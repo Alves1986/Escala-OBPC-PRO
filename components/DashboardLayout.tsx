@@ -91,7 +91,7 @@ export const DashboardLayout: React.FC<Props> = ({
           {/* Sidebar Footer */}
           <div className="p-4 border-t border-zinc-200 dark:border-zinc-700 space-y-1 shrink-0">
              
-             {/* PWA Install Button - Discreet Version */}
+             {/* PWA Install Button - Menu Version */}
              {deferredPrompt && onInstallAction && (
                <button 
                  onClick={onInstallAction}
@@ -165,6 +165,17 @@ export const DashboardLayout: React.FC<Props> = ({
                  <span className="font-bold text-zinc-900 dark:text-zinc-100">{title}</span>
               </div>
            </div>
+
+           {/* Mobile Install Button - Visible in Header */}
+           {deferredPrompt && onInstallAction && (
+             <button 
+               onClick={onInstallAction}
+               className="p-2 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors animate-fade-in"
+               title="Instalar App"
+             >
+               <Download size={20} />
+             </button>
+           )}
         </header>
 
         {/* Main Content Area */}
