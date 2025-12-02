@@ -625,7 +625,7 @@ const AppContent = () => {
         }
       });
     }
-}
+  };
   // --- SUB-HANDLERS ---
   const toggleRoleCollapse = (role: string) => {
     if (collapsedRoles.includes(role)) {
