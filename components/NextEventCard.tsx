@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { CalendarClock, Share2, User, CheckCircle2 } from 'lucide-react';
+import { CalendarClock, Share2, User, CheckCircle2, Link as LinkIcon } from 'lucide-react';
 import { Role, AttendanceMap } from '../types';
 
 interface Props {
@@ -30,7 +30,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
   const team = getAssignedMembers();
 
   const handleShare = () => {
-    const appLink = window.location.href;
+    const baseUrl = window.location.origin + window.location.pathname;
 
     let text = `📢 *PRÓXIMO EVENTO - MINISTÉRIO DE MÍDIA* 📢\n\n`;
     text += `🗓️ *${event.title}*\n`;
@@ -41,13 +41,13 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
       text += `_(Ninguém escalado ainda)_\n`;
     } else {
       team.forEach(t => {
-        text += `▪️ *${t.role}:* ${t.name}\n`;
+        // Create a specific link for this assignment key
+        const confirmLink = `${baseUrl}?action=confirm&key=${encodeURIComponent(t.key)}&name=${encodeURIComponent(t.name)}`;
+        text += `▪️ *${t.role}:* ${t.name}\n   🔗 Confirme aqui: ${confirmLink}\n\n`;
       });
     }
     
-    text += `\nDeus abençoe o serviço de todos! 🙏\n`;
-    text += `👇 *Confirme sua presença no sistema clicando abaixo:*\n`;
-    text += `${appLink}`;
+    text += `Deus abençoe o serviço de todos! 🙏`;
     
     onShare(text);
   };
@@ -67,7 +67,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
           <button 
             onClick={handleShare}
             className="bg-white/20 hover:bg-white/30 text-white p-2.5 rounded-xl backdrop-blur-sm transition-all shadow-lg active:scale-95"
-            title="Enviar Escala no Grupo"
+            title="Enviar Escala com Links de Confirmação"
           >
             <Share2 size={24} />
           </button>
@@ -77,7 +77,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
       <div className="p-6">
         <div className="flex justify-between items-end mb-4">
           <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Escalados para este dia</h3>
-          <span className="text-[10px] text-zinc-400">Clique no círculo para confirmar</span>
+          <span className="text-[10px] text-zinc-400">Clique no círculo para confirmar manual</span>
         </div>
         
         {team.length === 0 ? (
@@ -115,7 +115,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
                         ? 'text-green-600 bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:hover:bg-green-900/50' 
                         : 'text-zinc-300 hover:text-green-500 hover:bg-zinc-200 dark:hover:bg-zinc-700'
                     }`}
-                    title={isConfirmed ? "Presença Confirmada (Clique para remover)" : "Confirmar Presença"}
+                    title={isConfirmed ? "Presença Confirmada" : "Confirmar Presença"}
                   >
                     <CheckCircle2 size={20} className={isConfirmed ? "fill-green-600/10" : ""} />
                   </button>
