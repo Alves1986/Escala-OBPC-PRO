@@ -1,6 +1,7 @@
+
 import React from 'react';
-import { ScheduleMap, Role, AttendanceMap, AvailabilityMap } from '../types';
-import { CheckCircle2, AlertTriangle, Trash2 } from 'lucide-react';
+import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis } from '../types';
+import { CheckCircle2, AlertTriangle, Trash2, BrainCircuit, AlertCircle } from 'lucide-react';
 
 interface Props {
   events: { iso: string; dateDisplay: string; title: string }[];
@@ -9,6 +10,7 @@ interface Props {
   attendance: AttendanceMap;
   availability: AvailabilityMap;
   members: Record<string, string[]>;
+  scheduleIssues: ScheduleAnalysis;
   onCellChange: (key: string, value: string) => void;
   onAttendanceToggle: (key: string) => void;
   onDeleteEvent: (iso: string, title: string) => void;
@@ -16,12 +18,13 @@ interface Props {
 }
 
 export const ScheduleTable: React.FC<Props> = ({
-  events, roles, schedule, attendance, availability, members, onCellChange, onAttendanceToggle, onDeleteEvent, memberStats
+  events, roles, schedule, attendance, availability, members, scheduleIssues, onCellChange, onAttendanceToggle, onDeleteEvent, memberStats
 }) => {
   
   // Calculate if member is unavailable for a specific date
   const isUnavailable = (member: string, isoDateStr: string) => {
     const datePart = isoDateStr.split('T')[0];
+    // Verifica se a data exata está na lista de indisponibilidade (ignora datas com '+' que são preferenciais)
     return availability[member]?.includes(datePart);
   };
 
@@ -62,6 +65,10 @@ export const ScheduleTable: React.FC<Props> = ({
                   const currentValue = schedule[key] || "";
                   const roleMembers = members[role] || [];
                   const isConfirmed = attendance[key];
+                  const issue = scheduleIssues[key];
+                  
+                  // Verifica se há conflito: membro escalado E indisponível na data
+                  const hasLocalConflict = currentValue && isUnavailable(currentValue, event.iso);
 
                   // Sort members: Available first, then by least usage
                   const sortedMembers = [...roleMembers].sort((a, b) => {
@@ -75,13 +82,18 @@ export const ScheduleTable: React.FC<Props> = ({
                   return (
                     <td key={key} className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <div className="relative w-full">
+                        <div className="relative w-full group/cell">
                           <select
                             value={currentValue}
                             onChange={(e) => onCellChange(key, e.target.value)}
-                            className={`w-full bg-zinc-100 dark:bg-zinc-900/50 border-0 rounded-md py-1.5 pl-3 pr-8 text-xs ring-1 ring-inset focus:ring-2 sm:text-sm sm:leading-6 cursor-pointer
-                              ${currentValue ? 'text-zinc-900 dark:text-zinc-100 ring-zinc-300 dark:ring-zinc-600' : 'text-zinc-400 ring-zinc-200 dark:ring-zinc-700'}
-                              focus:ring-brand-500
+                            className={`w-full bg-zinc-100 dark:bg-zinc-900/50 border-0 rounded-md py-1.5 pl-3 pr-8 text-xs ring-1 ring-inset focus:ring-2 sm:text-sm sm:leading-6 cursor-pointer transition-all
+                              ${hasLocalConflict 
+                                ? 'text-red-700 dark:text-red-400 ring-red-300 dark:ring-red-900 focus:ring-red-500 bg-red-50 dark:bg-red-900/20 font-medium' 
+                                : issue?.type === 'warning'
+                                  ? 'text-amber-700 dark:text-amber-400 ring-amber-300 dark:ring-amber-900 focus:ring-amber-500 bg-amber-50 dark:bg-amber-900/20'
+                                  : currentValue 
+                                    ? 'text-zinc-900 dark:text-zinc-100 ring-zinc-300 dark:ring-zinc-600 focus:ring-brand-500' 
+                                    : 'text-zinc-400 ring-zinc-200 dark:ring-zinc-700 focus:ring-brand-500'}
                             `}
                           >
                             <option value="">-- Selecionar --</option>
@@ -94,10 +106,28 @@ export const ScheduleTable: React.FC<Props> = ({
                               );
                             })}
                           </select>
-                          {/* Indicator for conflicts/availability if forced */}
-                          {currentValue && isUnavailable(currentValue, event.iso) && (
-                            <div className="absolute right-8 top-2 text-red-500" title="Conflito de Disponibilidade">
-                              <AlertTriangle size={14} />
+                          
+                          {/* Indicador Visual de Conflito Local (Data Bloqueada) */}
+                          {hasLocalConflict && (
+                            <div className="absolute right-8 top-1/2 -translate-y-1/2 text-red-500 animate-pulse" title="CONFLITO: Membro marcou indisponibilidade neste dia!">
+                              <AlertTriangle size={16} />
+                            </div>
+                          )}
+
+                          {/* Indicador de Análise da IA */}
+                          {!hasLocalConflict && issue && (
+                            <div className="absolute right-8 top-1/2 -translate-y-1/2 text-amber-500">
+                               {issue.type === 'error' ? <AlertCircle size={16} /> : <BrainCircuit size={16} />}
+                               {/* Tooltip Customizado */}
+                               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-zinc-800 text-white text-xs rounded shadow-lg opacity-0 group-hover/cell:opacity-100 transition-opacity pointer-events-none z-50">
+                                  <p className="font-bold mb-1 flex items-center gap-1">
+                                    <BrainCircuit size={12}/> Análise IA:
+                                  </p>
+                                  {issue.message}
+                                  {issue.suggestedReplacement && (
+                                    <p className="mt-1 text-green-400">Sugestão: {issue.suggestedReplacement}</p>
+                                  )}
+                               </div>
                             </div>
                           )}
                         </div>

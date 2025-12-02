@@ -1,22 +1,31 @@
 
-import React, { useState } from 'react';
-import { Share2, FileText, FileSpreadsheet, Trash, ChevronDown } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Share2, FileText, FileSpreadsheet, Trash, ChevronDown, Upload } from 'lucide-react';
 
 interface Props {
   onExportIndividual: (member: string) => void;
   onWhatsApp: () => void;
   onCSV: () => void;
+  onImportCSV: (file: File) => void;
   onClearMonth: () => void;
   allMembers: string[];
 }
 
-export const ToolsMenu: React.FC<Props> = ({ onExportIndividual, onWhatsApp, onCSV, onClearMonth, allMembers }) => {
+export const ToolsMenu: React.FC<Props> = ({ onExportIndividual, onWhatsApp, onCSV, onImportCSV, onClearMonth, allMembers }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleIndividual = () => {
     if (!selectedMember) return alert("Selecione um membro primeiro");
     onExportIndividual(selectedMember);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      onImportCSV(e.target.files[0]);
+    }
+    setIsOpen(false);
   };
 
   return (
@@ -48,11 +57,22 @@ export const ToolsMenu: React.FC<Props> = ({ onExportIndividual, onWhatsApp, onC
           </div>
 
           <div className="p-2 space-y-1">
+            <button onClick={() => fileInputRef.current?.click()} className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-zinc-50 dark:hover:bg-zinc-700 rounded flex items-center gap-2">
+              <Upload size={16} /> Importar CSV (Membros)
+            </button>
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              className="hidden" 
+              accept=".csv" 
+              onChange={handleFileChange} 
+            />
+            
             <button onClick={onWhatsApp} className="w-full text-left px-3 py-2 text-sm text-green-600 hover:bg-zinc-50 dark:hover:bg-zinc-700 rounded flex items-center gap-2">
               <Share2 size={16} /> Copiar para WhatsApp
             </button>
             <button onClick={onCSV} className="w-full text-left px-3 py-2 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 rounded flex items-center gap-2">
-              <FileSpreadsheet size={16} /> Baixar CSV
+              <FileSpreadsheet size={16} /> Baixar Tabela CSV
             </button>
             <div className="border-t border-zinc-100 dark:border-zinc-700 my-1"></div>
             <button onClick={onClearMonth} className="w-full text-left px-3 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded flex items-center gap-2">

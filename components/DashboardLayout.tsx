@@ -1,5 +1,6 @@
+
 import React, { ReactNode } from 'react';
-import { Menu, Moon, Sun, LogOut } from 'lucide-react';
+import { Menu, Moon, Sun, LogOut, Cloud, CloudOff } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
@@ -10,10 +11,11 @@ interface Props {
   toggleTheme: () => void;
   onLogout: () => void;
   title: string;
+  isConnected: boolean;
 }
 
 export const DashboardLayout: React.FC<Props> = ({ 
-  children, sidebar, sidebarOpen, setSidebarOpen, theme, toggleTheme, onLogout, title 
+  children, sidebar, sidebarOpen, setSidebarOpen, theme, toggleTheme, onLogout, title, isConnected 
 }) => {
   return (
     <div className={`flex h-screen overflow-hidden bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 transition-colors duration-300`}>
@@ -58,12 +60,20 @@ export const DashboardLayout: React.FC<Props> = ({
       {/* Main Content */}
       <div className="flex flex-col flex-1 w-full min-w-0">
         <header className="h-16 flex items-center justify-between px-4 bg-white dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700 shadow-sm z-10">
-          <button 
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 rounded-lg text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 lg:hidden"
-          >
-            <Menu size={24} />
-          </button>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="p-2 rounded-lg text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 lg:hidden"
+            >
+              <Menu size={24} />
+            </button>
+            
+            {/* Connection Status Indicator */}
+            <div className={`hidden sm:flex items-center gap-2 text-xs font-medium px-2 py-1 rounded-full ${isConnected ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+              {isConnected ? <Cloud size={14} /> : <CloudOff size={14} />}
+              {isConnected ? 'Online (Supabase)' : 'Offline'}
+            </div>
+          </div>
 
           <div className="flex items-center gap-4 ml-auto">
              <div className="text-right hidden sm:block">

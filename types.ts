@@ -1,3 +1,5 @@
+
+
 export type Role = string;
 
 export interface MemberMap {
@@ -20,13 +22,34 @@ export interface CustomEvent {
 }
 
 export interface AvailabilityMap {
-  [memberName: string]: string[]; // Array of YYYY-MM-DD
+  [memberName: string]: string[]; // Array of YYYY-MM-DD (prefix '+' for preferred)
 }
 
 export interface AuditLogEntry {
   date: string;
   action: string;
   details: string;
+}
+
+export interface ScheduleIssue {
+  type: 'error' | 'warning' | 'info';
+  message: string;
+  suggestedReplacement?: string;
+}
+
+export interface ScheduleAnalysis {
+  [key: string]: ScheduleIssue;
+}
+
+// Push Notification Types
+export interface PushSubscriptionRecord {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+  device_id: string; // Unique ID stored in localStorage to identify this device
+  last_updated: string;
 }
 
 export interface AppState {
@@ -43,5 +66,7 @@ export interface AppState {
 }
 
 export const DEFAULT_ROLES = ["Projeção", "Transmissão", "Fotografia", "Storys"];
+
+// Supabase Credentials
 export const SUPABASE_URL = "https://phlfpaojiiplnzihsgee.supabase.co"; 
 export const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBobGZwYW9qaWlwbG56aWhzZ2VlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ1MTkxNDEsImV4cCI6MjA4MDA5NTE0MX0.-72lH-LHmobWqqSzBuIKusGTDao_iaiu9q8lJnClUBk";
