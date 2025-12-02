@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Escala Mídia Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+            colors: {
+              brand: {
+                50: '#eff6ff',
+                100: '#dbeafe',
+                500: '#3b82f6',
+                600: '#2563eb',
+                700: '#1d4ed8',
+                900: '#1e3a8a',
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body { @apply bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100; }
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { @apply bg-transparent; }
+      ::-webkit-scrollbar-thumb { @apply bg-zinc-300 dark:bg-zinc-700 rounded-full; }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "jspdf": "https://aistudiocdn.com/jspdf@^3.0.4",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
+    "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
+    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.86.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "jspdf-autotable": "https://aistudiocdn.com/jspdf-autotable@^5.0.2"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
