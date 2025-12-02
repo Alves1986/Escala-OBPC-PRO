@@ -30,25 +30,30 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
   const team = getAssignedMembers();
 
   const handleShare = () => {
-    // Get clean URL without query params to avoid recursion
-    const baseUrl = window.location.href.split('?')[0];
+    // Pega a URL base limpa (sem query params)
+    // Garante que não tenha barra duplicada no final antes de adicionar a query
+    const baseUrl = window.location.href.split('?')[0].replace(/\/$/, '');
+    
     // Extrai a hora do formato ISO (YYYY-MM-DDTHH:mm)
     const time = event.iso.split('T')[1];
 
-    let text = `📢 *PRÓXIMO EVENTO - MINISTÉRIO DE MÍDIA* 📢\n\n`;
-    text += `🗓️ *${event.title}*\n`;
+    // Montagem da mensagem EXATAMENTE conforme o modelo aprovado
+    let text = `📢 PRÓXIMO EVENTO - MINISTÉRIO DE MÍDIA 📢\n\n`;
+    text += `🗓 ${event.title}\n`;
     text += `🕒 Data: ${event.dateDisplay} às ${time}\n\n`;
-    text += `👥 *Equipe Escalada:*\n`;
+    text += `👥 Equipe Escalada:\n`;
     
     if (team.length === 0) {
       text += `_(Ninguém escalado ainda)_\n`;
     } else {
       team.forEach(t => {
-        // Reverted to full parameter names for reliability
-        const confirmLink = `${baseUrl}?action=confirm&key=${encodeURIComponent(t.key)}&name=${encodeURIComponent(t.name)}`;
+        // Link curto: ?a=c (action=confirm), k (key), n (name)
+        // EncodeURIComponent garante que espaços e acentos não quebrem o link
+        const confirmLink = `${baseUrl}/?a=c&k=${encodeURIComponent(t.key)}&n=${encodeURIComponent(t.name)}`;
         
-        // WhatsApp Format: <URL> ensures the link is clickable and doesn't break even if long
-        text += `▪️ *${t.role}:* ${t.name}\n   🔗 Confirme: <${confirmLink}>\n\n`;
+        // Formatação visual específica
+        text += `▪ ${t.role}: ${t.name}\n`;
+        text += `   🔗 Confirme: <${confirmLink}>\n\n`;
       });
     }
     
