@@ -414,13 +414,15 @@ const AppContent = () => {
   };
 
   const handleConfirmPresence = () => {
-    if (confirmationData && ministryId) {
+    // Capture ministryId in a local const to allow type narrowing
+    const mid = ministryId;
+    
+    if (confirmationData && mid) {
       const { key } = confirmationData;
       const newAtt = { ...attendance, [key]: true };
       setAttendance(newAtt);
       
-      // Fix: Ensure ministryId is string before saving
-      saveData(ministryId, 'attendance_v1', newAtt);
+      saveData(mid, 'attendance_v1', newAtt);
       
       addToast("Presença Confirmada com Sucesso!", "success");
       setConfirmationData(null);
@@ -535,7 +537,7 @@ const AppContent = () => {
 
   // --- AI GENERATION ---
   const generateAI = async () => {
-    const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
+    const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY as string | undefined;
     if (!apiKey) return addToast("Chave API não configurada", "error");
 
     setLoading(true);
@@ -581,7 +583,7 @@ const AppContent = () => {
   };
   
   const analyzeSchedule = async () => {
-     const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
+     const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY as string | undefined;
      if (!apiKey) return addToast("Chave API não configurada", "error");
      
      setLoading(true);
@@ -804,12 +806,14 @@ const AppContent = () => {
              }
           }}
           onConfirm={(key) => {
-            // Fix: Check ministryId before confirming
-            if (!ministryId) return;
+            // Capture ministryId locally to satisfy TypeScript narrowing
+            const mid = ministryId;
+            if (!mid) return;
+            
             if (confirm("Confirmar presença manualmente?")) {
                const newVal = !attendance[key];
                setAttendance({...attendance, [key]: newVal});
-               saveData(ministryId, 'attendance_v1', {...attendance, [key]: newVal});
+               saveData(mid, 'attendance_v1', {...attendance, [key]: newVal});
             }
           }}
         />
