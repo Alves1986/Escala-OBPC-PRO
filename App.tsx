@@ -573,7 +573,7 @@ const AppContent = () => {
       });
       
       const jsonText = response.text;
-      const generatedSchedule = JSON.parse(jsonText);
+      const generatedSchedule = JSON.parse(jsonText || '{}');
       
       setSchedule(prev => ({ ...prev, ...generatedSchedule }));
       addToast("Escala gerada com IA!", "success");
@@ -624,6 +624,20 @@ const AppContent = () => {
             responseMimeType: "application/json"
         }
       });
+
+      const jsonText = response.text;
+      if (jsonText) {
+         const issues = JSON.parse(jsonText);
+         setScheduleIssues(issues);
+         addToast("Análise concluída!", "success");
+         logAction("IA", "Análise de escala realizada.");
+      }
+
+    } catch (e) {
+      console.error(e);
+      addToast("Erro na análise. Tente novamente.", "error");
+    } finally {
+      setLoading(false);
     }
   };
   // --- SUB-HANDLERS ---
