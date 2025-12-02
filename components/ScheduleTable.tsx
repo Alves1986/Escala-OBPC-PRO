@@ -1,6 +1,6 @@
 import React from 'react';
 import { ScheduleMap, Role, AttendanceMap, AvailabilityMap } from '../types';
-import { CheckCircle2, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Trash2 } from 'lucide-react';
 
 interface Props {
   events: { iso: string; dateDisplay: string; title: string }[];
@@ -11,11 +11,12 @@ interface Props {
   members: Record<string, string[]>;
   onCellChange: (key: string, value: string) => void;
   onAttendanceToggle: (key: string) => void;
+  onDeleteEvent: (iso: string, title: string) => void;
   memberStats: Record<string, number>;
 }
 
 export const ScheduleTable: React.FC<Props> = ({
-  events, roles, schedule, attendance, availability, members, onCellChange, onAttendanceToggle, memberStats
+  events, roles, schedule, attendance, availability, members, onCellChange, onAttendanceToggle, onDeleteEvent, memberStats
 }) => {
   
   // Calculate if member is unavailable for a specific date
@@ -30,7 +31,7 @@ export const ScheduleTable: React.FC<Props> = ({
         <table className="w-full text-sm text-left">
           <thead className="text-xs text-zinc-500 uppercase bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700">
             <tr>
-              <th className="px-6 py-4 font-bold sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10 w-48">Evento</th>
+              <th className="px-6 py-4 font-bold sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10 w-48 shadow-[1px_0_0_0_rgba(0,0,0,0.05)] dark:shadow-[1px_0_0_0_rgba(255,255,255,0.05)]">Evento</th>
               {roles.map(role => (
                 <th key={role} className="px-6 py-4 font-bold min-w-[180px]">{role}</th>
               ))}
@@ -40,11 +41,20 @@ export const ScheduleTable: React.FC<Props> = ({
             {events.length === 0 ? (
               <tr><td colSpan={roles.length + 1} className="p-8 text-center text-zinc-500">Nenhum evento para este mês.</td></tr>
             ) : events.map((event) => (
-              <tr key={event.iso} className="border-b border-zinc-100 dark:border-zinc-700/50 hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors">
-                <td className="px-6 py-4 sticky left-0 bg-white dark:bg-zinc-800 z-10 border-r border-zinc-100 dark:border-zinc-700">
-                  <div className="flex flex-col">
-                    <span className="font-semibold text-zinc-800 dark:text-zinc-100">{event.title}</span>
-                    <span className="text-xs text-zinc-500">{event.dateDisplay}</span>
+              <tr key={event.iso} className="border-b border-zinc-100 dark:border-zinc-700/50 hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors group">
+                <td className="px-6 py-4 sticky left-0 bg-white dark:bg-zinc-800 z-10 border-r border-zinc-100 dark:border-zinc-700 shadow-[1px_0_0_0_rgba(0,0,0,0.05)] dark:shadow-[1px_0_0_0_rgba(255,255,255,0.05)] group-hover:bg-zinc-50 dark:group-hover:bg-zinc-800/80 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-zinc-800 dark:text-zinc-100">{event.title}</span>
+                      <span className="text-xs text-zinc-500">{event.dateDisplay}</span>
+                    </div>
+                    <button 
+                      onClick={() => onDeleteEvent(event.iso, event.title)}
+                      className="text-zinc-300 hover:text-red-500 p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
+                      title="Remover/Ocultar Evento"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
                 </td>
                 {roles.map(role => {
@@ -65,7 +75,7 @@ export const ScheduleTable: React.FC<Props> = ({
                   return (
                     <td key={key} className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <div className="relative w-full group">
+                        <div className="relative w-full">
                           <select
                             value={currentValue}
                             onChange={(e) => onCellChange(key, e.target.value)}
@@ -95,7 +105,7 @@ export const ScheduleTable: React.FC<Props> = ({
                         {currentValue && (
                           <button
                             onClick={() => onAttendanceToggle(key)}
-                            className={`p-1 rounded-full transition-colors ${
+                            className={`p-1 rounded-full transition-colors flex-shrink-0 ${
                               isConfirmed 
                                 ? 'text-green-600 bg-green-100 dark:bg-green-900/30' 
                                 : 'text-zinc-300 hover:text-zinc-400'

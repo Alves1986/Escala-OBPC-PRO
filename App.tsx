@@ -9,7 +9,7 @@ import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DE
 import { loadData, saveData } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
 import { Download, Users, Calendar, BarChart2, Plus, Trash2, Wand2, Shield, Settings, Activity } from 'lucide-react';
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import { GoogleGenAI } from "@google/genai";
 
@@ -57,6 +57,7 @@ const App = () => {
   const [schedule, setSchedule] = useState<ScheduleMap>({});
   const [attendance, setAttendance] = useState<AttendanceMap>({});
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>([]);
+  const [ignoredEvents, setIgnoredEvents] = useState<string[]>([]);
   const [availability, setAvailability] = useState<AvailabilityMap>({});
   const [roles, setRoles] = useState<string[]>(DEFAULT_ROLES);
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
@@ -74,7 +75,23 @@ const App = () => {
 
   // --- DERIVED STATE ---
   const [year, month] = currentMonth.split('-').map(Number);
-  const events = useMemo(() => generateMonthEvents(year, month - 1, customEvents), [year, month, customEvents]);
+  
+  // Generate all potential events, then separate into visible and hidden
+  const { visibleEvents, hiddenEventsList } = useMemo(() => {
+    const allGenerated = generateMonthEvents(year, month - 1, customEvents);
+    const visible: typeof allGenerated = [];
+    const hidden: typeof allGenerated = [];
+
+    allGenerated.forEach(evt => {
+      if (ignoredEvents.includes(evt.iso)) {
+        hidden.push(evt);
+      } else {
+        visible.push(evt);
+      }
+    });
+
+    return { visibleEvents: visible, hiddenEventsList: hidden };
+  }, [year, month, customEvents, ignoredEvents]);
   
   const allMembersList = useMemo(() => {
     const list = new Set<string>();
@@ -110,11 +127,12 @@ const App = () => {
     if (ministryId) {
       setLoading(true);
       const loadAll = async () => {
-        const [m, s, a, c, av, r, lg, th] = await Promise.all([
+        const [m, s, a, c, ig, av, r, lg, th] = await Promise.all([
           loadData<MemberMap>(ministryId, 'members_v7', {}),
           loadData<ScheduleMap>(ministryId, 'escala_full_v7', {}),
           loadData<AttendanceMap>(ministryId, 'attendance_v1', {}),
           loadData<CustomEvent[]>(ministryId, 'custom_events_v1', []),
+          loadData<string[]>(ministryId, 'ignored_events_v1', []),
           loadData<AvailabilityMap>(ministryId, 'availability_v1', {}),
           loadData<string[]>(ministryId, 'functions_config', DEFAULT_ROLES),
           loadData<AuditLogEntry[]>(ministryId, 'audit_log_v1', []),
@@ -132,6 +150,7 @@ const App = () => {
         setSchedule(s);
         setAttendance(a);
         setCustomEvents(c);
+        setIgnoredEvents(ig);
         setAvailability(av);
         setRoles(r);
         setAuditLog(lg);
@@ -171,6 +190,7 @@ const App = () => {
       saveData(ministryId, 'escala_full_v7', schedule),
       saveData(ministryId, 'attendance_v1', attendance),
       saveData(ministryId, 'custom_events_v1', customEvents),
+      saveData(ministryId, 'ignored_events_v1', ignoredEvents),
       saveData(ministryId, 'availability_v1', availability),
       saveData(ministryId, 'functions_config', roles),
       saveData(ministryId, 'audit_log_v1', auditLog),
@@ -178,6 +198,30 @@ const App = () => {
     ]);
     if(btn) btn.innerText = "Salvar";
     alert("Dados salvos com sucesso na nuvem!");
+  };
+
+  // --- EVENT MANAGEMENT ---
+  const handleDeleteEvent = (iso: string, title: string) => {
+    if (!confirm(`Deseja remover o evento "${title}"?`)) return;
+
+    // Check if it's a custom event
+    const isCustom = customEvents.some(c => {
+      const customIso = `${c.date}T${c.time}`;
+      return customIso === iso;
+    });
+
+    if (isCustom) {
+      setCustomEvents(prev => prev.filter(c => `${c.date}T${c.time}` !== iso));
+      logAction("Excluir Evento Extra", title);
+    } else {
+      setIgnoredEvents(prev => [...prev, iso]);
+      logAction("Ocultar Evento", title);
+    }
+  };
+
+  const handleRestoreEvent = (iso: string) => {
+    setIgnoredEvents(prev => prev.filter(e => e !== iso));
+    logAction("Restaurar Evento", iso);
   };
 
   // --- MEMBER MANAGEMENT ---
@@ -231,7 +275,7 @@ const App = () => {
     doc.setFontSize(18);
     doc.text(title, 14, 15);
     const tableColumn = ["Data", "Evento", ...roles];
-    const tableRows = events.map(evt => {
+    const tableRows = visibleEvents.map(evt => {
       const row = [evt.dateDisplay, evt.title];
       roles.forEach(role => row.push(schedule[`${evt.iso}_${role}`] || "-"));
       return row;
@@ -255,7 +299,7 @@ const App = () => {
     doc.text(`Mês: ${getMonthName(currentMonth)}`, 14, 22);
 
     const data: any[] = [];
-    events.forEach(evt => {
+    visibleEvents.forEach(evt => {
       roles.forEach(role => {
         const assigned = schedule[`${evt.iso}_${role}`];
         if (assigned === memberName) {
@@ -277,7 +321,7 @@ const App = () => {
 
   const exportCSV = () => {
     let csv = `Evento;Data;${roles.join(';')}\n`;
-    events.forEach(evt => {
+    visibleEvents.forEach(evt => {
       const cols = roles.map(role => schedule[`${evt.iso}_${role}`] || "").join(';');
       csv += `${evt.title};${evt.dateDisplay};${cols}\n`;
     });
@@ -291,7 +335,7 @@ const App = () => {
 
   const copyWhatsApp = () => {
     let text = `*Escala - ${getMonthName(currentMonth)}*\n\n`;
-    events.forEach(evt => {
+    visibleEvents.forEach(evt => {
       text += `*${evt.title} - ${evt.dateDisplay}*\n`;
       let hasEntry = false;
       roles.forEach(role => {
@@ -310,12 +354,12 @@ const App = () => {
 
   // --- AI ---
   const handleAIGeneration = async () => {
-    if (!process.env.API_KEY) return alert("API Key configuration missing.");
+    if (!process.env.API_KEY) return alert("API Key missing.");
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       let promptText = `Gere uma escala para ${getMonthName(currentMonth)}.
       Roles: ${roles.join(', ')}.
-      Eventos: ${events.map(e => `${e.title} (${e.dateDisplay})`).join(', ')}.
+      Eventos: ${visibleEvents.map(e => `${e.title} (${e.dateDisplay})`).join(', ')}.
       Membros disponíveis: ${JSON.stringify(members)}.
       Histórico de indisponibilidade (YYYY-MM-DD): ${JSON.stringify(availability)}.
       Regras: Tente equilibrar a carga. Respeite a indisponibilidade.
@@ -331,8 +375,9 @@ const App = () => {
         setSchedule(prev => ({ ...prev, ...suggestion }));
         logAction("IA", "Gerou sugestão automática");
       }
-    } catch (e) {
-      alert("Erro na IA: " + e);
+    } catch (e: any) {
+      console.error(e);
+      alert("Erro na IA: " + (e.message || e));
     }
   };
 
@@ -430,7 +475,7 @@ const App = () => {
       </div>
 
       <ScheduleTable 
-        events={events}
+        events={visibleEvents}
         roles={roles}
         schedule={schedule}
         attendance={attendance}
@@ -438,6 +483,7 @@ const App = () => {
         members={members}
         onCellChange={handleCellChange}
         onAttendanceToggle={(key) => setAttendance(prev => ({ ...prev, [key]: !prev[key] }))}
+        onDeleteEvent={handleDeleteEvent}
         memberStats={memberStats}
       />
 
@@ -447,8 +493,10 @@ const App = () => {
       <EventsModal 
         isOpen={eventsModalOpen} onClose={() => setEventsModalOpen(false)} 
         events={customEvents} 
+        hiddenEvents={hiddenEventsList}
         onAdd={e => { setCustomEvents([...customEvents, e]); logAction("Add Evento", e.title); }} 
         onRemove={id => { setCustomEvents(customEvents.filter(e => e.id !== id)); logAction("Del Evento", id); }} 
+        onRestore={handleRestoreEvent}
       />
       
       <AvailabilityModal 
