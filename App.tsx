@@ -367,19 +367,22 @@ const AppContent = () => {
   };
 
   const saveAll = async () => {
-    if (!ministryId) return;
+    // Capture ministryId in a local const for TypeScript narrowing
+    const mid = ministryId;
+    if (!mid) return;
+    
     setLoading(true);
     try {
       await Promise.all([
-        saveData(ministryId, 'members_v7', members),
-        saveData(ministryId, 'escala_full_v7', schedule),
-        saveData(ministryId, 'attendance_v1', attendance),
-        saveData(ministryId, 'custom_events_v1', customEvents),
-        saveData(ministryId, 'ignored_events_v1', ignoredEvents),
-        saveData(ministryId, 'availability_v1', availability),
-        saveData(ministryId, 'functions_config', roles),
-        saveData(ministryId, 'audit_log_v1', auditLog),
-        saveData(ministryId, 'theme_pref', theme)
+        saveData(mid, 'members_v7', members),
+        saveData(mid, 'escala_full_v7', schedule),
+        saveData(mid, 'attendance_v1', attendance),
+        saveData(mid, 'custom_events_v1', customEvents),
+        saveData(mid, 'ignored_events_v1', ignoredEvents),
+        saveData(mid, 'availability_v1', availability),
+        saveData(mid, 'functions_config', roles),
+        saveData(mid, 'audit_log_v1', auditLog),
+        saveData(mid, 'theme_pref', theme)
       ]);
       addToast("Dados salvos na nuvem!", "success");
     } catch (e) {
@@ -406,8 +409,10 @@ const AppContent = () => {
     setAttendance(newAtt);
     
     // Save attendance immediately for realtime updates
-    if (ministryId) {
-      saveData(ministryId, 'attendance_v1', newAtt);
+    // Capture ministryId locally
+    const mid = ministryId;
+    if (mid) {
+      saveData(mid, 'attendance_v1', newAtt);
     }
     
     addToast(newVal ? "Presença confirmada" : "Confirmação removida", "success");
