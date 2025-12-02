@@ -418,6 +418,8 @@ const AppContent = () => {
       const { key } = confirmationData;
       const newAtt = { ...attendance, [key]: true };
       setAttendance(newAtt);
+      
+      // Fix: Ensure ministryId is string before saving
       saveData(ministryId, 'attendance_v1', newAtt);
       
       addToast("Presença Confirmada com Sucesso!", "success");
@@ -802,6 +804,8 @@ const AppContent = () => {
              }
           }}
           onConfirm={(key) => {
+            // Fix: Check ministryId before confirming
+            if (!ministryId) return;
             if (confirm("Confirmar presença manualmente?")) {
                const newVal = !attendance[key];
                setAttendance({...attendance, [key]: newVal});

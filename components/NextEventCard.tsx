@@ -30,8 +30,11 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
   const team = getAssignedMembers();
 
   const handleShare = () => {
-    // Usa window.location.origin para garantir o domínio correto sem paths extras ou queries
-    const baseUrl = window.location.origin;
+    // Usa classe URL para garantir construção segura sem erros de path
+    const url = new URL(window.location.href);
+    // Limpa a query string atual e define os novos parametros
+    url.search = ''; 
+    url.hash = '';
     
     // Extrai a hora do formato ISO (YYYY-MM-DDTHH:mm)
     const time = event.iso.split('T')[1];
@@ -46,9 +49,12 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
       text += `_(Ninguém escalado ainda)_\n`;
     } else {
       team.forEach(t => {
-        // Link curto: ?a=c (action=confirm), k (key), n (name)
-        // EncodeURIComponent garante que espaços e acentos não quebrem o link
-        const confirmLink = `${baseUrl}/?a=c&k=${encodeURIComponent(t.key)}&n=${encodeURIComponent(t.name)}`;
+        // Define parâmetros limpos
+        url.searchParams.set('a', 'c');
+        url.searchParams.set('k', t.key);
+        url.searchParams.set('n', t.name);
+        
+        const confirmLink = url.toString();
         
         // Formatação visual específica
         text += `▪ ${t.role}: ${t.name}\n`;
