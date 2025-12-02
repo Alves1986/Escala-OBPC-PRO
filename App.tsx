@@ -561,7 +561,8 @@ const AppContent = () => {
         config: { responseMimeType: "application/json" }
       });
       
-      const cleanText = result.text.replace(/```json|```/g, '').trim();
+      const responseText = result.text || "{}";
+      const cleanText = responseText.replace(/```json|```/g, '').trim();
       const suggestion = JSON.parse(cleanText);
       
       confirmAction("Sugestão da IA Pronta", "A IA gerou uma escala baseada na disponibilidade. Deseja aplicar?", () => {
@@ -627,7 +628,8 @@ const AppContent = () => {
         config: { responseMimeType: "application/json" }
       });
 
-      const cleanText = result.text.replace(/```json|```/g, '').trim();
+      const responseText = result.text || "{}";
+      const cleanText = responseText.replace(/```json|```/g, '').trim();
       const analysis = JSON.parse(cleanText);
       
       setScheduleIssues(analysis);
