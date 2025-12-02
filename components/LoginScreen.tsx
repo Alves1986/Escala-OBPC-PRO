@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, History, Loader2, X, User } from 'lucide-react';
+import { ArrowRight, History, Loader2, X, User, ShieldCheck } from 'lucide-react';
 
 interface Props {
   onLogin: (id: string) => void;
@@ -11,6 +10,7 @@ export const LoginScreen: React.FC<Props> = ({ onLogin, isLoading = false }) => 
   const [input, setInput] = useState("");
   const [recentLogins, setRecentLogins] = useState<string[]>([]);
   const [isFocused, setIsFocused] = useState(false);
+  const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
     try {
@@ -54,11 +54,18 @@ export const LoginScreen: React.FC<Props> = ({ onLogin, isLoading = false }) => 
           
           {/* Header */}
           <div className="text-center mb-8">
-            <img 
-              src="/app-icon.png" 
-              alt="Logo Escala Mídia" 
-              className="mx-auto w-24 h-24 mb-6 rounded-2xl shadow-2xl shadow-blue-900/20 hover:scale-105 transition-transform duration-300"
-            />
+            {imgError ? (
+               <div className="mx-auto w-24 h-24 mb-6 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-2xl shadow-blue-900/20">
+                 <ShieldCheck size={48} className="text-white" />
+               </div>
+            ) : (
+              <img 
+                src="/app-icon.png" 
+                alt="Logo Escala Mídia" 
+                className="mx-auto w-24 h-24 mb-6 rounded-2xl shadow-2xl shadow-blue-900/20 hover:scale-105 transition-transform duration-300"
+                onError={() => setImgError(true)}
+              />
+            )}
             <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Escala Mídia Pro</h1>
             <p className="text-zinc-400 text-sm">Acesse o painel do seu ministério</p>
           </div>

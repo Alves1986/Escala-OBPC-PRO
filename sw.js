@@ -1,13 +1,21 @@
-
-const CACHE_NAME = 'escala-midia-cache-v4';
+const CACHE_NAME = 'escala-midia-cache-v5';
 const urlsToCache = [
   './',
   './index.html',
   './manifest.json',
   './app-icon.png',
   'https://cdn.tailwindcss.com',
-  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js'
+  'https://aistudiocdn.com/lucide-react@^0.555.0',
+  'https://aistudiocdn.com/react-dom@^19.2.0/',
+  'https://aistudiocdn.com/recharts@^3.5.1',
+  'https://aistudiocdn.com/react@^19.2.0/',
+  'https://aistudiocdn.com/react@^19.2.0',
+  'https://aistudiocdn.com/@google/genai@^1.30.0',
+  'https://aistudiocdn.com/vite@^7.2.6',
+  'https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1',
+  'https://aistudiocdn.com/jspdf@^3.0.4',
+  'https://aistudiocdn.com/@supabase/supabase-js@^2.86.0',
+  'https://aistudiocdn.com/jspdf-autotable@^5.0.2'
 ];
 
 self.addEventListener('install', event => {
@@ -50,8 +58,8 @@ self.addEventListener('push', function(event) {
     const title = data.title || 'Escala Mídia Pro';
     const options = {
       body: data.body || 'Nova atualização na escala.',
-      icon: '/app-icon.png', // Usar o ícone local
-      badge: '/app-icon.png', // Usar o ícone local (monocromático idealmente, mas funcionará)
+      icon: '/app-icon.png',
+      badge: '/app-icon.png',
       vibrate: [100, 50, 100],
       data: {
         url: data.url || '/'

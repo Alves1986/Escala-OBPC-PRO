@@ -1,5 +1,5 @@
-import React, { ReactNode } from 'react';
-import { Menu, Moon, Sun, LogOut, Cloud, CloudOff } from 'lucide-react';
+import React, { ReactNode, useState } from 'react';
+import { Menu, Moon, Sun, LogOut, Cloud, CloudOff, Layout } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
@@ -16,6 +16,8 @@ interface Props {
 export const DashboardLayout: React.FC<Props> = ({ 
   children, sidebar, sidebarOpen, setSidebarOpen, theme, toggleTheme, onLogout, title, isConnected 
 }) => {
+  const [imgError, setImgError] = useState(false);
+
   return (
     <div className={`flex h-screen overflow-hidden bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 transition-colors duration-300`}>
       {/* Mobile Backdrop */}
@@ -31,7 +33,18 @@ export const DashboardLayout: React.FC<Props> = ({
         <div className="flex flex-col h-full">
           {/* Sidebar Header */}
           <div className="flex items-center gap-3 h-16 px-6 border-b border-zinc-200 dark:border-zinc-700 shrink-0">
-            <img src="/app-icon.png" alt="Logo" className="w-8 h-8 rounded-lg shadow-sm" />
+            {imgError ? (
+              <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-sm">
+                <Layout size={18} />
+              </div>
+            ) : (
+              <img 
+                src="/app-icon.png" 
+                alt="Logo" 
+                className="w-8 h-8 rounded-lg shadow-sm" 
+                onError={() => setImgError(true)}
+              />
+            )}
             <span className="text-lg font-bold tracking-tight truncate" title={title}>{title}</span>
           </div>
 
@@ -79,7 +92,18 @@ export const DashboardLayout: React.FC<Props> = ({
                   <Menu size={24} />
               </button>
               <div className="flex items-center gap-2">
-                 <img src="/app-icon.png" alt="Logo" className="w-6 h-6 rounded shadow-sm" />
+                 {imgError ? (
+                   <div className="w-6 h-6 rounded bg-indigo-600 flex items-center justify-center text-white">
+                      <Layout size={14} />
+                   </div>
+                 ) : (
+                   <img 
+                      src="/app-icon.png" 
+                      alt="Logo" 
+                      className="w-6 h-6 rounded shadow-sm"
+                      onError={() => setImgError(true)}
+                   />
+                 )}
                  <span className="font-bold text-zinc-900 dark:text-zinc-100">{title}</span>
               </div>
            </div>
