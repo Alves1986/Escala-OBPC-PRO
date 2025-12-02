@@ -30,7 +30,8 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
   const team = getAssignedMembers();
 
   const handleShare = () => {
-    const baseUrl = window.location.origin + window.location.pathname;
+    // Get clean URL without query params to avoid "googhttps" duplication or messy history
+    const baseUrl = window.location.href.split('?')[0];
     // Extrai a hora do formato ISO (YYYY-MM-DDTHH:mm)
     const time = event.iso.split('T')[1];
 
@@ -43,9 +44,11 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
       text += `_(Ninguém escalado ainda)_\n`;
     } else {
       team.forEach(t => {
-        // Create a specific link for this assignment key
-        const confirmLink = `${baseUrl}?action=confirm&key=${encodeURIComponent(t.key)}&name=${encodeURIComponent(t.name)}`;
-        text += `▪️ *${t.role}:* ${t.name}\n   🔗 Confirme aqui: ${confirmLink}\n\n`;
+        // Shortened URL parameters: a=confirm (c), k=key, n=name
+        const confirmLink = `${baseUrl}?a=c&k=${encodeURIComponent(t.key)}&n=${encodeURIComponent(t.name)}`;
+        
+        // WhatsApp Format: <URL> ensures the link is clickable and doesn't break
+        text += `▪️ *${t.role}:* ${t.name}\n   🔗 Confirme: <${confirmLink}>\n\n`;
       });
     }
     

@@ -126,11 +126,12 @@ const AppContent = () => {
   // URL Parameter Check for Confirmation
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const action = params.get('action');
-    const key = params.get('key');
-    const name = params.get('name');
+    // Support both long (old) and short (new) parameters
+    const action = params.get('action') || params.get('a');
+    const key = params.get('key') || params.get('k');
+    const name = params.get('name') || params.get('n');
 
-    if (action === 'confirm' && key && name) {
+    if ((action === 'confirm' || action === 'c') && key && name) {
       // Decode key: 2023-10-01T19:30_Som
       const [isoDate, role] = key.split('_');
       const [datePart, timePart] = isoDate.split('T');
@@ -542,14 +543,22 @@ const AppContent = () => {
   };
 
   const copyWhatsApp = () => {
+    const baseUrl = window.location.href.split('?')[0];
     let text = `*Escala - ${getMonthName(currentMonth)}*\n\n`;
+    
     visibleEvents.forEach(evt => {
       const time = evt.iso.split('T')[1];
       text += `*${evt.title} - ${evt.dateDisplay} às ${time}*\n`;
       let hasEntry = false;
       roles.forEach(role => {
-        const member = schedule[`${evt.iso}_${role}`];
-        if (member) { text += `  - ${role}: ${member}\n`; hasEntry = true; }
+        const key = `${evt.iso}_${role}`;
+        const member = schedule[key];
+        if (member) { 
+           // Short link for full list
+           const confirmLink = `${baseUrl}?a=c&k=${encodeURIComponent(key)}&n=${encodeURIComponent(member)}`;
+           text += `  - ${role}: ${member} <${confirmLink}>\n`; 
+           hasEntry = true; 
+        }
       });
       if (!hasEntry) text += `  _(Vazio)_\n`;
       text += '\n';
