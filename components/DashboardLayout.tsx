@@ -1,6 +1,6 @@
 
 import React, { ReactNode, useState } from 'react';
-import { Menu, Moon, Sun, LogOut, Cloud, CloudOff, Layout, Download } from 'lucide-react';
+import { Menu, Moon, Sun, LogOut, Cloud, CloudOff, Layout, Download, RefreshCw } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
@@ -20,6 +20,38 @@ export const DashboardLayout: React.FC<Props> = ({
   children, sidebar, sidebarOpen, setSidebarOpen, theme, toggleTheme, onLogout, title, isConnected, deferredPrompt, onInstallAction
 }) => {
   const [imgError, setImgError] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const handleHardReload = async () => {
+    setIsUpdating(true);
+    // Adiciona um pequeno delay para a UI atualizar antes de travar o processo
+    setTimeout(async () => {
+      try {
+        if ('serviceWorker' in navigator) {
+          try {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            for (let registration of registrations) {
+              await registration.unregister();
+            }
+          } catch (swError) {
+            console.warn("Erro ao limpar Service Workers:", swError);
+          }
+        }
+        if ('caches' in window) {
+           try {
+             const keys = await caches.keys();
+             await Promise.all(keys.map(key => caches.delete(key)));
+           } catch (cacheError) {
+             console.warn("Erro ao limpar Caches:", cacheError);
+           }
+        }
+      } catch (e) {
+        console.error("Erro geral na atualização:", e);
+      } finally {
+        window.location.reload();
+      }
+    }, 100);
+  };
 
   return (
     <div className={`flex h-screen overflow-hidden bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 transition-colors duration-300`}>
@@ -83,6 +115,16 @@ export const DashboardLayout: React.FC<Props> = ({
              >
                 {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
                 <span>{theme === 'dark' ? 'Modo Claro' : 'Modo Escuro'}</span>
+             </button>
+
+             <button 
+               onClick={handleHardReload} 
+               disabled={isUpdating}
+               className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-lg transition-colors"
+               title="Clique se houver erros ou atualizações pendentes"
+             >
+                <RefreshCw size={18} className={isUpdating ? "animate-spin" : ""} />
+                <span>{isUpdating ? 'Atualizando...' : 'Atualizar Sistema'}</span>
              </button>
              
              <button 

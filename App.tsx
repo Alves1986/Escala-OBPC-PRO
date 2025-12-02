@@ -10,7 +10,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis } from './types';
 import { loadData, saveData, getStorageKey } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
-import { Download, Users, Calendar, BarChart2, Plus, Trash2, Wand2, Shield, Settings, Activity, BrainCircuit } from 'lucide-react';
+import { Download, Users, Calendar, BarChart2, Plus, Trash2, Wand2, Shield, Settings, Activity, BrainCircuit, ChevronDown } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { GoogleGenAI } from "@google/genai";
@@ -32,6 +32,7 @@ const AppContent = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [collapsedRoles, setCollapsedRoles] = useState<string[]>([]);
   
   // Data
   const [members, setMembers] = useState<MemberMap>({});
@@ -380,6 +381,12 @@ const AppContent = () => {
     });
   };
 
+  const toggleRoleCollapse = (role: string) => {
+    setCollapsedRoles(prev => 
+      prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]
+    );
+  };
+
   const handleCellChange = (key: string, value: string) => {
     const newSchedule = { ...schedule };
     if (value) newSchedule[key] = value;
@@ -706,20 +713,29 @@ const AppContent = () => {
       </div>
 
       <div className="flex-1">
-        <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Equipe</label>
+        <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Equipe (Clique para expandir)</label>
         <div className="space-y-3">
           {roles.map(role => (
             <div key={role} className="bg-zinc-50 dark:bg-zinc-900/50 rounded-lg p-2 border border-zinc-200 dark:border-zinc-700/50">
-              <h4 className="text-xs font-bold text-brand-600 mb-2">{role}</h4>
-              <ul className="space-y-1">
-                {(members[role] || []).length === 0 && <li className="text-xs text-zinc-400 italic">Vazio</li>}
-                {(members[role] || []).map(m => (
-                  <li key={m} className="flex justify-between items-center text-xs group">
-                    <span className="text-zinc-700 dark:text-zinc-300">{m}</span>
-                    <button onClick={() => removeMember(role, m)} className="text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={12} /></button>
-                  </li>
-                ))}
-              </ul>
+              <div 
+                onClick={() => toggleRoleCollapse(role)}
+                className="flex justify-between items-center cursor-pointer select-none"
+              >
+                <h4 className="text-xs font-bold text-brand-600">{role}</h4>
+                <ChevronDown size={14} className={`text-zinc-400 transition-transform ${collapsedRoles.includes(role) ? '-rotate-90' : ''}`}/>
+              </div>
+              
+              {!collapsedRoles.includes(role) && (
+                <ul className="space-y-1 mt-2 animate-slide-up">
+                  {(members[role] || []).length === 0 && <li className="text-xs text-zinc-400 italic">Vazio</li>}
+                  {(members[role] || []).map(m => (
+                    <li key={m} className="flex justify-between items-center text-xs group">
+                      <span className="text-zinc-700 dark:text-zinc-300">{m}</span>
+                      <button onClick={() => removeMember(role, m)} className="text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={12} /></button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           ))}
         </div>
