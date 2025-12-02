@@ -516,27 +516,14 @@ const AppContent = () => {
   };
 
   // --- AI HELPERS ---
-  const getAIKey = () => {
-    let key = localStorage.getItem('gemini_api_key') || process.env.API_KEY;
-    if (!key) {
-        const userKey = prompt("Insira sua Google Gemini API Key:");
-        if(!userKey) return null;
-        key = userKey;
-        localStorage.setItem('gemini_api_key', key);
-    }
-    return key;
-  };
 
   const handleAIGeneration = async () => {
-    const key = getAIKey();
-    if (!key) return addToast("API Key necessária", "error");
-    
     addToast("IA: Analisando escalas e disponibilidade...", "info");
     const btn = document.getElementById('ai-btn');
     if(btn) btn.classList.add('animate-pulse');
 
     try {
-      const ai = new GoogleGenAI({ apiKey: key });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       const availabilityContext: Record<string, { blocked: string[], preferred: string[] }> = {};
       Object.keys(availability).forEach(m => {
@@ -585,22 +572,19 @@ const AppContent = () => {
 
     } catch (e: any) {
       console.error(e);
-      addToast("Erro na IA: Verifique a API Key", "error");
+      addToast("Erro na IA: Verifique a API Key ou configuração.", "error");
     } finally {
       if(btn) btn.classList.remove('animate-pulse');
     }
   };
 
   const handleAIReview = async () => {
-    const key = getAIKey();
-    if (!key) return addToast("API Key necessária", "error");
-    
     addToast("IA: Revisando escala atual...", "info");
     const btn = document.getElementById('ai-review-btn');
     if(btn) btn.classList.add('animate-pulse');
 
     try {
-      const ai = new GoogleGenAI({ apiKey: key });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
       // Build current assignments for the month
       const currentAssignments: Record<string, string> = {};

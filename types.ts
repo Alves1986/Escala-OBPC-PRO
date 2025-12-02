@@ -1,3 +1,4 @@
+
 export type Role = string;
 
 export interface MemberMap {
@@ -66,5 +67,7 @@ export interface AppState {
 export const DEFAULT_ROLES = ["Projeção", "Transmissão", "Fotografia", "Storys"];
 
 // Supabase Credentials
-export const SUPABASE_URL = "https://phlfpaojiiplnzihsgee.supabase.co"; 
-export const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBobGZwYW9qaWlwbG56aWhzZ2VlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ1MTkxNDEsImV4cCI6MjA4MDA5NTE0MX0.-72lH-LHmobWqqSzBuIKusGTDao_iaiu9q8lJnClUBk";
+// Uses Vite environment variables if available, otherwise falls back to the hardcoded values.
+// We use type assertion to avoid TS errors with import.meta.env if types aren't loaded
+export const SUPABASE_URL = (import.meta as any).env?.VITE_SUPABASE_URL || "https://phlfpaojiiplnzihsgee.supabase.co"; 
+export const SUPABASE_KEY = (import.meta as any).env?.VITE_SUPABASE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBobGZwYW9qaWlwbG56aWhzZ2VlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ1MTkxNDEsImV4cCI6MjA4MDA5NTE0MX0.-72lH-LHmobWqqSzBuIKusGTDao_iaiu9q8lJnClUBk";
