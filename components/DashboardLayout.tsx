@@ -57,13 +57,14 @@ export const DashboardLayout: React.FC<Props> = ({
           </div>
 
           {/* Sidebar Footer */}
-          <div className="p-4 border-t border-zinc-200 dark:border-zinc-700 space-y-2 shrink-0">
+          <div className="p-4 border-t border-zinc-200 dark:border-zinc-700 space-y-1 shrink-0">
              
-             {/* PWA Install Button - Only appears if supported */}
+             {/* PWA Install Button - Discreet Version */}
              {deferredPrompt && onInstallAction && (
                <button 
                  onClick={onInstallAction}
-                 className="w-full flex items-center gap-2 px-3 py-2 text-sm font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 dark:text-blue-300 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 rounded-lg transition-colors mb-2 animate-pulse"
+                 className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 rounded-lg transition-colors"
+                 title="Instalar aplicativo"
                >
                  <Download size={18} />
                  <span>Instalar App</span>
@@ -71,7 +72,7 @@ export const DashboardLayout: React.FC<Props> = ({
              )}
 
              {/* Connection Status */}
-             <div className={`flex items-center gap-2 px-2 py-1.5 text-xs rounded font-medium transition-colors ${isConnected ? 'text-green-600 bg-green-50 dark:bg-green-900/20' : 'text-red-500 bg-red-50 dark:bg-red-900/20'}`}>
+             <div className={`flex items-center gap-2 px-3 py-2 text-xs rounded-lg font-medium transition-colors mb-1 ${isConnected ? 'text-green-600 dark:text-green-500' : 'text-red-500'}`}>
                 {isConnected ? <Cloud size={14}/> : <CloudOff size={14}/>}
                 <span>{isConnected ? 'Sincronizado' : 'Offline'}</span>
              </div>
@@ -86,7 +87,7 @@ export const DashboardLayout: React.FC<Props> = ({
              
              <button 
                onClick={onLogout} 
-               className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition-colors"
+               className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition-colors"
              >
                 <LogOut size={18} />
                 <span>Sair</span>
