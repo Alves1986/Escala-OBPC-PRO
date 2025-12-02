@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, History, ShieldCheck, Loader2, X, User } from 'lucide-react';
+import { ArrowRight, History, Loader2, X, User } from 'lucide-react';
 
 interface Props {
   onLogin: (id: string) => void;
@@ -54,9 +54,11 @@ export const LoginScreen: React.FC<Props> = ({ onLogin, isLoading = false }) => 
           
           {/* Header */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 mb-4 shadow-lg shadow-blue-500/20">
-              <ShieldCheck className="text-white w-8 h-8" />
-            </div>
+            <img 
+              src="/app-icon.png" 
+              alt="Logo Escala Mídia" 
+              className="mx-auto w-24 h-24 mb-6 rounded-2xl shadow-2xl shadow-blue-900/20 hover:scale-105 transition-transform duration-300"
+            />
             <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Escala Mídia Pro</h1>
             <p className="text-zinc-400 text-sm">Acesse o painel do seu ministério</p>
           </div>

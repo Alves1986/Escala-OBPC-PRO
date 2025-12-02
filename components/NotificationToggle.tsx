@@ -74,7 +74,7 @@ export const NotificationToggle: React.FC<Props> = ({ ministryId }) => {
         // Send a test notification immediately (Local Simulation)
         new Notification("Notificações Ativas", {
           body: "Você receberá alertas sobre a escala.",
-          icon: "https://img.icons8.com/fluency/192/calendar.png"
+          icon: "/app-icon.png"
         });
       } else {
         throw new Error("Falha ao salvar inscrição.");

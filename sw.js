@@ -1,9 +1,10 @@
 
-const CACHE_NAME = 'escala-midia-cache-v3';
+const CACHE_NAME = 'escala-midia-cache-v4';
 const urlsToCache = [
   './',
   './index.html',
   './manifest.json',
+  './app-icon.png',
   'https://cdn.tailwindcss.com',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js'
@@ -49,8 +50,8 @@ self.addEventListener('push', function(event) {
     const title = data.title || 'Escala Mídia Pro';
     const options = {
       body: data.body || 'Nova atualização na escala.',
-      icon: 'https://img.icons8.com/fluency/192/calendar.png', // Update with your actual icon URL
-      badge: 'https://img.icons8.com/fluency/96/calendar.png', // Small monochrome icon recommended
+      icon: '/app-icon.png', // Usar o ícone local
+      badge: '/app-icon.png', // Usar o ícone local (monocromático idealmente, mas funcionará)
       vibrate: [100, 50, 100],
       data: {
         url: data.url || '/'
