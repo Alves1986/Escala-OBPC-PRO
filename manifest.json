@@ -1,6 +1,8 @@
+
 {
   "name": "Escala Mídia Pro",
   "short_name": "Mídia OBPC",
+  "id": "/index.html",
   "description": "Sistema profissional de escala para equipes de mídia.",
   "start_url": "./",
   "scope": "/",

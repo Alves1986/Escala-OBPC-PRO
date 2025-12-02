@@ -31,6 +31,7 @@ const AppContent = () => {
   const [theme, setTheme] = useState<'light'|'dark'>('dark');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
   
   // Data
   const [members, setMembers] = useState<MemberMap>({});
@@ -123,6 +124,40 @@ const AppContent = () => {
 
   // --- EFFECTS ---
 
+  // PWA Install Prompt Listener
+  useEffect(() => {
+    const handler = (e: any) => {
+      // Prevent the mini-infobar from appearing on mobile
+      e.preventDefault();
+      // Stash the event so it can be triggered later.
+      setInstallPrompt(e);
+      console.log("PWA Install prompt captured");
+    };
+
+    window.addEventListener('beforeinstallprompt', handler);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+    };
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (!installPrompt) return;
+    
+    // Show the install prompt
+    installPrompt.prompt();
+    
+    // Wait for the user to respond to the prompt
+    const { outcome } = await installPrompt.userChoice;
+    
+    if (outcome === 'accepted') {
+      console.log('User accepted the install prompt');
+      setInstallPrompt(null);
+    } else {
+      console.log('User dismissed the install prompt');
+    }
+  };
+
   // URL Parameter Check for Confirmation
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -197,6 +232,7 @@ const AppContent = () => {
       } catch (e) { console.warn(e); }
       
       navigator.serviceWorker.register(swUrl)
+        .then(reg => console.log('SW Registered', reg.scope))
         .catch(err => console.warn('SW failed:', err));
     }
   }, []);
@@ -701,6 +737,8 @@ const AppContent = () => {
       onLogout={handleLogout}
       title="Escala Mídia Pro"
       isConnected={isConnected}
+      deferredPrompt={installPrompt}
+      onInstallAction={handleInstallApp}
     >
       <div className="mb-6 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
         <div>

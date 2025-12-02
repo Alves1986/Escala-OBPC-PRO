@@ -1,5 +1,6 @@
+
 import React, { ReactNode, useState } from 'react';
-import { Menu, Moon, Sun, LogOut, Cloud, CloudOff, Layout } from 'lucide-react';
+import { Menu, Moon, Sun, LogOut, Cloud, CloudOff, Layout, Download } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
@@ -11,10 +12,12 @@ interface Props {
   onLogout: () => void;
   title: string;
   isConnected: boolean;
+  deferredPrompt?: any;
+  onInstallAction?: () => void;
 }
 
 export const DashboardLayout: React.FC<Props> = ({ 
-  children, sidebar, sidebarOpen, setSidebarOpen, theme, toggleTheme, onLogout, title, isConnected 
+  children, sidebar, sidebarOpen, setSidebarOpen, theme, toggleTheme, onLogout, title, isConnected, deferredPrompt, onInstallAction
 }) => {
   const [imgError, setImgError] = useState(false);
 
@@ -55,6 +58,18 @@ export const DashboardLayout: React.FC<Props> = ({
 
           {/* Sidebar Footer */}
           <div className="p-4 border-t border-zinc-200 dark:border-zinc-700 space-y-2 shrink-0">
+             
+             {/* PWA Install Button - Only appears if supported */}
+             {deferredPrompt && onInstallAction && (
+               <button 
+                 onClick={onInstallAction}
+                 className="w-full flex items-center gap-2 px-3 py-2 text-sm font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 dark:text-blue-300 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 rounded-lg transition-colors mb-2 animate-pulse"
+               >
+                 <Download size={18} />
+                 <span>Instalar App</span>
+               </button>
+             )}
+
              {/* Connection Status */}
              <div className={`flex items-center gap-2 px-2 py-1.5 text-xs rounded font-medium transition-colors ${isConnected ? 'text-green-600 bg-green-50 dark:bg-green-900/20' : 'text-red-500 bg-red-50 dark:bg-red-900/20'}`}>
                 {isConnected ? <Cloud size={14}/> : <CloudOff size={14}/>}
