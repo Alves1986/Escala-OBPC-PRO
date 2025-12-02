@@ -1,5 +1,3 @@
-
-
 export type Role = string;
 
 export interface MemberMap {
