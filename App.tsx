@@ -624,24 +624,8 @@ const AppContent = () => {
             responseMimeType: "application/json"
         }
       });
-
-       const analysis = JSON.parse(response.text);
-       setScheduleIssues(analysis);
-       
-       if (Object.keys(analysis).length === 0) {
-           addToast("Nenhum problema encontrado!", "success");
-       } else {
-           addToast("Análise concluída. Verifique os ícones na tabela.", "warning");
-       }
-       
-     } catch (e) {
-         console.error(e);
-         addToast("Erro ao analisar.", "error");
-     } finally {
-         setLoading(false);
-     }
-  };
-  
+    }
+  }
   // --- SUB-HANDLERS ---
   const toggleRoleCollapse = (role: string) => {
     if (collapsedRoles.includes(role)) {
