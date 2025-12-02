@@ -547,7 +547,7 @@ const AppContent = () => {
 
     setLoading(true);
     try {
-      const genAI = new GoogleGenAI({ apiKey }); // Use correct named parameter
+      const genAI = new GoogleGenAI({ apiKey: apiKey as string }); // Use correct named parameter and cast
       
       const prompt = `
         Gere uma escala para uma equipe de mídia.
@@ -593,7 +593,7 @@ const AppContent = () => {
      
      setLoading(true);
      try {
-       const genAI = new GoogleGenAI({ apiKey }); // Use correct named parameter
+       const genAI = new GoogleGenAI({ apiKey: apiKey as string }); // Use correct named parameter and cast
        
        // Filter schedule for current month only
        const currentSchedule: any = {};
