@@ -1,20 +1,26 @@
 {
   "name": "Escala Mídia Pro",
-  "short_name": "Escala OBPC",
-  "start_url": ".",
+  "short_name": "Mídia OBPC",
+  "description": "Sistema profissional de escala para equipes de mídia.",
+  "start_url": "./",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#18181b",
-  "theme_color": "#000000",
+  "theme_color": "#18181b",
+  "categories": ["productivity", "utilities"],
   "icons": [
     {
       "src": "/app-icon.png",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "any maskable"
     },
     {
       "src": "/app-icon.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ]
 }
