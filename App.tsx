@@ -544,7 +544,8 @@ const AppContent = () => {
   const copyWhatsApp = () => {
     let text = `*Escala - ${getMonthName(currentMonth)}*\n\n`;
     visibleEvents.forEach(evt => {
-      text += `*${evt.title} - ${evt.dateDisplay}*\n`;
+      const time = evt.iso.split('T')[1];
+      text += `*${evt.title} - ${evt.dateDisplay} às ${time}*\n`;
       let hasEntry = false;
       roles.forEach(role => {
         const member = schedule[`${evt.iso}_${role}`];

@@ -31,10 +31,12 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
 
   const handleShare = () => {
     const baseUrl = window.location.origin + window.location.pathname;
+    // Extrai a hora do formato ISO (YYYY-MM-DDTHH:mm)
+    const time = event.iso.split('T')[1];
 
     let text = `📢 *PRÓXIMO EVENTO - MINISTÉRIO DE MÍDIA* 📢\n\n`;
     text += `🗓️ *${event.title}*\n`;
-    text += `🕒 Data: ${event.dateDisplay}\n\n`;
+    text += `🕒 Data: ${event.dateDisplay} às ${time}\n\n`;
     text += `👥 *Equipe Escalada:*\n`;
     
     if (team.length === 0) {
@@ -47,7 +49,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
       });
     }
     
-    text += `Deus abençoe o serviço de todos! 🙏`;
+    text += `🙏🏻 Deus Abençoe a Todos, tenham um ótimo culto.`;
     
     onShare(text);
   };
