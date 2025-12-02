@@ -169,18 +169,30 @@ const AppContent = () => {
     const name = params.get('name') || params.get('n');
 
     if ((action === 'confirm' || action === 'c') && key && name) {
-      // Decode key: 2023-10-01T19:30_Som
-      const [isoDate, role] = key.split('_');
-      const [datePart, timePart] = isoDate.split('T');
-      const formattedDate = `${datePart.split('-').reverse().join('/')} às ${timePart}`;
+      // Validar formato da chave para evitar erro de split undefined
+      if (key.includes('_')) {
+        const parts = key.split('_');
+        // Garantir que temos as duas partes (data e função)
+        if (parts.length >= 2) {
+          const isoDate = parts[0];
+          const role = parts[1];
+          
+          if (isoDate && role) {
+             const [datePart, timePart] = isoDate.split('T');
+             const formattedDate = datePart && timePart 
+                ? `${datePart.split('-').reverse().join('/')} às ${timePart}`
+                : isoDate;
 
-      setConfirmationData({
-        key,
-        memberName: decodeURIComponent(name),
-        eventName: 'Evento', // Generic, or could be fetched
-        date: formattedDate,
-        role: role
-      });
+             setConfirmationData({
+               key,
+               memberName: decodeURIComponent(name),
+               eventName: 'Evento', // Generic, or could be fetched
+               date: formattedDate,
+               role: role
+             });
+          }
+        }
+      }
     }
   }, []);
 
@@ -487,7 +499,9 @@ const AppContent = () => {
   const importCSV = (file: File) => {
     const reader = new FileReader();
     reader.onload = (e) => {
-      const text = e.target?.result as string;
+      const text = e.target?.result;
+      if (typeof text !== 'string') return; // Type Guard Fix
+      
       const lines = text.split('\n');
       const newMembers: MemberMap = { ...members };
       

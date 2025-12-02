@@ -30,9 +30,8 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
   const team = getAssignedMembers();
 
   const handleShare = () => {
-    // Pega a URL base limpa (sem query params)
-    // Garante que não tenha barra duplicada no final antes de adicionar a query
-    const baseUrl = window.location.href.split('?')[0].replace(/\/$/, '');
+    // Usa window.location.origin para garantir o domínio correto sem paths extras ou queries
+    const baseUrl = window.location.origin;
     
     // Extrai a hora do formato ISO (YYYY-MM-DDTHH:mm)
     const time = event.iso.split('T')[1];
