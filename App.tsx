@@ -48,8 +48,6 @@ const AppContent = () => {
   
   // UI State
   const [loading, setLoading] = useState(false);
-  // Modal states are mostly replaced by Tabs, but Profile and Confirmation still need Modals
-  const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [confirmationData, setConfirmationData] = useState<any>(null);
 
   // --- DERIVED STATE ---
@@ -586,7 +584,7 @@ const AppContent = () => {
               return <AuditModal isOpen={true} isPage={true} logs={auditLog} />;
           
           case 'profile':
-              return <ProfileModal isOpen={true} onClose={() => setActiveTab('dashboard')} currentUser={currentUser} onUpdateProfile={handleUpdateProfile} />;
+              return <ProfileModal isOpen={true} isPage={true} currentUser={currentUser} onUpdateProfile={handleUpdateProfile} />;
 
           default:
               return null;
