@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { CustomEvent, AvailabilityMap, AuditLogEntry, Role, User } from '../types';
-import { X, Plus, Trash2, Calendar, ShieldAlert, Undo2, CheckCircle2 } from 'lucide-react';
+import { X, Plus, Trash2, Calendar, ShieldAlert, Undo2, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { getMonthName } from '../utils/dateUtils';
 
 interface ModalProps {
-  isOpen: boolean; // Agora usado para controlar se o componente deve ser renderizado (no caso de modal) ou se é sempre visível (no caso de página)
+  isOpen: boolean; 
   onClose?: () => void;
   title: string;
   children: React.ReactNode;
@@ -127,31 +128,42 @@ export const AvailabilityModal = ({ isOpen, onClose, members, availability, onUp
   isOpen: boolean; onClose?: () => void; members: string[]; availability: AvailabilityMap; onUpdate: (m: string, dates: string[]) => void; currentMonth: string; currentUser: User | null; isPage?: boolean;
 }) => {
   const [selectedMember, setSelectedMember] = useState("");
-  const [year, month] = currentMonth.split('-').map(Number);
+  const [viewMonth, setViewMonth] = useState(currentMonth); // Estado local para navegação de mês dentro do modal
+  
+  const [year, month] = viewMonth.split('-').map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
 
   const isAdmin = currentUser?.role === 'admin';
+  const uniqueMembers = Array.from(new Set(members)).sort(); // Remove duplicatas
 
   useEffect(() => {
-    // Se for página, já seleciona o usuário atual se for membro
     if ((isOpen || isPage) && currentUser) {
         if (!isAdmin) {
              setSelectedMember(currentUser.name);
-        } else if (!selectedMember && members.length > 0) {
-             // Admin sem seleção, pode selecionar o primeiro ou ficar vazio
         }
     }
   }, [isOpen, isPage, currentUser, isAdmin]);
 
+  // Atualiza viewMonth quando o modal abre para garantir sincronia inicial, mas permite navegação
+  useEffect(() => {
+      if(isOpen || isPage) setViewMonth(currentMonth);
+  }, [currentMonth]); // Dependência apenas de currentMonth global, não de isOpen para evitar reset ao fechar/abrir modal interno
+
   const toggleDate = (day: number) => {
     if (!selectedMember) return;
-    const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
+    const dateStr = `${viewMonth}-${String(day).padStart(2, '0')}`;
     const currentDates = availability[selectedMember] || [];
     
     const newDates = currentDates.includes(dateStr) 
       ? currentDates.filter(d => d !== dateStr)
       : [...currentDates, dateStr];
     onUpdate(selectedMember, newDates);
+  };
+
+  const changeMonth = (delta: number) => {
+      const d = new Date(year, month - 1 + delta, 1);
+      const iso = d.toISOString().slice(0, 7);
+      setViewMonth(iso);
   };
 
   return (
@@ -170,7 +182,7 @@ export const AvailabilityModal = ({ isOpen, onClose, members, availability, onUp
                 className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded p-2"
             >
                 <option value="">Selecione o Membro...</option>
-                {members.map(m => <option key={m} value={m}>{m}</option>)}
+                {uniqueMembers.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
         ) : (
@@ -179,17 +191,26 @@ export const AvailabilityModal = ({ isOpen, onClose, members, availability, onUp
           </div>
         )}
 
+        {/* Navegação de Mês */}
+        <div className="flex items-center justify-between bg-zinc-100 dark:bg-zinc-800 p-2 rounded-lg">
+            <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded"><ChevronLeft size={20}/></button>
+            <span className="font-bold text-zinc-800 dark:text-zinc-200">{getMonthName(viewMonth)}</span>
+            <button onClick={() => changeMonth(1)} className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded"><ChevronRight size={20}/></button>
+        </div>
+
         {selectedMember && (
           <div className="bg-white dark:bg-zinc-900/50 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
             <div className="grid grid-cols-7 gap-2 mb-4">
                {['D','S','T','Q','Q','S','S'].map((d,i) => (
                    <div key={i} className="text-center text-xs font-bold text-zinc-400">{d}</div>
                ))}
+               
+              {/* Espaçamento para o primeiro dia da semana */}
+              {Array.from({ length: new Date(year, month - 1, 1).getDay() }).map((_, i) => <div key={`empty-${i}`} />)}
+
               {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
-                const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
+                const dateStr = `${viewMonth}-${String(day).padStart(2, '0')}`;
                 const isAvailable = (availability[selectedMember] || []).includes(dateStr);
-                
-                // Calculando dia da semana para offset se quisesse ser perfeito, mas grid simples funciona
                 
                 return (
                   <button
@@ -353,7 +374,7 @@ export const StatsModal = ({ isOpen, onClose, stats, monthName, isPage }: { isOp
   );
 };
 
-// --- Audit Log Modal ---
+// --- Audit Modal ---
 export const AuditModal = ({ isOpen, onClose, logs, isPage }: { isOpen: boolean; onClose?: () => void; logs: AuditLogEntry[]; isPage?: boolean; }) => {
   return (
     <Wrapper isOpen={isOpen} onClose={onClose} title="Histórico de Atividades" isPage={isPage}>

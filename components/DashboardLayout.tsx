@@ -116,10 +116,10 @@ export const DashboardLayout: React.FC<Props> = ({
              
              <NavItem tab="dashboard" label="Dashboard" icon={Layout} />
              <NavItem tab="calendar" label="Calendário" icon={Calendar} />
-             {isAdmin && <NavItem tab="schedule_editor" label="Editor de Escala" icon={Edit} />}
              <NavItem tab="availability" label="Disponibilidade" icon={CheckCircle} />
              
              <div className="text-xs font-bold text-zinc-400 uppercase px-4 mb-2 mt-6">Gestão</div>
+             {isAdmin && <NavItem tab="schedule_editor" label="Editor de Escala" icon={Edit} />}
              <NavItem tab="events" label="Eventos" icon={Clock} />
              {isAdmin && <NavItem tab="team" label="Equipe & Funções" icon={Users} />}
              <NavItem tab="stats" label="Estatísticas" icon={BarChart2} />

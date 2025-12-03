@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ScheduleTable } from './components/ScheduleTable';
-import { ScheduleCalendarView } from './components/ScheduleCalendarView'; // Novo Componente
+import { ScheduleCalendarView } from './components/ScheduleCalendarView'; 
 import { EventsModal, AvailabilityModal, RolesModal, AuditModal, StatsModal } from './components/ManagementModals';
 import { ProfileModal } from './components/ProfileModal';
 import { ToolsMenu } from './components/ToolsMenu';
@@ -463,7 +463,12 @@ const AppContent = () => {
         const response = await genAI.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: "application/json" } });
         setScheduleIssues(JSON.parse(response.text || '{}'));
         addToast("Análise feita!", "success");
-     } catch(e) { addToast("Erro IA", "error"); } finally { setLoading(false); }
+     } catch(e) { 
+        console.error(e);
+        addToast("Erro na análise IA", "error"); 
+     } finally { 
+        setLoading(false); 
+     }
   };
 
   const handleUpdateProfile = async (name: string, whatsapp: string) => {
@@ -530,7 +535,8 @@ const AppContent = () => {
           case 'calendar':
               return (
                   <ScheduleCalendarView 
-                    events={visibleEvents} roles={roles} schedule={schedule} attendance={attendance} currentUser={currentUser} 
+                    roles={roles} schedule={schedule} attendance={attendance} currentUser={currentUser} 
+                    currentMonth={currentMonth} onMonthChange={setCurrentMonth} customEvents={customEvents}
                   />
               );
 
