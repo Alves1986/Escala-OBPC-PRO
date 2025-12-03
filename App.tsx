@@ -403,7 +403,11 @@ const AppContent = () => {
       {nextEvent ? (
         <NextEventCard 
           event={nextEvent} schedule={schedule} attendance={attendance} roles={roles}
-          onShare={(txt) => { navigator.clipboard.writeText(txt).then(() => addToast("Copiado!", "success")); }}
+          onShare={(txt) => { 
+             const url = new URL("https://wa.me/");
+             url.searchParams.set("text", txt);
+             window.open(url.toString(), "_blank");
+          }}
           onConfirm={(key) => { const mid = ministryId; if (!mid) return; if (confirm("Confirmar presença manualmente?")) { const newVal = !attendance[key]; setAttendance({...attendance, [key]: newVal}); saveData(mid, 'attendance_v1', {...attendance, [key]: newVal}); } }}
         />
       ) : (
@@ -453,7 +457,10 @@ const AppContent = () => {
                   roles.forEach(r => { const w = schedule[`${evt.iso}_${r}`]; if(w) text += `   ▪ ${r}: ${w}\n`; });
                   text += `\n`;
                 });
-                navigator.clipboard.writeText(text).then(() => addToast("Copiado!", "success"));
+                
+                const url = new URL("https://wa.me/");
+                url.searchParams.set("text", text);
+                window.open(url.toString(), "_blank");
              }}
              onCSV={() => {
                 let csv = `Data,Evento,${roles.join(',')}\n`;
