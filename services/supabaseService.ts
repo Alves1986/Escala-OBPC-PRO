@@ -10,159 +10,108 @@ if (SUPABASE_URL && SUPABASE_KEY) {
 
 export const getStorageKey = (ministryId: string, suffix: string) => `${ministryId}_${suffix}`;
 
-// --- Authentication Logic ---
+export const getSupabase = () => supabase;
 
-export const authenticateUser = async (ministryId: string, usernameInput: string, passwordInput: string): Promise<{ success: boolean; message: string; user?: User }> => {
-  if (!supabase || !ministryId) return { success: false, message: "Erro de conexão" };
+// --- Native Authentication Logic ---
 
-  const usersKey = getStorageKey(ministryId, 'users_v1');
-  const legacyAuthKey = getStorageKey(ministryId, 'auth_config_v1');
+export const loginWithEmail = async (email: string, password: string): Promise<{ success: boolean; message: string; user?: User, ministryId?: string }> => {
+    if (!supabase) return { success: false, message: "Erro de conexão" };
 
-  try {
-    // 1. Tenta buscar a lista de usuários moderna
-    const { data: usersData } = await supabase
-      .from('app_storage')
-      .select('value')
-      .eq('key', usersKey)
-      .single();
-
-    let users: User[] = usersData ? usersData.value : [];
-
-    // Tenta encontrar o usuário na lista
-    const foundUser = users.find(u => u.username === usernameInput);
-
-    if (foundUser) {
-      if (foundUser.password === passwordInput) {
-        return { success: true, message: "Login realizado.", user: foundUser };
-      } else {
-        return { success: false, message: "Senha incorreta." };
-      }
-    }
-
-    // FALLBACK: Se o usuário for "admin" e não estiver na lista (migração ou legado), verifica a chave antiga
-    if (usernameInput === 'admin') {
-      const { data: legacyData } = await supabase
-        .from('app_storage')
-        .select('value')
-        .eq('key', legacyAuthKey)
-        .single();
-      
-      if (!legacyData) {
-         // Primeiro acesso admin absoluto
-         // Cria o usuário admin na nova estrutura
-         const newAdmin: User = {
-            username: 'admin',
-            name: 'Administrador',
-            role: 'admin',
-            password: passwordInput,
-            createdAt: new Date().toISOString()
-         };
-         users.push(newAdmin);
-         await saveData(ministryId, 'users_v1', users);
-         return { success: true, message: "Admin configurado.", user: newAdmin };
-      }
-
-      const storedAuth = legacyData.value as { password: string };
-      if (storedAuth.password === passwordInput) {
-        // Migrar para estrutura nova em memória para retornar
-        const legacyAdmin: User = { username: 'admin', name: 'Administrador', role: 'admin' };
-        return { success: true, message: "Login Admin.", user: legacyAdmin };
-      } else {
-        return { success: false, message: "Senha incorreta." };
-      }
-    }
-
-    return { success: false, message: "Usuário não encontrado." };
-
-  } catch (e) {
-    console.error("Auth error", e);
-    return { success: false, message: "Erro interno de autenticação." };
-  }
-};
-
-// --- Registration Logic ---
-
-export const getMinistryRoles = async (ministryId: string): Promise<string[] | null> => {
-    if (!supabase) return null;
     try {
-        const { data } = await supabase
-          .from('app_storage')
-          .select('value')
-          .eq('key', getStorageKey(ministryId, 'functions_config'))
-          .single();
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email,
+            password
+        });
+
+        if (error) {
+            return { success: false, message: "Email ou senha incorretos." };
+        }
+
+        if (data.user) {
+            const metadata = data.user.user_metadata;
+            const userProfile: User = {
+                id: data.user.id,
+                email: data.user.email,
+                name: metadata.name || 'Usuário',
+                role: metadata.role || 'member',
+                ministryId: metadata.ministryId, // AQUI ESTÁ A MÁGICA: Recupera o ID antigo
+                whatsapp: metadata.whatsapp,
+                functions: metadata.functions || []
+            };
+            return { success: true, message: "Login realizado.", user: userProfile, ministryId: metadata.ministryId };
+        }
         
-        if (data) return data.value as string[];
-        
-        // Se não tiver config salva, verifica se o ministério "existe" (tem algum dado salvo)
-        const { data: checkData } = await supabase.from('app_storage').select('key').ilike('key', `${ministryId}_%`).limit(1);
-        if (checkData && checkData.length > 0) return DEFAULT_ROLES;
-        
-        return null; // Ministério não existe
+        return { success: false, message: "Erro desconhecido." };
     } catch (e) {
-        return null;
+        console.error(e);
+        return { success: false, message: "Erro interno." };
     }
 };
 
-export const registerMember = async (
-    ministryId: string, 
-    name: string, 
-    whatsapp: string, 
-    password: string, 
-    selectedRoles: string[]
+export const registerWithEmail = async (
+    email: string,
+    password: string,
+    name: string,
+    ministryId: string,
+    whatsapp?: string,
+    selectedRoles?: string[]
 ): Promise<{ success: boolean; message: string }> => {
     if (!supabase) return { success: false, message: "Erro de conexão" };
 
     try {
-        // 1. Validar Username (slug do nome)
-        const username = name.trim().split(' ')[0].toLowerCase() + Math.floor(Math.random() * 100);
-        
-        // 2. Carregar Usuários existentes
-        const users = await loadData<User[]>(ministryId, 'users_v1', []);
-        
-        // Verificar duplicidade de nome (opcional, mas bom)
-        if (users.some(u => u.name.toLowerCase() === name.toLowerCase())) {
-            return { success: false, message: "Já existe um usuário com este nome." };
-        }
+        const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
 
-        // 3. Criar Novo Usuário
-        const newUser: User = {
-            username,
-            name,
-            whatsapp,
+        const { data, error } = await supabase.auth.signUp({
+            email,
             password,
-            role: 'member', // Default para member
-            functions: selectedRoles,
-            createdAt: new Date().toISOString()
-        };
-        
-        const updatedUsers = [...users, newUser];
-        
-        // 4. Carregar e Atualizar Lista de Membros (Escala)
-        const membersMap = await loadData<MemberMap>(ministryId, 'members_v7', {});
-        const updatedMembersMap = { ...membersMap };
-        
-        selectedRoles.forEach(role => {
-            if (!updatedMembersMap[role]) updatedMembersMap[role] = [];
-            if (!updatedMembersMap[role].includes(name)) {
-                updatedMembersMap[role].push(name);
+            options: {
+                data: {
+                    name,
+                    ministryId: cleanMid, // Salva o ID do ministério nos metadados
+                    whatsapp,
+                    role: 'admin', // Quem cria a conta define o ID, assumimos Admin/Líder
+                    functions: selectedRoles || []
+                }
             }
         });
 
-        // 5. Salvar Tudo
-        await Promise.all([
-            saveData(ministryId, 'users_v1', updatedUsers),
-            saveData(ministryId, 'members_v7', updatedMembersMap)
-        ]);
+        if (error) {
+            return { success: false, message: error.message };
+        }
 
-        return { success: true, message: `Cadastro realizado! Seu usuário é: ${username}` };
-
+        return { success: true, message: "Conta criada! Verifique seu email se necessário ou faça login." };
     } catch (e) {
         console.error(e);
-        return { success: false, message: "Erro ao cadastrar." };
+        return { success: false, message: "Erro ao registrar." };
     }
 };
 
-// --- Data Loading/Saving ---
+export const logout = async () => {
+    if (supabase) await supabase.auth.signOut();
+};
+
+export const getCurrentUser = async (): Promise<{ user: User | null, ministryId: string | null }> => {
+    if (!supabase) return { user: null, ministryId: null };
+    
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+        const meta = session.user.user_metadata;
+        return {
+            user: {
+                id: session.user.id,
+                email: session.user.email,
+                name: meta.name,
+                role: meta.role || 'member',
+                ministryId: meta.ministryId,
+                whatsapp: meta.whatsapp
+            },
+            ministryId: meta.ministryId
+        };
+    }
+    return { user: null, ministryId: null };
+}
+
+// --- Data Loading/Saving (Mantido igual para compatibilidade com dados antigos) ---
 
 export const loadData = async <T>(ministryId: string, keySuffix: string, fallback: T): Promise<T> => {
   if (!supabase || !ministryId) return fallback;
@@ -199,7 +148,7 @@ export const saveData = async <T>(ministryId: string, keySuffix: string, value: 
   }
 };
 
-// --- Push Notification Specific ---
+// --- Push Notification ---
 
 export const saveSubscription = async (ministryId: string, subscription: PushSubscription) => {
   if (!supabase || !ministryId) return false;

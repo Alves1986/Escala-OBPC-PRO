@@ -52,12 +52,14 @@ export interface PushSubscriptionRecord {
 }
 
 export interface User {
-  username: string; // ID único (slug)
-  name: string;     // Nome de exibição
-  password?: string;
+  id?: string;        // UUID do Supabase Auth
+  email?: string;     // Email de login
+  username?: string;  // ID legado ou Display Name
+  name: string;       // Nome de exibição
   role: 'admin' | 'member';
-  whatsapp?: string; // Novo campo
-  functions?: string[]; // Funções que o membro exerce
+  ministryId?: string; // Vínculo com os dados antigos
+  whatsapp?: string;
+  functions?: string[];
   createdAt?: string;
 }
 
