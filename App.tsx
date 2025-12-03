@@ -425,8 +425,8 @@ const AppContent = () => {
     navigator.clipboard.writeText(text).then(() => addToast("Copiado!", "success"));
   };
   
-  const generateCSV = () => { /* ... (mantido igual) ... */ };
-  const importCSV = (file: File) => { /* ... (mantido igual) ... */ };
+  const generateCSV = () => { /* ... */ };
+  const importCSV = (file: File) => { /* ... */ };
   const clearMonthSchedule = () => {
     if (confirm("Limpar toda a escala do mês?")) {
       const newSchedule = { ...schedule };
@@ -500,7 +500,8 @@ const AppContent = () => {
                           <NextEventCard 
                             event={nextEvent} schedule={schedule} attendance={attendance} roles={roles}
                             onShare={(txt) => { navigator.share ? navigator.share({ title: 'Escala', text: txt }).catch(console.error) : navigator.clipboard.writeText(txt).then(() => addToast("Copiado!", "success")); }}
-                            onConfirm={(key) => { const mid = ministryId; if (!mid) return; if (confirm("Confirmar presença?")) { const newVal = !attendance[key]; setAttendance({...attendance, [key]: newVal}); saveData(mid, 'attendance_v1', {...attendance, [key]: newVal}); } }}
+                            onConfirm={toggleAttendance}
+                            currentUser={currentUser} swaps={swaps} onRequestSwap={handleRequestSwap} onCancelSwap={handleCancelSwap} onAcceptSwap={handleAcceptSwap} membersMap={members}
                           />
                       ) : (
                           <div className="bg-white dark:bg-zinc-800 p-8 rounded-2xl text-center shadow-sm border border-zinc-200 dark:border-zinc-700">
@@ -535,6 +536,8 @@ const AppContent = () => {
                   <ScheduleCalendarView 
                     roles={roles} schedule={schedule} attendance={attendance} currentUser={currentUser} 
                     currentMonth={currentMonth} onMonthChange={setCurrentMonth} customEvents={customEvents}
+                    // Pass Swap Props
+                    swaps={swaps} onRequestSwap={handleRequestSwap} onCancelSwap={handleCancelSwap} onAcceptSwap={handleAcceptSwap} membersMap={members} onAttendanceToggle={toggleAttendance}
                   />
               );
 

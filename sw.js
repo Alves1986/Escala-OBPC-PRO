@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'escala-midia-cache-v33-final-tabs';
+const CACHE_NAME = 'escala-midia-cache-v35-final-fixes';
 
 // Assets estáticos fundamentais (Libraries pesadas ficam aqui para Cache-First)
 const PRECACHE_URLS = [

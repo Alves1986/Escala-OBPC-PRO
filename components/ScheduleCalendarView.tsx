@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { ScheduleMap, Role, AttendanceMap, CustomEvent } from '../types';
-import { User, CheckCircle2, ChevronLeft, ChevronRight, X, Clock, Calendar as CalendarIcon } from 'lucide-react';
+import { ScheduleMap, Role, AttendanceMap, CustomEvent, SwapRequest, User as UserType } from '../types';
+import { ChevronLeft, ChevronRight, X, Calendar as CalendarIcon } from 'lucide-react';
 import { getMonthName } from '../utils/dateUtils';
 import { NextEventCard } from './NextEventCard';
 
@@ -9,20 +9,28 @@ interface Props {
   roles: Role[];
   schedule: ScheduleMap;
   attendance: AttendanceMap;
-  currentUser: any;
+  currentUser: UserType | null;
   currentMonth: string;
   onMonthChange: (month: string) => void;
-  customEvents: CustomEvent[]; // Recebe eventos para gerar o calendário localmente
+  customEvents: CustomEvent[];
+  // Swap Props passthrough
+  swaps?: SwapRequest[];
+  onRequestSwap?: (key: string, eventTitle: string, dateDisplay: string) => void;
+  onCancelSwap?: (swapId: string) => void;
+  onAcceptSwap?: (swapId: string) => void;
+  membersMap?: Record<string, string[]>;
+  onAttendanceToggle?: (key: string) => void;
 }
 
-export const ScheduleCalendarView: React.FC<Props> = ({ roles, schedule, attendance, currentUser, currentMonth, onMonthChange, customEvents }) => {
+export const ScheduleCalendarView: React.FC<Props> = ({ 
+    roles, schedule, attendance, currentUser, currentMonth, onMonthChange, customEvents,
+    swaps, onRequestSwap, onCancelSwap, onAcceptSwap, membersMap, onAttendanceToggle
+}) => {
   const [selectedEvent, setSelectedEvent] = useState<{ iso: string, title: string, dateDisplay: string } | null>(null);
 
   const [year, month] = currentMonth.split('-').map(Number);
-  
-  // Lógica de Geração de Dias (Cópia simplificada da utils para renderizar o grid)
   const daysInMonth = new Date(year, month, 0).getDate();
-  const firstDayOfWeek = new Date(year, month - 1, 1).getDay(); // 0 (Dom) a 6 (Sab)
+  const firstDayOfWeek = new Date(year, month - 1, 1).getDay(); 
 
   const changeMonth = (delta: number) => {
       const d = new Date(year, month - 1 + delta, 1);
@@ -34,14 +42,12 @@ export const ScheduleCalendarView: React.FC<Props> = ({ roles, schedule, attenda
       const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
       const dayEvents: { iso: string, title: string, time: string, dateDisplay: string }[] = [];
 
-      // Eventos Customizados
       customEvents.forEach(evt => {
           if (evt.date === dateStr) {
               dayEvents.push({ iso: `${dateStr}T${evt.time}`, title: evt.title, time: evt.time, dateDisplay: `${String(day).padStart(2,'0')}/${String(month).padStart(2,'0')}` });
           }
       });
 
-      // Eventos Padrão (Hardcoded como na utils)
       const date = new Date(year, month - 1, day);
       const dow = date.getDay();
       if (dow === 3) dayEvents.push({ iso: `${dateStr}T19:30`, title: "Culto (Quarta)", time: "19:30", dateDisplay: `${String(day).padStart(2,'0')}/${String(month).padStart(2,'0')}` });
@@ -70,48 +76,46 @@ export const ScheduleCalendarView: React.FC<Props> = ({ roles, schedule, attenda
       {/* Grid de Calendário */}
       <div className="flex-1 bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden flex flex-col">
           {/* Dias da Semana */}
-          <div className="grid grid-cols-7 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50">
+          <div className="grid grid-cols-7 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 shrink-0">
              {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
                  <div key={d} className="py-3 text-center text-xs font-bold text-zinc-400 uppercase tracking-wider">{d}</div>
              ))}
           </div>
           
           {/* Dias */}
-          <div className="grid grid-cols-7 flex-1 auto-rows-fr">
-             {/* Empty slots for start of month */}
+          <div className="grid grid-cols-7 flex-1 auto-rows-fr overflow-y-auto">
              {Array.from({ length: firstDayOfWeek }).map((_, i) => (
-                 <div key={`empty-${i}`} className="bg-zinc-50/30 dark:bg-zinc-900/30 border-b border-r border-zinc-100 dark:border-zinc-700/50" />
+                 <div key={`empty-${i}`} className="bg-zinc-50/30 dark:bg-zinc-900/30 border-b border-r border-zinc-100 dark:border-zinc-700/50 min-h-[100px]" />
              ))}
 
-             {/* Actual Days */}
              {Array.from({ length: daysInMonth }).map((_, i) => {
                  const day = i + 1;
                  const dayEvents = getEventsForDay(day);
                  const isToday = new Date().toISOString().slice(0,10) === `${currentMonth}-${String(day).padStart(2,'0')}`;
 
                  return (
-                     <div key={day} className={`min-h-[100px] border-b border-r border-zinc-100 dark:border-zinc-700/50 p-2 relative flex flex-col gap-1 transition-colors hover:bg-blue-50/30 dark:hover:bg-blue-900/10 ${isToday ? 'bg-blue-50/50 dark:bg-blue-900/20' : ''}`}>
-                         <span className={`text-sm font-semibold w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-500'}`}>{day}</span>
+                     <div key={day} className={`min-h-[120px] border-b border-r border-zinc-100 dark:border-zinc-700/50 p-2 relative flex flex-col gap-1 transition-colors hover:bg-blue-50/30 dark:hover:bg-blue-900/10 ${isToday ? 'bg-blue-50/50 dark:bg-blue-900/20' : ''}`}>
+                         <span className={`text-sm font-semibold w-6 h-6 flex items-center justify-center rounded-full shrink-0 ${isToday ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-500'}`}>{day}</span>
                          
-                         {/* Lista de Eventos no Dia */}
-                         <div className="flex-1 flex flex-col gap-1 overflow-y-auto custom-scrollbar">
+                         <div className="flex-1 flex flex-col gap-1.5 overflow-y-auto custom-scrollbar">
                             {dayEvents.map(evt => {
-                                // Verifica quem está escalado neste evento
                                 const membersInEvent = roles.map(r => schedule[`${evt.iso}_${r}`]).filter(Boolean);
                                 
                                 return (
                                     <button 
                                         key={evt.iso}
                                         onClick={() => setSelectedEvent(evt)}
-                                        className="text-left bg-zinc-100 dark:bg-zinc-700/50 hover:bg-blue-100 dark:hover:bg-blue-900/40 border border-zinc-200 dark:border-zinc-600 rounded px-1.5 py-1 transition-all group"
+                                        className="text-left bg-zinc-100 dark:bg-zinc-700/50 hover:bg-blue-100 dark:hover:bg-blue-900/40 border border-zinc-200 dark:border-zinc-600 rounded px-2 py-1.5 transition-all group h-auto"
                                     >
-                                        <div className="text-[10px] font-bold text-zinc-700 dark:text-zinc-300 truncate mb-1">{evt.time} - {evt.title}</div>
-                                        {/* Bolinhas dos Escalados */}
-                                        <div className="flex -space-x-1 overflow-hidden">
+                                        {/* CSS FIX: whitespace-normal e break-words para não cortar texto */}
+                                        <div className="text-[10px] font-bold text-zinc-700 dark:text-zinc-300 mb-1 whitespace-normal break-words leading-tight">
+                                            {evt.time} <span className="text-zinc-500 dark:text-zinc-400 font-normal">|</span> {evt.title}
+                                        </div>
+                                        <div className="flex flex-wrap gap-0.5">
                                             {membersInEvent.length > 0 ? membersInEvent.map((m, idx) => (
-                                                <div key={idx} className="w-3 h-3 rounded-full bg-blue-500 ring-1 ring-white dark:ring-zinc-800" title={m}></div>
+                                                <div key={idx} className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-1 ring-white dark:ring-zinc-800" title={m}></div>
                                             )) : (
-                                                <div className="w-3 h-3 rounded-full bg-zinc-300 dark:bg-zinc-600 ring-1 ring-white dark:ring-zinc-800"></div>
+                                                <div className="w-2.5 h-2.5 rounded-full bg-zinc-300 dark:bg-zinc-600 ring-1 ring-white dark:ring-zinc-800"></div>
                                             )}
                                         </div>
                                     </button>
@@ -121,15 +125,9 @@ export const ScheduleCalendarView: React.FC<Props> = ({ roles, schedule, attenda
                      </div>
                  );
              })}
-
-             {/* Fill remaining cells if needed to make grid square-ish */}
-             {Array.from({ length: (42 - (daysInMonth + firstDayOfWeek)) % 7 }).map((_, i) => (
-                <div key={`end-empty-${i}`} className="bg-zinc-50/30 dark:bg-zinc-900/30 border-b border-r border-zinc-100 dark:border-zinc-700/50" />
-             ))}
           </div>
       </div>
 
-      {/* Modal de Detalhes (Pop-up) */}
       {selectedEvent && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedEvent(null)}>
               <div className="w-full max-w-md bg-transparent" onClick={e => e.stopPropagation()}>
@@ -145,8 +143,15 @@ export const ScheduleCalendarView: React.FC<Props> = ({ roles, schedule, attenda
                           schedule={schedule} 
                           attendance={attendance} 
                           roles={roles} 
-                          onShare={() => {}} // Não precisa compartilhar daqui, só visualizar
-                          onConfirm={() => {}} // Visualização apenas, ou poderia implementar confirmação
+                          onShare={() => {}} 
+                          onConfirm={(key) => onAttendanceToggle && onAttendanceToggle(key)}
+                          // Pass Swap Props
+                          currentUser={currentUser}
+                          swaps={swaps}
+                          onRequestSwap={onRequestSwap}
+                          onCancelSwap={onCancelSwap}
+                          onAcceptSwap={onAcceptSwap}
+                          membersMap={membersMap}
                       />
                   </div>
               </div>
