@@ -10,6 +10,57 @@ if (SUPABASE_URL && SUPABASE_KEY) {
 
 export const getStorageKey = (ministryId: string, suffix: string) => `${ministryId}_${suffix}`;
 
+// --- Authentication Logic ---
+
+export const authenticateUser = async (ministryId: string, passwordInput: string): Promise<{ success: boolean; message: string }> => {
+  if (!supabase || !ministryId) return { success: false, message: "Erro de conexão" };
+
+  const authKey = getStorageKey(ministryId, 'auth_config_v1');
+
+  try {
+    // 1. Tenta buscar a configuração de senha existente
+    const { data, error } = await supabase
+      .from('app_storage')
+      .select('value')
+      .eq('key', authKey)
+      .single();
+
+    if (error || !data) {
+      // CENÁRIO 1: Sem senha cadastrada (Primeiro acesso ou migração da versão antiga)
+      // A senha digitada agora será a senha definitiva.
+      if (passwordInput.length < 4) {
+        return { success: false, message: "A senha deve ter no mínimo 4 caracteres." };
+      }
+
+      const { error: saveError } = await supabase
+        .from('app_storage')
+        .upsert(
+          { key: authKey, value: { password: passwordInput, createdAt: new Date().toISOString() } },
+          { onConflict: 'key' }
+        );
+
+      if (saveError) return { success: false, message: "Erro ao criar senha." };
+      
+      return { success: true, message: "Senha definida com sucesso!" };
+    }
+
+    // CENÁRIO 2: Já existe senha cadastrada
+    const storedAuth = data.value as { password: string };
+    
+    if (storedAuth.password === passwordInput) {
+      return { success: true, message: "Login realizado." };
+    } else {
+      return { success: false, message: "Senha incorreta." };
+    }
+
+  } catch (e) {
+    console.error("Auth error", e);
+    return { success: false, message: "Erro interno de autenticação." };
+  }
+};
+
+// --- Data Loading/Saving ---
+
 export const loadData = async <T>(ministryId: string, keySuffix: string, fallback: T): Promise<T> => {
   if (!supabase || !ministryId) return fallback;
   
