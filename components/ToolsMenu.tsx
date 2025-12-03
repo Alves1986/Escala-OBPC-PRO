@@ -1,9 +1,10 @@
 
 import React, { useState, useRef } from 'react';
-import { Share2, FileText, FileSpreadsheet, Trash, ChevronDown, Upload } from 'lucide-react';
+import { Share2, FileText, FileSpreadsheet, Trash, ChevronDown, Upload, FileDown } from 'lucide-react';
 
 interface Props {
   onExportIndividual: (member: string) => void;
+  onExportFull: () => void;
   onWhatsApp: () => void;
   onCSV: () => void;
   onImportCSV: (file: File) => void;
@@ -11,7 +12,7 @@ interface Props {
   allMembers: string[];
 }
 
-export const ToolsMenu: React.FC<Props> = ({ onExportIndividual, onWhatsApp, onCSV, onImportCSV, onClearMonth, allMembers }) => {
+export const ToolsMenu: React.FC<Props> = ({ onExportIndividual, onExportFull, onWhatsApp, onCSV, onImportCSV, onClearMonth, allMembers }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -71,9 +72,15 @@ export const ToolsMenu: React.FC<Props> = ({ onExportIndividual, onWhatsApp, onC
             <button onClick={onWhatsApp} className="w-full text-left px-3 py-2 text-sm text-green-600 hover:bg-zinc-50 dark:hover:bg-zinc-700 rounded flex items-center gap-2">
               <Share2 size={16} /> Copiar para WhatsApp
             </button>
+            
+            <button onClick={onExportFull} className="w-full text-left px-3 py-2 text-sm text-indigo-600 hover:bg-zinc-50 dark:hover:bg-zinc-700 rounded flex items-center gap-2">
+              <FileDown size={16} /> Baixar PDF Completo
+            </button>
+
             <button onClick={onCSV} className="w-full text-left px-3 py-2 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 rounded flex items-center gap-2">
               <FileSpreadsheet size={16} /> Baixar Tabela CSV
             </button>
+            
             <div className="border-t border-zinc-100 dark:border-zinc-700 my-1"></div>
             <button onClick={onClearMonth} className="w-full text-left px-3 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded flex items-center gap-2">
               <Trash size={16} /> Limpar Mês Atual

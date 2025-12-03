@@ -1,6 +1,6 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord } from '../types';
+import { SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, DEFAULT_ROLES } from '../types';
 
 let supabase: SupabaseClient | null = null;
 
@@ -12,51 +12,154 @@ export const getStorageKey = (ministryId: string, suffix: string) => `${ministry
 
 // --- Authentication Logic ---
 
-export const authenticateUser = async (ministryId: string, passwordInput: string): Promise<{ success: boolean; message: string }> => {
+export const authenticateUser = async (ministryId: string, usernameInput: string, passwordInput: string): Promise<{ success: boolean; message: string; user?: User }> => {
   if (!supabase || !ministryId) return { success: false, message: "Erro de conexão" };
 
-  const authKey = getStorageKey(ministryId, 'auth_config_v1');
+  const usersKey = getStorageKey(ministryId, 'users_v1');
+  const legacyAuthKey = getStorageKey(ministryId, 'auth_config_v1');
 
   try {
-    // 1. Tenta buscar a configuração de senha existente
-    const { data, error } = await supabase
+    // 1. Tenta buscar a lista de usuários moderna
+    const { data: usersData } = await supabase
       .from('app_storage')
       .select('value')
-      .eq('key', authKey)
+      .eq('key', usersKey)
       .single();
 
-    if (error || !data) {
-      // CENÁRIO 1: Sem senha cadastrada (Primeiro acesso ou migração da versão antiga)
-      // A senha digitada agora será a senha definitiva.
-      if (passwordInput.length < 4) {
-        return { success: false, message: "A senha deve ter no mínimo 4 caracteres." };
+    let users: User[] = usersData ? usersData.value : [];
+
+    // Tenta encontrar o usuário na lista
+    const foundUser = users.find(u => u.username === usernameInput);
+
+    if (foundUser) {
+      if (foundUser.password === passwordInput) {
+        return { success: true, message: "Login realizado.", user: foundUser };
+      } else {
+        return { success: false, message: "Senha incorreta." };
+      }
+    }
+
+    // FALLBACK: Se o usuário for "admin" e não estiver na lista (migração ou legado), verifica a chave antiga
+    if (usernameInput === 'admin') {
+      const { data: legacyData } = await supabase
+        .from('app_storage')
+        .select('value')
+        .eq('key', legacyAuthKey)
+        .single();
+      
+      if (!legacyData) {
+         // Primeiro acesso admin absoluto
+         // Cria o usuário admin na nova estrutura
+         const newAdmin: User = {
+            username: 'admin',
+            name: 'Administrador',
+            role: 'admin',
+            password: passwordInput,
+            createdAt: new Date().toISOString()
+         };
+         users.push(newAdmin);
+         await saveData(ministryId, 'users_v1', users);
+         return { success: true, message: "Admin configurado.", user: newAdmin };
       }
 
-      const { error: saveError } = await supabase
-        .from('app_storage')
-        .upsert(
-          { key: authKey, value: { password: passwordInput, createdAt: new Date().toISOString() } },
-          { onConflict: 'key' }
-        );
-
-      if (saveError) return { success: false, message: "Erro ao criar senha." };
-      
-      return { success: true, message: "Senha definida com sucesso!" };
+      const storedAuth = legacyData.value as { password: string };
+      if (storedAuth.password === passwordInput) {
+        // Migrar para estrutura nova em memória para retornar
+        const legacyAdmin: User = { username: 'admin', name: 'Administrador', role: 'admin' };
+        return { success: true, message: "Login Admin.", user: legacyAdmin };
+      } else {
+        return { success: false, message: "Senha incorreta." };
+      }
     }
 
-    // CENÁRIO 2: Já existe senha cadastrada
-    const storedAuth = data.value as { password: string };
-    
-    if (storedAuth.password === passwordInput) {
-      return { success: true, message: "Login realizado." };
-    } else {
-      return { success: false, message: "Senha incorreta." };
-    }
+    return { success: false, message: "Usuário não encontrado." };
 
   } catch (e) {
     console.error("Auth error", e);
     return { success: false, message: "Erro interno de autenticação." };
   }
+};
+
+// --- Registration Logic ---
+
+export const getMinistryRoles = async (ministryId: string): Promise<string[] | null> => {
+    if (!supabase) return null;
+    try {
+        const { data } = await supabase
+          .from('app_storage')
+          .select('value')
+          .eq('key', getStorageKey(ministryId, 'functions_config'))
+          .single();
+        
+        if (data) return data.value as string[];
+        
+        // Se não tiver config salva, verifica se o ministério "existe" (tem algum dado salvo)
+        const { data: checkData } = await supabase.from('app_storage').select('key').ilike('key', `${ministryId}_%`).limit(1);
+        if (checkData && checkData.length > 0) return DEFAULT_ROLES;
+        
+        return null; // Ministério não existe
+    } catch (e) {
+        return null;
+    }
+};
+
+export const registerMember = async (
+    ministryId: string, 
+    name: string, 
+    whatsapp: string, 
+    password: string, 
+    selectedRoles: string[]
+): Promise<{ success: boolean; message: string }> => {
+    if (!supabase) return { success: false, message: "Erro de conexão" };
+
+    try {
+        // 1. Validar Username (slug do nome)
+        const username = name.trim().split(' ')[0].toLowerCase() + Math.floor(Math.random() * 100);
+        
+        // 2. Carregar Usuários existentes
+        const users = await loadData<User[]>(ministryId, 'users_v1', []);
+        
+        // Verificar duplicidade de nome (opcional, mas bom)
+        if (users.some(u => u.name.toLowerCase() === name.toLowerCase())) {
+            return { success: false, message: "Já existe um usuário com este nome." };
+        }
+
+        // 3. Criar Novo Usuário
+        const newUser: User = {
+            username,
+            name,
+            whatsapp,
+            password,
+            role: 'member', // Default para member
+            functions: selectedRoles,
+            createdAt: new Date().toISOString()
+        };
+        
+        const updatedUsers = [...users, newUser];
+        
+        // 4. Carregar e Atualizar Lista de Membros (Escala)
+        const membersMap = await loadData<MemberMap>(ministryId, 'members_v7', {});
+        const updatedMembersMap = { ...membersMap };
+        
+        selectedRoles.forEach(role => {
+            if (!updatedMembersMap[role]) updatedMembersMap[role] = [];
+            if (!updatedMembersMap[role].includes(name)) {
+                updatedMembersMap[role].push(name);
+            }
+        });
+
+        // 5. Salvar Tudo
+        await Promise.all([
+            saveData(ministryId, 'users_v1', updatedUsers),
+            saveData(ministryId, 'members_v7', updatedMembersMap)
+        ]);
+
+        return { success: true, message: `Cadastro realizado! Seu usuário é: ${username}` };
+
+    } catch (e) {
+        console.error(e);
+        return { success: false, message: "Erro ao cadastrar." };
+    }
 };
 
 // --- Data Loading/Saving ---
@@ -101,7 +204,6 @@ export const saveData = async <T>(ministryId: string, keySuffix: string, value: 
 export const saveSubscription = async (ministryId: string, subscription: PushSubscription) => {
   if (!supabase || !ministryId) return false;
 
-  // Generate or retrieve a persistent Device ID for this browser
   let deviceId = localStorage.getItem('escala_device_id');
   if (!deviceId) {
     deviceId = crypto.randomUUID();
@@ -118,8 +220,6 @@ export const saveSubscription = async (ministryId: string, subscription: PushSub
     last_updated: new Date().toISOString()
   };
 
-  // We store subscriptions as individual keys to avoid massive JSON arrays and race conditions
-  // Key format: ministryId_sub_DEVICEID
   const storageKey = getStorageKey(ministryId, `sub_${deviceId}`);
   
   try {

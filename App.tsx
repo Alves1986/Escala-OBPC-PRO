@@ -439,8 +439,19 @@ const AppContent = () => {
 
   // --- EXPORT / TOOLS ---
   const exportPDF = (memberFilter?: string) => {
-    const doc = new jsPDF();
-    doc.text(`Escala Mídia - ${getMonthName(currentMonth)}`, 14, 15);
+    // Change to landscape for better column fit
+    const doc = new jsPDF('landscape'); 
+    
+    // Title Formatting: "Escala - Dezembro de 2025"
+    const [y, m] = currentMonth.split('-').map(Number);
+    const dateObj = new Date(y, m - 1);
+    const monthFull = dateObj.toLocaleDateString('pt-BR', { month: 'long' });
+    const title = `Escala - ${monthFull.charAt(0).toUpperCase() + monthFull.slice(1)} de ${y}`;
+    
+    doc.setFontSize(18);
+    // Dark grey text for title
+    doc.setTextColor(40, 40, 40); 
+    doc.text(title, 14, 15);
     
     const head = [['Data', 'Evento', ...roles]];
     const body = visibleEvents.map(evt => {
@@ -453,9 +464,9 @@ const AppContent = () => {
     });
 
     if (memberFilter) {
-       // Filter Logic for Individual PDF
-       // (Simplificado para este exemplo: gera tudo mas destaca o user)
-       doc.text(`Escala Individual: ${memberFilter}`, 14, 22);
+       doc.setFontSize(12);
+       doc.setTextColor(80, 80, 80);
+       doc.text(`Filtro: ${memberFilter}`, 14, 22);
     }
 
     autoTable(doc, {
@@ -463,8 +474,24 @@ const AppContent = () => {
       head: head,
       body: body,
       theme: 'grid',
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [41, 128, 185] },
+      styles: { 
+        fontSize: 10,
+        cellPadding: 3,
+        lineColor: [220, 220, 220], // Light gray borders
+        lineWidth: 0.1,
+      },
+      headStyles: { 
+        fillColor: [26, 188, 156], // #1abc9c (Turquoise/Green) requested by user
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        halign: 'left'
+      },
+      bodyStyles: {
+        textColor: [50, 50, 50]
+      },
+      alternateRowStyles: {
+        fillColor: [245, 245, 245]
+      }
     });
 
     doc.save(`Escala_${currentMonth}.pdf`);
@@ -775,6 +802,7 @@ const AppContent = () => {
           
           <ToolsMenu 
             onExportIndividual={(m) => exportPDF(m)}
+            onExportFull={() => exportPDF()}
             onWhatsApp={copyToWhatsApp}
             onCSV={generateCSV}
             onImportCSV={importCSV}
