@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Clock, Calendar, Save, User, Briefcase } from 'lucide-react';
-import { Role, ScheduleMap } from '../types';
+import { X, Clock, Calendar, Save, User, Briefcase, RefreshCcw } from 'lucide-react';
+import { Role, ScheduleMap, User as UserType } from '../types';
 
 interface Props {
   isOpen: boolean;
@@ -10,9 +10,11 @@ interface Props {
   schedule: ScheduleMap;
   roles: Role[];
   onSave: (oldIso: string, newTitle: string, newTime: string) => void;
+  onSwapRequest?: (eventTitle: string, currentMember: string) => void;
+  currentUser?: UserType | null;
 }
 
-export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, schedule, roles, onSave }) => {
+export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, schedule, roles, onSave, onSwapRequest, currentUser }) => {
   const [time, setTime] = useState("");
   const [title, setTitle] = useState("");
 
@@ -24,6 +26,8 @@ export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, sch
   }, [event]);
 
   if (!isOpen || !event) return null;
+
+  const isUserScheduled = currentUser && roles.some(role => schedule[`${event.iso}_${role}`] === currentUser.name);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -102,13 +106,24 @@ export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, sch
                     </div>
                 </div>
 
-                {/* Action Buttons */}
-                <button 
-                    onClick={() => onSave(event.iso, title, time)} 
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 active:scale-95 transition-all"
-                >
-                    <Save size={18} /> Salvar Alterações
-                </button>
+                {/* Actions */}
+                <div className="flex flex-col gap-3">
+                    <button 
+                        onClick={() => onSave(event.iso, title, time)} 
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 active:scale-95 transition-all"
+                    >
+                        <Save size={18} /> Salvar Alterações
+                    </button>
+                    
+                    {onSwapRequest && currentUser && (
+                        <button 
+                            onClick={() => onSwapRequest(title, currentUser.name)}
+                            className="w-full bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 dark:text-amber-200 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 text-sm"
+                        >
+                            <RefreshCcw size={18} /> Solicitar Troca / Indisponibilidade
+                        </button>
+                    )}
+                </div>
             </div>
         </div>
     </div>

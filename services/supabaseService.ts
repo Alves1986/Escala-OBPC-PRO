@@ -1,6 +1,6 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, DEFAULT_ROLES } from '../types';
+import { SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, DEFAULT_ROLES, AppNotification } from '../types';
 
 let supabase: SupabaseClient | null = null;
 
@@ -79,6 +79,13 @@ export const registerWithEmail = async (
         if (error) {
             return { success: false, message: error.message };
         }
+        
+        // Envia notificação de boas-vindas/novo membro
+        await sendNotification(cleanMid, {
+            type: 'info',
+            title: 'Novo Membro',
+            message: `${name} acabou de se cadastrar no sistema.`,
+        });
 
         return { success: true, message: "Conta criada! Verifique seu email se necessário ou faça login." };
     } catch (e) {
@@ -170,6 +177,44 @@ export const saveData = async <T>(ministryId: string, keySuffix: string, value: 
     return false;
   }
 };
+
+// --- Notifications System ---
+
+export const sendNotification = async (ministryId: string, notification: Omit<AppNotification, 'id' | 'timestamp' | 'read'>) => {
+    try {
+        const currentNotifications = await loadData<AppNotification[]>(ministryId, 'notifications_v1', []);
+        
+        const newNotification: AppNotification = {
+            id: Date.now().toString(),
+            timestamp: new Date().toISOString(),
+            read: false,
+            ...notification
+        };
+        
+        // Mantém apenas as últimas 50 notificações
+        const updated = [newNotification, ...currentNotifications].slice(0, 50);
+        
+        await saveData(ministryId, 'notifications_v1', updated);
+        return true;
+    } catch (e) {
+        console.error("Erro ao enviar notificação", e);
+        return false;
+    }
+};
+
+export const markNotificationsRead = async (ministryId: string, notificationIds: string[]) => {
+    try {
+        const currentNotifications = await loadData<AppNotification[]>(ministryId, 'notifications_v1', []);
+        const updated = currentNotifications.map(n => 
+            notificationIds.includes(n.id) ? { ...n, read: true } : n
+        );
+        await saveData(ministryId, 'notifications_v1', updated);
+        return updated;
+    } catch (e) {
+        console.error("Erro ao marcar lido", e);
+        return [];
+    }
+}
 
 // --- Push Notification ---
 

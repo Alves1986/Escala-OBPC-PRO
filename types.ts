@@ -30,6 +30,16 @@ export interface AuditLogEntry {
   details: string;
 }
 
+export interface AppNotification {
+  id: string;
+  type: 'info' | 'success' | 'warning' | 'alert';
+  title: string;
+  message: string;
+  timestamp: string;
+  read: boolean;
+  actionLink?: string; // Opcional: link para redirecionar
+}
+
 export interface ScheduleIssue {
   type: 'error' | 'warning' | 'info';
   message: string;

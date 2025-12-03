@@ -9,8 +9,8 @@ import { EventsScreen } from './components/EventsScreen';
 import { AvailabilityScreen } from './components/AvailabilityScreen';
 import { ProfileScreen } from './components/ProfileScreen';
 import { EventDetailsModal } from './components/EventDetailsModal';
-import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User } from './types';
-import { loadData, saveData, getStorageKey, getSupabase, logout, updateUserProfile } from './services/supabaseService';
+import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification } from './types';
+import { loadData, saveData, getStorageKey, getSupabase, logout, updateUserProfile, sendNotification } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
 import { 
   Calendar as CalendarIcon, 
@@ -82,6 +82,7 @@ const AppContent = () => {
   const [roles, setRoles] = useState<string[]>(DEFAULT_ROLES);
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [scheduleIssues, setScheduleIssues] = useState<ScheduleAnalysis>({});
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   
   // UI State
   const [loading, setLoading] = useState(false);
@@ -205,7 +206,7 @@ const AppContent = () => {
       setLoading(true);
       const loadAll = async () => {
         try {
-          const [m, s, a, c, ig, av, r, lg, th] = await Promise.all([
+          const [m, s, a, c, ig, av, r, lg, th, notif] = await Promise.all([
             loadData<MemberMap>(ministryId, 'members_v7', {}),
             loadData<ScheduleMap>(ministryId, 'escala_full_v7', {}),
             loadData<AttendanceMap>(ministryId, 'attendance_v1', {}),
@@ -214,10 +215,11 @@ const AppContent = () => {
             loadData<AvailabilityMap>(ministryId, 'availability_v1', {}),
             loadData<string[]>(ministryId, 'functions_config', DEFAULT_ROLES),
             loadData<AuditLogEntry[]>(ministryId, 'audit_log_v1', []),
-            loadData<'light'|'dark'>(ministryId, 'theme_pref', 'dark')
+            loadData<'light'|'dark'>(ministryId, 'theme_pref', 'dark'),
+            loadData<AppNotification[]>(ministryId, 'notifications_v1', [])
           ]);
           setMembers(Object.keys(m).length === 0 ? (() => {const i:any={}; DEFAULT_ROLES.forEach(r=>i[r]=[]); return i})() : m);
-          setSchedule(s); setAttendance(a); setCustomEvents(c); setIgnoredEvents(ig); setAvailability(av); setRoles(r); setAuditLog(lg); setTheme(th);
+          setSchedule(s); setAttendance(a); setCustomEvents(c); setIgnoredEvents(ig); setAvailability(av); setRoles(r); setAuditLog(lg); setTheme(th); setNotifications(notif);
           setIsConnected(true);
         } catch (e) { addToast("Erro ao carregar dados", "error"); setIsConnected(false); } 
         finally { setLoading(false); }
@@ -299,11 +301,22 @@ const AppContent = () => {
         saveData(mid, 'availability_v1', availability),
         saveData(mid, 'functions_config', roles),
         saveData(mid, 'audit_log_v1', auditLog),
-        saveData(mid, 'theme_pref', theme)
+        saveData(mid, 'theme_pref', theme),
+        saveData(mid, 'notifications_v1', notifications)
       ]);
       addToast("Dados salvos na nuvem!", "success");
     } catch (e) { addToast("Erro ao salvar", "error"); } 
     finally { setLoading(false); }
+  };
+  
+  // Notification Wrapper
+  const notify = async (type: 'info' | 'success' | 'warning' | 'alert', title: string, message: string) => {
+      if (ministryId) {
+          await sendNotification(ministryId, { type, title, message });
+          // Atualiza localmente para ver imediatamente
+          const newNotif: AppNotification = { id: Date.now().toString(), timestamp: new Date().toISOString(), read: false, type, title, message };
+          setNotifications(prev => [newNotif, ...prev]);
+      }
   };
 
   // --- ACTIONS ---
@@ -323,18 +336,37 @@ const AppContent = () => {
     const newAtt = { ...attendance, [key]: newVal };
     setAttendance(newAtt);
     saveData(mid, 'attendance_v1', newAtt);
-    addToast(newVal ? "Presença confirmada" : "Confirmação removida", "success");
+    
+    if (newVal) {
+        addToast("Presença confirmada", "success");
+        // Notifica o líder apenas se for confirmação
+        const memberName = schedule[key] || "Alguém";
+        const [iso, role] = key.split('_');
+        const dateDisplay = iso.split('T')[0].split('-').reverse().join('/');
+        
+        notify('success', 'Presença Confirmada', `${memberName} confirmou presença para o dia ${dateDisplay} (${role}).`);
+    } else {
+        addToast("Confirmação removida", "info");
+    }
   };
 
   const handleConfirmPresence = () => {
     if (!confirmationData || !ministryId) return;
-    const { key } = confirmationData;
+    const { key, memberName, date } = confirmationData;
     const mid = ministryId;
     const newAtt = { ...attendance, [key]: true };
     setAttendance(newAtt);
     saveData(mid, 'attendance_v1', newAtt);
     addToast("Presença confirmada!", "success");
+    
+    notify('success', 'Presença Confirmada (Link)', `${memberName} confirmou presença via link para ${date}.`);
+    
     setConfirmationData(null);
+  };
+  
+  const handleSwapRequest = async (eventTitle: string, currentMember: string) => {
+      await notify('warning', 'Solicitação de Troca', `${currentMember} solicitou troca para o evento ${eventTitle}.`);
+      addToast("Solicitação de troca enviada ao líder.", "success");
   };
 
   // --- EVENT UPDATE LOGIC ---
@@ -508,7 +540,20 @@ const AppContent = () => {
              url.searchParams.set("text", txt);
              window.open(url.toString(), "_blank");
           }}
-          onConfirm={(key) => { const mid = ministryId; if (!mid) return; if (confirm("Confirmar presença manualmente?")) { const newVal = !attendance[key]; setAttendance({...attendance, [key]: newVal}); saveData(mid, 'attendance_v1', {...attendance, [key]: newVal}); } }}
+          onConfirm={(key) => { 
+              const mid = ministryId; 
+              if (!mid) return; 
+              if (confirm("Confirmar presença manualmente?")) { 
+                  const newVal = !attendance[key]; 
+                  setAttendance({...attendance, [key]: newVal}); 
+                  saveData(mid, 'attendance_v1', {...attendance, [key]: newVal});
+                  
+                  if (newVal) {
+                      const mName = schedule[key];
+                      notify('success', 'Confirmação Manual', `Presença de ${mName} confirmada manualmente no dashboard.`);
+                  }
+              } 
+          }}
         />
       ) : (
         <div className="p-8 text-center bg-zinc-100 dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800">
@@ -769,6 +814,7 @@ const AppContent = () => {
       currentTab={currentTab} onTabChange={setCurrentTab}
       mainNavItems={MAIN_NAV_ITEMS}
       managementNavItems={MANAGEMENT_NAV_ITEMS}
+      notifications={notifications} onNotificationsUpdate={setNotifications}
     >
       <div className="pb-20">
         {currentTab === 'dashboard' && renderDashboard()}
@@ -784,6 +830,7 @@ const AppContent = () => {
             allMembersList={allMembersList}
             currentMonth={currentMonth}
             onMonthChange={setCurrentMonth}
+            onNotify={(msg) => notify('info', 'Disponibilidade Atualizada', msg)}
           />
         )}
         
@@ -826,6 +873,8 @@ const AppContent = () => {
         schedule={schedule}
         roles={roles}
         onSave={handleUpdateEvent}
+        onSwapRequest={handleSwapRequest}
+        currentUser={currentUser}
       />
     </DashboardLayout>
   );

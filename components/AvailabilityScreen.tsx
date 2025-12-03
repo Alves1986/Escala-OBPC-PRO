@@ -9,9 +9,10 @@ interface Props {
   allMembersList: string[];
   currentMonth: string;
   onMonthChange: (newMonth: string) => void;
+  onNotify?: (message: string) => void;
 }
 
-export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailability, allMembersList, currentMonth, onMonthChange }) => {
+export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailability, allMembersList, currentMonth, onMonthChange, onNotify }) => {
   const [selectedMember, setSelectedMember] = useState("");
   
   const [year, month] = currentMonth.split('-').map(Number);
@@ -26,6 +27,26 @@ export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailabil
   const handleNextMonth = () => {
     const next = new Date(year, month, 1);
     onMonthChange(next.toISOString().slice(0, 7));
+  };
+
+  const handleToggleDate = (day: number) => {
+    if (!selectedMember) return;
+    const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
+    const currentUnavailableDates = availability[selectedMember] || [];
+    
+    const isAvailable = !currentUnavailableDates.includes(dateStr);
+
+    const newUnavailableDates = isAvailable 
+      ? [...currentUnavailableDates, dateStr] 
+      : currentUnavailableDates.filter(d => d !== dateStr);
+    
+    setAvailability({ ...availability, [selectedMember]: newUnavailableDates });
+
+    // Notificação inteligente: Avisar apenas se bloqueou muitos dias ou algo assim
+    // Para simplificar, vamos notificar a ação genérica se o hook existir
+    if (onNotify) {
+        onNotify(`${selectedMember} atualizou sua disponibilidade para ${currentMonth}.`);
+    }
   };
 
   return (
@@ -62,23 +83,16 @@ export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailabil
           <div className="grid grid-cols-7 gap-2 mt-6">
             {days.map(day => {
               const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
-              const currentUnavailableDates = availability[selectedMember] || [];
-              
-              // Se a data NÃO está no array, significa que está DISPONÍVEL (Visual Verde)
-              // Se a data ESTÁ no array, significa que está INDISPONÍVEL (Visual Cinza)
-              const isAvailable = !currentUnavailableDates.includes(dateStr);
+              const isUnavailable = (availability[selectedMember] || []).includes(dateStr);
+              // isAvailable para a UI significa NÃO estar na lista de unavailable
+              const isAvailableUI = !isUnavailable;
 
               return (
                 <button
                   key={day}
-                  onClick={() => {
-                    const newUnavailableDates = isAvailable 
-                      ? [...currentUnavailableDates, dateStr] // Torna indisponível (adiciona ao array de bloqueios)
-                      : currentUnavailableDates.filter(d => d !== dateStr); // Torna disponível (remove do array)
-                    setAvailability({ ...availability, [selectedMember]: newUnavailableDates });
-                  }}
+                  onClick={() => handleToggleDate(day)}
                   className={`aspect-square flex flex-col items-center justify-center rounded-xl text-lg font-bold transition-all shadow-sm ${
-                    isAvailable 
+                    isAvailableUI 
                       ? 'bg-green-500 text-white shadow-green-500/30 scale-100 ring-2 ring-green-400 dark:ring-green-600' 
                       : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 scale-95 opacity-60 hover:opacity-100'
                   }`}
