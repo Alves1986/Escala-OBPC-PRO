@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ScheduleTable } from './components/ScheduleTable';
@@ -694,7 +693,7 @@ const AppContent = () => {
       {nextEvent && (
         <NextEventCard 
           event={nextEvent} schedule={schedule} attendance={attendance} roles={roles}
-          onShare={(txt) => { navigator.share ? navigator.share({ title: 'Escala', text: txt }).catch(console.error) : (navigator.clipboard.writeText(txt) && addToast("Copiado!", "success")); }}
+          onShare={(txt) => { navigator.share ? navigator.share({ title: 'Escala', text: txt }).catch(console.error) : navigator.clipboard.writeText(txt).then(() => addToast("Copiado!", "success")); }}
           onConfirm={(key) => { const mid = ministryId; if (!mid) return; if (confirm("Confirmar presença manualmente?")) { const newVal = !attendance[key]; setAttendance({...attendance, [key]: newVal}); saveData(mid, 'attendance_v1', {...attendance, [key]: newVal}); } }}
         />
       )}
