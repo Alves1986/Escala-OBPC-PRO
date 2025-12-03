@@ -13,6 +13,17 @@ export interface AttendanceMap {
   [key: string]: boolean;
 }
 
+export interface SwapRequest {
+  id: string;
+  key: string; // Schedule Key (Date_Role)
+  requesterName: string;
+  role: string;
+  eventName: string;
+  dateDisplay: string;
+  status: 'pending' | 'completed';
+  createdAt: string;
+}
+
 export interface CustomEvent {
   id: string;
   title: string;

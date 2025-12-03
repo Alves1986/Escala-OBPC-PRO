@@ -1,7 +1,6 @@
-
 import React from 'react';
-import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis } from '../types';
-import { CheckCircle2, AlertTriangle, Trash2, BrainCircuit, AlertCircle } from 'lucide-react';
+import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis, SwapRequest, User } from '../types';
+import { CheckCircle2, AlertTriangle, Trash2, BrainCircuit, AlertCircle, RefreshCw, XCircle, ArrowRightLeft } from 'lucide-react';
 
 interface Props {
   events: { iso: string; dateDisplay: string; title: string }[];
@@ -15,17 +14,30 @@ interface Props {
   onAttendanceToggle: (key: string) => void;
   onDeleteEvent: (iso: string, title: string) => void;
   memberStats: Record<string, number>;
+  currentUser: User | null;
+  swaps: SwapRequest[];
+  onRequestSwap: (key: string, eventTitle: string, dateDisplay: string) => void;
+  onCancelSwap: (swapId: string) => void;
+  onAcceptSwap: (swapId: string) => void;
 }
 
 export const ScheduleTable: React.FC<Props> = ({
-  events, roles, schedule, attendance, availability, members, scheduleIssues, onCellChange, onAttendanceToggle, onDeleteEvent, memberStats
+  events, roles, schedule, attendance, availability, members, scheduleIssues, onCellChange, onAttendanceToggle, onDeleteEvent, memberStats, currentUser, swaps, onRequestSwap, onCancelSwap, onAcceptSwap
 }) => {
   
   // Calculate if member is unavailable for a specific date
-  const isUnavailable = (member: string, isoDateStr: string) => {
+  // NOVA LÓGICA: hasConflict retorna TRUE se o membro definiu disponibilidade e a data NÃO está nela.
+  const hasConflict = (member: string, isoDateStr: string) => {
     const datePart = isoDateStr.split('T')[0];
-    // Verifica se a data exata está na lista de indisponibilidade (ignora datas com '+' que são preferenciais)
-    return availability[member]?.includes(datePart);
+    const memberAvailability = availability[member];
+
+    // Se a lista de disponibilidade for indefinida ou vazia, assumimos que está livre (sem conflito).
+    if (!memberAvailability || memberAvailability.length === 0) {
+      return false;
+    }
+    
+    // Se tem lista, verifica se a data está nela. Se NÃO estiver, é conflito.
+    return !memberAvailability.includes(datePart);
   };
 
   return (
@@ -67,84 +79,130 @@ export const ScheduleTable: React.FC<Props> = ({
                   const isConfirmed = attendance[key];
                   const issue = scheduleIssues[key];
                   
-                  // Verifica se há conflito: membro escalado E indisponível na data
-                  const hasLocalConflict = currentValue && isUnavailable(currentValue, event.iso);
+                  // Swap Logic
+                  const activeSwap = swaps.find(s => s.key === key && s.status === 'pending');
+                  const isMyShift = currentValue === currentUser?.name;
+                  // Pode aceitar se: não é minha escala, sou admin OU sou membro desta função
+                  const canAcceptSwap = !isMyShift && (currentUser?.role === 'admin' || roleMembers.includes(currentUser?.name || ''));
+                  const isSwapRequester = activeSwap?.requesterName === currentUser?.name;
 
-                  // Sort members: Available first, then by least usage
+                  // Verifica se há conflito usando a nova lógica (Data não permitida)
+                  const hasLocalConflict = currentValue && hasConflict(currentValue, event.iso);
+
+                  // Sort members: Available first (no conflict), then by least usage
                   const sortedMembers = [...roleMembers].sort((a, b) => {
-                    const unavailA = isUnavailable(a, event.iso);
-                    const unavailB = isUnavailable(b, event.iso);
-                    if (unavailA && !unavailB) return 1;
-                    if (!unavailA && unavailB) return -1;
+                    const conflictA = hasConflict(a, event.iso);
+                    const conflictB = hasConflict(b, event.iso);
+                    // Quem tem conflito vai para o final
+                    if (conflictA && !conflictB) return 1;
+                    if (!conflictA && conflictB) return -1;
                     return (memberStats[a] || 0) - (memberStats[b] || 0);
                   });
 
                   return (
-                    <td key={key} className="px-6 py-4">
+                    <td key={key} className={`px-6 py-4 relative ${activeSwap ? 'bg-amber-50/50 dark:bg-amber-900/10' : ''}`}>
                       <div className="flex items-center gap-2">
                         <div className="relative w-full group/cell">
                           <select
                             value={currentValue}
                             onChange={(e) => onCellChange(key, e.target.value)}
+                            disabled={!!activeSwap && currentUser?.role !== 'admin'}
                             className={`w-full bg-zinc-100 dark:bg-zinc-900/50 border-0 rounded-md py-1.5 pl-3 pr-8 text-xs ring-1 ring-inset focus:ring-2 sm:text-sm sm:leading-6 cursor-pointer transition-all
-                              ${hasLocalConflict 
-                                ? 'text-red-700 dark:text-red-400 ring-red-300 dark:ring-red-900 focus:ring-red-500 bg-red-50 dark:bg-red-900/20 font-medium' 
-                                : issue?.type === 'warning'
-                                  ? 'text-amber-700 dark:text-amber-400 ring-amber-300 dark:ring-amber-900 focus:ring-amber-500 bg-amber-50 dark:bg-amber-900/20'
-                                  : currentValue 
-                                    ? 'text-zinc-900 dark:text-zinc-100 ring-zinc-300 dark:ring-zinc-600 focus:ring-brand-500' 
-                                    : 'text-zinc-400 ring-zinc-200 dark:ring-zinc-700 focus:ring-brand-500'}
+                              ${activeSwap 
+                                ? 'text-amber-700 dark:text-amber-400 ring-amber-300 dark:ring-amber-900' 
+                                : hasLocalConflict 
+                                  ? 'text-red-700 dark:text-red-400 ring-red-300 dark:ring-red-900 focus:ring-red-500 bg-red-50 dark:bg-red-900/20 font-medium' 
+                                  : issue?.type === 'warning'
+                                    ? 'text-amber-700 dark:text-amber-400 ring-amber-300 dark:ring-amber-900 focus:ring-amber-500 bg-amber-50 dark:bg-amber-900/20'
+                                    : currentValue 
+                                      ? 'text-zinc-900 dark:text-zinc-100 ring-zinc-300 dark:ring-zinc-600 focus:ring-brand-500' 
+                                      : 'text-zinc-400 ring-zinc-200 dark:ring-zinc-700 focus:ring-brand-500'}
                             `}
                           >
                             <option value="">-- Selecionar --</option>
                             {sortedMembers.map(m => {
-                              const unavail = isUnavailable(m, event.iso);
+                              const conflict = hasConflict(m, event.iso);
                               return (
-                                <option key={m} value={m} disabled={unavail} className={unavail ? 'text-red-400' : ''}>
-                                  {m} ({memberStats[m] || 0}) {unavail ? '[Indisp.]' : ''}
+                                <option key={m} value={m} className={conflict ? 'text-red-400' : ''}>
+                                  {m} ({memberStats[m] || 0}) {conflict ? '[Indisp.]' : ''}
                                 </option>
                               );
                             })}
                           </select>
                           
+                          {/* Swap Indicator Badge */}
+                          {activeSwap && (
+                             <div className="absolute left-0 -top-5 text-[10px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 rounded flex items-center gap-1 animate-pulse">
+                               <RefreshCw size={10} className="animate-spin-slow"/> Em Troca
+                             </div>
+                          )}
+                          
                           {/* Indicador Visual de Conflito Local (Data Bloqueada) */}
-                          {hasLocalConflict && (
-                            <div className="absolute right-8 top-1/2 -translate-y-1/2 text-red-500 animate-pulse" title="CONFLITO: Membro marcou indisponibilidade neste dia!">
+                          {hasLocalConflict && !activeSwap && (
+                            <div className="absolute right-8 top-1/2 -translate-y-1/2 text-red-500 animate-pulse" title="CONFLITO: Membro não marcou disponibilidade neste dia!">
                               <AlertTriangle size={16} />
                             </div>
                           )}
 
                           {/* Indicador de Análise da IA */}
-                          {!hasLocalConflict && issue && (
+                          {!hasLocalConflict && !activeSwap && issue && (
                             <div className="absolute right-8 top-1/2 -translate-y-1/2 text-amber-500">
                                {issue.type === 'error' ? <AlertCircle size={16} /> : <BrainCircuit size={16} />}
-                               {/* Tooltip Customizado */}
-                               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-zinc-800 text-white text-xs rounded shadow-lg opacity-0 group-hover/cell:opacity-100 transition-opacity pointer-events-none z-50">
-                                  <p className="font-bold mb-1 flex items-center gap-1">
-                                    <BrainCircuit size={12}/> Análise IA:
-                                  </p>
-                                  {issue.message}
-                                  {issue.suggestedReplacement && (
-                                    <p className="mt-1 text-green-400">Sugestão: {issue.suggestedReplacement}</p>
-                                  )}
-                               </div>
                             </div>
                           )}
                         </div>
                         
-                        {currentValue && (
-                          <button
-                            onClick={() => onAttendanceToggle(key)}
-                            className={`p-1 rounded-full transition-colors flex-shrink-0 ${
-                              isConfirmed 
-                                ? 'text-green-600 bg-green-100 dark:bg-green-900/30' 
-                                : 'text-zinc-300 hover:text-zinc-400'
-                            }`}
-                            title={isConfirmed ? "Presença Confirmada" : "Confirmar Presença"}
-                          >
-                            <CheckCircle2 size={16} />
-                          </button>
-                        )}
+                        {/* Action Buttons */}
+                        <div className="flex gap-1">
+                            {currentValue && !activeSwap && (
+                              <>
+                                <button
+                                  onClick={() => onAttendanceToggle(key)}
+                                  className={`p-1 rounded-full transition-colors flex-shrink-0 ${
+                                    isConfirmed 
+                                      ? 'text-green-600 bg-green-100 dark:bg-green-900/30' 
+                                      : 'text-zinc-300 hover:text-zinc-400'
+                                  }`}
+                                  title={isConfirmed ? "Presença Confirmada" : "Confirmar Presença"}
+                                >
+                                  <CheckCircle2 size={16} />
+                                </button>
+                                
+                                {(isMyShift || currentUser?.role === 'admin') && (
+                                    <button
+                                      onClick={() => onRequestSwap(key, event.title, event.dateDisplay)}
+                                      className="p-1 rounded-full text-zinc-300 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors flex-shrink-0"
+                                      title="Solicitar Troca"
+                                    >
+                                      <RefreshCw size={16} />
+                                    </button>
+                                )}
+                              </>
+                            )}
+
+                            {activeSwap && (
+                                <>
+                                   {isSwapRequester ? (
+                                     <button
+                                       onClick={() => onCancelSwap(activeSwap.id)}
+                                       className="p-1 rounded-full text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex-shrink-0"
+                                       title="Cancelar Troca"
+                                     >
+                                       <XCircle size={16} />
+                                     </button>
+                                   ) : canAcceptSwap ? (
+                                     <button
+                                       onClick={() => onAcceptSwap(activeSwap.id)}
+                                       className="p-1 rounded-full bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-colors flex-shrink-0 animate-bounce"
+                                       title="ASSUMIR ESCALA (Aceitar Troca)"
+                                     >
+                                       <ArrowRightLeft size={16} />
+                                     </button>
+                                   ) : null}
+                                </>
+                            )}
+                        </div>
+
                       </div>
                     </td>
                   );

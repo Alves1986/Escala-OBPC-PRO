@@ -1,7 +1,6 @@
-
-import React, { useState } from 'react';
-import { CustomEvent, AvailabilityMap, AuditLogEntry, Role } from '../types';
-import { X, Plus, Trash2, Calendar, ShieldAlert, Undo2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { CustomEvent, AvailabilityMap, AuditLogEntry, Role, User } from '../types';
+import { X, Plus, Trash2, Calendar, ShieldAlert, Undo2, CheckCircle2 } from 'lucide-react';
 
 interface ModalProps {
   isOpen: boolean;
@@ -104,18 +103,30 @@ export const EventsModal = ({ isOpen, onClose, events, hiddenEvents, onAdd, onRe
   );
 };
 
-// --- Availability Modal ---
-export const AvailabilityModal = ({ isOpen, onClose, members, availability, onUpdate, currentMonth }: {
-  isOpen: boolean; onClose: () => void; members: string[]; availability: AvailabilityMap; onUpdate: (m: string, dates: string[]) => void; currentMonth: string;
+// --- Availability Modal (AGORA: DISPONIBILIDADE) ---
+export const AvailabilityModal = ({ isOpen, onClose, members, availability, onUpdate, currentMonth, currentUser }: {
+  isOpen: boolean; onClose: () => void; members: string[]; availability: AvailabilityMap; onUpdate: (m: string, dates: string[]) => void; currentMonth: string; currentUser: User | null;
 }) => {
   const [selectedMember, setSelectedMember] = useState("");
   const [year, month] = currentMonth.split('-').map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
 
+  const isAdmin = currentUser?.role === 'admin';
+
+  useEffect(() => {
+    if (isOpen && currentUser && !isAdmin) {
+      // Se não for admin, trava a seleção no próprio usuário
+      setSelectedMember(currentUser.name);
+    }
+  }, [isOpen, currentUser, isAdmin]);
+
   const toggleDate = (day: number) => {
     if (!selectedMember) return;
     const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
     const currentDates = availability[selectedMember] || [];
+    
+    // Lógica Invertida: Se está na lista, remove. Se não está, adiciona.
+    // Lista agora representa DIAS DISPONÍVEIS.
     const newDates = currentDates.includes(dateStr) 
       ? currentDates.filter(d => d !== dateStr)
       : [...currentDates, dateStr];
@@ -123,39 +134,52 @@ export const AvailabilityModal = ({ isOpen, onClose, members, availability, onUp
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Gerenciar Indisponibilidade">
+    <Modal isOpen={isOpen} onClose={onClose} title="Marcar Disponibilidade">
       <div className="space-y-4">
-        <select 
-          value={selectedMember} 
-          onChange={e => setSelectedMember(e.target.value)}
-          className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded p-2"
-        >
-          <option value="">Selecione o Membro...</option>
-          {members.map(m => <option key={m} value={m}>{m}</option>)}
-        </select>
-
-        {selectedMember && (
-          <div className="grid grid-cols-7 gap-1">
-            {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
-              const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
-              const isUnavailable = (availability[selectedMember] || []).includes(dateStr);
-              return (
-                <button
-                  key={day}
-                  onClick={() => toggleDate(day)}
-                  className={`aspect-square flex items-center justify-center rounded text-sm font-medium transition-colors ${
-                    isUnavailable 
-                      ? 'bg-red-500 text-white' 
-                      : 'bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600'
-                  }`}
-                >
-                  {day}
-                </button>
-              );
-            })}
+        {isAdmin ? (
+          <select 
+            value={selectedMember} 
+            onChange={e => setSelectedMember(e.target.value)}
+            className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded p-2"
+          >
+            <option value="">Selecione o Membro...</option>
+            {members.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        ) : (
+          <div className="bg-zinc-100 dark:bg-zinc-900 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 text-center font-bold text-zinc-800 dark:text-zinc-200">
+             {currentUser?.name}
           </div>
         )}
-        <p className="text-xs text-zinc-500 text-center">Clique nos dias que o membro NÃO pode servir.</p>
+
+        {selectedMember && (
+          <>
+            <div className="grid grid-cols-7 gap-1">
+              {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
+                const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
+                // Lógica Visual Invertida: Se está na lista, é VERDE (Disponível)
+                const isAvailable = (availability[selectedMember] || []).includes(dateStr);
+                return (
+                  <button
+                    key={day}
+                    onClick={() => toggleDate(day)}
+                    className={`aspect-square flex items-center justify-center rounded text-sm font-medium transition-colors ${
+                      isAvailable 
+                        ? 'bg-green-500 text-white shadow-sm ring-2 ring-green-300 dark:ring-green-900' 
+                        : 'bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-zinc-400'
+                    }`}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex items-center justify-center gap-4 text-xs mt-2">
+                <div className="flex items-center gap-1"><span className="w-3 h-3 bg-green-500 rounded"></span> Disponível</div>
+                <div className="flex items-center gap-1"><span className="w-3 h-3 bg-zinc-200 dark:bg-zinc-700 rounded"></span> Indisponível</div>
+            </div>
+            <p className="text-xs text-zinc-500 text-center mt-2">Clique nos dias que você <strong>PODE</strong> servir.</p>
+          </>
+        )}
       </div>
     </Modal>
   );

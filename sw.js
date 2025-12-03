@@ -1,4 +1,5 @@
-const CACHE_NAME = 'escala-midia-cache-v22-force';
+
+const CACHE_NAME = 'escala-midia-cache-v28-forgot-pw';
 
 // Assets estáticos fundamentais (Libraries pesadas ficam aqui para Cache-First)
 const PRECACHE_URLS = [

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, ShieldCheck, UserPlus, ArrowLeft, CheckCircle2 } from 'lucide-react';
-import { loginWithEmail, registerWithEmail } from '../services/supabaseService';
+import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, ShieldCheck, UserPlus, ArrowLeft, CheckCircle2, KeyRound } from 'lucide-react';
+import { loginWithEmail, registerWithEmail, sendPasswordResetEmail } from '../services/supabaseService';
 import { User } from '../types';
 
 interface Props {
@@ -10,7 +10,7 @@ interface Props {
 }
 
 export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
-  const [view, setView] = useState<'login' | 'register'>('login');
+  const [view, setView] = useState<'login' | 'register' | 'forgot-password'>('login');
   
   // Login State
   const [email, setEmail] = useState("");
@@ -22,6 +22,9 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
   const [regMinistryId, setRegMinistryId] = useState("");
+
+  // Forgot Password State
+  const [resetEmail, setResetEmail] = useState("");
   
   // UI State
   const [localLoading, setLocalLoading] = useState(false);
@@ -73,6 +76,28 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
       setLocalLoading(false);
   };
 
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!resetEmail) {
+          setErrorMsg("Digite seu e-mail.");
+          return;
+      }
+
+      setLocalLoading(true);
+      setErrorMsg("");
+      setSuccessMsg("");
+
+      const result = await sendPasswordResetEmail(resetEmail);
+
+      if (result.success) {
+          setSuccessMsg(result.message);
+          // Opcional: voltar para login após alguns segundos
+      } else {
+          setErrorMsg(result.message);
+      }
+      setLocalLoading(false);
+  };
+
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-zinc-950 relative overflow-hidden font-sans">
       {/* Background Effects */}
@@ -86,10 +111,12 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
           
           <div className="text-center mb-6">
              <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
-               <ShieldCheck size={32} className="text-white" />
+               {view === 'forgot-password' ? <KeyRound size={32} className="text-white"/> : <ShieldCheck size={32} className="text-white" />}
              </div>
              <h1 className="text-xl font-bold text-white tracking-tight">
-                {view === 'login' ? 'Entrar no Sistema' : 'Criar Nova Conta'}
+                {view === 'login' && 'Entrar no Sistema'}
+                {view === 'register' && 'Criar Nova Conta'}
+                {view === 'forgot-password' && 'Recuperar Senha'}
              </h1>
           </div>
 
@@ -112,7 +139,10 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-semibold text-zinc-500 uppercase ml-1">Senha</label>
+                  <div className="flex justify-between items-center ml-1">
+                    <label className="text-[10px] font-semibold text-zinc-500 uppercase">Senha</label>
+                    <button type="button" onClick={() => { setErrorMsg(""); setView('forgot-password'); }} className="text-[10px] font-medium text-blue-400 hover:text-blue-300">Esqueceu?</button>
+                  </div>
                   <div className="relative">
                     <Lock size={16} className="absolute left-3 top-3 text-zinc-600" />
                     <input 
@@ -212,6 +242,41 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                       <button type="button" onClick={() => setView('login')} className="p-3 bg-zinc-800 text-zinc-400 rounded-xl hover:text-white"><ArrowLeft size={18}/></button>
                       <button type="submit" disabled={localLoading} className="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-xl shadow-lg flex justify-center items-center">
                           {localLoading ? <Loader2 className="animate-spin"/> : 'Finalizar Cadastro'}
+                      </button>
+                  </div>
+              </form>
+          )}
+
+          {/* FORGOT PASSWORD VIEW */}
+          {view === 'forgot-password' && (
+              <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
+                  <div className="bg-zinc-800/50 p-3 rounded-lg border border-zinc-700 mb-2">
+                      <p className="text-[10px] text-zinc-300 leading-tight text-center">
+                        Digite o e-mail associado à sua conta para receber um link de redefinição de senha.
+                      </p>
+                  </div>
+
+                  <div className="space-y-1">
+                      <label className="text-[10px] font-semibold text-zinc-500 uppercase ml-1">E-mail</label>
+                      <div className="relative">
+                          <Mail size={16} className="absolute left-3 top-3 text-zinc-600" />
+                          <input 
+                              type="email" 
+                              value={resetEmail} 
+                              onChange={e => setResetEmail(e.target.value)}
+                              placeholder="seu@email.com" 
+                              className="w-full bg-zinc-950 border border-zinc-800 focus:border-blue-600 text-white rounded-xl py-2.5 pl-9 pr-3 outline-none transition-colors text-sm"
+                          />
+                      </div>
+                  </div>
+
+                  {successMsg && <div className="p-2 rounded bg-green-500/10 text-green-400 text-xs text-center">{successMsg}</div>}
+                  {errorMsg && <div className="p-2 rounded bg-red-500/10 text-red-400 text-xs text-center">{errorMsg}</div>}
+
+                  <div className="flex gap-2 mt-4">
+                      <button type="button" onClick={() => { setErrorMsg(""); setSuccessMsg(""); setView('login'); }} className="p-3 bg-zinc-800 text-zinc-400 rounded-xl hover:text-white"><ArrowLeft size={18}/></button>
+                      <button type="submit" disabled={localLoading} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow-lg flex justify-center items-center">
+                          {localLoading ? <Loader2 className="animate-spin"/> : 'Enviar Link'}
                       </button>
                   </div>
               </form>

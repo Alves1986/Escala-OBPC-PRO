@@ -1,15 +1,17 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ScheduleTable } from './components/ScheduleTable';
 import { StatsModal } from './components/StatsModal';
 import { EventsModal, AvailabilityModal, RolesModal, AuditModal } from './components/ManagementModals';
+import { ProfileModal } from './components/ProfileModal';
 import { ToolsMenu } from './components/ToolsMenu';
 import { ToastProvider, useToast } from './components/Toast';
 import { LoginScreen } from './components/LoginScreen';
-import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User } from './types';
-import { loadData, saveData, getStorageKey, getSupabase, logout } from './services/supabaseService';
+import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, SwapRequest } from './types';
+import { loadData, saveData, getStorageKey, getSupabase, logout, updateUserProfile } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
-import { Download, Users, Calendar, BarChart2, Plus, Trash2, Wand2, Shield, Settings, Activity, BrainCircuit, ChevronDown } from 'lucide-react';
+import { Users, Calendar, BarChart2, Wand2, Settings, Activity, BrainCircuit, ChevronDown, CheckCircle, Trash2 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { GoogleGenAI } from "@google/genai";
@@ -29,6 +31,7 @@ const AppContent = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [isIOS, setIsIOS] = useState(false);
   const [collapsedRoles, setCollapsedRoles] = useState<string[]>(DEFAULT_ROLES);
   
   // Data
@@ -41,6 +44,7 @@ const AppContent = () => {
   const [roles, setRoles] = useState<string[]>(DEFAULT_ROLES);
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [scheduleIssues, setScheduleIssues] = useState<ScheduleAnalysis>({});
+  const [swaps, setSwaps] = useState<SwapRequest[]>([]);
   
   // UI State
   const [loading, setLoading] = useState(false);
@@ -49,6 +53,7 @@ const AppContent = () => {
   const [availModalOpen, setAvailModalOpen] = useState(false);
   const [rolesModalOpen, setRolesModalOpen] = useState(false);
   const [logsModalOpen, setLogsModalOpen] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
   
   // Confirmation Modal State
   const [confirmationData, setConfirmationData] = useState<any>(null);
@@ -162,6 +167,11 @@ const AppContent = () => {
 
   // --- PWA & NOTIFICATIONS EFFECTS ---
   useEffect(() => {
+    // Detect iOS
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
+    setIsIOS(isIosDevice);
+
     const handler = (e: any) => {
       e.preventDefault();
       setInstallPrompt(e);
@@ -215,20 +225,32 @@ const AppContent = () => {
     if(!supabase) return;
 
     const attendanceKey = getStorageKey(ministryId, 'attendance_v1');
+    const swapsKey = getStorageKey(ministryId, 'swaps_v1');
     
     const channel = supabase
-      .channel('attendance_changes')
+      .channel('app_changes')
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'app_storage', filter: `key=eq.${attendanceKey}` },
         (payload) => {
           const newData = payload.new.value as AttendanceMap;
           setAttendance(newData);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'app_storage', filter: `key=eq.${swapsKey}` },
+        (payload) => {
+          const newSwaps = payload.new.value as SwapRequest[];
+          setSwaps(newSwaps);
           if (Notification.permission === 'granted' && document.visibilityState === 'hidden') {
-             new Notification('Atualização na Escala', {
-               body: 'Alguém confirmou presença! Abra o app para ver.',
-               icon: '/app-icon.png'
-             });
+             const pending = newSwaps.find(s => s.status === 'pending');
+             if(pending) {
+               new Notification('Solicitação de Troca', {
+                  body: `${pending.requesterName} pediu troca na escala.`,
+                  icon: '/app-icon.png'
+               });
+             }
           }
         }
       )
@@ -280,7 +302,7 @@ const AppContent = () => {
       setLoading(true);
       const loadAll = async () => {
         try {
-          const [m, s, a, c, ig, av, r, lg, th] = await Promise.all([
+          const [m, s, a, c, ig, av, r, lg, th, sw] = await Promise.all([
             loadData<MemberMap>(ministryId, 'members_v7', {}),
             loadData<ScheduleMap>(ministryId, 'escala_full_v7', {}),
             loadData<AttendanceMap>(ministryId, 'attendance_v1', {}),
@@ -289,7 +311,8 @@ const AppContent = () => {
             loadData<AvailabilityMap>(ministryId, 'availability_v1', {}),
             loadData<string[]>(ministryId, 'functions_config', DEFAULT_ROLES),
             loadData<AuditLogEntry[]>(ministryId, 'audit_log_v1', []),
-            loadData<'light'|'dark'>(ministryId, 'theme_pref', 'dark')
+            loadData<'light'|'dark'>(ministryId, 'theme_pref', 'dark'),
+            loadData<SwapRequest[]>(ministryId, 'swaps_v1', [])
           ]);
           
           if (Object.keys(m).length === 0) {
@@ -307,6 +330,7 @@ const AppContent = () => {
           setCollapsedRoles(r); 
           setAuditLog(lg);
           setTheme(th);
+          setSwaps(sw || []);
           setIsConnected(true);
         } catch (e) {
           addToast("Erro ao carregar dados", "error");
@@ -343,6 +367,7 @@ const AppContent = () => {
     
     setLoading(true);
     try {
+      // Fix: Capture mid locally so TS knows it's not null in closure
       await Promise.all([
         saveData(mid, 'members_v7', members),
         saveData(mid, 'escala_full_v7', schedule),
@@ -352,7 +377,8 @@ const AppContent = () => {
         saveData(mid, 'availability_v1', availability),
         saveData(mid, 'functions_config', roles),
         saveData(mid, 'audit_log_v1', auditLog),
-        saveData(mid, 'theme_pref', theme)
+        saveData(mid, 'theme_pref', theme),
+        saveData(mid, 'swaps_v1', swaps)
       ]);
       addToast("Dados salvos na nuvem!", "success");
     } catch (e) {
@@ -363,6 +389,10 @@ const AppContent = () => {
   };
 
   const updateCell = (key: string, value: string) => {
+    if (currentUser?.role !== 'admin') {
+      addToast("Apenas admins podem alterar a escala de outros.", "warning");
+      return;
+    }
     setSchedule(prev => ({ ...prev, [key]: value }));
     if (attendance[key]) {
        const newAtt = { ...attendance };
@@ -374,6 +404,15 @@ const AppContent = () => {
   const toggleAttendance = (key: string) => {
     const mid = ministryId;
     if (!mid) return;
+
+    const assignedName = schedule[key];
+    const isMe = currentUser?.name === assignedName;
+    const isAdmin = currentUser?.role === 'admin';
+
+    if (!isMe && !isAdmin) {
+      addToast("Você só pode confirmar sua própria presença.", "warning");
+      return;
+    }
 
     const newVal = !attendance[key];
     const newAtt = { ...attendance, [key]: newVal };
@@ -397,6 +436,89 @@ const AppContent = () => {
       setConfirmationData(null);
       window.history.replaceState({}, document.title, window.location.pathname);
     }
+  };
+
+  // --- SWAP LOGIC ---
+
+  const handleRequestSwap = (key: string, eventTitle: string, dateDisplay: string) => {
+    const mid = ministryId;
+    if (!mid || !currentUser) return;
+    
+    // Verifica se já tem swap pendente
+    if (swaps.find(s => s.key === key && s.status === 'pending')) {
+        addToast("Já existe uma troca pendente para este item.", "warning");
+        return;
+    }
+
+    const role = key.split('_')[1];
+    
+    const newSwap: SwapRequest = {
+        id: crypto.randomUUID(),
+        key,
+        requesterName: currentUser.name,
+        role,
+        eventName: eventTitle,
+        dateDisplay,
+        status: 'pending',
+        createdAt: new Date().toISOString()
+    };
+
+    const updatedSwaps = [...swaps, newSwap];
+    setSwaps(updatedSwaps);
+    saveData(mid, 'swaps_v1', updatedSwaps);
+    addToast("Solicitação de troca enviada!", "success");
+  };
+
+  const handleCancelSwap = (swapId: string) => {
+    const mid = ministryId;
+    if (!mid) return;
+    
+    const updatedSwaps = swaps.filter(s => s.id !== swapId);
+    setSwaps(updatedSwaps);
+    saveData(mid, 'swaps_v1', updatedSwaps);
+    addToast("Solicitação de troca cancelada.", "info");
+  };
+
+  const handleAcceptSwap = (swapId: string) => {
+    const mid = ministryId;
+    if (!mid || !currentUser) return;
+
+    const swap = swaps.find(s => s.id === swapId);
+    if (!swap) return;
+
+    // Verificar se o usuário tem a função (role) necessária
+    // Admin pode tudo, ou se o usuário estiver na lista de membros daquela função
+    const membersInRole = members[swap.role] || [];
+    const isQualified = membersInRole.includes(currentUser.name);
+    const isAdmin = currentUser.role === 'admin';
+
+    if (!isQualified && !isAdmin) {
+        addToast(`Apenas membros da função ${swap.role} podem aceitar esta troca.`, "error");
+        return;
+    }
+
+    // Executar a Troca
+    const newSchedule = { ...schedule, [swap.key]: currentUser.name };
+    // Remover confirmação anterior (já que mudou a pessoa)
+    const newAttendance = { ...attendance };
+    delete newAttendance[swap.key];
+
+    // Atualizar Swaps
+    const updatedSwaps = swaps.map(s => s.id === swapId ? { ...s, status: 'completed' as const } : s);
+
+    // Salvar tudo
+    setSchedule(newSchedule);
+    setAttendance(newAttendance);
+    setSwaps(updatedSwaps);
+
+    Promise.all([
+        saveData(mid, 'escala_full_v7', newSchedule),
+        saveData(mid, 'attendance_v1', newAttendance),
+        saveData(mid, 'swaps_v1', updatedSwaps)
+    ]);
+
+    addToast(`Troca realizada! Você assumiu o lugar de ${swap.requesterName}.`, "success");
+    logAction("Troca de Escala", `${currentUser.name} assumiu a escala de ${swap.requesterName} em ${swap.dateDisplay}`);
   };
 
   // --- EXPORT TOOLS ---
@@ -451,8 +573,9 @@ const AppContent = () => {
       });
       text += `\n`;
     });
-    navigator.clipboard.writeText(text);
-    addToast("Copiado para área de transferência!", "success");
+    navigator.clipboard.writeText(text).then(() => {
+        addToast("Copiado para área de transferência!", "success");
+    });
   };
   
   const generateCSV = () => {
@@ -512,13 +635,20 @@ const AppContent = () => {
     try {
       const genAI = new GoogleGenAI({ apiKey: apiKey as string });
       
+      // Prompt atualizado para entender DISPONIBILIDADE
       const prompt = `
         Gere uma escala para uma equipe de mídia.
         Mês: ${currentMonth}
         Dias/Eventos: ${JSON.stringify(visibleEvents.map(e => ({ date: e.iso, title: e.title })))}
         Funções: ${JSON.stringify(roles)}
         Membros Disponíveis por Função: ${JSON.stringify(members)}
-        Indisponibilidades: ${JSON.stringify(availability)}
+        
+        ATENÇÃO PARA DISPONIBILIDADE:
+        A lista abaixo contem os dias que cada membro PODE servir.
+        Se um membro estiver na lista 'Disponibilidade' com datas, você SÓ PODE escalá-lo nessas datas específicas.
+        Se o membro não tiver lista de disponibilidade definida (vazio), assuma que ele está livre em qualquer dia.
+        Disponibilidade (Lista Verde): ${JSON.stringify(availability)}
+        
         Histórico Anterior: ${JSON.stringify(memberStats)}
         Retorne APENAS um JSON no formato: { "YYYY-MM-DDTHH:mm_Funcao": "NomeMembro", ... }
       `;
@@ -551,11 +681,18 @@ const AppContent = () => {
        const currentSchedule: any = {};
        Object.keys(schedule).forEach(k => { if (k.startsWith(currentMonth)) currentSchedule[k] = schedule[k]; });
 
+       // Prompt atualizado para analisar DISPONIBILIDADE
        const prompt = `
          Analise esta escala de equipe de mídia.
          Escala Atual: ${JSON.stringify(currentSchedule)}
          Membros: ${JSON.stringify(members)}
-         Indisponibilidades: ${JSON.stringify(availability)}
+         
+         REGRA DE DISPONIBILIDADE:
+         A lista abaixo contém as datas EXCLUSIVAS que cada membro PODE servir.
+         Se um membro definiu datas mas foi escalado em um dia FORA dessa lista, isso é um ERRO.
+         Se a lista do membro estiver vazia, ele está livre.
+         Disponibilidade (Datas Permitidas): ${JSON.stringify(availability)}
+         
          Retorne um JSON: { "YYYY-MM-DDTHH:mm_Funcao": { "type": "error"|"warning", "message": "...", "suggestedReplacement": "Nome" } }
        `;
        
@@ -570,6 +707,7 @@ const AppContent = () => {
          addToast("Análise concluída!", "success");
       }
     } catch (e) {
+      console.error(e);
       addToast("Erro na análise.", "error");
     } finally {
       setLoading(false);
@@ -581,6 +719,18 @@ const AppContent = () => {
       setCollapsedRoles(collapsedRoles.filter(r => r !== role));
     } else {
       setCollapsedRoles([...collapsedRoles, role]);
+    }
+  };
+
+  const handleUpdateProfile = async (name: string, whatsapp: string) => {
+    const res = await updateUserProfile(name, whatsapp);
+    if (res.success) {
+      addToast(res.message, "success");
+      if (currentUser) {
+        setCurrentUser({ ...currentUser, name, whatsapp });
+      }
+    } else {
+      addToast(res.message, "error");
     }
   };
 
@@ -609,6 +759,8 @@ const AppContent = () => {
       deferredPrompt={installPrompt}
       onInstallAction={handleInstallApp}
       currentUser={currentUser}
+      isIOS={isIOS}
+      onOpenProfile={() => setProfileModalOpen(true)}
       sidebar={
         <div className="space-y-6">
           <div>
@@ -671,7 +823,7 @@ const AppContent = () => {
             <Calendar size={18} className="text-blue-500"/> <span className="hidden sm:inline">Eventos</span>
           </button>
           <button onClick={() => setAvailModalOpen(true)} className="flex items-center gap-2 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 px-4 py-2 rounded-lg font-medium border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors shadow-sm">
-            <Shield size={18} className="text-red-500"/> <span className="hidden sm:inline">Indisponibilidade</span>
+            <CheckCircle size={18} className="text-green-500"/> <span className="hidden sm:inline">Disponibilidade</span>
           </button>
           
           <ToolsMenu 
@@ -713,16 +865,18 @@ const AppContent = () => {
       <ScheduleTable 
         events={visibleEvents} roles={roles} schedule={schedule} attendance={attendance} availability={availability} members={members} scheduleIssues={scheduleIssues} memberStats={memberStats}
         onCellChange={updateCell} onAttendanceToggle={toggleAttendance} onDeleteEvent={(iso) => setIgnoredEvents([...ignoredEvents, iso])}
+        currentUser={currentUser} swaps={swaps} onRequestSwap={handleRequestSwap} onCancelSwap={handleCancelSwap} onAcceptSwap={handleAcceptSwap}
       />
       
       {hiddenEventsList.length > 0 && <div className="mt-4 text-center"><button onClick={() => setEventsModalOpen(true)} className="text-xs text-zinc-400 hover:text-blue-500 underline">Ver {hiddenEventsList.length} ocultos</button></div>}
 
       <StatsModal isOpen={statsOpen} onClose={() => setStatsOpen(false)} stats={memberStats} monthName={getMonthName(currentMonth)} />
       <EventsModal isOpen={eventsModalOpen} onClose={() => setEventsModalOpen(false)} events={customEvents} hiddenEvents={hiddenEventsList} onAdd={evt => setCustomEvents([...customEvents, evt])} onRemove={id => setCustomEvents(customEvents.filter(e => e.id !== id))} onRestore={iso => setIgnoredEvents(ignoredEvents.filter(i => i !== iso))} />
-      <AvailabilityModal isOpen={availModalOpen} onClose={() => setAvailModalOpen(false)} members={allMembersList} availability={availability} currentMonth={currentMonth} onUpdate={(m, dates) => setAvailability(prev => ({ ...prev, [m]: dates }))} />
+      <AvailabilityModal isOpen={availModalOpen} onClose={() => setAvailModalOpen(false)} members={allMembersList} availability={availability} currentMonth={currentMonth} onUpdate={(m, dates) => setAvailability(prev => ({ ...prev, [m]: dates }))} currentUser={currentUser} />
       <RolesModal isOpen={rolesModalOpen} onClose={() => setRolesModalOpen(false)} roles={roles} onUpdate={setRoles} />
       <AuditModal isOpen={logsModalOpen} onClose={() => setLogsModalOpen(false)} logs={auditLog} />
       <ConfirmationModal isOpen={!!confirmationData} onClose={() => setConfirmationData(null)} onConfirm={handleConfirmPresence} data={confirmationData} />
+      <ProfileModal isOpen={profileModalOpen} onClose={() => setProfileModalOpen(false)} currentUser={currentUser} onUpdateProfile={handleUpdateProfile} />
 
     </DashboardLayout>
   );

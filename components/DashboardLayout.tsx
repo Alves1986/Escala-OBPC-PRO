@@ -1,6 +1,6 @@
 
 import React, { ReactNode, useState } from 'react';
-import { Menu, Moon, Sun, LogOut, Cloud, CloudOff, Layout, Download, RefreshCw } from 'lucide-react';
+import { Menu, Moon, Sun, LogOut, Cloud, CloudOff, Layout, Download, RefreshCw, Share, PlusSquare, X, User as UserIcon } from 'lucide-react';
 import { User } from '../types';
 
 interface Props {
@@ -16,13 +16,16 @@ interface Props {
   deferredPrompt?: any;
   onInstallAction?: () => void;
   currentUser?: User | null;
+  isIOS?: boolean;
+  onOpenProfile?: () => void;
 }
 
 export const DashboardLayout: React.FC<Props> = ({ 
-  children, sidebar, sidebarOpen, setSidebarOpen, theme, toggleTheme, onLogout, title, isConnected, deferredPrompt, onInstallAction, currentUser
+  children, sidebar, sidebarOpen, setSidebarOpen, theme, toggleTheme, onLogout, title, isConnected, deferredPrompt, onInstallAction, currentUser, isIOS, onOpenProfile
 }) => {
   const [imgError, setImgError] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [showIOSInstructions, setShowIOSInstructions] = useState(false);
 
   const handleHardReload = async () => {
     setIsUpdating(true);
@@ -44,6 +47,17 @@ export const DashboardLayout: React.FC<Props> = ({
     }, 100);
   };
 
+  const handleInstallClick = () => {
+    if (isIOS) {
+      setShowIOSInstructions(true);
+    } else if (onInstallAction) {
+      onInstallAction();
+    }
+  };
+
+  // Mostrar botão se tiver o prompt do Android OU se for iOS
+  const showInstallButton = !!deferredPrompt || isIOS;
+
   return (
     <div className={`flex h-screen overflow-hidden bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 transition-colors duration-300`}>
       {/* Mobile Backdrop */}
@@ -56,7 +70,7 @@ export const DashboardLayout: React.FC<Props> = ({
         <div className="flex flex-col h-full">
           {/* Sidebar Header */}
           <div className="flex flex-col px-6 py-4 border-b border-zinc-200 dark:border-zinc-700 shrink-0">
-             <div className="flex items-center gap-3 mb-2">
+             <div className="flex items-center gap-3 mb-4">
                 {imgError ? (
                   <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-sm"><Layout size={18} /></div>
                 ) : (
@@ -65,21 +79,38 @@ export const DashboardLayout: React.FC<Props> = ({
                 <span className="text-lg font-bold tracking-tight truncate" title={title}>{title}</span>
              </div>
              {currentUser && (
-                <div className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
-                   {currentUser.email} ({currentUser.role})
-                </div>
+                <button 
+                  onClick={onOpenProfile}
+                  className="flex items-center gap-3 p-2 -mx-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-colors group text-left"
+                >
+                    <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 group-hover:scale-105 transition-transform">
+                        <UserIcon size={20} />
+                    </div>
+                    <div className="flex flex-col overflow-hidden">
+                        <span className="text-sm font-bold text-zinc-800 dark:text-zinc-100 truncate">{currentUser.name}</span>
+                        <span className="text-[10px] text-zinc-500 dark:text-zinc-400 uppercase tracking-wide truncate">{currentUser.role === 'admin' ? 'Líder / Admin' : 'Membro'}</span>
+                    </div>
+                </button>
              )}
           </div>
 
           {/* Sidebar Content */}
           <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
             {sidebar}
+            
+            {onOpenProfile && (
+              <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-700/50">
+                 <button onClick={onOpenProfile} className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg transition-colors">
+                    <UserIcon size={16} /> <span>Meu Perfil</span>
+                 </button>
+              </div>
+            )}
           </div>
 
           {/* Sidebar Footer */}
           <div className="p-4 border-t border-zinc-200 dark:border-zinc-700 space-y-1 shrink-0">
-             {deferredPrompt && onInstallAction && (
-               <button onClick={onInstallAction} className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 rounded-lg transition-colors">
+             {showInstallButton && (
+               <button onClick={handleInstallClick} className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors">
                  <Download size={18} /> <span>Instalar App</span>
                </button>
              )}
@@ -123,8 +154,8 @@ export const DashboardLayout: React.FC<Props> = ({
                  <span className="font-bold text-zinc-900 dark:text-zinc-100">{title}</span>
               </div>
            </div>
-           {deferredPrompt && onInstallAction && (
-             <button onClick={onInstallAction} className="p-2 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors animate-fade-in"><Download size={20} /></button>
+           {showInstallButton && (
+             <button onClick={handleInstallClick} className="p-2 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors animate-fade-in"><Download size={20} /></button>
            )}
         </header>
 
@@ -132,6 +163,36 @@ export const DashboardLayout: React.FC<Props> = ({
           {children}
         </main>
       </div>
+
+      {/* iOS Installation Instructions Modal */}
+      {showIOSInstructions && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowIOSInstructions(false)}>
+          <div className="bg-white dark:bg-zinc-800 w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-start mb-4">
+               <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Instalar no iPhone</h3>
+               <button onClick={() => setShowIOSInstructions(false)} className="text-zinc-400 hover:text-zinc-600"><X size={20}/></button>
+            </div>
+            <div className="space-y-4 text-sm text-zinc-600 dark:text-zinc-300">
+               <p>Para instalar este aplicativo no seu iPhone, siga estes passos:</p>
+               <ol className="space-y-3">
+                  <li className="flex items-center gap-3">
+                     <span className="flex items-center justify-center w-6 h-6 rounded-full bg-zinc-100 dark:bg-zinc-700 font-bold text-xs">1</span>
+                     <span>Toque no botão <strong>Compartilhar</strong> <Share size={14} className="inline mx-1"/> na barra inferior.</span>
+                  </li>
+                  <li className="flex items-center gap-3">
+                     <span className="flex items-center justify-center w-6 h-6 rounded-full bg-zinc-100 dark:bg-zinc-700 font-bold text-xs">2</span>
+                     <span>Role para baixo e toque em <strong>"Adicionar à Tela de Início"</strong> <PlusSquare size={14} className="inline mx-1"/>.</span>
+                  </li>
+                  <li className="flex items-center gap-3">
+                     <span className="flex items-center justify-center w-6 h-6 rounded-full bg-zinc-100 dark:bg-zinc-700 font-bold text-xs">3</span>
+                     <span>Confirme tocando em <strong>Adicionar</strong> no canto superior.</span>
+                  </li>
+               </ol>
+            </div>
+            <button onClick={() => setShowIOSInstructions(false)} className="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl">Entendi</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -86,6 +86,38 @@ export const registerWithEmail = async (
     }
 };
 
+export const sendPasswordResetEmail = async (email: string): Promise<{ success: boolean; message: string }> => {
+    if (!supabase) return { success: false, message: "Erro de conexão" };
+
+    try {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: window.location.href, // Redireciona de volta para o app após clicar no link
+        });
+
+        if (error) throw error;
+
+        return { success: true, message: "Link de redefinição enviado para seu e-mail." };
+    } catch (e: any) {
+        console.error(e);
+        return { success: false, message: e.message || "Erro ao enviar email." };
+    }
+};
+
+export const updateUserProfile = async (name: string, whatsapp: string): Promise<{ success: boolean, message: string }> => {
+    if (!supabase) return { success: false, message: "Erro de conexão" };
+    try {
+        const { error } = await supabase.auth.updateUser({
+            data: { name, whatsapp }
+        });
+
+        if (error) throw error;
+        return { success: true, message: "Perfil atualizado!" };
+    } catch (e: any) {
+        console.error(e);
+        return { success: false, message: e.message || "Erro ao atualizar" };
+    }
+};
+
 export const logout = async () => {
     if (supabase) await supabase.auth.signOut();
 };
