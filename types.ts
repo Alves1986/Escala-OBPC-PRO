@@ -74,6 +74,8 @@ export interface User {
   createdAt?: string;
 }
 
+export type Tab = 'dashboard' | 'schedule_editor' | 'calendar' | 'events' | 'availability' | 'team' | 'stats' | 'logs' | 'profile';
+
 export interface AppState {
   ministryId: string | null;
   currentUser: User | null;
@@ -86,6 +88,7 @@ export interface AppState {
   roles: string[];
   theme: 'light' | 'dark';
   sidebarOpen: boolean;
+  activeTab: Tab;
 }
 
 export const DEFAULT_ROLES = ["Projeção", "Transmissão", "Fotografia", "Storys"];
