@@ -8,6 +8,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { EventsScreen } from './components/EventsScreen';
 import { AvailabilityScreen } from './components/AvailabilityScreen';
 import { ProfileScreen } from './components/ProfileScreen';
+import { EventDetailsModal } from './components/EventDetailsModal';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User } from './types';
 import { loadData, saveData, getStorageKey, getSupabase, logout, updateUserProfile } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
@@ -89,6 +90,8 @@ const AppContent = () => {
   
   // Confirmation Modal State
   const [confirmationData, setConfirmationData] = useState<any>(null);
+  // Event Details Modal State
+  const [selectedEvent, setSelectedEvent] = useState<{ iso: string; title: string; dateDisplay: string } | null>(null);
 
   // --- DERIVED STATE ---
   const [year, month] = currentMonth.split('-').map(Number);
@@ -243,6 +246,29 @@ const AppContent = () => {
     }
   }, []);
 
+  // --- NOTIFICATION OF THE DAY ---
+  useEffect(() => {
+    if (!nextEvent) return;
+    const today = new Date().toISOString().split('T')[0];
+    const eventDate = nextEvent.iso.split('T')[0];
+    const lastNotified = localStorage.getItem('last_notified_event');
+
+    if (today === eventDate && lastNotified !== nextEvent.iso) {
+      addToast(`Hoje tem ${nextEvent.title}! Envie a escala.`, 'info');
+      
+      if ('Notification' in window && Notification.permission === 'granted') {
+        navigator.serviceWorker.ready.then(registration => {
+          registration.showNotification("Hoje tem Escala!", {
+            body: `Não esqueça de enviar a escala do evento: ${nextEvent.title}`,
+            icon: '/app-icon.png',
+            vibrate: [200, 100, 200]
+          } as any);
+        });
+      }
+      localStorage.setItem('last_notified_event', nextEvent.iso);
+    }
+  }, [nextEvent]);
+
   const handleLogout = async () => {
     if (confirm("Sair do sistema?")) { await logout(); setMinistryId(null); setCurrentUser(null); setSchedule({}); setMembers({}); }
   };
@@ -311,6 +337,76 @@ const AppContent = () => {
     setConfirmationData(null);
   };
 
+  // --- EVENT UPDATE LOGIC ---
+  const handleUpdateEvent = (oldIso: string, newTitle: string, newTime: string) => {
+    if (!ministryId) return;
+    
+    // 1. Calculate new ISO
+    const datePart = oldIso.split('T')[0];
+    const newIso = `${datePart}T${newTime}`;
+
+    if (newIso === oldIso && newTitle === selectedEvent?.title) {
+        setSelectedEvent(null);
+        return;
+    }
+
+    // 2. Logic to update event list
+    // Check if it's already a custom event
+    const existingCustom = customEvents.find(c => `${c.date}T${c.time}` === oldIso);
+    
+    let newCustomEvents = [...customEvents];
+    let newIgnored = [...ignoredEvents];
+
+    if (existingCustom) {
+        // Update existing custom event
+        newCustomEvents = customEvents.map(c => c.id === existingCustom.id ? { ...c, time: newTime, title: newTitle } : c);
+    } else {
+        // It's a generated default event. Hide it and create a custom override
+        newIgnored.push(oldIso);
+        newCustomEvents.push({
+            id: Date.now().toString(),
+            date: datePart,
+            time: newTime,
+            title: newTitle
+        });
+    }
+
+    setCustomEvents(newCustomEvents);
+    setIgnoredEvents(newIgnored);
+    saveData(ministryId, 'custom_events_v1', newCustomEvents);
+    saveData(ministryId, 'ignored_events_v1', newIgnored);
+
+    // 3. Migrate Schedule and Attendance Data
+    const newSchedule = { ...schedule };
+    const newAttendance = { ...attendance };
+    
+    roles.forEach(role => {
+        const oldKey = `${oldIso}_${role}`;
+        const newKey = `${newIso}_${role}`;
+        
+        // Migrate schedule
+        if (newSchedule[oldKey]) {
+            newSchedule[newKey] = newSchedule[oldKey];
+            delete newSchedule[oldKey];
+        }
+        
+        // Migrate attendance
+        if (newAttendance[oldKey]) {
+            newAttendance[newKey] = newAttendance[oldKey];
+            delete newAttendance[oldKey];
+        }
+    });
+
+    setSchedule(newSchedule);
+    setAttendance(newAttendance);
+    saveData(ministryId, 'escala_full_v7', newSchedule);
+    saveData(ministryId, 'attendance_v1', newAttendance);
+
+    addToast("Evento e horários atualizados!", "success");
+    setSelectedEvent(null);
+  };
+
+
   const exportPDF = (memberFilter?: string) => {
     const doc = new jsPDF('landscape'); 
     const [y, m] = currentMonth.split('-').map(Number);
@@ -377,7 +473,11 @@ const AppContent = () => {
        const response = await genAI.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: "application/json" } });
        if (response.text) setScheduleIssues(JSON.parse(response.text));
        addToast("Análise concluída!", "success");
-     } catch (e) { addToast("Erro na análise.", "error"); } finally { setLoading(false); }
+     } catch (e) { 
+        addToast("Erro na análise.", "error"); 
+     } finally { 
+        setLoading(false); 
+     }
   };
 
   // --- RENDER VIEWS ---
@@ -516,7 +616,11 @@ const AppContent = () => {
                     <span className={`text-sm font-bold ${isToday ? 'text-blue-500' : 'text-zinc-700 dark:text-zinc-300'}`}>{day}</span>
                     <div className="mt-2 space-y-1">
                        {dayEvents.map(evt => (
-                          <div key={evt.iso} className="text-[10px] bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-1 rounded truncate border-l-2 border-blue-500">
+                          <div 
+                            key={evt.iso} 
+                            onClick={() => setSelectedEvent(evt)}
+                            className="text-[10px] bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-1 rounded truncate border-l-2 border-blue-500 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                          >
                              {evt.iso.split('T')[1]} - {evt.title}
                              <div className="flex gap-0.5 mt-0.5 opacity-50">
                                 {Array.from({length: roles.length}).map((_, i) => <div key={i} className={`w-1 h-1 rounded-full ${schedule[`${evt.iso}_${roles[i]}`] ? 'bg-blue-500' : 'bg-zinc-300'}`} />)}
@@ -714,6 +818,15 @@ const AppContent = () => {
       </div>
 
       <ConfirmationModal isOpen={!!confirmationData} onClose={() => setConfirmationData(null)} onConfirm={handleConfirmPresence} data={confirmationData} />
+      
+      <EventDetailsModal 
+        isOpen={!!selectedEvent}
+        onClose={() => setSelectedEvent(null)}
+        event={selectedEvent}
+        schedule={schedule}
+        roles={roles}
+        onSave={handleUpdateEvent}
+      />
     </DashboardLayout>
   );
 };
