@@ -13,17 +13,6 @@ export interface AttendanceMap {
   [key: string]: boolean;
 }
 
-export interface SwapRequest {
-  id: string;
-  key: string; // Schedule Key (Date_Role)
-  requesterName: string;
-  role: string;
-  eventName: string;
-  dateDisplay: string;
-  status: 'pending' | 'completed';
-  createdAt: string;
-}
-
 export interface CustomEvent {
   id: string;
   title: string;
@@ -67,14 +56,13 @@ export interface User {
   email?: string;     // Email de login
   username?: string;  // ID legado ou Display Name
   name: string;       // Nome de exibição
+  avatar_url?: string; // Foto de perfil (Base64)
   role: 'admin' | 'member';
   ministryId?: string; // Vínculo com os dados antigos
   whatsapp?: string;
   functions?: string[];
   createdAt?: string;
 }
-
-export type Tab = 'dashboard' | 'schedule_editor' | 'calendar' | 'events' | 'availability' | 'team' | 'stats' | 'logs' | 'profile';
 
 export interface AppState {
   ministryId: string | null;
@@ -88,7 +76,6 @@ export interface AppState {
   roles: string[];
   theme: 'light' | 'dark';
   sidebarOpen: boolean;
-  activeTab: Tab;
 }
 
 export const DEFAULT_ROLES = ["Projeção", "Transmissão", "Fotografia", "Storys"];

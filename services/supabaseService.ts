@@ -34,8 +34,9 @@ export const loginWithEmail = async (email: string, password: string): Promise<{
                 email: data.user.email,
                 name: metadata.name || 'Usuário',
                 role: metadata.role || 'member',
-                ministryId: metadata.ministryId, // AQUI ESTÁ A MÁGICA: Recupera o ID antigo
+                ministryId: metadata.ministryId, 
                 whatsapp: metadata.whatsapp,
+                avatar_url: metadata.avatar_url,
                 functions: metadata.functions || []
             };
             return { success: true, message: "Login realizado.", user: userProfile, ministryId: metadata.ministryId };
@@ -86,35 +87,24 @@ export const registerWithEmail = async (
     }
 };
 
-export const sendPasswordResetEmail = async (email: string): Promise<{ success: boolean; message: string }> => {
+export const updateUserProfile = async (name: string, whatsapp: string, avatar_url?: string): Promise<{ success: boolean, message: string }> => {
     if (!supabase) return { success: false, message: "Erro de conexão" };
-
+    
     try {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.href, // Redireciona de volta para o app após clicar no link
-        });
+        const updates: any = { name, whatsapp };
+        if (avatar_url !== undefined) {
+            updates.avatar_url = avatar_url;
+        }
 
-        if (error) throw error;
-
-        return { success: true, message: "Link de redefinição enviado para seu e-mail." };
-    } catch (e: any) {
-        console.error(e);
-        return { success: false, message: e.message || "Erro ao enviar email." };
-    }
-};
-
-export const updateUserProfile = async (name: string, whatsapp: string): Promise<{ success: boolean, message: string }> => {
-    if (!supabase) return { success: false, message: "Erro de conexão" };
-    try {
         const { error } = await supabase.auth.updateUser({
-            data: { name, whatsapp }
+            data: updates
         });
 
         if (error) throw error;
-        return { success: true, message: "Perfil atualizado!" };
+        return { success: true, message: "Perfil atualizado com sucesso!" };
     } catch (e: any) {
         console.error(e);
-        return { success: false, message: e.message || "Erro ao atualizar" };
+        return { success: false, message: e.message || "Erro ao atualizar perfil." };
     }
 };
 
@@ -135,7 +125,8 @@ export const getCurrentUser = async (): Promise<{ user: User | null, ministryId:
                 name: meta.name,
                 role: meta.role || 'member',
                 ministryId: meta.ministryId,
-                whatsapp: meta.whatsapp
+                whatsapp: meta.whatsapp,
+                avatar_url: meta.avatar_url
             },
             ministryId: meta.ministryId
         };
