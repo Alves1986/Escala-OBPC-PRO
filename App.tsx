@@ -10,7 +10,7 @@ import { AvailabilityScreen } from './components/AvailabilityScreen';
 import { ProfileScreen } from './components/ProfileScreen';
 import { EventDetailsModal } from './components/EventDetailsModal';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile } from './types';
-import { loadData, saveData, getStorageKey, getSupabase, logout, updateUserProfile, sendNotification } from './services/supabaseService';
+import { loadData, saveData, getStorageKey, getSupabase, logout, updateUserProfile, sendNotification, syncMemberProfile } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
 import { 
   Calendar as CalendarIcon, 
@@ -34,7 +34,9 @@ import {
   CheckCircle2,
   Mail,
   Phone,
-  UserCircle2
+  UserCircle2,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -129,14 +131,20 @@ const AppContent = () => {
   
   const allMembersList = useMemo(() => {
     const list = new Set<string>();
-    const values = Object.values(members) as string[][];
-    values.forEach(arr => {
-      if (Array.isArray(arr)) {
-        arr.forEach(m => list.add(m));
-      }
+    
+    // 1. Members from Role Map (Legacy/Manual)
+    Object.values(members).forEach(arr => {
+      if (Array.isArray(arr)) arr.forEach(m => list.add(m));
     });
+
+    // 2. Members from Registered List (Auth)
+    registeredMembers.forEach(m => list.add(m.name));
+
+    // 3. Members from Availability Map (Ghost members who saved data)
+    Object.keys(availability).forEach(m => list.add(m));
+
     return Array.from(list).sort();
-  }, [members]);
+  }, [members, registeredMembers, availability]);
 
   const memberStats = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -205,6 +213,7 @@ const AppContent = () => {
   };
 
   // --- DATA LOADING & SAVING ---
+  // dependência adicionada currentUser para garantir que o self-heal tenha acesso aos dados do usuário
   useEffect(() => {
     if (ministryId) {
       setLoading(true);
@@ -226,12 +235,88 @@ const AppContent = () => {
           setMembers(Object.keys(m).length === 0 ? (() => {const i:any={}; DEFAULT_ROLES.forEach(r=>i[r]=[]); return i})() : m);
           setSchedule(s); setAttendance(a); setCustomEvents(c); setIgnoredEvents(ig); setAvailability(av); setRoles(r); setAuditLog(lg); setTheme(th); setNotifications(notif); setRegisteredMembers(regMem);
           setIsConnected(true);
+
+          // LÓGICA DE AUTO-CORREÇÃO (SELF-HEALING)
+          // Verifica se o usuário atual está na lista. Se não, adiciona-o automaticamente.
+          if (currentUser && currentUser.email) {
+             const isInList = regMem.some(mem => 
+                (mem.email && mem.email.toLowerCase() === currentUser.email?.toLowerCase()) || 
+                mem.name === currentUser.name
+             );
+
+             if (!isInList) {
+                 console.log("Usuário não encontrado na lista oficial. Sincronizando automaticamente...");
+                 syncMemberProfile(ministryId, currentUser).then(newList => {
+                     if (newList.length > 0) setRegisteredMembers(newList);
+                 });
+             }
+          }
+
         } catch (e) { addToast("Erro ao carregar dados", "error"); setIsConnected(false); } 
         finally { setLoading(false); }
       };
       loadAll();
     }
-  }, [ministryId]);
+  }, [ministryId, currentUser]); // Adicionado currentUser para trigger do self-heal
+
+  // --- BACKGROUND SYNC & REALTIME POLLING ---
+  useEffect(() => {
+    if (!ministryId) return;
+
+    const runSync = async () => {
+       try {
+          // 1. Notificações (Global - Sempre verifica)
+          const remoteNotifs = await loadData<AppNotification[]>(ministryId, 'notifications_v1', []);
+          setNotifications(current => {
+             // Se houver novas notificações (baseado no ID da mais recente), exibe toast
+             if (remoteNotifs.length > 0) {
+                 const latestRemote = remoteNotifs[0];
+                 const latestLocal = current.length > 0 ? current[0] : null;
+                 
+                 // Se é diferente do que temos e não lida
+                 if ((!latestLocal || latestRemote.id !== latestLocal.id) && !latestRemote.read) {
+                     // Exibe alerta visual flutuante
+                     setTimeout(() => addToast(latestRemote.title, 'info'), 100);
+                 }
+                 // Atualiza estado se houve mudança no array
+                 if (JSON.stringify(current) !== JSON.stringify(remoteNotifs)) {
+                     return remoteNotifs;
+                 }
+             }
+             return current;
+          });
+
+          // 2. Membros e Disponibilidade (Apenas na aba Team ou quando necessário)
+          // Atualiza a lista pública se estivermos na aba de equipe para ver novos cadastros
+          if (currentTab === 'team') {
+             const remoteMembers = await loadData<TeamMemberProfile[]>(ministryId, 'public_members_list', []);
+             if (remoteMembers.length > 0) {
+                 setRegisteredMembers(current => {
+                    if (JSON.stringify(current) !== JSON.stringify(remoteMembers)) {
+                        return remoteMembers;
+                    }
+                    return current;
+                 });
+             }
+             // Também atualiza disponibilidade para ver mudanças de status
+             const remoteAvail = await loadData<AvailabilityMap>(ministryId, 'availability_v1', {});
+             setAvailability(current => {
+                 if (JSON.stringify(current) !== JSON.stringify(remoteAvail)) return remoteAvail;
+                 return current;
+             });
+          }
+       } catch (e) {
+          console.error("Erro no sync de background", e);
+       }
+    };
+
+    // Executa imediatamente ao mudar aba/ministério
+    runSync();
+
+    // Polling a cada 15s para garantir que novos dados cheguem
+    const timer = setInterval(runSync, 15000);
+    return () => clearInterval(timer);
+  }, [ministryId, currentTab]); 
 
   useEffect(() => {
     if (theme === 'dark') document.documentElement.classList.add('dark');
@@ -285,7 +370,13 @@ const AppContent = () => {
       if (res.success) {
           addToast(res.message, "success");
           if (currentUser) {
-              setCurrentUser({ ...currentUser, name, whatsapp, avatar_url });
+              const updatedUser = { ...currentUser, name, whatsapp, avatar_url };
+              setCurrentUser(updatedUser);
+              // Atualiza na lista local também para refletir imediatamente
+              if (ministryId) {
+                  const newList = await syncMemberProfile(ministryId, updatedUser);
+                  setRegisteredMembers(newList);
+              }
           }
       } else {
           addToast(res.message, "error");
@@ -701,15 +792,45 @@ const AppContent = () => {
     const filteredMembers = registeredMembers
         .filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()) || m.email?.toLowerCase().includes(memberSearch.toLowerCase()))
         .sort((a, b) => a.name.localeCompare(b.name));
+    
+    // Ghost members: found in allMembersList but not in registeredMembers
+    const ghostMembers = allMembersList.filter(name => !registeredMembers.some(rm => rm.name === name));
+    
+    // Função manual de refresh
+    const handleRefreshList = async () => {
+        if (!ministryId) return;
+        setLoading(true);
+        // Recarrega TUDO para garantir consistência
+        const [regMem, av, notif] = await Promise.all([
+             loadData<TeamMemberProfile[]>(ministryId, 'public_members_list', []),
+             loadData<AvailabilityMap>(ministryId, 'availability_v1', {}),
+             loadData<AppNotification[]>(ministryId, 'notifications_v1', [])
+        ]);
+        
+        setRegisteredMembers(regMem);
+        setAvailability(av);
+        setNotifications(notif);
+
+        setLoading(false);
+        addToast("Dados sincronizados!", "success");
+    };
 
     return (
     <div className="space-y-6 animate-fade-in max-w-6xl mx-auto">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
          <div>
-            <h2 className="text-2xl font-bold text-zinc-800 dark:text-white">Membros Cadastrados</h2>
-            <p className="text-zinc-500 text-sm">Lista oficial de todos os usuários registrados no sistema.</p>
+            <h2 className="text-2xl font-bold text-zinc-800 dark:text-white">Membros & Equipe</h2>
+            <p className="text-zinc-500 text-sm">Lista de usuários cadastrados e membros ativos no sistema.</p>
          </div>
          <div className="flex gap-2 w-full md:w-auto">
+            <button 
+                onClick={handleRefreshList} 
+                disabled={loading}
+                className="bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 p-2.5 rounded-lg transition-colors border border-blue-100 dark:border-blue-900/30"
+                title="Atualizar Lista"
+            >
+                <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
+            </button>
             <div className="relative w-full md:w-72">
                 <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
                 <input 
@@ -730,81 +851,104 @@ const AppContent = () => {
          </div>
       </div>
 
-      <div className="bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden">
-         {filteredMembers.length === 0 ? (
-            <div className="p-12 text-center text-zinc-500">
-                <Users size={48} className="mx-auto mb-4 opacity-20" />
-                <p>Nenhum membro encontrado.</p>
-                <p className="text-xs mt-1">Os membros aparecerão aqui após realizarem o cadastro.</p>
-            </div>
-         ) : (
-             <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                    <thead className="bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700 text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                        <tr>
-                            <th className="px-6 py-4">Membro</th>
-                            <th className="px-6 py-4">Contato</th>
-                            <th className="px-6 py-4">Funções na Escala</th>
-                            <th className="px-6 py-4 text-right">Desde</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
-                        {filteredMembers.map(member => {
-                            const assignedRoles = getMemberRoles(member.name);
-                            return (
-                                <tr key={member.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-4">
-                                            {member.avatar_url ? (
-                                                <img src={member.avatar_url} alt={member.name} className="w-10 h-10 rounded-full object-cover border border-zinc-200 dark:border-zinc-700" />
-                                            ) : (
-                                                <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-                                                    <span className="font-bold text-sm">{member.name.charAt(0).toUpperCase()}</span>
-                                                </div>
-                                            )}
-                                            <div>
-                                                <div className="font-bold text-zinc-900 dark:text-zinc-100">{member.name}</div>
-                                                <div className="text-xs text-zinc-500">ID: {member.id.substring(0, 8)}...</div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="space-y-1">
-                                            {member.email && (
-                                                <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
-                                                    <Mail size={14} className="opacity-50" /> {member.email}
-                                                </div>
-                                            )}
-                                            {member.whatsapp && (
-                                                <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
-                                                    <Phone size={14} className="opacity-50" /> {member.whatsapp}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex flex-wrap gap-2">
-                                            {assignedRoles.length > 0 ? assignedRoles.map(role => (
-                                                <span key={role} className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-900/30">
-                                                    {role}
-                                                </span>
-                                            )) : (
-                                                <span className="text-zinc-400 text-xs italic">Sem função atribuída</span>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <span className="text-sm text-zinc-500">
-                                            {member.createdAt ? new Date(member.createdAt).toLocaleDateString('pt-BR') : '-'}
-                                        </span>
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
+      <div className="space-y-6">
+          {/* LISTA OFICIAL (CADASTRADOS) */}
+          <div className="bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+             <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50">
+                 <h3 className="text-xs font-bold text-zinc-500 uppercase">Membros Cadastrados (Login Ativo)</h3>
              </div>
-         )}
+             {filteredMembers.length === 0 ? (
+                <div className="p-8 text-center text-zinc-500">
+                    <Users size={32} className="mx-auto mb-2 opacity-20" />
+                    <p>Nenhum membro cadastrado encontrado.</p>
+                </div>
+             ) : (
+                 <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead className="bg-zinc-50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-700 text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                            <tr>
+                                <th className="px-6 py-3">Membro</th>
+                                <th className="px-6 py-3">Contato</th>
+                                <th className="px-6 py-3">Funções</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
+                            {filteredMembers.map(member => {
+                                const assignedRoles = getMemberRoles(member.name);
+                                return (
+                                    <tr key={member.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-4">
+                                                {member.avatar_url ? (
+                                                    <img src={member.avatar_url} alt={member.name} className="w-10 h-10 rounded-full object-cover border border-zinc-200 dark:border-zinc-700" />
+                                                ) : (
+                                                    <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                                                        <span className="font-bold text-sm">{member.name.charAt(0).toUpperCase()}</span>
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <div className="font-bold text-zinc-900 dark:text-zinc-100">{member.name}</div>
+                                                    <div className="text-xs text-zinc-500">ID: {member.id.substring(0, 8)}...</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="space-y-1">
+                                                {member.email && (
+                                                    <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+                                                        <Mail size={14} className="opacity-50" /> {member.email}
+                                                    </div>
+                                                )}
+                                                {member.whatsapp && (
+                                                    <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+                                                        <Phone size={14} className="opacity-50" /> {member.whatsapp}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-wrap gap-2">
+                                                {assignedRoles.length > 0 ? assignedRoles.map(role => (
+                                                    <span key={role} className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-900/30">
+                                                        {role}
+                                                    </span>
+                                                )) : (
+                                                    <span className="text-zinc-400 text-xs italic">Sem função</span>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                 </div>
+             )}
+          </div>
+
+          {/* LISTA DE FANTASMAS (ATIVOS MAS SEM LOGIN OFICIAL SINCRONIZADO) */}
+          {ghostMembers.length > 0 && (
+              <div className="bg-amber-50 dark:bg-amber-900/10 rounded-xl shadow-sm border border-amber-200 dark:border-amber-900/30 overflow-hidden">
+                 <div className="px-6 py-4 border-b border-amber-200 dark:border-amber-900/30 bg-amber-100/50 dark:bg-amber-900/20 flex items-center gap-2">
+                     <AlertCircle size={16} className="text-amber-600 dark:text-amber-500"/>
+                     <h3 className="text-xs font-bold text-amber-700 dark:text-amber-500 uppercase">Outros Membros Ativos (Detectados no Sistema)</h3>
+                 </div>
+                 <div className="p-4">
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mb-4">
+                        Estes membros têm dados no sistema (escalas ou disponibilidade salva) mas não foram encontrados na lista oficial de cadastros. 
+                        Isso pode ocorrer se eles usaram o sistema antes da atualização ou se houve falha na sincronização do perfil.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {ghostMembers.map(name => (
+                            <div key={name} className="flex items-center justify-between p-3 bg-white dark:bg-zinc-800 rounded-lg border border-amber-100 dark:border-amber-900/20">
+                                <span className="font-bold text-zinc-700 dark:text-zinc-300">{name}</span>
+                                <span className="text-[10px] px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full font-bold">Não Sincronizado</span>
+                            </div>
+                        ))}
+                    </div>
+                 </div>
+              </div>
+          )}
       </div>
 
       {/* Quick Add Roles for Context */}

@@ -52,10 +52,15 @@ export const saveData = async <T>(ministryId: string, keySuffix: string, value: 
 // --- Member Directory Sync ---
 
 export const syncMemberProfile = async (ministryId: string, user: User) => {
+    console.log("Sincronizando perfil na lista pública:", user.name);
     try {
         const list = await loadData<TeamMemberProfile[]>(ministryId, 'public_members_list', []);
-        // Find by email or name (fallback)
-        const index = list.findIndex(m => m.email === user.email || m.name === user.name);
+        
+        // Find by email (preferred) or name (fallback) - Case insensitive for email
+        const index = list.findIndex(m => 
+            (m.email && user.email && m.email.toLowerCase() === user.email.toLowerCase()) || 
+            m.name === user.name
+        );
         
         const newProfile: TeamMemberProfile = {
             id: user.id || Date.now().toString(),
@@ -70,21 +75,34 @@ export const syncMemberProfile = async (ministryId: string, user: User) => {
         let newList;
         if (index >= 0) {
             newList = [...list];
-            // Merge to preserve existing data like roles if they were manually edited
-            // But we update name/contact info from user profile
             const existing = newList[index];
+            
+            // Lógica inteligente de merge:
+            // 1. Atualiza dados de contato (Nome, Whats, Foto) com o que vem do login atual
+            // 2. PRESERVA as funções (roles) que já estão na lista, a menos que o login traga novas
+            // 3. Preserva a data de criação original
+            
             newList[index] = { 
                 ...existing, 
-                name: user.name,
-                email: user.email,
-                whatsapp: user.whatsapp,
-                avatar_url: user.avatar_url
+                id: existing.id || user.id, // Atualiza ID se estiver faltando
+                name: user.name, // Nome sempre atualizado pelo perfil
+                email: user.email || existing.email,
+                whatsapp: user.whatsapp || existing.whatsapp,
+                avatar_url: user.avatar_url || existing.avatar_url,
+                // Se o usuário logado não tiver roles definidas no metadata (comum), mantém as da lista
+                roles: (user.functions && user.functions.length > 0) ? user.functions : (existing.roles || []),
+                createdAt: existing.createdAt || newProfile.createdAt
             }; 
         } else {
+            // Novo membro na lista
             newList = [...list, newProfile];
         }
         
-        await saveData(ministryId, 'public_members_list', newList);
+        // Ordena alfabeticamente para manter a organização
+        newList.sort((a, b) => a.name.localeCompare(b.name));
+        
+        const saved = await saveData(ministryId, 'public_members_list', newList);
+        if (saved) console.log("Perfil sincronizado com sucesso.");
         return newList;
     } catch (e) {
         console.error("Erro ao sincronizar perfil do membro", e);
@@ -119,6 +137,13 @@ export const loginWithEmail = async (email: string, password: string): Promise<{
                 avatar_url: metadata.avatar_url,
                 functions: metadata.functions || []
             };
+
+            // Força a sincronização ao logar para garantir que o membro apareça na lista
+            if (metadata.ministryId) {
+                // Não aguardamos o sync para não travar o login visualmente, mas disparamos
+                syncMemberProfile(metadata.ministryId, userProfile);
+            }
+
             return { success: true, message: "Login realizado.", user: userProfile, ministryId: metadata.ministryId };
         }
         
@@ -157,6 +182,27 @@ export const registerWithEmail = async (
         });
 
         if (error) return { success: false, message: error.message };
+
+        // CRUCIAL: Sincroniza imediatamente o novo usuário com a lista pública
+        if (data.user) {
+            const userProfile: User = {
+                id: data.user.id,
+                email: email,
+                name: name,
+                role: 'member',
+                ministryId: cleanMid,
+                whatsapp: whatsapp,
+                functions: selectedRoles || []
+            };
+            await syncMemberProfile(cleanMid, userProfile);
+
+            // ENVIA NOTIFICAÇÃO PARA O PAINEL
+            await sendNotification(cleanMid, {
+                type: 'info',
+                title: 'Novo Membro Cadastrado',
+                message: `${name} acabou de se cadastrar na equipe.`
+            });
+        }
 
         return { success: true, message: "Cadastro realizado com sucesso!" };
     } catch (e) {
@@ -300,6 +346,26 @@ export const markNotificationsRead = async (ministryId: string, notificationIds:
         return notifs;
     } catch (e) {
         console.error("Erro ao marcar lidas", e);
+        return [];
+    }
+};
+
+export const clearAllNotifications = async (ministryId: string): Promise<AppNotification[]> => {
+    if (!supabase || !ministryId) return [];
+
+    try {
+        const key = getStorageKey(ministryId, 'notifications_v1');
+        // Substitui a lista inteira por um array vazio
+        const { error } = await supabase.from('app_storage').upsert({ key, value: [] }, { onConflict: 'key' });
+        
+        if (error) {
+            console.error("Erro Supabase ao limpar:", error);
+            return [];
+        }
+
+        return [];
+    } catch (e) {
+        console.error("Erro ao limpar notificações", e);
         return [];
     }
 };

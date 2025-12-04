@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Bell, Check, Trash2, Info, AlertTriangle, CheckCircle, AlertOctagon } from 'lucide-react';
 import { AppNotification } from '../types';
-import { markNotificationsRead } from '../services/supabaseService';
+import { markNotificationsRead, clearAllNotifications } from '../services/supabaseService';
 
 interface Props {
   notifications: AppNotification[];
@@ -21,6 +21,14 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
     
     const updated = await markNotificationsRead(ministryId, unreadIds);
     onNotificationsUpdate(updated);
+  };
+
+  const handleClearAll = async () => {
+      if (!ministryId) return;
+      if (confirm("Tem certeza que deseja limpar todas as notificações?")) {
+          await clearAllNotifications(ministryId);
+          onNotificationsUpdate([]); // Limpa localmente
+      }
   };
 
   const getIcon = (type: string) => {
@@ -52,11 +60,18 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
           <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-zinc-800 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-700 z-50 overflow-hidden animate-fade-in">
              <div className="p-3 border-b border-zinc-100 dark:border-zinc-700 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900/50">
                  <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Notificações</h3>
-                 {unreadCount > 0 && (
-                     <button onClick={handleMarkAllRead} className="text-[10px] text-blue-600 hover:text-blue-500 font-bold flex items-center gap-1">
-                         <Check size={12}/> Marcar lidas
-                     </button>
-                 )}
+                 <div className="flex items-center gap-3">
+                    {unreadCount > 0 && (
+                        <button onClick={handleMarkAllRead} className="text-[10px] text-blue-600 hover:text-blue-500 font-bold flex items-center gap-1" title="Marcar todas como lidas">
+                            <Check size={12}/> Ler
+                        </button>
+                    )}
+                    {notifications.length > 0 && (
+                        <button onClick={handleClearAll} className="text-[10px] text-red-500 hover:text-red-600 font-bold flex items-center gap-1" title="Limpar histórico">
+                            <Trash2 size={12}/> Limpar
+                        </button>
+                    )}
+                 </div>
              </div>
              
              <div className="max-h-80 overflow-y-auto custom-scrollbar">
