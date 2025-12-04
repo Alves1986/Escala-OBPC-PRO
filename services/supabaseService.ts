@@ -51,6 +51,33 @@ export const saveData = async <T>(ministryId: string, keySuffix: string, value: 
   }
 };
 
+// --- Admin Management ---
+
+export const toggleAdmin = async (ministryId: string, email: string): Promise<{ success: boolean; isAdmin: boolean }> => {
+    if (!supabase || !ministryId) return { success: false, isAdmin: false };
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+
+    try {
+        const admins = await loadData<string[]>(cleanMid, 'admins_list', []);
+        let newAdmins = [...admins];
+        let isAdmin = false;
+
+        if (newAdmins.includes(email)) {
+            newAdmins = newAdmins.filter(e => e !== email);
+            isAdmin = false;
+        } else {
+            newAdmins.push(email);
+            isAdmin = true;
+        }
+
+        await saveData(cleanMid, 'admins_list', newAdmins);
+        return { success: true, isAdmin };
+    } catch (e) {
+        console.error("Erro ao alterar admin", e);
+        return { success: false, isAdmin: false };
+    }
+};
+
 // --- Member Directory Sync ---
 
 export const syncMemberProfile = async (ministryId: string, user: User) => {

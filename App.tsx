@@ -13,7 +13,7 @@ import { EventDetailsModal } from './components/EventDetailsModal';
 import { AvailabilityReportScreen } from './components/AvailabilityReportScreen';
 import { SwapRequestsScreen } from './components/SwapRequestsScreen';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile, SwapRequest } from './types';
-import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap } from './services/supabaseService';
+import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap, toggleAdmin } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -32,7 +32,9 @@ import {
   Phone,
   Trash2,
   Plus,
-  RefreshCcw
+  RefreshCcw,
+  ShieldCheck,
+  ShieldAlert
 } from 'lucide-react';
 import { NextEventCard } from './components/NextEventCard';
 import { ConfirmationModal } from './components/ConfirmationModal';
@@ -81,6 +83,7 @@ const AppInner = () => {
   const [scheduleIssues, setScheduleIssues] = useState<ScheduleAnalysis>({});
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [swapRequests, setSwapRequests] = useState<SwapRequest[]>([]);
+  const [adminsList, setAdminsList] = useState<string[]>([]);
   
   // UI State
   const [loading, setLoading] = useState(false);
@@ -185,7 +188,8 @@ const AppInner = () => {
         resAttend,
         resNotif,
         resRegMembers,
-        resSwaps
+        resSwaps,
+        resAdmins
       ] = await Promise.all([
         loadData<MemberMap>(cleanMid, 'members_v7', {}),
         loadData<ScheduleMap>(cleanMid, `schedule_${currentMonth}`, {}),
@@ -197,7 +201,8 @@ const AppInner = () => {
         loadData<AttendanceMap>(cleanMid, `attendance_${currentMonth}`, {}),
         loadData<AppNotification[]>(cleanMid, 'notifications_v1', []),
         loadData<TeamMemberProfile[]>(cleanMid, 'public_members_list', []),
-        loadData<SwapRequest[]>(cleanMid, 'swap_requests_v1', [])
+        loadData<SwapRequest[]>(cleanMid, 'swap_requests_v1', []),
+        loadData<string[]>(cleanMid, 'admins_list', [])
       ]);
 
       setMembers(resMembers);
@@ -211,6 +216,14 @@ const AppInner = () => {
       setNotifications(resNotif);
       setRegisteredMembers(resRegMembers);
       setSwapRequests(resSwaps);
+      setAdminsList(resAdmins);
+
+      // Upgrade current user if in admins list
+      if (currentUser && currentUser.email && resAdmins.includes(currentUser.email)) {
+          if (currentUser.role !== 'admin') {
+              setCurrentUser(prev => prev ? { ...prev, role: 'admin' } : null);
+          }
+      }
 
       setIsConnected(true);
     } catch (e) {
@@ -349,6 +362,31 @@ const AppInner = () => {
          }
       }
     );
+  };
+
+  const handleToggleAdmin = async (email: string, name: string) => {
+      if (!ministryId) return;
+      if (email === currentUser?.email) {
+          addToast("Você não pode alterar seu próprio nível de acesso.", "warning");
+          return;
+      }
+
+      const isCurrentlyAdmin = adminsList.includes(email);
+      const action = isCurrentlyAdmin ? "remover permissão de Admin" : "promover a Admin";
+
+      confirmAction(
+          "Alterar Permissão",
+          `Deseja ${action} de ${name}?`,
+          async () => {
+              const res = await toggleAdmin(ministryId, email);
+              if (res.success) {
+                  setAdminsList(prev => res.isAdmin ? [...prev, email] : prev.filter(e => e !== email));
+                  addToast(res.isAdmin ? `${name} agora é Admin.` : `${name} agora é Membro.`, "success");
+              } else {
+                  addToast("Erro ao alterar permissão.", "error");
+              }
+          }
+      );
   };
 
   const handleRefreshList = async () => {
@@ -574,7 +612,9 @@ const AppInner = () => {
              ) : (
                  registeredMembers
                     .filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()))
-                    .map(member => (
+                    .map(member => {
+                     const isAdmin = adminsList.includes(member.email || '');
+                     return (
                      <div key={member.id} className="p-4 flex items-center justify-between hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
                          <div className="flex items-center gap-4">
                              {member.avatar_url ? (
@@ -586,7 +626,10 @@ const AppInner = () => {
                              )}
                              
                              <div>
-                                 <h4 className="font-bold text-zinc-800 dark:text-zinc-100">{member.name}</h4>
+                                 <div className="flex items-center gap-2">
+                                     <h4 className="font-bold text-zinc-800 dark:text-zinc-100">{member.name}</h4>
+                                     {isAdmin && <ShieldCheck size={14} className="text-blue-500" />}
+                                 </div>
                                  <p className="text-xs text-zinc-500">ID: {member.id.substring(0,8)}...</p>
                              </div>
                          </div>
@@ -597,7 +640,7 @@ const AppInner = () => {
                          </div>
 
                          <div className="flex items-center gap-4">
-                             <div className="text-right">
+                             <div className="text-right hidden sm:block">
                                 {member.roles && member.roles.length > 0 ? (
                                     <div className="flex flex-wrap gap-1 justify-end max-w-[200px]">
                                         {member.roles.map(r => (
@@ -611,16 +654,30 @@ const AppInner = () => {
                                 )}
                              </div>
                              
-                             <button 
-                                onClick={() => handleDeleteMember(member.id, member.name)}
-                                className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                title="Excluir Membro"
-                             >
-                                <Trash2 size={18} />
-                             </button>
+                             {/* Ações */}
+                             <div className="flex gap-1">
+                                 {/* Botão de Promover a Admin */}
+                                 {member.email && (
+                                     <button 
+                                        onClick={() => handleToggleAdmin(member.email!, member.name)}
+                                        className={`p-2 rounded-lg transition-colors ${isAdmin ? 'text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20' : 'text-zinc-300 hover:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+                                        title={isAdmin ? "Rebaixar para Membro" : "Promover a Admin"}
+                                     >
+                                        <Shield size={18} className={isAdmin ? 'fill-current' : ''} />
+                                     </button>
+                                 )}
+
+                                 <button 
+                                    onClick={() => handleDeleteMember(member.id, member.name)}
+                                    className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                    title="Excluir Membro"
+                                 >
+                                    <Trash2 size={18} />
+                                 </button>
+                             </div>
                          </div>
                      </div>
-                 ))
+                 )})
              )}
          </div>
       </div>
