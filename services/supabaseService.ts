@@ -84,7 +84,7 @@ export const syncMemberProfile = async (ministryId: string, user: User) => {
             
             newList[index] = { 
                 ...existing, 
-                id: existing.id || user.id, // Atualiza ID se estiver faltando
+                id: user.id || existing.id || Date.now().toString(), // Fixed TS Error
                 name: user.name, // Nome sempre atualizado pelo perfil
                 email: user.email || existing.email,
                 whatsapp: user.whatsapp || existing.whatsapp,
