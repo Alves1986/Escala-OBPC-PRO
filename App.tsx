@@ -169,6 +169,14 @@ const AppContent = () => {
     setAuditLog(prev => [newEntry, ...prev].slice(0, 200));
   };
 
+  const getMinistryTitle = (id: string | null) => {
+    if (!id) return "Escala Mídia Pro";
+    const cleanId = id.toLowerCase().trim();
+    if (cleanId === 'midia') return "Mídia / Comunicação";
+    if (cleanId === 'louvor') return "Louvor / Adoração";
+    return `Escala ${id.charAt(0).toUpperCase() + id.slice(1)}`;
+  };
+
   // --- AUTH EFFECT ---
   useEffect(() => {
     const supabase = getSupabase();
@@ -1012,7 +1020,7 @@ const AppContent = () => {
 
   return (
     <DashboardLayout 
-      title={`Escala ${ministryId}`} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} theme={theme} toggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')} onLogout={handleLogout} isConnected={isConnected} deferredPrompt={installPrompt} onInstallAction={handleInstallApp} currentUser={currentUser} isIOS={isIOS}
+      title={getMinistryTitle(ministryId)} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} theme={theme} toggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')} onLogout={handleLogout} isConnected={isConnected} deferredPrompt={installPrompt} onInstallAction={handleInstallApp} currentUser={currentUser} isIOS={isIOS}
       currentTab={currentTab} onTabChange={setCurrentTab}
       mainNavItems={MAIN_NAV_ITEMS}
       managementNavItems={MANAGEMENT_NAV_ITEMS}
