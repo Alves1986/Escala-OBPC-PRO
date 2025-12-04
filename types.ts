@@ -98,7 +98,11 @@ export interface AppState {
   sidebarOpen: boolean;
 }
 
-export const DEFAULT_ROLES = ["Projeção", "Transmissão", "Fotografia", "Storys"];
+export const DEFAULT_ROLES: Record<string, string[]> = {
+  'midia': ["Projeção", "Transmissão", "Fotografia", "Storys"],
+  'louvor': ['Ministro', 'Vocal', 'Guitarra', 'Baixo', 'Teclado', 'Bateria', 'Dança', 'Mesa de Som'],
+  'default': ["Membro"]
+};
 
 // Supabase Credentials
 export const SUPABASE_URL = (import.meta as any).env?.VITE_SUPABASE_URL || "https://phlfpaojiiplnzihsgee.supabase.co"; 

@@ -77,7 +77,7 @@ const AppInner = () => {
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>([]);
   const [ignoredEvents, setIgnoredEvents] = useState<string[]>([]);
   const [availability, setAvailability] = useState<AvailabilityMap>({});
-  const [roles, setRoles] = useState<string[]>(DEFAULT_ROLES);
+  const [roles, setRoles] = useState<string[]>(DEFAULT_ROLES['midia'] || []);
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [scheduleIssues, setScheduleIssues] = useState<ScheduleAnalysis>({});
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
