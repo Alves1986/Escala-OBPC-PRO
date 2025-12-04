@@ -11,8 +11,9 @@ import { AvailabilityScreen } from './components/AvailabilityScreen';
 import { ProfileScreen } from './components/ProfileScreen';
 import { EventDetailsModal } from './components/EventDetailsModal';
 import { AvailabilityReportScreen } from './components/AvailabilityReportScreen';
-import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile } from './types';
-import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification } from './services/supabaseService';
+import { SwapRequestsScreen } from './components/SwapRequestsScreen';
+import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile, SwapRequest } from './types';
+import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -30,7 +31,8 @@ import {
   Mail,
   Phone,
   Trash2,
-  Plus
+  Plus,
+  RefreshCcw
 } from 'lucide-react';
 import { NextEventCard } from './components/NextEventCard';
 import { ConfirmationModal } from './components/ConfirmationModal';
@@ -41,6 +43,7 @@ const MAIN_NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
   { id: 'calendar', label: 'Calendário', icon: <CalendarIcon size={20} /> },
   { id: 'availability', label: 'Disponibilidade', icon: <Shield size={20} /> },
+  { id: 'swaps', label: 'Trocas de Escala', icon: <RefreshCcw size={20} /> },
 ];
 
 const MANAGEMENT_NAV_ITEMS = [
@@ -77,6 +80,7 @@ const AppInner = () => {
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [scheduleIssues, setScheduleIssues] = useState<ScheduleAnalysis>({});
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [swapRequests, setSwapRequests] = useState<SwapRequest[]>([]);
   
   // UI State
   const [loading, setLoading] = useState(false);
@@ -180,7 +184,8 @@ const AppInner = () => {
         resIgnored,
         resAttend,
         resNotif,
-        resRegMembers
+        resRegMembers,
+        resSwaps
       ] = await Promise.all([
         loadData<MemberMap>(cleanMid, 'members_v7', {}),
         loadData<ScheduleMap>(cleanMid, `schedule_${currentMonth}`, {}),
@@ -191,7 +196,8 @@ const AppInner = () => {
         loadData<string[]>(cleanMid, `ignored_events_${currentMonth}`, []),
         loadData<AttendanceMap>(cleanMid, `attendance_${currentMonth}`, {}),
         loadData<AppNotification[]>(cleanMid, 'notifications_v1', []),
-        loadData<TeamMemberProfile[]>(cleanMid, 'public_members_list', [])
+        loadData<TeamMemberProfile[]>(cleanMid, 'public_members_list', []),
+        loadData<SwapRequest[]>(cleanMid, 'swap_requests_v1', [])
       ]);
 
       setMembers(resMembers);
@@ -204,6 +210,7 @@ const AppInner = () => {
       setAttendance(resAttend);
       setNotifications(resNotif);
       setRegisteredMembers(resRegMembers);
+      setSwapRequests(resSwaps);
 
       setIsConnected(true);
     } catch (e) {
@@ -371,6 +378,51 @@ const AppInner = () => {
     }
   };
 
+  const handleCreateSwapRequest = async (role: string, eventIso: string, eventTitle: string) => {
+    if (!ministryId || !currentUser) return;
+    
+    const newReq: SwapRequest = {
+        id: Date.now().toString(),
+        ministryId,
+        requesterName: currentUser.name,
+        requesterId: currentUser.id,
+        role,
+        eventIso,
+        eventTitle,
+        status: 'pending',
+        createdAt: new Date().toISOString()
+    };
+    
+    const success = await createSwapRequest(ministryId, newReq);
+    if (success) {
+        setSwapRequests(prev => [newReq, ...prev]);
+        addToast("Solicitação de troca enviada ao mural!", "success");
+    } else {
+        addToast("Erro ao criar solicitação.", "error");
+    }
+  };
+
+  const handleAcceptSwap = async (reqId: string) => {
+     if (!ministryId || !currentUser) return;
+     
+     const confirm = window.confirm("Você tem certeza que deseja assumir esta escala?");
+     if (!confirm) return;
+
+     const result = await performSwap(ministryId, reqId, currentUser.name, currentUser.id);
+     
+     if (result.success) {
+         addToast(result.message, "success");
+         // Refresh data (schedule and requests)
+         const updatedRequests = await loadData<SwapRequest[]>(ministryId, 'swap_requests_v1', []);
+         const updatedSchedule = await loadData<ScheduleMap>(ministryId, `schedule_${currentMonth}`, {});
+         
+         setSwapRequests(updatedRequests);
+         setSchedule(updatedSchedule);
+     } else {
+         addToast(result.message, "error");
+     }
+  };
+
   const handleShareNextEvent = () => {
     if (!nextEvent) {
         addToast("Nenhum evento próximo encontrado para compartilhar.", "warning");
@@ -405,9 +457,6 @@ const AppInner = () => {
      if(!ministryId || !selectedEventDetails) return;
      const datePart = oldIso.split('T')[0];
      const newIso = `${datePart}T${newTime}`;
-     
-     // Note: Real implementation needs to handle updating customEvents list and schedule keys
-     // This is a simplified placeholder as per request context
      
      addToast("Edição de detalhes salva!", "success");
      setSelectedEventDetails(null);
@@ -741,6 +790,18 @@ const AppInner = () => {
                 }
             }}
          />
+      )}
+
+      {currentTab === 'swaps' && currentUser && (
+          <SwapRequestsScreen 
+              schedule={schedule}
+              currentUser={currentUser}
+              requests={swapRequests}
+              visibleEvents={visibleEvents}
+              onCreateRequest={handleCreateSwapRequest}
+              onAcceptRequest={handleAcceptSwap}
+              onCancelRequest={(id) => console.log('Cancel', id)}
+          />
       )}
 
       {currentTab === 'editor' && currentUser?.role === 'admin' && (

@@ -50,6 +50,19 @@ export interface ScheduleAnalysis {
   [key: string]: ScheduleIssue;
 }
 
+export interface SwapRequest {
+  id: string;
+  ministryId: string;
+  requesterName: string;
+  requesterId?: string;
+  role: string;
+  eventIso: string; // YYYY-MM-DDTHH:mm
+  eventTitle: string;
+  status: 'pending' | 'completed' | 'cancelled';
+  createdAt: string;
+  takenByName?: string;
+}
+
 // Push Notification Types
 export interface PushSubscriptionRecord {
   endpoint: string;

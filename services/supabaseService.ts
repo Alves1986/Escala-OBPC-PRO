@@ -1,6 +1,6 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, DEFAULT_ROLES, AppNotification, TeamMemberProfile, AvailabilityMap } from '../types';
+import { SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, DEFAULT_ROLES, AppNotification, TeamMemberProfile, AvailabilityMap, SwapRequest, ScheduleMap } from '../types';
 
 let supabase: SupabaseClient | null = null;
 
@@ -102,7 +102,6 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
     try {
         // 1. Remove da Lista Pública de Membros (Visual)
         const list = await loadData<TeamMemberProfile[]>(ministryId, 'public_members_list', []);
-        // Remove por ID (se registrado) ou por Nome (se manual)
         const newList = list.filter(m => {
             if (memberId && memberId !== 'manual') return m.id !== memberId;
             return m.name !== memberName;
@@ -129,6 +128,87 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
     } catch (e) {
         console.error("Erro ao excluir membro", e);
         return false;
+    }
+};
+
+// --- Swap Logic ---
+
+export const createSwapRequest = async (ministryId: string, request: SwapRequest): Promise<boolean> => {
+    if (!supabase || !ministryId) return false;
+    try {
+        const requests = await loadData<SwapRequest[]>(ministryId, 'swap_requests_v1', []);
+        const newRequests = [request, ...requests];
+        return await saveData(ministryId, 'swap_requests_v1', newRequests);
+    } catch (e) {
+        console.error("Error creating swap request", e);
+        return false;
+    }
+};
+
+export const performSwap = async (
+    ministryId: string, 
+    requestId: string, 
+    acceptingMemberName: string,
+    acceptingMemberId?: string
+): Promise<{ success: boolean; message: string }> => {
+    if (!supabase || !ministryId) return { success: false, message: "Erro de conexão" };
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+
+    try {
+        // 1. Carrega os Pedidos
+        const requests = await loadData<SwapRequest[]>(cleanMid, 'swap_requests_v1', []);
+        const requestIndex = requests.findIndex(r => r.id === requestId);
+        
+        if (requestIndex < 0) return { success: false, message: "Solicitação não encontrada." };
+        
+        const request = requests[requestIndex];
+        if (request.status !== 'pending') return { success: false, message: "Esta solicitação já foi processada." };
+
+        // 2. Carrega a Escala do Mês do Evento
+        const eventMonth = request.eventIso.slice(0, 7); // YYYY-MM
+        const scheduleKey = `schedule_${eventMonth}`;
+        const schedule = await loadData<ScheduleMap>(cleanMid, scheduleKey, {});
+        
+        const slotKey = `${request.eventIso}_${request.role}`;
+        const currentAssigned = schedule[slotKey];
+
+        // 3. Valida se o membro original ainda está na escala
+        if (currentAssigned !== request.requesterName) {
+            return { 
+                success: false, 
+                message: "A escala mudou e o membro original não está mais nela. Troca cancelada." 
+            };
+        }
+
+        // 4. Realiza a Troca
+        schedule[slotKey] = acceptingMemberName;
+        
+        // 5. Atualiza o Pedido
+        requests[requestIndex] = {
+            ...request,
+            status: 'completed',
+            takenByName: acceptingMemberName
+        };
+
+        // 6. Salva Tudo
+        const saveSchedule = await saveData(cleanMid, scheduleKey, schedule);
+        const saveRequests = await saveData(cleanMid, 'swap_requests_v1', requests);
+
+        if (saveSchedule && saveRequests) {
+            // Notifica
+            await sendNotification(cleanMid, {
+                type: 'success',
+                title: 'Troca de Escala Realizada',
+                message: `${acceptingMemberName} assumiu a escala de ${request.requesterName} para ${request.eventTitle}.`
+            });
+            return { success: true, message: "Troca realizada com sucesso!" };
+        } else {
+            return { success: false, message: "Erro ao salvar dados." };
+        }
+
+    } catch (e) {
+        console.error("Error performing swap", e);
+        return { success: false, message: "Erro interno no servidor." };
     }
 };
 
