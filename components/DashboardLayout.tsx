@@ -1,4 +1,3 @@
-
 import React, { ReactNode, useState } from 'react';
 import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon } from 'lucide-react';
 import { User, AppNotification } from '../types';
@@ -19,10 +18,7 @@ interface Props {
   onLogout: () => void;
   title: string;
   isConnected: boolean;
-  deferredPrompt?: any;
-  onInstallAction?: () => void;
   currentUser?: User | null;
-  isIOS?: boolean;
   currentTab: string;
   onTabChange: (tab: string) => void;
   mainNavItems: NavItem[];
@@ -33,7 +29,7 @@ interface Props {
 }
 
 export const DashboardLayout: React.FC<Props> = ({ 
-  children, sidebarOpen, setSidebarOpen, theme, toggleTheme, onLogout, title, isConnected, deferredPrompt, onInstallAction, currentUser, isIOS,
+  children, sidebarOpen, setSidebarOpen, theme, toggleTheme, onLogout, title, isConnected, currentUser,
   currentTab, onTabChange, mainNavItems, managementNavItems, notifications, onNotificationsUpdate
 }) => {
   const [imgError, setImgError] = useState(false);
@@ -58,8 +54,6 @@ export const DashboardLayout: React.FC<Props> = ({
       }
     }, 500);
   };
-
-  const showInstallButton = !!deferredPrompt || isIOS;
 
   const renderNavButton = (item: NavItem) => {
     const isActive = currentTab === item.id;
@@ -197,12 +191,6 @@ export const DashboardLayout: React.FC<Props> = ({
                   {isUpdating ? 'v2.0' : 'v2.0'}
               </button>
            </div>
-
-           {showInstallButton && (
-               <button onClick={onInstallAction} className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors shadow-lg shadow-blue-600/20">
-                 <Download size={14} /> Instalar App
-               </button>
-           )}
         </div>
       </aside>
 

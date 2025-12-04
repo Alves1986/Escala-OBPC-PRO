@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ScheduleTable } from './components/ScheduleTable';
@@ -77,8 +76,6 @@ const AppContent = () => {
   const [theme, setTheme] = useState<'light'|'dark'>('dark');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
-  const [installPrompt, setInstallPrompt] = useState<any>(null);
-  const [isIOS, setIsIOS] = useState(false);
   
   // Data State
   const [members, setMembers] = useState<MemberMap>({});
@@ -207,30 +204,6 @@ const AppContent = () => {
       });
       setMinistryId(meta.ministryId);
   }
-
-  // --- PWA EFFECTS (UPDATED) ---
-  useEffect(() => {
-    const userAgent = window.navigator.userAgent.toLowerCase();
-    setIsIOS(/iphone|ipad|ipod/.test(userAgent));
-    
-    const handler = (e: any) => { 
-        // Prevent Chrome 67 and earlier from automatically showing the prompt
-        e.preventDefault(); 
-        // Stash the event so it can be triggered later.
-        setInstallPrompt(e); 
-        console.log("PWA Install Prompt captured");
-    };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
-
-  const handleInstallApp = async () => {
-    if (!installPrompt) return;
-    installPrompt.prompt();
-    const { outcome } = await installPrompt.userChoice;
-    console.log(`User response to install prompt: ${outcome}`);
-    setInstallPrompt(null);
-  };
 
   // --- DATA LOADING & SAVING ---
   useEffect(() => {
@@ -1020,7 +993,7 @@ const AppContent = () => {
 
   return (
     <DashboardLayout 
-      title={getMinistryTitle(ministryId)} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} theme={theme} toggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')} onLogout={handleLogout} isConnected={isConnected} deferredPrompt={installPrompt} onInstallAction={handleInstallApp} currentUser={currentUser} isIOS={isIOS}
+      title={getMinistryTitle(ministryId)} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} theme={theme} toggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')} onLogout={handleLogout} isConnected={isConnected} currentUser={currentUser} 
       currentTab={currentTab} onTabChange={setCurrentTab}
       mainNavItems={MAIN_NAV_ITEMS}
       managementNavItems={MANAGEMENT_NAV_ITEMS}
