@@ -1,7 +1,8 @@
 
-const CACHE_NAME = 'escala-midia-v1-redo';
+const CACHE_NAME = 'escala-midia-pwa-v2';
 
 // Lista de arquivos vitais para o funcionamento offline
+// Inclui as bibliotecas do CDN definidas no importmap do index.html
 const PRECACHE_URLS = [
   '/',
   '/index.html',
@@ -9,14 +10,16 @@ const PRECACHE_URLS = [
   '/app-icon.png',
   'https://cdn.tailwindcss.com',
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap',
-  // Importante: Assegurar que as bibliotecas principais estejam cacheadas
+  // Dependências críticas do CDN
   'https://aistudiocdn.com/lucide-react@^0.555.0',
   'https://aistudiocdn.com/react-dom@^19.2.0/',
   'https://aistudiocdn.com/recharts@^3.5.1',
   'https://aistudiocdn.com/react@^19.2.0/',
   'https://aistudiocdn.com/react@^19.2.0',
   'https://aistudiocdn.com/@google/genai@^1.30.0',
-  'https://aistudiocdn.com/@supabase/supabase-js@^2.86.0'
+  'https://aistudiocdn.com/@supabase/supabase-js@^2.86.0',
+  'https://aistudiocdn.com/jspdf@^3.0.4',
+  'https://aistudiocdn.com/jspdf-autotable@^5.0.2'
 ];
 
 // Instalação: Cacheia arquivos estáticos
@@ -24,7 +27,6 @@ self.addEventListener('install', event => {
   self.skipWaiting(); // Força o SW a ativar imediatamente
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      console.log('[SW] Caching app shell');
       return cache.addAll(PRECACHE_URLS);
     })
   );
@@ -37,7 +39,6 @@ self.addEventListener('activate', event => {
       return Promise.all(
         cacheNames.map(cacheName => {
           if (cacheName !== CACHE_NAME) {
-            console.log('[SW] Clearing old cache', cacheName);
             return caches.delete(cacheName);
           }
         })
@@ -51,8 +52,7 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // Estratégia: Stale-While-Revalidate para arquivos estáticos
-  // Tenta servir do cache, mas atualiza em background
+  // Estratégia: Stale-While-Revalidate para scripts e estilos
   if (event.request.destination === 'script' || event.request.destination === 'style' || event.request.destination === 'image') {
     event.respondWith(
       caches.match(event.request).then(cachedResponse => {
@@ -70,8 +70,7 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Estratégia: Network First para navegação e dados (garante frescor)
-  // Se falhar (offline), tenta o cache
+  // Estratégia: Network First para navegação (garante dados frescos)
   event.respondWith(
     fetch(event.request)
       .then(response => {
@@ -92,40 +91,5 @@ self.addEventListener('fetch', event => {
            return null;
         });
       })
-  );
-});
-
-// Push Notifications
-self.addEventListener('push', function(event) {
-  if (event.data) {
-    try {
-      const data = event.data.json();
-      const title = data.title || 'Escala Mídia Pro';
-      const options = {
-        body: data.body || 'Nova atualização.',
-        icon: '/app-icon.png',
-        badge: '/app-icon.png',
-        vibrate: [100, 50, 100],
-        data: { url: data.url || '/' }
-      };
-      event.waitUntil(self.registration.showNotification(title, options));
-    } catch (e) {
-      console.error('[SW] Push Error', e);
-    }
-  }
-});
-
-self.addEventListener('notificationclick', function(event) {
-  event.notification.close();
-  event.waitUntil(
-    clients.matchAll({ type: 'window' }).then(windowClients => {
-      for (var i = 0; i < windowClients.length; i++) {
-        var client = windowClients[i];
-        if (client.url === event.notification.data.url && 'focus' in client) {
-          return client.focus();
-        }
-      }
-      if (clients.openWindow) return clients.openWindow(event.notification.data.url);
-    })
   );
 });

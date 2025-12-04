@@ -70,6 +70,9 @@ const AppInner = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   
+  // PWA Install State
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+
   // Data State
   const [members, setMembers] = useState<MemberMap>({});
   const [registeredMembers, setRegisteredMembers] = useState<TeamMemberProfile[]>([]);
@@ -99,6 +102,25 @@ const AppInner = () => {
   
   // Event Detail Modal (from Calendar Grid)
   const [selectedEventDetails, setSelectedEventDetails] = useState<{ iso: string; title: string; dateDisplay: string } | null>(null);
+
+  // --- PWA INSTALL LISTENER ---
+  useEffect(() => {
+    window.addEventListener('beforeinstallprompt', (e) => {
+      // Prevent the mini-infobar from appearing on mobile
+      e.preventDefault();
+      // Stash the event so it can be triggered later.
+      setInstallPrompt(e);
+    });
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setInstallPrompt(null);
+    }
+  };
 
   // --- DERIVED STATE ---
   const [year, month] = currentMonth.split('-').map(Number);
@@ -785,6 +807,8 @@ const AppInner = () => {
       managementNavItems={MANAGEMENT_NAV_ITEMS}
       notifications={notifications}
       onNotificationsUpdate={setNotifications}
+      installPrompt={installPrompt}
+      onInstall={handleInstallApp}
     >
       {currentTab === 'dashboard' && renderDashboard()}
       
