@@ -11,7 +11,7 @@ import { ProfileScreen } from './components/ProfileScreen';
 import { EventDetailsModal } from './components/EventDetailsModal';
 import { AvailabilityReportScreen } from './components/AvailabilityReportScreen';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile } from './types';
-import { loadData, saveData, getSupabase, logout, updateUserProfile, syncMemberProfile, deleteMember } from './services/supabaseService';
+import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -31,9 +31,7 @@ import {
   Mail,
   Phone,
   Trash2,
-  Plus,
-  AlertTriangle,
-  Link
+  Plus
 } from 'lucide-react';
 import { NextEventCard } from './components/NextEventCard';
 import { ConfirmationModal } from './components/ConfirmationModal';
@@ -79,7 +77,7 @@ const AppInner = () => {
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>([]);
   const [ignoredEvents, setIgnoredEvents] = useState<string[]>([]);
   const [availability, setAvailability] = useState<AvailabilityMap>({});
-  const [roles, setRoles] = useState<string[]>(DEFAULT_ROLES['midia'] || []);
+  const [roles, setRoles] = useState<string[]>([]); // Inicializado vazio, carregado depois
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [scheduleIssues, setScheduleIssues] = useState<ScheduleAnalysis>({});
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -87,12 +85,9 @@ const AppInner = () => {
   // UI State
   const [loading, setLoading] = useState(false);
   const [memberSearch, setMemberSearch] = useState("");
-  const [collapsedRoles, setCollapsedRoles] = useState<string[]>([]);
   
   // Confirmation Modal State
   const [confirmationData, setConfirmationData] = useState<any>(null);
-  // Event Details Modal State
-  const [selectedEvent, setSelectedEvent] = useState<{ iso: string; title: string; dateDisplay: string } | null>(null);
 
   // Modals States
   const [eventsModalOpen, setEventsModalOpen] = useState(false);
@@ -161,11 +156,8 @@ const AppInner = () => {
     // 2. Members from Registered List
     registeredMembers.forEach(m => list.add(m.name));
 
-    // 3. Members from Availability Map (Ghost members)
-    Object.keys(availability).forEach(m => list.add(m));
-
     return Array.from(list).sort();
-  }, [members, registeredMembers, availability]);
+  }, [members, registeredMembers]);
 
   const memberStats = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -195,19 +187,24 @@ const AppInner = () => {
     return `Escala ${id.charAt(0).toUpperCase() + id.slice(1)}`;
   }
 
-  // --- HELPER UNWRAP FUNCTION ---
-  // Extrai o valor de Promise.allSettled. Se rejeitado, retorna fallback.
-  const unwrap = <T,>(result: PromiseSettledResult<T>, fallback: T): T => {
-    return result.status === 'fulfilled' ? result.value : fallback;
-  };
-
   // --- INITIAL DATA LOAD ---
   const loadAll = async (mid: string) => {
     setLoading(true);
     try {
       const cleanMid = mid.trim().toLowerCase().replace(/\s+/g, '-');
       
-      const results = await Promise.allSettled([
+      const [
+        resMembers,
+        resSchedule,
+        resAvail,
+        resEvents,
+        resRoles,
+        resLogs,
+        resIgnored,
+        resAttend,
+        resNotif,
+        resRegMembers
+      ] = await Promise.all([
         loadData<MemberMap>(cleanMid, 'members_v7', {}),
         loadData<ScheduleMap>(cleanMid, `schedule_${currentMonth}`, {}),
         loadData<AvailabilityMap>(cleanMid, 'availability_v1', {}),
@@ -220,28 +217,16 @@ const AppInner = () => {
         loadData<TeamMemberProfile[]>(cleanMid, 'public_members_list', [])
       ]);
 
-      // Extrai os resultados com segurança
-      const resMembers = results[0];
-      const resSchedule = results[1];
-      const resAvail = results[2];
-      const resEvents = results[3];
-      const resRoles = results[4];
-      const resLogs = results[5];
-      const resIgnored = results[6];
-      const resAttend = results[7];
-      const resNotif = results[8];
-      const resRegMembers = results[9];
-
-      setMembers(unwrap(resMembers, {}));
-      setSchedule(unwrap(resSchedule, {}));
-      setAvailability(unwrap(resAvail, {}));
-      setCustomEvents(unwrap(resEvents, []));
-      setRoles(unwrap(resRoles, DEFAULT_ROLES[cleanMid] || DEFAULT_ROLES['midia']));
-      setAuditLog(unwrap(resLogs, []));
-      setIgnoredEvents(unwrap(resIgnored, []));
-      setAttendance(unwrap(resAttend, {}));
-      setNotifications(unwrap(resNotif, []));
-      setRegisteredMembers(unwrap(resRegMembers, []));
+      setMembers(resMembers);
+      setSchedule(resSchedule);
+      setAvailability(resAvail);
+      setCustomEvents(resEvents);
+      setRoles(resRoles);
+      setAuditLog(resLogs);
+      setIgnoredEvents(resIgnored);
+      setAttendance(resAttend);
+      setNotifications(resNotif);
+      setRegisteredMembers(resRegMembers);
 
       setIsConnected(true);
     } catch (e) {
@@ -314,63 +299,29 @@ const AppInner = () => {
     }
   }, [ministryId, currentMonth]);
 
-  // --- SELF-HEALING: Auto-Add Current User to Member List ---
-  useEffect(() => {
-    const checkAndFixMembership = async () => {
-        if (!currentUser || !ministryId || loading) return;
-        
-        const amIInList = registeredMembers.some(m => 
-            (m.id && currentUser.id && m.id === currentUser.id) || 
-            (m.email && currentUser.email && m.email === currentUser.email) ||
-            m.name === currentUser.name
-        );
-
-        if (!amIInList && registeredMembers) {
-            console.log("Self-Healing: Usuário atual não encontrado na lista. Forçando sincronização...");
-            const updatedList = await syncMemberProfile(ministryId, currentUser);
-            if (updatedList.length > 0) {
-                setRegisteredMembers(updatedList);
-                addToast("Perfil sincronizado com a equipe!", "success");
-            }
-        }
-    };
-
-    const timeout = setTimeout(checkAndFixMembership, 3000);
-    return () => clearTimeout(timeout);
-  }, [currentUser, ministryId, registeredMembers]);
-
-  // --- POLLING & SYNC ---
+  // --- POLLING ---
   useEffect(() => {
       if (!ministryId) return;
-
       const pollData = async () => {
           try {
               const latestNotifs = await loadData<AppNotification[]>(ministryId, 'notifications_v1', []);
               if (JSON.stringify(latestNotifs) !== JSON.stringify(notifications)) {
                   setNotifications(latestNotifs);
+                  // Toast notification logic
                   const newUnread = latestNotifs.filter(n => !n.read && !notifications.some(old => old.id === n.id));
                   if (newUnread.length > 0) {
                       addToast(newUnread[0].title, "info");
                   }
               }
-
-              if (currentTab === 'team') {
-                   const latestMembers = await loadData<TeamMemberProfile[]>(ministryId, 'public_members_list', []);
-                   if (JSON.stringify(latestMembers) !== JSON.stringify(registeredMembers)) {
-                       setRegisteredMembers(latestMembers);
-                   }
-              }
-
               setIsConnected(true);
           } catch (e) {
               console.warn("Polling failed", e);
               setIsConnected(false);
           }
       };
-
       const interval = setInterval(pollData, 15000);
       return () => clearInterval(interval);
-  }, [ministryId, notifications, registeredMembers, currentTab]);
+  }, [ministryId, notifications]);
 
 
   // --- HANDLERS ---
@@ -424,6 +375,7 @@ const AppInner = () => {
          const success = await deleteMember(ministryId, memberId, memberName);
          if (success) {
              setRegisteredMembers(prev => prev.filter(m => m.name !== memberName));
+             // Update local role maps
              const newMembersMap = { ...members };
              Object.keys(newMembersMap).forEach(role => {
                  newMembersMap[role] = newMembersMap[role].filter(n => n !== memberName);
@@ -443,12 +395,7 @@ const AppInner = () => {
       if (!ministryId) return;
       setLoading(true);
       const list = await loadData<TeamMemberProfile[]>(ministryId, 'public_members_list', []);
-      const latestAvail = await loadData<AvailabilityMap>(ministryId, 'availability_v1', {});
-      const latestNotif = await loadData<AppNotification[]>(ministryId, 'notifications_v1', []);
-      
       setRegisteredMembers(list);
-      setAvailability(latestAvail);
-      setNotifications(latestNotif);
       setLoading(false);
       addToast("Lista atualizada!", "success");
   };
@@ -567,31 +514,12 @@ const AppInner = () => {
     </div>
   );
 
-  const renderTeam = () => {
-    // UNIFIED MEMBER LIST: Combines registered profiles AND any manual member found in the system
-    const unifiedTeam = useMemo(() => {
-        const teamMap = new Map<string, TeamMemberProfile | null>();
-        
-        // 1. Add all REGISTERED members
-        registeredMembers.forEach(m => teamMap.set(m.name, m));
-
-        // 2. Add all OTHER members found in the system (Manual/Ghost)
-        allMembersList.forEach(name => {
-            if (!teamMap.has(name)) {
-                teamMap.set(name, null); // Null means "Unsynced/Manual"
-            }
-        });
-        
-        // Sort alphabetically
-        return Array.from(teamMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-    }, [registeredMembers, allMembersList]);
-
-    return (
+  const renderTeam = () => (
     <div className="space-y-6 animate-fade-in max-w-5xl mx-auto">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-zinc-200 dark:border-zinc-700 pb-4">
         <div>
            <h2 className="text-2xl font-bold text-zinc-800 dark:text-white">Membros & Equipe</h2>
-           <p className="text-zinc-500 text-sm">Lista unificada de todos os membros (Cadastrados e Locais).</p>
+           <p className="text-zinc-500 text-sm">Gerencie os membros cadastrados e funções.</p>
         </div>
         <div className="flex gap-2">
             <button 
@@ -615,80 +543,62 @@ const AppInner = () => {
         </div>
       </div>
 
-      {/* Tabela de Membros Unificada */}
+      {/* Tabela de Membros Cadastrados */}
       <div className="bg-zinc-50 dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 overflow-hidden shadow-sm">
          <div className="px-6 py-3 bg-zinc-100 dark:bg-zinc-800/50 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center">
-            <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Membros da Equipe</h3>
-            <span className="text-[10px] bg-zinc-200 dark:bg-zinc-700 px-2 py-1 rounded-full text-zinc-600 dark:text-zinc-300">Total: {unifiedTeam.length}</span>
+            <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Membros Cadastrados</h3>
+            <span className="text-[10px] bg-zinc-200 dark:bg-zinc-700 px-2 py-1 rounded-full text-zinc-600 dark:text-zinc-300">Total: {registeredMembers.length}</span>
          </div>
          
          <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
-             {unifiedTeam.length === 0 ? (
+             {registeredMembers.length === 0 ? (
                  <div className="p-12 text-center text-zinc-500 dark:text-zinc-400 flex flex-col items-center">
                      <Users size={48} className="mb-3 opacity-20"/>
-                     <p>Nenhum membro encontrado.</p>
+                     <p>Nenhum membro cadastrado ainda.</p>
+                     <p className="text-xs mt-1">Os membros aparecerão aqui após realizarem o cadastro.</p>
                  </div>
              ) : (
-                 unifiedTeam
-                    .filter(([name]) => name.toLowerCase().includes(memberSearch.toLowerCase()))
-                    .map(([name, profile]) => (
-                     <div key={name} className="p-4 flex items-center justify-between hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+                 registeredMembers
+                    .filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()))
+                    .map(member => (
+                     <div key={member.id} className="p-4 flex items-center justify-between hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
                          <div className="flex items-center gap-4">
-                             {/* Avatar Logic */}
-                             {profile?.avatar_url ? (
-                                 <img src={profile.avatar_url} alt={name} className="w-10 h-10 rounded-full object-cover shadow-sm" />
+                             {member.avatar_url ? (
+                                 <img src={member.avatar_url} alt={member.name} className="w-10 h-10 rounded-full object-cover shadow-sm" />
                              ) : (
-                                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm ${profile ? 'bg-blue-600' : 'bg-zinc-400 dark:bg-zinc-700'}`}>
-                                     {name.charAt(0).toUpperCase()}
+                                 <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                                     {member.name.charAt(0).toUpperCase()}
                                  </div>
                              )}
                              
                              <div>
-                                 <h4 className="font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
-                                     {name}
-                                     {!profile && <AlertTriangle size={14} className="text-amber-500" title="Perfil não sincronizado (Membro Local)"/>}
-                                 </h4>
-                                 <p className="text-xs text-zinc-500">
-                                     {profile ? `ID: ${profile.id.substring(0,8)}...` : 'Membro Local / Não Sincronizado'}
-                                 </p>
+                                 <h4 className="font-bold text-zinc-800 dark:text-zinc-100">{member.name}</h4>
+                                 <p className="text-xs text-zinc-500">ID: {member.id.substring(0,8)}...</p>
                              </div>
                          </div>
                          
                          <div className="hidden md:block text-sm text-zinc-600 dark:text-zinc-400">
-                             {profile?.email && <div className="flex items-center gap-2"><Mail size={14}/> {profile.email}</div>}
-                             {profile?.whatsapp && <div className="flex items-center gap-2 mt-1"><Phone size={14}/> {profile.whatsapp}</div>}
+                             {member.email && <div className="flex items-center gap-2"><Mail size={14}/> {member.email}</div>}
+                             {member.whatsapp && <div className="flex items-center gap-2 mt-1"><Phone size={14}/> {member.whatsapp}</div>}
                          </div>
 
                          <div className="flex items-center gap-4">
                              <div className="text-right">
-                                {/* Roles Logic: Prioritize Profile, Fallback to Manual Map */}
-                                {(() => {
-                                    let rolesToDisplay: string[] = [];
-                                    if (profile?.roles && profile.roles.length > 0) {
-                                        rolesToDisplay = profile.roles;
-                                    } else {
-                                        // Fallback manual map search
-                                        Object.entries(members).forEach(([role, list]) => {
-                                            if ((list as string[]).includes(name)) rolesToDisplay.push(role);
-                                        });
-                                    }
-
-                                    return rolesToDisplay.length > 0 ? (
-                                        <div className="flex flex-wrap gap-1 justify-end max-w-[200px]">
-                                            {rolesToDisplay.map(r => (
-                                                <span key={r} className="text-[10px] px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-700 rounded text-zinc-600 dark:text-zinc-300 font-medium">
-                                                    {r}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <span className="text-xs text-zinc-400 italic">Sem função</span>
-                                    );
-                                })()}
+                                {member.roles && member.roles.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1 justify-end max-w-[200px]">
+                                        {member.roles.map(r => (
+                                            <span key={r} className="text-[10px] px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-700 rounded text-zinc-600 dark:text-zinc-300 font-medium">
+                                                {r}
+                                            </span>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <span className="text-xs text-zinc-400 italic">Sem função</span>
+                                )}
                              </div>
                              
                              <button 
-                                onClick={() => handleDeleteMember(profile?.id || 'manual', name)}
+                                onClick={() => handleDeleteMember(member.id, member.name)}
                                 className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                                 title="Excluir Membro"
                              >
@@ -701,7 +611,7 @@ const AppInner = () => {
          </div>
       </div>
 
-      {/* Gerenciamento Rápido de Funções (Legado/Manual) */}
+      {/* Gerenciamento Rápido de Funções */}
       <div>
         <h3 className="text-lg font-bold text-zinc-800 dark:text-white mb-4">Gerenciamento Rápido de Funções</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -749,7 +659,7 @@ const AppInner = () => {
                     }}
                     className="w-full py-2 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg text-xs text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                 >
-                    + Adicionar Manualmente
+                    + Nova Função
                 </button>
                 <p className="text-[10px] text-zinc-400 mt-2 text-center">* Para adicionar membros às funções, use a coluna "Funções na Escala" (lógica a ser implementada) ou adicione manualmente no editor.</p>
             </div>
@@ -767,7 +677,7 @@ const AppInner = () => {
         </div>
       </div>
     </div>
-  )};
+  );
 
   if (sessionLoading) {
       return (
@@ -1136,13 +1046,11 @@ const AppInner = () => {
       <AuditModal isOpen={logsModalOpen} onClose={() => setLogsModalOpen(false)} logs={auditLog} />
       <StatsModal isOpen={statsModalOpen} onClose={() => setStatsModalOpen(false)} stats={memberStats} monthName={getMonthName(currentMonth)} />
       
-      {/* Event Details (Click on Event Name to Edit) Not implemented in table click yet, but component exists */}
     </DashboardLayout>
   );
 };
 
 // --- MAIN APP WRAPPER ---
-// Fixes "useToast must be used within a ToastProvider" error
 const App = () => {
   return (
     <ToastProvider>
