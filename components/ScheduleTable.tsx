@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis } from '../types';
 import { CheckCircle2, AlertTriangle, Trash2, BrainCircuit, AlertCircle } from 'lucide-react';
@@ -21,15 +22,30 @@ export const ScheduleTable: React.FC<Props> = ({
   events, roles, schedule, attendance, availability, members, allMembers, scheduleIssues, onCellChange, onAttendanceToggle, onDeleteEvent, memberStats
 }) => {
   
-  // Calculate if member is unavailable for a specific date
+  // Calculate if member is unavailable for a specific date AND Time
   const isUnavailable = (member: string, isoDateStr: string) => {
-    const datePart = isoDateStr.split('T')[0];
+    // isoDateStr format: YYYY-MM-DDTHH:mm
+    const [datePart, timePart] = isoDateStr.split('T');
     const availableDates = availability[member];
     
     if (!availableDates || availableDates.length === 0) return false;
 
-    // Se tem datas marcadas, a data atual PRECISA estar lá. Se não estiver, é conflito.
-    return !availableDates.includes(datePart);
+    // 1. Check Full Day Availability (legacy standard: just the date string)
+    if (availableDates.includes(datePart)) return false; // Available all day
+
+    // 2. Check Specific Periods
+    const hasMorning = availableDates.includes(`${datePart}_M`);
+    const hasNight = availableDates.includes(`${datePart}_N`);
+    
+    // Determine Event Period based on hour (Simple logic: < 13:00 is Morning)
+    const eventHour = parseInt(timePart.split(':')[0], 10);
+    const isMorningEvent = eventHour < 13;
+
+    if (isMorningEvent && hasMorning) return false; // Available for Morning
+    if (!isMorningEvent && hasNight) return false; // Available for Night
+
+    // If none of the above matched, the user is NOT available for this specific slot
+    return true; 
   };
 
   return (
@@ -75,7 +91,7 @@ export const ScheduleTable: React.FC<Props> = ({
                   const isConfirmed = attendance[key];
                   const issue = scheduleIssues[key];
                   
-                  // Verifica se há conflito: membro escalado E indisponível na data
+                  // Verifica se há conflito: membro escalado E indisponível na data/hora
                   const hasLocalConflict = currentValue && isUnavailable(currentValue, event.iso);
 
                   // Função auxiliar de ordenação
@@ -138,9 +154,9 @@ export const ScheduleTable: React.FC<Props> = ({
                             )}
                           </select>
                           
-                          {/* Indicador Visual de Conflito Local (Data Bloqueada) */}
+                          {/* Indicador Visual de Conflito Local (Data/Hora Bloqueada) */}
                           {hasLocalConflict && (
-                            <div className="absolute right-8 top-1/2 -translate-y-1/2 text-red-500 animate-pulse" title="CONFLITO: Membro não marcou este dia como disponível!">
+                            <div className="absolute right-8 top-1/2 -translate-y-1/2 text-red-500 animate-pulse" title="CONFLITO: Membro indisponível neste horário!">
                               <AlertTriangle size={16} />
                             </div>
                           )}

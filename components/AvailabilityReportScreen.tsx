@@ -62,8 +62,13 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
       const dates = availability[name] || [];
       const monthDates = dates
         .filter(d => d.startsWith(currentMonth))
-        .map(d => parseInt(d.split('-')[2])) // Pega apenas o dia
-        .sort((a, b) => a - b);
+        .map(d => {
+            const parts = d.split('_');
+            const dayNum = parseInt(d.split('-')[2]);
+            const type = parts.length > 1 ? parts[1] : 'BOTH'; // 'M', 'N' or 'BOTH'
+            return { day: dayNum, type };
+        })
+        .sort((a, b) => a.day - b.day);
 
       return {
         name,
@@ -176,11 +181,19 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
                <div className="pt-4 border-t border-zinc-100 dark:border-zinc-700/50">
                   {item.days.length > 0 ? (
                      <div className="flex flex-wrap gap-1.5">
-                        {item.days.map(day => (
-                           <span key={day} className="w-8 h-8 flex items-center justify-center bg-green-500 text-white rounded-lg text-xs font-bold shadow-sm">
-                              {day}
-                           </span>
-                        ))}
+                        {item.days.map(({day, type}) => {
+                           let bgClass = "bg-green-500 text-white";
+                           if(type === 'M') bgClass = "bg-orange-500 text-white";
+                           if(type === 'N') bgClass = "bg-indigo-500 text-white";
+                           
+                           return (
+                              <div key={day} className={`w-8 h-8 flex flex-col items-center justify-center rounded-lg shadow-sm ${bgClass}`}>
+                                 <span className="text-xs font-bold">{day}</span>
+                                 {type === 'M' && <span className="text-[8px] leading-none opacity-80">M</span>}
+                                 {type === 'N' && <span className="text-[8px] leading-none opacity-80">N</span>}
+                              </div>
+                           )
+                        })}
                      </div>
                   ) : (
                      <div className="text-center py-2 text-zinc-400 text-xs italic flex items-center justify-center gap-2">

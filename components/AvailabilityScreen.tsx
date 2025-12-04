@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { AvailabilityMap, User } from '../types';
 import { getMonthName } from '../utils/dateUtils';
-import { User as UserIcon, CalendarCheck, ChevronDown, Save, CheckCircle2 } from 'lucide-react';
+import { User as UserIcon, CalendarCheck, ChevronDown, Save, CheckCircle2, Sun, Moon, X } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface Props {
@@ -15,10 +15,40 @@ interface Props {
   currentUser: User | null;
 }
 
+// Modal Interno para Seleção de Período
+const SundaySelectionModal = ({ isOpen, onClose, onSelect, currentDateDisplay }: { isOpen: boolean, onClose: () => void, onSelect: (type: 'M' | 'N' | 'BOTH') => void, currentDateDisplay: string }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white dark:bg-zinc-800 rounded-xl shadow-2xl w-full max-w-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+                <div className="p-4 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900">
+                    <h3 className="font-bold text-zinc-800 dark:text-white">Disponibilidade no Domingo</h3>
+                    <button onClick={onClose}><X size={20} className="text-zinc-500"/></button>
+                </div>
+                <div className="p-6 space-y-3">
+                    <p className="text-sm text-zinc-600 dark:text-zinc-300 text-center mb-4">
+                        Para o dia <strong>{currentDateDisplay}</strong>, qual período você pode servir?
+                    </p>
+                    <button onClick={() => onSelect('M')} className="w-full flex items-center justify-between p-3 rounded-lg border border-orange-200 bg-orange-50 hover:bg-orange-100 text-orange-700 transition-colors">
+                        <span className="font-bold flex items-center gap-2"><Sun size={18}/> Apenas Manhã</span>
+                    </button>
+                    <button onClick={() => onSelect('N')} className="w-full flex items-center justify-between p-3 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition-colors">
+                         <span className="font-bold flex items-center gap-2"><Moon size={18}/> Apenas Noite</span>
+                    </button>
+                    <button onClick={() => onSelect('BOTH')} className="w-full flex items-center justify-between p-3 rounded-lg border border-green-200 bg-green-50 hover:bg-green-100 text-green-700 transition-colors">
+                         <span className="font-bold flex items-center gap-2"><CheckCircle2 size={18}/> Ambos (Dia Todo)</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailability, allMembersList, currentMonth, onMonthChange, onNotify, currentUser }) => {
   const [selectedMember, setSelectedMember] = useState("");
-  const [tempDates, setTempDates] = useState<string[]>([]); // Estado local para edição
+  const [tempDates, setTempDates] = useState<string[]>([]); // Formato: "YYYY-MM-DD" ou "YYYY-MM-DD_M" ou "YYYY-MM-DD_N"
   const [hasChanges, setHasChanges] = useState(false);
+  const [sundayModal, setSundayModal] = useState<{ isOpen: boolean, day: number } | null>(null);
   const { addToast } = useToast();
 
   const [year, month] = currentMonth.split('-').map(Number);
@@ -35,12 +65,10 @@ export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailabil
   // Carrega os dados do membro selecionado para o estado local
   useEffect(() => {
     if (selectedMember) {
-        // Agora a lógica é: O que está no array são os dias DISPONÍVEIS (Verdes)
-        // Se não tiver nada salvo, começa vazio (tudo cinza)
         setTempDates(availability[selectedMember] || []);
         setHasChanges(false);
     }
-  }, [selectedMember, availability, currentMonth]); // Adicionado currentMonth para recarregar ao mudar mês
+  }, [selectedMember, availability, currentMonth]);
 
   const handlePrevMonth = () => {
     const prev = new Date(year, month - 2, 1);
@@ -54,17 +82,51 @@ export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailabil
 
   const handleToggleDate = (day: number) => {
     if (!selectedMember) return;
-    const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
     
-    setTempDates(prev => {
-        const exists = prev.includes(dateStr);
-        if (exists) {
-            return prev.filter(d => d !== dateStr);
+    // Verifica se é Domingo (0 = Domingo)
+    const dateObj = new Date(year, month - 1, day);
+    const isSunday = dateObj.getDay() === 0;
+    const dateStrBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
+
+    // Se for domingo, e a data NÃO estiver marcada ainda, abre modal
+    // Se já estiver marcada (qualquer variação), remove direto (toggle off)
+    const existingIndex = tempDates.findIndex(d => d.startsWith(dateStrBase));
+
+    if (isSunday) {
+        if (existingIndex >= 0) {
+            // Se já existe, remove (independente se é M, N ou Both)
+            const newDates = [...tempDates];
+            newDates.splice(existingIndex, 1);
+            setTempDates(newDates);
+            setHasChanges(true);
         } else {
-            return [...prev, dateStr];
+            // Se não existe, abre modal para escolher
+            setSundayModal({ isOpen: true, day });
         }
-    });
-    setHasChanges(true);
+    } else {
+        // Dias normais (Seg-Sáb) funcionam como boolean (Dia todo)
+        if (existingIndex >= 0) {
+             setTempDates(prev => prev.filter(d => !d.startsWith(dateStrBase)));
+        } else {
+             setTempDates(prev => [...prev, dateStrBase]);
+        }
+        setHasChanges(true);
+    }
+  };
+
+  const handleSundaySelection = (type: 'M' | 'N' | 'BOTH') => {
+      if (!sundayModal) return;
+      const { day } = sundayModal;
+      const dateStrBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
+      
+      let finalString = dateStrBase;
+      if (type === 'M') finalString += '_M';
+      if (type === 'N') finalString += '_N';
+      // 'BOTH' fica apenas a data limpa (padrão legado)
+
+      setTempDates(prev => [...prev, finalString]);
+      setHasChanges(true);
+      setSundayModal(null);
   };
 
   const handleSave = () => {
@@ -82,6 +144,16 @@ export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailabil
       }
   };
 
+  const getDayStatus = (day: number) => {
+      const dateStrBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
+      const entry = tempDates.find(d => d.startsWith(dateStrBase));
+      
+      if (!entry) return null;
+      if (entry.endsWith('_M')) return 'M';
+      if (entry.endsWith('_N')) return 'N';
+      return 'BOTH';
+  };
+
   const isAdmin = currentUser?.role === 'admin';
 
   return (
@@ -92,8 +164,8 @@ export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailabil
             <CalendarCheck className="text-blue-500"/> Disponibilidade
           </h2>
           <p className="text-zinc-500 text-sm mt-1">
-            Selecione os dias em que você <strong className="text-green-600 dark:text-green-400">ESTÁ DISPONÍVEL</strong> para servir.
-            Dias não marcados serão considerados como indisponíveis.
+            Selecione os dias em que você <strong className="text-green-600 dark:text-green-400">ESTÁ DISPONÍVEL</strong>.
+            <br/>Para domingos, você poderá escolher entre Manhã, Noite ou Ambos.
           </p>
         </div>
         
@@ -148,36 +220,46 @@ export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailabil
                 {Array.from({ length: new Date(year, month - 1, 1).getDay() }).map((_, i) => <div key={`empty-${i}`} />)}
                 
                 {days.map(day => {
-                const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
-                
-                // Nova lógica: Verifica se está no array tempDates (disponível)
-                const isSelectedAvailable = tempDates.includes(dateStr);
+                const status = getDayStatus(day);
+                const isSelectedAvailable = status !== null;
+
+                // Estilos baseados no tipo de disponibilidade
+                let bgClass = 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700';
+                if (status === 'BOTH') bgClass = 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-green-500/30 ring-2 ring-green-400 dark:ring-green-600';
+                if (status === 'M') bgClass = 'bg-gradient-to-br from-orange-400 to-amber-500 text-white shadow-orange-500/30 ring-2 ring-orange-400';
+                if (status === 'N') bgClass = 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-indigo-500/30 ring-2 ring-indigo-400';
 
                 return (
                     <button
                     key={day}
                     onClick={() => handleToggleDate(day)}
-                    className={`aspect-square flex flex-col items-center justify-center rounded-xl text-lg font-bold transition-all shadow-sm relative overflow-hidden group ${
-                        isSelectedAvailable 
-                        ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-green-500/30 scale-100 ring-2 ring-green-400 dark:ring-green-600 z-10' 
-                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700'
-                    }`}
+                    className={`aspect-square flex flex-col items-center justify-center rounded-xl text-lg font-bold transition-all shadow-sm relative overflow-hidden group ${bgClass} ${isSelectedAvailable ? 'scale-100 z-10' : ''}`}
                     >
                     <span className="relative z-10">{day}</span>
-                    {isSelectedAvailable && <CheckCircle2 size={16} className="absolute top-1 right-1 opacity-50" />}
+                    {status === 'BOTH' && <CheckCircle2 size={16} className="absolute top-1 right-1 opacity-50" />}
+                    {status === 'M' && <Sun size={16} className="absolute top-1 right-1 opacity-70" />}
+                    {status === 'N' && <Moon size={16} className="absolute top-1 right-1 opacity-70" />}
                     </button>
                 )
                 })}
             </div>
             
-            <div className="flex gap-6 justify-center mt-6 text-sm font-medium">
+            <div className="flex flex-wrap gap-4 justify-center mt-6 text-sm font-medium">
                 <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
                     <div className="w-4 h-4 bg-gradient-to-br from-green-500 to-emerald-600 rounded-md shadow-sm ring-1 ring-green-400"/> 
-                    Disponível (Selecionado)
+                    Dia Todo
+                </div>
+                <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
+                    <div className="w-4 h-4 bg-gradient-to-br from-orange-400 to-amber-500 rounded-md shadow-sm ring-1 ring-orange-400"/> 
+                    Manhã
+                </div>
+                <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
+                    <div className="w-4 h-4 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-md shadow-sm ring-1 ring-indigo-400"/> 
+                    Noite
                 </div>
                 <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400">
                     <div className="w-4 h-4 bg-zinc-200 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-md shadow-sm"/> 
-                    Indisponível (Vazio)
+                    Indisponível
                 </div>
             </div>
 
@@ -196,6 +278,16 @@ export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailabil
                     Salvar Disponibilidade
                 </button>
             </div>
+            
+            {/* Modal de Domingo */}
+            {sundayModal && (
+                <SundaySelectionModal 
+                    isOpen={true} 
+                    onClose={() => setSundayModal(null)} 
+                    onSelect={handleSundaySelection}
+                    currentDateDisplay={`${sundayModal.day}/${month}`}
+                />
+            )}
 
           </div>
         ) : (
