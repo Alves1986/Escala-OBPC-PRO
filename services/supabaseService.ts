@@ -56,36 +56,12 @@ export const saveData = async <T>(ministryId: string, keySuffix: string, value: 
 export const syncMemberProfile = async (ministryId: string, user: User) => {
     if (!supabase || !ministryId) return [];
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-    console.log(`[Sync] Sincronizando perfil [${user.name}] em [${cleanMid}]`);
-
+    
     try {
         const storageKey = getStorageKey(cleanMid, 'public_members_list');
-        
-        // 1. Busca Explícita com tratamento de erro robusto
-        // NÃO podemos assumir que falha = lista vazia, pois isso apaga os outros membros
-        const { data, error } = await supabase
-            .from('app_storage')
-            .select('value')
-            .eq('key', storageKey)
-            .single();
+        const { data } = await supabase.from('app_storage').select('value').eq('key', storageKey).single();
+        let list: TeamMemberProfile[] = data?.value || [];
 
-        let list: TeamMemberProfile[] = [];
-
-        if (data) {
-            list = data.value || [];
-        } else if (error) {
-            // Se erro for "Não encontrado", assumimos lista vazia segura
-            if (error.code === 'PGRST116') {
-                console.log("[Sync] Lista de membros não existe. Criando nova.");
-                list = [];
-            } else {
-                // Se for erro de rede ou outro, aborta para proteger dados
-                console.error("[Sync] Erro CRÍTICO ao buscar lista. Abortando para proteger dados.", error);
-                return []; 
-            }
-        }
-        
-        // 2. Prepara o objeto do perfil atualizado
         const newProfile: TeamMemberProfile = {
             id: user.id || Date.now().toString(),
             name: user.name,
@@ -96,56 +72,26 @@ export const syncMemberProfile = async (ministryId: string, user: User) => {
             createdAt: new Date().toISOString()
         };
 
-        // 3. Verifica se o membro já existe na lista (Merge)
         const index = list.findIndex(m => 
-            (m.id && user.id && m.id === user.id) || // Match por ID
-            (m.email && user.email && m.email.toLowerCase() === user.email.toLowerCase()) || // Match por Email
-            m.name === user.name // Match por Nome (Fallback)
+            (m.id && user.id && m.id === user.id) || 
+            (m.email && user.email && m.email === user.email)
         );
         
-        // Trabalhamos em uma cópia da lista
         let newList = [...list];
 
         if (index >= 0) {
-            // ATUALIZAÇÃO: Mescla dados existentes com os novos do login
-            const existing = newList[index];
-            newList[index] = { 
-                ...existing, 
-                // Prioriza os dados do login atual, mantendo o que não mudou
-                id: user.id || existing.id, 
-                name: user.name, 
-                email: user.email || existing.email,
-                whatsapp: user.whatsapp || existing.whatsapp,
-                avatar_url: user.avatar_url || existing.avatar_url,
-                // Se o login atual trouxe funções, usa elas. Senão, mantém as do banco.
-                roles: (user.functions && user.functions.length > 0) ? user.functions : (existing.roles || []),
-                createdAt: existing.createdAt || newProfile.createdAt
-            }; 
-            console.log(`[Sync] Membro atualizado: ${user.name}`);
+            newList[index] = { ...newList[index], ...newProfile }; 
         } else {
-            // INSERÇÃO: Adiciona novo membro à lista
             newList.push(newProfile);
-            console.log(`[Sync] Novo membro adicionado: ${user.name}`);
         }
         
-        // 4. Ordenação Alfabética
         newList.sort((a, b) => a.name.localeCompare(b.name));
         
-        // 5. Salvamento Seguro
-        const { error: saveError } = await supabase
-            .from('app_storage')
-            .upsert({ key: storageKey, value: newList }, { onConflict: 'key' });
-
-        if (saveError) {
-            console.error("[Sync] Erro ao salvar lista atualizada:", saveError);
-            return [];
-        }
-
-        console.log("[Sync] Lista de membros sincronizada com sucesso.");
+        await supabase.from('app_storage').upsert({ key: storageKey, value: newList }, { onConflict: 'key' });
         return newList;
 
     } catch (e) {
-        console.error("[Sync] Exceção não tratada:", e);
+        console.error("Error syncing profile", e);
         return [];
     }
 };
@@ -217,7 +163,6 @@ export const loginWithEmail = async (email: string, password: string): Promise<{
             };
 
             if (cleanMid) {
-                // Tenta sincronizar no login para garantir presença na lista
                 syncMemberProfile(cleanMid, userProfile);
             }
 
@@ -271,10 +216,8 @@ export const registerWithEmail = async (
                 functions: selectedRoles || []
             };
             
-            // Força sincronização imediata
             await syncMemberProfile(cleanMid, userProfile);
 
-            // Se o usuário selecionou funções, já insere ele nos grupos correspondentes
             if (selectedRoles && selectedRoles.length > 0) {
                 const currentRoles = await loadData<MemberMap>(cleanMid, 'members_v7', {});
                 let rolesChanged = false;
@@ -327,7 +270,6 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
             }
         };
 
-        // Adiciona funções se fornecido
         if (functions) {
             updates.data.functions = functions;
         }
@@ -352,12 +294,10 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
             };
             await syncMemberProfile(ministryId, userProfile);
 
-            // Sincroniza também o mapa de cargos (members_v7) para o gerenciamento rápido
             if (functions) {
                 const currentMap = await loadData<MemberMap>(ministryId, 'members_v7', {});
                 let mapChanged = false;
 
-                // 1. Remove usuário de todas as listas primeiro (para evitar duplicatas ou funções antigas)
                 Object.keys(currentMap).forEach(role => {
                     if (currentMap[role].includes(name)) {
                         currentMap[role] = currentMap[role].filter(n => n !== name);
@@ -365,7 +305,6 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
                     }
                 });
 
-                // 2. Adiciona às listas selecionadas
                 functions.forEach(role => {
                     if (!currentMap[role]) currentMap[role] = [];
                     if (!currentMap[role].includes(name)) {

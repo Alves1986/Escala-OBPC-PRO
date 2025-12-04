@@ -77,7 +77,7 @@ const AppInner = () => {
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>([]);
   const [ignoredEvents, setIgnoredEvents] = useState<string[]>([]);
   const [availability, setAvailability] = useState<AvailabilityMap>({});
-  const [roles, setRoles] = useState<string[]>([]); // Inicializado vazio, carregado depois
+  const [roles, setRoles] = useState<string[]>([]); 
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [scheduleIssues, setScheduleIssues] = useState<ScheduleAnalysis>({});
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -125,26 +125,6 @@ const AppInner = () => {
     });
   }, [visibleEvents]);
   
-  // Lista Consolidada para uso no Editor (Inclui funções manuais + cadastrados)
-  const consolidatedMembers = useMemo(() => {
-    const map: Record<string, string[]> = { ...members }; // Começa com o mapa manual
-    
-    // Varre os membros cadastrados para injetá-los nas funções corretas
-    registeredMembers.forEach(profile => {
-      if (profile.roles && profile.roles.length > 0) {
-         profile.roles.forEach(role => {
-            if (!map[role]) map[role] = [];
-            // Adiciona se ainda não estiver na lista manual dessa função
-            if (!map[role].includes(profile.name)) {
-                map[role] = [...map[role], profile.name];
-            }
-         });
-      }
-    });
-    
-    return map;
-  }, [members, registeredMembers]);
-
   const allMembersList = useMemo(() => {
     const list = new Set<string>();
     
@@ -231,7 +211,7 @@ const AppInner = () => {
       setIsConnected(true);
     } catch (e) {
       console.error("Load Error", e);
-      addToast("Erro ao carregar dados. Verifique a conexão.", "error");
+      addToast("Erro ao carregar dados.", "error");
     } finally {
       setLoading(false);
     }
@@ -298,30 +278,6 @@ const AppInner = () => {
       loadAll(ministryId);
     }
   }, [ministryId, currentMonth]);
-
-  // --- POLLING ---
-  useEffect(() => {
-      if (!ministryId) return;
-      const pollData = async () => {
-          try {
-              const latestNotifs = await loadData<AppNotification[]>(ministryId, 'notifications_v1', []);
-              if (JSON.stringify(latestNotifs) !== JSON.stringify(notifications)) {
-                  setNotifications(latestNotifs);
-                  // Toast notification logic
-                  const newUnread = latestNotifs.filter(n => !n.read && !notifications.some(old => old.id === n.id));
-                  if (newUnread.length > 0) {
-                      addToast(newUnread[0].title, "info");
-                  }
-              }
-              setIsConnected(true);
-          } catch (e) {
-              console.warn("Polling failed", e);
-              setIsConnected(false);
-          }
-      };
-      const interval = setInterval(pollData, 15000);
-      return () => clearInterval(interval);
-  }, [ministryId, notifications]);
 
 
   // --- HANDLERS ---
@@ -661,7 +617,6 @@ const AppInner = () => {
                 >
                     + Nova Função
                 </button>
-                <p className="text-[10px] text-zinc-400 mt-2 text-center">* Para adicionar membros às funções, use a coluna "Funções na Escala" (lógica a ser implementada) ou adicione manualmente no editor.</p>
             </div>
             ))}
             
@@ -842,7 +797,7 @@ const AppInner = () => {
               schedule={schedule}
               attendance={attendance}
               availability={availability}
-              members={consolidatedMembers}
+              members={members}
               allMembers={allMembersList}
               scheduleIssues={scheduleIssues}
               onCellChange={handleCellChange}

@@ -83,30 +83,25 @@ export const ScheduleTable: React.FC<Props> = ({
                 {roles.map(role => {
                   const key = `${event.iso}_${role}`;
                   const currentValue = schedule[key] || "";
-                  const roleMembers = members[role] || [];
                   
-                  // Separa os membros em "Da Função" e "Outros"
-                  const otherMembers = allMembers.filter(m => !roleMembers.includes(m));
-
+                  // Flatten available members for this role + all others into one list for simple selection
+                  // This reverts the "OptGroup" logic
+                  const roleSpecificMembers = members[role] || [];
+                  const uniqueMembers = Array.from(new Set([...roleSpecificMembers, ...allMembers]));
+                  
                   const isConfirmed = attendance[key];
                   const issue = scheduleIssues[key];
                   
                   // Verifica se há conflito: membro escalado E indisponível na data/hora
                   const hasLocalConflict = currentValue && isUnavailable(currentValue, event.iso);
 
-                  // Função auxiliar de ordenação
-                  const sortMembers = (list: string[]) => {
-                      return [...list].sort((a, b) => {
+                  const sortedMembers = uniqueMembers.sort((a, b) => {
                         const unavailA = isUnavailable(a, event.iso);
                         const unavailB = isUnavailable(b, event.iso);
                         if (unavailA && !unavailB) return 1;
                         if (!unavailA && unavailB) return -1;
                         return (memberStats[a] || 0) - (memberStats[b] || 0);
-                      });
-                  };
-
-                  const sortedRoleMembers = sortMembers(roleMembers);
-                  const sortedOtherMembers = sortMembers(otherMembers);
+                  });
 
                   return (
                     <td key={key} className="px-6 py-4">
@@ -126,55 +121,20 @@ export const ScheduleTable: React.FC<Props> = ({
                             `}
                           >
                             <option value="">-- Selecionar --</option>
-                            
-                            {/* GRUPO 1: MEMBROS DA FUNÇÃO */}
-                            <optgroup label="Equipe da Função">
-                                {sortedRoleMembers.map(m => {
-                                    const unavail = isUnavailable(m, event.iso);
-                                    return (
-                                        <option key={m} value={m} className={unavail ? 'text-red-400 bg-red-50 dark:bg-zinc-800' : ''}>
-                                        {m} ({memberStats[m] || 0}) {unavail ? '[Não Disp.]' : ''}
-                                        </option>
-                                    );
-                                })}
-                            </optgroup>
-
-                            {/* GRUPO 2: OUTROS MEMBROS DO SISTEMA */}
-                            {sortedOtherMembers.length > 0 && (
-                                <optgroup label="Outros Membros">
-                                    {sortedOtherMembers.map(m => {
-                                        const unavail = isUnavailable(m, event.iso);
-                                        return (
-                                            <option key={m} value={m} className={unavail ? 'text-red-400 bg-red-50 dark:bg-zinc-800' : ''}>
-                                            {m} ({memberStats[m] || 0}) {unavail ? '[Não Disp.]' : ''}
-                                            </option>
-                                        );
-                                    })}
-                                </optgroup>
-                            )}
+                            {sortedMembers.map(m => {
+                                const unavail = isUnavailable(m, event.iso);
+                                return (
+                                    <option key={m} value={m} className={unavail ? 'text-red-400 bg-red-50 dark:bg-zinc-800' : ''}>
+                                    {m} ({memberStats[m] || 0}) {unavail ? '[Não Disp.]' : ''}
+                                    </option>
+                                );
+                            })}
                           </select>
                           
-                          {/* Indicador Visual de Conflito Local (Data/Hora Bloqueada) */}
+                          {/* Indicador Visual de Conflito Local */}
                           {hasLocalConflict && (
                             <div className="absolute right-8 top-1/2 -translate-y-1/2 text-red-500 animate-pulse" title="CONFLITO: Membro indisponível neste horário!">
                               <AlertTriangle size={16} />
-                            </div>
-                          )}
-
-                          {/* Indicador de Análise da IA */}
-                          {!hasLocalConflict && issue && (
-                            <div className="absolute right-8 top-1/2 -translate-y-1/2 text-amber-500">
-                               {issue.type === 'error' ? <AlertCircle size={16} /> : <BrainCircuit size={16} />}
-                               {/* Tooltip Customizado */}
-                               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-zinc-800 text-white text-xs rounded shadow-lg opacity-0 group-hover/cell:opacity-100 transition-opacity pointer-events-none z-50">
-                                  <p className="font-bold mb-1 flex items-center gap-1">
-                                    <BrainCircuit size={12}/> Análise IA:
-                                  </p>
-                                  {issue.message}
-                                  {issue.suggestedReplacement && (
-                                    <p className="mt-1 text-green-400">Sugestão: {issue.suggestedReplacement}</p>
-                                  )}
-                               </div>
                             </div>
                           )}
                         </div>
