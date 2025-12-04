@@ -27,12 +27,9 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
   const [selectedRole, setSelectedRole] = useState("Todos");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Auto-refresh ao montar a tela
-  useEffect(() => {
-    if (onRefresh) {
-        onRefresh();
-    }
-  }, []);
+  // Removido o useEffect de auto-refresh para evitar que dados locais recentes 
+  // sejam sobrescritos por dados antigos do servidor (flickering).
+  // O app já tem os dados na memória. O refresh deve ser apenas manual.
 
   const handleManualRefresh = async () => {
       if (onRefresh) {
@@ -54,16 +51,25 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
     onMonthChange(next.toISOString().slice(0, 7));
   };
 
+  // Função auxiliar para normalizar nomes (ignora acentos, case e espaços extras)
+  const normalizeString = (str: string) => {
+      return str
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+  };
+
   // Processa e combina os dados
   const reportData = useMemo(() => {
     // 1. Pega todos os membros registrados
-    // 2. Adiciona membros "fantasmas" que tem disponibilidade mas não registro (casos raros)
+    // 2. Adiciona membros "fantasmas" que tem disponibilidade mas não registro
     const allMemberNames = new Set<string>(registeredMembers.map(m => m.name));
     Object.keys(availability).forEach(name => allMemberNames.add(name));
 
     const data = Array.from(allMemberNames).map((name: string) => {
       // Tenta achar o perfil completo
-      const profile = registeredMembers.find(m => m.name === name);
+      const profile = registeredMembers.find(m => normalizeString(m.name) === normalizeString(name));
       
       // Determina as funções (Perfil > Mapa Manual)
       let roles: string[] = [];
@@ -72,17 +78,19 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
       } else {
         // Fallback: Procura no mapa manual
         Object.entries(membersMap).forEach(([role, members]) => {
-          if ((members as string[]).includes(name)) roles.push(role);
+          if ((members as string[]).some(m => normalizeString(m) === normalizeString(name))) {
+              roles.push(role);
+          }
         });
       }
 
-      // Pega dias disponíveis no mês atual com busca insensível a case/trim
-      // Normaliza o nome atual para buscar no mapa de disponibilidade
-      const normalizedName = name.trim().toLowerCase();
+      // Pega dias disponíveis no mês atual com busca insensível a case/trim/acentos
+      const normalizedName = normalizeString(name);
       let dates: string[] = [];
       
-      // Tenta encontrar a chave exata ou uma variação
-      const availKey = Object.keys(availability).find(k => k.trim().toLowerCase() === normalizedName);
+      // Tenta encontrar a chave no mapa de disponibilidade usando a string normalizada
+      const availKey = Object.keys(availability).find(k => normalizeString(k) === normalizedName);
+      
       if (availKey) {
           dates = availability[availKey] || [];
       }
@@ -98,7 +106,7 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
         .sort((a, b) => a.day - b.day);
 
       return {
-        name,
+        name: profile ? profile.name : name, // Usa o nome oficial do perfil se existir
         avatar_url: profile?.avatar_url,
         roles,
         days: monthDates,
@@ -109,7 +117,7 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
     // Filtragem
     return data
       .filter(item => {
-        const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSearch = normalizeString(item.name).includes(normalizeString(searchTerm));
         const matchesRole = selectedRole === "Todos" || item.roles.includes(selectedRole);
         return matchesSearch && matchesRole;
       })
@@ -135,7 +143,7 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
             <button 
                 onClick={handleManualRefresh}
                 className="p-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-400 transition-colors"
-                title="Atualizar Dados"
+                title="Sincronizar Dados (Nuvem)"
             >
                 <RefreshCw size={20} className={isRefreshing ? "animate-spin" : ""} />
             </button>
