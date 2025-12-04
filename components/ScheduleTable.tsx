@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis } from '../types';
-import { CheckCircle2, AlertTriangle, Trash2, BrainCircuit, AlertCircle } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Trash2 } from 'lucide-react';
 
 interface Props {
   events: { iso: string; dateDisplay: string; title: string }[];
@@ -84,24 +83,21 @@ export const ScheduleTable: React.FC<Props> = ({
                   const key = `${event.iso}_${role}`;
                   const currentValue = schedule[key] || "";
                   
-                  // Flatten available members for this role + all others into one list for simple selection
-                  // This reverts the "OptGroup" logic
-                  const roleSpecificMembers = members[role] || [];
-                  const uniqueMembers = Array.from(new Set([...roleSpecificMembers, ...allMembers]));
-                  
-                  const isConfirmed = attendance[key];
-                  const issue = scheduleIssues[key];
-                  
-                  // Verifica se há conflito: membro escalado E indisponível na data/hora
-                  const hasLocalConflict = currentValue && isUnavailable(currentValue, event.iso);
-
-                  const sortedMembers = uniqueMembers.sort((a, b) => {
+                  // Use allMembers for a flat list, allowing any registered member to be selected
+                  // Sort by availability and then by usage count
+                  const sortedMembers = [...allMembers].sort((a, b) => {
                         const unavailA = isUnavailable(a, event.iso);
                         const unavailB = isUnavailable(b, event.iso);
+                        // Unavailable members go to bottom
                         if (unavailA && !unavailB) return 1;
                         if (!unavailA && unavailB) return -1;
+                        // Then sort by usage count (least used first for balance, or most used if preferred)
                         return (memberStats[a] || 0) - (memberStats[b] || 0);
                   });
+
+                  const isConfirmed = attendance[key];
+                  const issue = scheduleIssues[key];
+                  const hasLocalConflict = currentValue && isUnavailable(currentValue, event.iso);
 
                   return (
                     <td key={key} className="px-6 py-4">
@@ -125,7 +121,7 @@ export const ScheduleTable: React.FC<Props> = ({
                                 const unavail = isUnavailable(m, event.iso);
                                 return (
                                     <option key={m} value={m} className={unavail ? 'text-red-400 bg-red-50 dark:bg-zinc-800' : ''}>
-                                    {m} ({memberStats[m] || 0}) {unavail ? '[Não Disp.]' : ''}
+                                    {m} ({memberStats[m] || 0}) {unavail ? '[Indisp.]' : ''}
                                     </option>
                                 );
                             })}
