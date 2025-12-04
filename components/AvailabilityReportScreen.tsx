@@ -1,8 +1,8 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { AvailabilityMap, TeamMemberProfile, MemberMap } from '../types';
 import { getMonthName } from '../utils/dateUtils';
-import { CalendarSearch, Search, Filter, CalendarX, CalendarCheck } from 'lucide-react';
+import { CalendarSearch, Search, Filter, CalendarX, RefreshCw } from 'lucide-react';
 
 interface Props {
   availability: AvailabilityMap;
@@ -11,6 +11,7 @@ interface Props {
   currentMonth: string;
   onMonthChange: (newMonth: string) => void;
   availableRoles: string[];
+  onRefresh?: () => Promise<void>;
 }
 
 export const AvailabilityReportScreen: React.FC<Props> = ({ 
@@ -19,10 +20,27 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
   membersMap,
   currentMonth, 
   onMonthChange,
-  availableRoles 
+  availableRoles,
+  onRefresh
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRole, setSelectedRole] = useState("Todos");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Auto-refresh ao montar a tela
+  useEffect(() => {
+    if (onRefresh) {
+        onRefresh();
+    }
+  }, []);
+
+  const handleManualRefresh = async () => {
+      if (onRefresh) {
+          setIsRefreshing(true);
+          await onRefresh();
+          setTimeout(() => setIsRefreshing(false), 500);
+      }
+  };
 
   const [year, month] = currentMonth.split('-').map(Number);
 
@@ -58,8 +76,17 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
         });
       }
 
-      // Pega dias disponíveis no mês atual
-      const dates = availability[name] || [];
+      // Pega dias disponíveis no mês atual com busca insensível a case/trim
+      // Normaliza o nome atual para buscar no mapa de disponibilidade
+      const normalizedName = name.trim().toLowerCase();
+      let dates: string[] = [];
+      
+      // Tenta encontrar a chave exata ou uma variação
+      const availKey = Object.keys(availability).find(k => k.trim().toLowerCase() === normalizedName);
+      if (availKey) {
+          dates = availability[availKey] || [];
+      }
+
       const monthDates = dates
         .filter(d => d.startsWith(currentMonth))
         .map(d => {
@@ -103,14 +130,25 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
           </p>
         </div>
         
-        {/* Month Selector */}
-        <div className="flex items-center gap-4 bg-white dark:bg-zinc-800 p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm self-end">
-            <button onClick={handlePrevMonth} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md">←</button>
-            <div className="text-center min-w-[120px]">
-                <span className="block text-xs font-medium text-zinc-500 uppercase">Referência</span>
-                <span className="block text-sm font-bold text-zinc-900 dark:text-zinc-100">{getMonthName(currentMonth)}</span>
+        {/* Actions */}
+        <div className="flex items-center gap-2 self-end">
+            <button 
+                onClick={handleManualRefresh}
+                className="p-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-400 transition-colors"
+                title="Atualizar Dados"
+            >
+                <RefreshCw size={20} className={isRefreshing ? "animate-spin" : ""} />
+            </button>
+
+            {/* Month Selector */}
+            <div className="flex items-center gap-4 bg-white dark:bg-zinc-800 p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                <button onClick={handlePrevMonth} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md">←</button>
+                <div className="text-center min-w-[120px]">
+                    <span className="block text-xs font-medium text-zinc-500 uppercase">Referência</span>
+                    <span className="block text-sm font-bold text-zinc-900 dark:text-zinc-100">{getMonthName(currentMonth)}</span>
+                </div>
+                <button onClick={handleNextMonth} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md">→</button>
             </div>
-            <button onClick={handleNextMonth} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md">→</button>
         </div>
       </div>
 

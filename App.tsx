@@ -430,6 +430,15 @@ const AppInner = () => {
       addToast("Lista atualizada!", "success");
   };
 
+  // Nova função para atualizar apenas disponibilidade
+  const handleReloadAvailability = async () => {
+      if (!ministryId) return;
+      const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+      const resAvail = await loadData<AvailabilityMap>(cleanMid, 'availability_v1', {});
+      setAvailability(resAvail);
+      addToast("Disponibilidade sincronizada.", "success");
+  };
+
   const handleUpdateProfile = async (name: string, whatsapp: string, avatar_url?: string, functions?: string[]) => {
     if (!currentUser) return;
     const res = await updateUserProfile(name, whatsapp, avatar_url, functions);
@@ -1064,6 +1073,7 @@ const AppInner = () => {
               currentMonth={currentMonth}
               onMonthChange={setCurrentMonth}
               availableRoles={roles}
+              onRefresh={handleReloadAvailability}
           />
       )}
 
