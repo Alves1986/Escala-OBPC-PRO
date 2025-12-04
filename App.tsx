@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ScheduleTable } from './components/ScheduleTable';
@@ -11,15 +12,13 @@ import { ProfileScreen } from './components/ProfileScreen';
 import { EventDetailsModal } from './components/EventDetailsModal';
 import { AvailabilityReportScreen } from './components/AvailabilityReportScreen';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile } from './types';
-import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember } from './services/supabaseService';
+import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { 
   Calendar as CalendarIcon, 
-  BarChart2, 
   Shield, 
-  Activity, 
   LayoutDashboard, 
   Users, 
   Edit3, 
@@ -35,8 +34,7 @@ import {
 } from 'lucide-react';
 import { NextEventCard } from './components/NextEventCard';
 import { ConfirmationModal } from './components/ConfirmationModal';
-import { EventsModal, AvailabilityModal, RolesModal, AuditModal } from './components/ManagementModals';
-import { StatsModal } from './components/StatsModal';
+import { EventsModal, AvailabilityModal, RolesModal } from './components/ManagementModals';
 
 // --- NAVIGATION ITEMS ---
 const MAIN_NAV_ITEMS = [
@@ -50,8 +48,6 @@ const MANAGEMENT_NAV_ITEMS = [
   { id: 'availability-report', label: 'Relat. Disponibilidade', icon: <CalendarSearch size={20} /> },
   { id: 'events', label: 'Eventos', icon: <Clock size={20} /> },
   { id: 'team', label: 'Membros & Equipe', icon: <Users size={20} /> },
-  { id: 'stats', label: 'Estatísticas', icon: <BarChart2 size={20} /> },
-  { id: 'logs', label: 'Logs do Sistema', icon: <Activity size={20} /> },
 ];
 
 const AppInner = () => {
@@ -93,8 +89,6 @@ const AppInner = () => {
   const [eventsModalOpen, setEventsModalOpen] = useState(false);
   const [availModalOpen, setAvailModalOpen] = useState(false);
   const [rolesModalOpen, setRolesModalOpen] = useState(false);
-  const [logsModalOpen, setLogsModalOpen] = useState(false);
-  const [statsModalOpen, setStatsModalOpen] = useState(false);
   
   // Event Detail Modal (from Calendar Grid)
   const [selectedEventDetails, setSelectedEventDetails] = useState<{ iso: string; title: string; dateDisplay: string } | null>(null);
@@ -933,28 +927,6 @@ const AppInner = () => {
       )}
 
       {currentTab === 'team' && currentUser?.role === 'admin' && renderTeam()}
-
-      {currentTab === 'stats' && currentUser?.role === 'admin' && (
-         <div className="text-center p-8">
-            <h2 className="text-2xl font-bold mb-4">Estatísticas</h2>
-            <button onClick={() => setStatsModalOpen(true)} className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 shadow-lg">
-                Ver Gráfico de Participação
-            </button>
-         </div>
-      )}
-
-      {currentTab === 'logs' && currentUser?.role === 'admin' && (
-         <div className="p-4 max-w-4xl mx-auto">
-             <h2 className="text-2xl font-bold mb-4">Logs do Sistema</h2>
-             <div className="bg-zinc-900 text-zinc-300 p-4 rounded-xl font-mono text-xs h-[500px] overflow-y-auto custom-scrollbar">
-                 {auditLog.map((log, i) => (
-                     <div key={i} className="mb-2 border-b border-zinc-800 pb-2">
-                         <span className="text-zinc-500">[{log.date}]</span> <span className="text-blue-400">{log.action}:</span> {log.details}
-                     </div>
-                 ))}
-             </div>
-         </div>
-      )}
       
       {currentTab === 'profile' && currentUser && (
          <ProfileScreen 
@@ -1025,9 +997,6 @@ const AppInner = () => {
         }}
       />
 
-      <AuditModal isOpen={logsModalOpen} onClose={() => setLogsModalOpen(false)} logs={auditLog} />
-      <StatsModal isOpen={statsModalOpen} onClose={() => setStatsModalOpen(false)} stats={memberStats} monthName={getMonthName(currentMonth)} />
-      
       {/* Event Details (from Calendar Grid click) */}
       <EventDetailsModal 
          isOpen={!!selectedEventDetails}
