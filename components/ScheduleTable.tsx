@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis } from '../types';
 import { CheckCircle2, AlertTriangle, Trash2, BrainCircuit, AlertCircle } from 'lucide-react';
@@ -10,6 +9,7 @@ interface Props {
   attendance: AttendanceMap;
   availability: AvailabilityMap;
   members: Record<string, string[]>;
+  allMembers: string[];
   scheduleIssues: ScheduleAnalysis;
   onCellChange: (key: string, value: string) => void;
   onAttendanceToggle: (key: string) => void;
@@ -18,18 +18,14 @@ interface Props {
 }
 
 export const ScheduleTable: React.FC<Props> = ({
-  events, roles, schedule, attendance, availability, members, scheduleIssues, onCellChange, onAttendanceToggle, onDeleteEvent, memberStats
+  events, roles, schedule, attendance, availability, members, allMembers, scheduleIssues, onCellChange, onAttendanceToggle, onDeleteEvent, memberStats
 }) => {
   
   // Calculate if member is unavailable for a specific date
-  // NOVA LÓGICA: O array 'availability' agora contém os dias DISPONÍVEIS.
-  // Se o array existir e tiver itens, e a data NÃO estiver nele, então é Indisponível.
   const isUnavailable = (member: string, isoDateStr: string) => {
     const datePart = isoDateStr.split('T')[0];
     const availableDates = availability[member];
     
-    // Se não tem dados ou array vazio, assumimos disponível para evitar bloqueio total inicial
-    // (Ou você pode decidir que vazio = indisponível total, mas geralmente é melhor assumir disponível até que se preencha)
     if (!availableDates || availableDates.length === 0) return false;
 
     // Se tem datas marcadas, a data atual PRECISA estar lá. Se não estiver, é conflito.
@@ -72,20 +68,29 @@ export const ScheduleTable: React.FC<Props> = ({
                   const key = `${event.iso}_${role}`;
                   const currentValue = schedule[key] || "";
                   const roleMembers = members[role] || [];
+                  
+                  // Separa os membros em "Da Função" e "Outros"
+                  const otherMembers = allMembers.filter(m => !roleMembers.includes(m));
+
                   const isConfirmed = attendance[key];
                   const issue = scheduleIssues[key];
                   
                   // Verifica se há conflito: membro escalado E indisponível na data
                   const hasLocalConflict = currentValue && isUnavailable(currentValue, event.iso);
 
-                  // Sort members: Available first, then by least usage
-                  const sortedMembers = [...roleMembers].sort((a, b) => {
-                    const unavailA = isUnavailable(a, event.iso);
-                    const unavailB = isUnavailable(b, event.iso);
-                    if (unavailA && !unavailB) return 1;
-                    if (!unavailA && unavailB) return -1;
-                    return (memberStats[a] || 0) - (memberStats[b] || 0);
-                  });
+                  // Função auxiliar de ordenação
+                  const sortMembers = (list: string[]) => {
+                      return [...list].sort((a, b) => {
+                        const unavailA = isUnavailable(a, event.iso);
+                        const unavailB = isUnavailable(b, event.iso);
+                        if (unavailA && !unavailB) return 1;
+                        if (!unavailA && unavailB) return -1;
+                        return (memberStats[a] || 0) - (memberStats[b] || 0);
+                      });
+                  };
+
+                  const sortedRoleMembers = sortMembers(roleMembers);
+                  const sortedOtherMembers = sortMembers(otherMembers);
 
                   return (
                     <td key={key} className="px-6 py-4">
@@ -105,14 +110,32 @@ export const ScheduleTable: React.FC<Props> = ({
                             `}
                           >
                             <option value="">-- Selecionar --</option>
-                            {sortedMembers.map(m => {
-                              const unavail = isUnavailable(m, event.iso);
-                              return (
-                                <option key={m} value={m} className={unavail ? 'text-red-400 bg-red-50 dark:bg-zinc-800' : ''}>
-                                  {m} ({memberStats[m] || 0}) {unavail ? '[Não Disp.]' : ''}
-                                </option>
-                              );
-                            })}
+                            
+                            {/* GRUPO 1: MEMBROS DA FUNÇÃO */}
+                            <optgroup label="Equipe da Função">
+                                {sortedRoleMembers.map(m => {
+                                    const unavail = isUnavailable(m, event.iso);
+                                    return (
+                                        <option key={m} value={m} className={unavail ? 'text-red-400 bg-red-50 dark:bg-zinc-800' : ''}>
+                                        {m} ({memberStats[m] || 0}) {unavail ? '[Não Disp.]' : ''}
+                                        </option>
+                                    );
+                                })}
+                            </optgroup>
+
+                            {/* GRUPO 2: OUTROS MEMBROS DO SISTEMA */}
+                            {sortedOtherMembers.length > 0 && (
+                                <optgroup label="Outros Membros">
+                                    {sortedOtherMembers.map(m => {
+                                        const unavail = isUnavailable(m, event.iso);
+                                        return (
+                                            <option key={m} value={m} className={unavail ? 'text-red-400 bg-red-50 dark:bg-zinc-800' : ''}>
+                                            {m} ({memberStats[m] || 0}) {unavail ? '[Não Disp.]' : ''}
+                                            </option>
+                                        );
+                                    })}
+                                </optgroup>
+                            )}
                           </select>
                           
                           {/* Indicador Visual de Conflito Local (Data Bloqueada) */}

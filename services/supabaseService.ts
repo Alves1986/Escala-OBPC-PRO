@@ -1,6 +1,6 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, DEFAULT_ROLES, AppNotification, TeamMemberProfile } from '../types';
+import { SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, DEFAULT_ROLES, AppNotification, TeamMemberProfile, AvailabilityMap } from '../types';
 
 let supabase: SupabaseClient | null = null;
 
@@ -110,6 +110,40 @@ export const syncMemberProfile = async (ministryId: string, user: User) => {
     }
 };
 
+export const deleteMember = async (ministryId: string, memberId: string, memberName: string): Promise<boolean> => {
+    if (!supabase || !ministryId) return false;
+
+    try {
+        // 1. Remove da Lista Pública de Membros (Visual)
+        const list = await loadData<TeamMemberProfile[]>(ministryId, 'public_members_list', []);
+        // Remove por ID ou Nome (para garantir que pegue fantasmas ou registrados)
+        const newList = list.filter(m => m.id !== memberId && m.name !== memberName);
+        await saveData(ministryId, 'public_members_list', newList);
+
+        // 2. Remove das Atribuições de Cargos (Members Map)
+        const memberMap = await loadData<MemberMap>(ministryId, 'members_v7', {});
+        const newMemberMap: MemberMap = {};
+        
+        Object.keys(memberMap).forEach(role => {
+            // Filtra o nome do membro de cada lista de função
+            newMemberMap[role] = memberMap[role].filter(name => name !== memberName);
+        });
+        await saveData(ministryId, 'members_v7', newMemberMap);
+
+        // 3. Limpa Disponibilidade Salva
+        const availability = await loadData<AvailabilityMap>(ministryId, 'availability_v1', {});
+        if (availability[memberName]) {
+            delete availability[memberName];
+            await saveData(ministryId, 'availability_v1', availability);
+        }
+
+        return true;
+    } catch (e) {
+        console.error("Erro ao excluir membro", e);
+        return false;
+    }
+};
+
 // --- Native Authentication Logic ---
 
 export const loginWithEmail = async (email: string, password: string): Promise<{ success: boolean; message: string; user?: User, ministryId?: string }> => {
@@ -194,7 +228,27 @@ export const registerWithEmail = async (
                 whatsapp: whatsapp,
                 functions: selectedRoles || []
             };
+            
+            // 1. Salva na lista
             await syncMemberProfile(cleanMid, userProfile);
+
+            // 2. Salva nas roles (Members Map) também, para já aparecer nos selects
+            if (selectedRoles && selectedRoles.length > 0) {
+                const currentRoles = await loadData<MemberMap>(cleanMid, 'members_v7', {});
+                let rolesChanged = false;
+                
+                selectedRoles.forEach(role => {
+                    if (!currentRoles[role]) currentRoles[role] = [];
+                    if (!currentRoles[role].includes(name)) {
+                        currentRoles[role].push(name);
+                        rolesChanged = true;
+                    }
+                });
+                
+                if (rolesChanged) {
+                    await saveData(cleanMid, 'members_v7', currentRoles);
+                }
+            }
 
             // ENVIA NOTIFICAÇÃO PARA O PAINEL
             await sendNotification(cleanMid, {

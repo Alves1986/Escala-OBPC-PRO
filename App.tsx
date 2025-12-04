@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ScheduleTable } from './components/ScheduleTable';
@@ -10,7 +9,7 @@ import { AvailabilityScreen } from './components/AvailabilityScreen';
 import { ProfileScreen } from './components/ProfileScreen';
 import { EventDetailsModal } from './components/EventDetailsModal';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile } from './types';
-import { loadData, saveData, getStorageKey, getSupabase, logout, updateUserProfile, sendNotification, syncMemberProfile } from './services/supabaseService';
+import { loadData, saveData, getStorageKey, getSupabase, logout, updateUserProfile, sendNotification, syncMemberProfile, deleteMember } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
 import { 
   Calendar as CalendarIcon, 
@@ -37,7 +36,9 @@ import {
   UserCircle2,
   RefreshCw,
   AlertCircle,
-  Share2
+  Share2,
+  AlertTriangle,
+  Trash
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -219,7 +220,8 @@ const AppContent = () => {
       setLoading(true);
       const loadAll = async () => {
         try {
-          const [m, s, a, c, ig, av, r, lg, th, notif, regMem] = await Promise.all([
+          // Use Promise.allSettled to ensure that one failure doesn't break the whole app
+          const results = await Promise.allSettled([
             loadData<MemberMap>(ministryId, 'members_v7', {}),
             loadData<ScheduleMap>(ministryId, 'escala_full_v7', {}),
             loadData<AttendanceMap>(ministryId, 'attendance_v1', {}),
@@ -232,8 +234,36 @@ const AppContent = () => {
             loadData<AppNotification[]>(ministryId, 'notifications_v1', []),
             loadData<TeamMemberProfile[]>(ministryId, 'public_members_list', [])
           ]);
+
+          // Helper to safely extract value or fallback
+          const unwrap = <T,>(index: number, fallback: T): T => {
+            const res = results[index];
+            return res.status === 'fulfilled' ? (res.value as T) : fallback;
+          };
+
+          const m = unwrap<MemberMap>(0, {});
+          const s = unwrap<ScheduleMap>(1, {});
+          const a = unwrap<AttendanceMap>(2, {});
+          const c = unwrap<CustomEvent[]>(3, []);
+          const ig = unwrap<string[]>(4, []);
+          const av = unwrap<AvailabilityMap>(5, {});
+          const r = unwrap<string[]>(6, DEFAULT_ROLES);
+          const lg = unwrap<AuditLogEntry[]>(7, []);
+          const th = unwrap<'light'|'dark'>(8, 'dark');
+          const notif = unwrap<AppNotification[]>(9, []);
+          const regMem = unwrap<TeamMemberProfile[]>(10, []);
+
           setMembers(Object.keys(m).length === 0 ? (() => {const i:any={}; DEFAULT_ROLES.forEach(r=>i[r]=[]); return i})() : m);
-          setSchedule(s); setAttendance(a); setCustomEvents(c); setIgnoredEvents(ig); setAvailability(av); setRoles(r); setAuditLog(lg); setTheme(th); setNotifications(notif); setRegisteredMembers(regMem);
+          setSchedule(s); 
+          setAttendance(a); 
+          setCustomEvents(c); 
+          setIgnoredEvents(ig); 
+          setAvailability(av); 
+          setRoles(r); 
+          setAuditLog(lg); 
+          setTheme(th); 
+          setNotifications(notif); 
+          setRegisteredMembers(regMem);
           setIsConnected(true);
 
           if (currentUser && currentUser.email) {
@@ -249,7 +279,12 @@ const AppContent = () => {
              }
           }
 
-        } catch (e) { addToast("Erro ao carregar dados", "error"); setIsConnected(false); } 
+        } catch (e) { 
+          // This catch block is now a safeguard for critical failures outside promises
+          console.error("Critical error loading data:", e);
+          addToast("Erro parcial ao carregar dados", "warning"); 
+          setIsConnected(false); 
+        } 
         finally { setLoading(false); }
       };
       loadAll();
@@ -680,6 +715,7 @@ const AppContent = () => {
          <ScheduleTable 
             events={visibleEvents} roles={roles} schedule={schedule} attendance={attendance} availability={availability} members={members} scheduleIssues={scheduleIssues} memberStats={memberStats}
             onCellChange={updateCell} onAttendanceToggle={toggleAttendance} onDeleteEvent={(iso) => setIgnoredEvents([...ignoredEvents, iso])}
+            allMembers={allMembersList}
           />
       </div>
     </div>
@@ -736,10 +772,28 @@ const AppContent = () => {
         Object.keys(members).forEach(role => { if (members[role].includes(memberName)) assignedRoles.push(role); });
         return assignedRoles;
     };
-    const filteredMembers = registeredMembers
+
+    // 1. Identificar "Membros Fantasmas" (Detectados no sistema, mas sem cadastro oficial)
+    const ghostMembers = allMembersList.filter(name => !registeredMembers.some(rm => rm.name === name));
+    
+    // 2. Criar perfis temporários para exibição na tabela
+    const ghostProfiles: TeamMemberProfile[] = ghostMembers.map(name => ({
+        id: `sys-${name}-${Date.now()}`, // ID temporário
+        name: name,
+        roles: [],
+        email: undefined,
+        whatsapp: undefined,
+        avatar_url: undefined,
+        createdAt: new Date().toISOString()
+    }));
+
+    // 3. Unificar a lista (Membros Registrados + Membros Detectados)
+    const allDisplayMembers = [...registeredMembers, ...ghostProfiles];
+
+    // 4. Filtrar e Ordernar
+    const filteredMembers = allDisplayMembers
         .filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()) || m.email?.toLowerCase().includes(memberSearch.toLowerCase()))
         .sort((a, b) => a.name.localeCompare(b.name));
-    const ghostMembers = allMembersList.filter(name => !registeredMembers.some(rm => rm.name === name));
     
     const handleRefreshList = async () => {
         if (!ministryId) return;
@@ -751,6 +805,37 @@ const AppContent = () => {
         ]);
         setRegisteredMembers(regMem); setAvailability(av); setNotifications(notif);
         setLoading(false); addToast("Dados sincronizados!", "success");
+    };
+
+    const handleDeleteMember = async (id: string, name: string) => {
+        if (!ministryId) return;
+        confirmAction("Excluir Membro", `Tem certeza que deseja remover ${name} da equipe? Isso limpará funções e disponibilidade.`, async () => {
+            setLoading(true);
+            const success = await deleteMember(ministryId, id, name);
+            if (success) {
+                // Optimistic UI Update
+                setRegisteredMembers(prev => prev.filter(m => m.id !== id && m.name !== name));
+                
+                // Update Roles Map locally
+                const newMembersMap = { ...members };
+                Object.keys(newMembersMap).forEach(role => {
+                    newMembersMap[role] = newMembersMap[role].filter(n => n !== name);
+                });
+                setMembers(newMembersMap);
+
+                // Update Availability locally
+                if (availability[name]) {
+                    const newAvail = { ...availability };
+                    delete newAvail[name];
+                    setAvailability(newAvail);
+                }
+
+                addToast("Membro removido com sucesso!", "success");
+            } else {
+                addToast("Erro ao remover membro.", "error");
+            }
+            setLoading(false);
+        });
     };
 
     return (
@@ -772,30 +857,55 @@ const AppContent = () => {
       <div className="space-y-6">
           <div className="bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden">
              <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50">
-                 <h3 className="text-xs font-bold text-zinc-500 uppercase">Membros Cadastrados (Login Ativo)</h3>
+                 <h3 className="text-xs font-bold text-zinc-500 uppercase">Todos os Membros (Registrados e Detectados)</h3>
              </div>
              {filteredMembers.length === 0 ? (
-                <div className="p-8 text-center text-zinc-500"><Users size={32} className="mx-auto mb-2 opacity-20" /><p>Nenhum membro cadastrado encontrado.</p></div>
+                <div className="p-8 text-center text-zinc-500"><Users size={32} className="mx-auto mb-2 opacity-20" /><p>Nenhum membro encontrado.</p></div>
              ) : (
                  <div className="overflow-x-auto">
                     <table className="w-full text-left">
                         <thead className="bg-zinc-50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-700 text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                            <tr><th className="px-6 py-3">Membro</th><th className="px-6 py-3">Contato</th><th className="px-6 py-3">Funções</th></tr>
+                            <tr><th className="px-6 py-3">Membro</th><th className="px-6 py-3">Contato</th><th className="px-6 py-3">Funções</th><th className="px-6 py-3 text-right">Ações</th></tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
                             {filteredMembers.map(member => {
                                 const assignedRoles = getMemberRoles(member.name);
+                                // Verifica se é um membro "fantasma" (sem ID oficial de banco de dados ou email)
+                                const isGhost = member.id.startsWith('sys-'); 
+
                                 return (
                                     <tr key={member.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-4">
-                                                {member.avatar_url ? <img src={member.avatar_url} alt={member.name} className="w-10 h-10 rounded-full object-cover border border-zinc-200 dark:border-zinc-700" /> : <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center"><span className="font-bold text-sm">{member.name.charAt(0).toUpperCase()}</span></div>}
-                                                <div><div className="font-bold text-zinc-900 dark:text-zinc-100">{member.name}</div><div className="text-xs text-zinc-500">ID: {member.id.substring(0, 8)}...</div></div>
+                                                {member.avatar_url ? (
+                                                    <img src={member.avatar_url} alt={member.name} className="w-10 h-10 rounded-full object-cover border border-zinc-200 dark:border-zinc-700" />
+                                                ) : (
+                                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${
+                                                        isGhost 
+                                                        ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400' 
+                                                        : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                                                    }`}>
+                                                        {member.name.charAt(0).toUpperCase()}
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{member.name}</span>
+                                                        {isGhost && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-300" title="Detectado automaticamente pelo sistema">AUTO</span>}
+                                                    </div>
+                                                    <div className="text-xs text-zinc-500">
+                                                        {isGhost ? 'Membro ativo detectado' : `ID: ${member.id.substring(0, 8)}...`}
+                                                    </div>
+                                                </div>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="space-y-1">
-                                                {member.email && <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400"><Mail size={14} className="opacity-50" /> {member.email}</div>}
+                                                {member.email ? (
+                                                    <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400"><Mail size={14} className="opacity-50" /> {member.email}</div>
+                                                ) : (
+                                                    <span className="text-xs text-zinc-400 italic">--</span>
+                                                )}
                                                 {member.whatsapp && <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400"><Phone size={14} className="opacity-50" /> {member.whatsapp}</div>}
                                             </div>
                                         </td>
@@ -803,6 +913,15 @@ const AppContent = () => {
                                             <div className="flex flex-wrap gap-2">
                                                 {assignedRoles.length > 0 ? assignedRoles.map(role => <span key={role} className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-900/30">{role}</span>) : <span className="text-zinc-400 text-xs italic">Sem função</span>}
                                             </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <button 
+                                                onClick={() => handleDeleteMember(member.id, member.name)}
+                                                className="text-zinc-400 hover:text-red-500 p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-colors" 
+                                                title="Excluir Membro"
+                                            >
+                                                <Trash size={16} />
+                                            </button>
                                         </td>
                                     </tr>
                                 );
@@ -812,12 +931,6 @@ const AppContent = () => {
                  </div>
              )}
           </div>
-          {ghostMembers.length > 0 && (
-              <div className="bg-amber-50 dark:bg-amber-900/10 rounded-xl shadow-sm border border-amber-200 dark:border-amber-900/30 overflow-hidden">
-                 <div className="px-6 py-4 border-b border-amber-200 dark:border-amber-900/30 bg-amber-100/50 dark:bg-amber-900/20 flex items-center gap-2"><AlertCircle size={16} className="text-amber-600 dark:text-amber-500"/><h3 className="text-xs font-bold text-amber-700 dark:text-amber-500 uppercase">Outros Membros Ativos (Detectados no Sistema)</h3></div>
-                 <div className="p-4"><p className="text-xs text-amber-600 dark:text-amber-400 mb-4">Estes membros têm dados no sistema (escalas ou disponibilidade salva) mas não foram encontrados na lista oficial de cadastros. Isso pode ocorrer se eles usaram o sistema antes da atualização ou se houve falha na sincronização do perfil.</p><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">{ghostMembers.map(name => (<div key={name} className="flex items-center justify-between p-3 bg-white dark:bg-zinc-800 rounded-lg border border-amber-100 dark:border-amber-900/20"><span className="font-bold text-zinc-700 dark:text-zinc-300">{name}</span><span className="text-[10px] px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full font-bold">Não Sincronizado</span></div>))}</div></div>
-              </div>
-          )}
       </div>
       <div className="mt-8 border-t border-zinc-200 dark:border-zinc-700 pt-8">
          <h3 className="text-lg font-bold text-zinc-800 dark:text-white mb-4">Gerenciamento Rápido de Funções</h3>
