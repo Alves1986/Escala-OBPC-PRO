@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, ShieldCheck, UserPlus, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, ShieldCheck, UserPlus, ArrowLeft, CheckCircle2, ChevronDown, Check } from 'lucide-react';
 import { loginWithEmail, registerWithEmail } from '../services/supabaseService';
 import { User } from '../types';
 
@@ -8,6 +8,24 @@ interface Props {
   onLoginSuccess?: () => void; // Apenas para trigger visual, o App.tsx gerencia o estado real via onAuthStateChange
   isLoading?: boolean;
 }
+
+// Configuração dos Ministérios Disponíveis
+const MINISTRIES = [
+  { id: 'midia', label: 'Mídia / Projeção' },
+  { id: 'louvor', label: 'Louvor / Banda' },
+  { id: 'infantil', label: 'Ministério Infantil' },
+  { id: 'diaconia', label: 'Diaconia / Recepção' },
+  { id: 'teatro', label: 'Teatro / Artes' }
+];
+
+// Configuração das Funções por Ministério
+const ROLES_BY_MINISTRY: Record<string, string[]> = {
+  'midia': ['Projeção', 'Transmissão', 'Fotografia', 'Storys', 'Som', 'Iluminação', 'Design'],
+  'louvor': ['Vocal', 'Violão', 'Teclado', 'Bateria', 'Baixo', 'Guitarra', 'Sax', 'Violino'],
+  'infantil': ['Professor(a)', 'Monitor(a)', 'Apoio', 'Berçário'],
+  'diaconia': ['Recepção', 'Portaria', 'Estacionamento', 'Ceia'],
+  'teatro': ['Ator/Atriz', 'Roteiro', 'Figurino', 'Maquiagem']
+};
 
 export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
   const [view, setView] = useState<'login' | 'register'>('login');
@@ -21,7 +39,8 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
   const [regName, setRegName] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
-  const [regMinistryId, setRegMinistryId] = useState("");
+  const [regMinistryId, setRegMinistryId] = useState(""); // Stores the ID (e.g., 'midia')
+  const [regSelectedRoles, setRegSelectedRoles] = useState<string[]>([]);
   
   // UI State
   const [localLoading, setLocalLoading] = useState(false);
@@ -47,7 +66,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
   const handleRegisterSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!regName || !regEmail || !regPassword || !regMinistryId) {
-          setErrorMsg("Preencha todos os campos.");
+          setErrorMsg("Preencha todos os campos obrigatórios.");
           return;
       }
       
@@ -55,7 +74,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
       setErrorMsg("");
       
       // O ID do ministério é CRUCIAL para manter os dados antigos
-      const result = await registerWithEmail(regEmail, regPassword, regName, regMinistryId);
+      const result = await registerWithEmail(regEmail, regPassword, regName, regMinistryId, undefined, regSelectedRoles);
       
       if (result.success) {
           setSuccessMsg(result.message);
@@ -73,6 +92,14 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
       setLocalLoading(false);
   };
 
+  const toggleRole = (role: string) => {
+    if (regSelectedRoles.includes(role)) {
+      setRegSelectedRoles(regSelectedRoles.filter(r => r !== role));
+    } else {
+      setRegSelectedRoles([...regSelectedRoles, role]);
+    }
+  };
+
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-zinc-950 relative overflow-hidden font-sans">
       {/* Background Effects */}
@@ -81,7 +108,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-900/20 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '2s' }}></div>
       </div>
 
-      <div className="z-10 w-full max-w-sm p-6">
+      <div className="z-10 w-full max-w-sm p-6 overflow-y-auto max-h-screen custom-scrollbar">
         <div className="bg-zinc-900/90 backdrop-blur-xl border border-zinc-800 rounded-3xl shadow-2xl p-8 transition-all">
           
           <div className="text-center mb-6">
@@ -160,7 +187,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
               <form onSubmit={handleRegisterSubmit} className="space-y-3">
                   <div className="bg-blue-900/10 p-3 rounded-lg border border-blue-900/30 mb-2">
                       <p className="text-[10px] text-blue-300 leading-tight text-center">
-                        <strong>Atenção:</strong> No campo "ID do Ministério", digite o mesmo código que você usava antes (ex: <em>midia-sede</em>) para recuperar seus dados antigos.
+                        Selecione o ministério correto para sincronizar com a equipe certa.
                       </p>
                   </div>
 
@@ -186,14 +213,51 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                   </div>
 
                   <div className="space-y-1">
-                      <label className="text-[10px] uppercase text-zinc-500 font-bold">ID do Ministério (Importante)</label>
-                      <input 
-                        value={regMinistryId} 
-                        onChange={e => setRegMinistryId(e.target.value)}
-                        placeholder="Ex: midia-sede" 
-                        className="w-full bg-zinc-950 border border-zinc-800 focus:border-blue-600 text-white rounded-lg py-2 px-3 text-sm"
-                      />
+                      <label className="text-[10px] uppercase text-zinc-500 font-bold">ID do Ministério (Equipe)</label>
+                      <div className="relative">
+                        <select
+                          value={regMinistryId}
+                          onChange={(e) => {
+                            setRegMinistryId(e.target.value);
+                            setRegSelectedRoles([]); // Limpa as funções ao mudar o ministério
+                          }}
+                          className="w-full bg-zinc-950 border border-zinc-800 focus:border-blue-600 text-white rounded-lg py-2 px-3 text-sm appearance-none outline-none"
+                        >
+                          <option value="">Selecione a equipe...</option>
+                          {MINISTRIES.map(m => (
+                            <option key={m.id} value={m.id}>{m.label}</option>
+                          ))}
+                        </select>
+                        <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+                      </div>
                   </div>
+
+                  {/* Seletor de Funções (Aparece apenas quando o ministério é selecionado) */}
+                  {regMinistryId && ROLES_BY_MINISTRY[regMinistryId] && (
+                    <div className="space-y-1 animate-fade-in">
+                       <label className="text-[10px] uppercase text-zinc-500 font-bold">Suas Funções (Selecione 1 ou mais)</label>
+                       <div className="flex flex-wrap gap-2 mt-1">
+                          {ROLES_BY_MINISTRY[regMinistryId].map(role => {
+                             const isSelected = regSelectedRoles.includes(role);
+                             return (
+                               <button
+                                 key={role}
+                                 type="button"
+                                 onClick={() => toggleRole(role)}
+                                 className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 ${
+                                   isSelected 
+                                     ? 'bg-blue-600 text-white border-blue-500 shadow-md shadow-blue-900/20' 
+                                     : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:border-zinc-700'
+                                 }`}
+                               >
+                                 {role}
+                                 {isSelected && <Check size={12} />}
+                               </button>
+                             )
+                          })}
+                       </div>
+                    </div>
+                  )}
 
                   <div className="space-y-1">
                       <label className="text-[10px] uppercase text-zinc-500 font-bold">Senha</label>
