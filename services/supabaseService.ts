@@ -84,12 +84,12 @@ export const syncMemberProfile = async (ministryId: string, user: User) => {
             
             newList[index] = { 
                 ...existing, 
-                id: user.id || existing.id || Date.now().toString(), // Fixed TS Error
+                id: user.id || existing.id || Date.now().toString(),
                 name: user.name, // Nome sempre atualizado pelo perfil
                 email: user.email || existing.email,
                 whatsapp: user.whatsapp || existing.whatsapp,
                 avatar_url: user.avatar_url || existing.avatar_url,
-                // Se o usuário logado não tiver roles definidas no metadata (comum), mantém as da lista
+                // Se o usuário logado tiver roles definidas (vindo de update profile), usa elas. Senão mantém as existentes.
                 roles: (user.functions && user.functions.length > 0) ? user.functions : (existing.roles || []),
                 createdAt: existing.createdAt || newProfile.createdAt
             }; 
@@ -116,7 +116,6 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
     try {
         // 1. Remove da Lista Pública de Membros (Visual)
         const list = await loadData<TeamMemberProfile[]>(ministryId, 'public_members_list', []);
-        // Remove por ID ou Nome (para garantir que pegue fantasmas ou registrados)
         const newList = list.filter(m => m.id !== memberId && m.name !== memberName);
         await saveData(ministryId, 'public_members_list', newList);
 
@@ -125,7 +124,6 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
         const newMemberMap: MemberMap = {};
         
         Object.keys(memberMap).forEach(role => {
-            // Filtra o nome do membro de cada lista de função
             newMemberMap[role] = memberMap[role].filter(name => name !== memberName);
         });
         await saveData(ministryId, 'members_v7', newMemberMap);
@@ -172,9 +170,7 @@ export const loginWithEmail = async (email: string, password: string): Promise<{
                 functions: metadata.functions || []
             };
 
-            // Força a sincronização ao logar para garantir que o membro apareça na lista
             if (metadata.ministryId) {
-                // Não aguardamos o sync para não travar o login visualmente, mas disparamos
                 syncMemberProfile(metadata.ministryId, userProfile);
             }
 
@@ -207,7 +203,7 @@ export const registerWithEmail = async (
             options: {
                 data: {
                     name,
-                    ministryId: cleanMid, // Salva o ID do ministério nos metadados
+                    ministryId: cleanMid, 
                     whatsapp,
                     functions: selectedRoles || [],
                     role: 'member'
@@ -217,7 +213,6 @@ export const registerWithEmail = async (
 
         if (error) return { success: false, message: error.message };
 
-        // CRUCIAL: Sincroniza imediatamente o novo usuário com a lista pública
         if (data.user) {
             const userProfile: User = {
                 id: data.user.id,
@@ -229,10 +224,8 @@ export const registerWithEmail = async (
                 functions: selectedRoles || []
             };
             
-            // 1. Salva na lista
             await syncMemberProfile(cleanMid, userProfile);
 
-            // 2. Salva nas roles (Members Map) também, para já aparecer nos selects
             if (selectedRoles && selectedRoles.length > 0) {
                 const currentRoles = await loadData<MemberMap>(cleanMid, 'members_v7', {});
                 let rolesChanged = false;
@@ -250,7 +243,6 @@ export const registerWithEmail = async (
                 }
             }
 
-            // ENVIA NOTIFICAÇÃO PARA O PAINEL
             await sendNotification(cleanMid, {
                 type: 'info',
                 title: 'Novo Membro Cadastrado',
@@ -270,7 +262,7 @@ export const logout = async () => {
     await supabase.auth.signOut();
 };
 
-export const updateUserProfile = async (name: string, whatsapp: string, avatar_url?: string): Promise<{ success: boolean; message: string }> => {
+export const updateUserProfile = async (name: string, whatsapp: string, avatar_url?: string, functions?: string[]): Promise<{ success: boolean; message: string }> => {
     if (!supabase) return { success: false, message: "Erro de conexão" };
 
     try {
@@ -278,7 +270,7 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
         
         if (error || !user) return { success: false, message: "Usuário não autenticado." };
 
-        const updates = {
+        const updates: any = {
             data: {
                 name,
                 whatsapp,
@@ -286,13 +278,17 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
             }
         };
 
+        // Adiciona funções se fornecido
+        if (functions) {
+            updates.data.functions = functions;
+        }
+
         const { error: updateError } = await supabase.auth.updateUser(updates);
 
         if (updateError) {
             return { success: false, message: "Erro ao atualizar perfil." };
         }
         
-        // Sync with public directory if needed
         const ministryId = user.user_metadata.ministryId;
         if (ministryId) {
              const userProfile: User = {
@@ -303,9 +299,36 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
                 ministryId: ministryId,
                 whatsapp: whatsapp,
                 avatar_url: avatar_url,
-                functions: user.user_metadata.functions || []
+                functions: functions || user.user_metadata.functions || []
             };
             await syncMemberProfile(ministryId, userProfile);
+
+            // Sincroniza também o mapa de cargos (members_v7) para o gerenciamento rápido
+            if (functions) {
+                const currentMap = await loadData<MemberMap>(ministryId, 'members_v7', {});
+                let mapChanged = false;
+
+                // 1. Remove usuário de todas as listas primeiro (para garantir limpeza de funções desmarcadas)
+                Object.keys(currentMap).forEach(role => {
+                    if (currentMap[role].includes(name)) {
+                        currentMap[role] = currentMap[role].filter(n => n !== name);
+                        mapChanged = true;
+                    }
+                });
+
+                // 2. Adiciona às listas selecionadas
+                functions.forEach(role => {
+                    if (!currentMap[role]) currentMap[role] = [];
+                    if (!currentMap[role].includes(name)) {
+                        currentMap[role].push(name);
+                        mapChanged = true;
+                    }
+                });
+
+                if (mapChanged) {
+                    await saveData(ministryId, 'members_v7', currentMap);
+                }
+            }
         }
 
         return { success: true, message: "Perfil atualizado com sucesso!" };
@@ -323,20 +346,16 @@ export const saveSubscription = async (ministryId: string, subscription: PushSub
         const { data } = await supabase.from('app_storage').select('value').eq('key', key).single();
         
         let subs: PushSubscriptionRecord[] = data?.value || [];
-        
-        // Remove duplicate if exists (by endpoint)
         subs = subs.filter((s: PushSubscriptionRecord) => s.endpoint !== subscription.endpoint);
         
         const subJson = subscription.toJSON();
-        
-        // Add new
         const record: PushSubscriptionRecord = {
             endpoint: subscription.endpoint,
             keys: {
                 p256dh: subJson.keys?.p256dh || '',
                 auth: subJson.keys?.auth || ''
             },
-            device_id: 'browser_' + Date.now(), // Simple ID
+            device_id: 'browser_' + Date.now(),
             last_updated: new Date().toISOString()
         };
         
@@ -358,17 +377,13 @@ export const sendNotification = async (ministryId: string, notification: Omit<Ap
         const { data } = await supabase.from('app_storage').select('value').eq('key', key).single();
         
         let notifs: AppNotification[] = data?.value || [];
-        
         const newNotif: AppNotification = {
             id: Date.now().toString(),
             timestamp: new Date().toISOString(),
             read: false,
             ...notification
         };
-        
-        // Keep last 50
         notifs = [newNotif, ...notifs].slice(0, 50);
-        
         await supabase.from('app_storage').upsert({ key, value: notifs }, { onConflict: 'key' });
     } catch (e) {
         console.error("Erro ao enviar notificação", e);
@@ -383,7 +398,6 @@ export const markNotificationsRead = async (ministryId: string, notificationIds:
         const { data } = await supabase.from('app_storage').select('value').eq('key', key).single();
         
         let notifs: AppNotification[] = data?.value || [];
-        
         let updated = false;
         notifs = notifs.map(n => {
             if (notificationIds.includes(n.id) && !n.read) {
@@ -396,7 +410,6 @@ export const markNotificationsRead = async (ministryId: string, notificationIds:
         if (updated) {
             await supabase.from('app_storage').upsert({ key, value: notifs }, { onConflict: 'key' });
         }
-        
         return notifs;
     } catch (e) {
         console.error("Erro ao marcar lidas", e);
@@ -409,7 +422,6 @@ export const clearAllNotifications = async (ministryId: string): Promise<AppNoti
 
     try {
         const key = getStorageKey(ministryId, 'notifications_v1');
-        // Substitui a lista inteira por um array vazio
         const { error } = await supabase.from('app_storage').upsert({ key, value: [] }, { onConflict: 'key' });
         
         if (error) {

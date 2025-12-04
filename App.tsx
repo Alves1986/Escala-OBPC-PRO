@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ScheduleTable } from './components/ScheduleTable';
@@ -193,16 +194,24 @@ const AppContent = () => {
           role: meta.role || 'member',
           ministryId: meta.ministryId,
           whatsapp: meta.whatsapp,
-          avatar_url: meta.avatar_url
+          avatar_url: meta.avatar_url,
+          functions: meta.functions || []
       });
       setMinistryId(meta.ministryId);
   }
 
-  // --- PWA EFFECTS ---
+  // --- PWA EFFECTS (UPDATED) ---
   useEffect(() => {
     const userAgent = window.navigator.userAgent.toLowerCase();
     setIsIOS(/iphone|ipad|ipod/.test(userAgent));
-    const handler = (e: any) => { e.preventDefault(); setInstallPrompt(e); };
+    
+    const handler = (e: any) => { 
+        // Prevent Chrome 67 and earlier from automatically showing the prompt
+        e.preventDefault(); 
+        // Stash the event so it can be triggered later.
+        setInstallPrompt(e); 
+        console.log("PWA Install Prompt captured");
+    };
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
@@ -211,7 +220,8 @@ const AppContent = () => {
     if (!installPrompt) return;
     installPrompt.prompt();
     const { outcome } = await installPrompt.userChoice;
-    if (outcome === 'accepted') setInstallPrompt(null);
+    console.log(`User response to install prompt: ${outcome}`);
+    setInstallPrompt(null);
   };
 
   // --- DATA LOADING & SAVING ---
@@ -370,16 +380,21 @@ const AppContent = () => {
     if (confirm("Sair do sistema?")) { await logout(); setMinistryId(null); setCurrentUser(null); setSchedule({}); setMembers({}); }
   };
 
-  const handleUpdateProfile = async (name: string, whatsapp: string, avatar_url?: string) => {
-      const res = await updateUserProfile(name, whatsapp, avatar_url);
+  const handleUpdateProfile = async (name: string, whatsapp: string, avatar_url?: string, functions?: string[]) => {
+      const res = await updateUserProfile(name, whatsapp, avatar_url, functions);
       if (res.success) {
           addToast(res.message, "success");
           if (currentUser) {
-              const updatedUser = { ...currentUser, name, whatsapp, avatar_url };
+              const updatedUser = { ...currentUser, name, whatsapp, avatar_url, functions: functions || currentUser.functions };
               setCurrentUser(updatedUser);
               if (ministryId) {
+                  // Sincroniza lista pública e estado
                   const newList = await syncMemberProfile(ministryId, updatedUser);
                   setRegisteredMembers(newList);
+                  
+                  // Recarrega o mapa de membros (members_v7) para refletir as novas funções imediatamente na UI
+                  const updatedMap = await loadData<MemberMap>(ministryId, 'members_v7', {});
+                  setMembers(updatedMap);
               }
           }
       } else {
@@ -869,7 +884,11 @@ const AppContent = () => {
                         </thead>
                         <tbody className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
                             {filteredMembers.map(member => {
-                                const assignedRoles = getMemberRoles(member.name);
+                                // Priority: Profile Roles (member.roles) -> Manual Map (getMemberRoles)
+                                const assignedRoles = (member.roles && member.roles.length > 0) 
+                                    ? member.roles 
+                                    : getMemberRoles(member.name);
+
                                 // Verifica se é um membro "fantasma" (sem ID oficial de banco de dados ou email)
                                 const isGhost = member.id.startsWith('sys-'); 
 
@@ -1013,7 +1032,13 @@ const AppContent = () => {
         {currentTab === 'events' && (
           <EventsScreen customEvents={customEvents} setCustomEvents={setCustomEvents} currentMonth={currentMonth} onMonthChange={setCurrentMonth} />
         )}
-        {currentTab === 'profile' && <ProfileScreen user={currentUser} onUpdateProfile={handleUpdateProfile} />}
+        {currentTab === 'profile' && (
+            <ProfileScreen 
+                user={currentUser} 
+                onUpdateProfile={handleUpdateProfile} 
+                availableRoles={roles}
+            />
+        )}
         {currentTab === 'stats' && renderStats()}
         {currentTab === 'logs' && renderLogs()}
       </div>

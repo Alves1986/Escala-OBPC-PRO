@@ -1,18 +1,20 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { User } from '../types';
-import { User as UserIcon, Mail, Hash, Briefcase, Save, Key, Camera, Image as ImageIcon } from 'lucide-react';
+import { User as UserIcon, Mail, Hash, Briefcase, Save, Key, Camera, Image as ImageIcon, Check } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface Props {
   user: User;
-  onUpdateProfile: (name: string, whatsapp: string, avatar_url?: string) => Promise<void>;
+  onUpdateProfile: (name: string, whatsapp: string, avatar_url?: string, functions?: string[]) => Promise<void>;
+  availableRoles?: string[];
 }
 
-export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile }) => {
+export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availableRoles = [] }) => {
   const [name, setName] = useState(user.name);
   const [whatsapp, setWhatsapp] = useState(user.whatsapp || '');
   const [avatar, setAvatar] = useState(user.avatar_url || '');
+  const [selectedFunctions, setSelectedFunctions] = useState<string[]>(user.functions || []);
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { addToast } = useToast();
@@ -21,6 +23,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile }) => {
     setName(user.name);
     setWhatsapp(user.whatsapp || '');
     setAvatar(user.avatar_url || '');
+    setSelectedFunctions(user.functions || []);
   }, [user]);
 
   const compressImage = (file: File): Promise<string> => {
@@ -81,13 +84,21 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile }) => {
     }
   };
 
+  const toggleFunction = (role: string) => {
+      if (selectedFunctions.includes(role)) {
+          setSelectedFunctions(selectedFunctions.filter(r => r !== role));
+      } else {
+          setSelectedFunctions([...selectedFunctions, role]);
+      }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return addToast("O nome é obrigatório", "error");
     
     setLoading(true);
     try {
-      await onUpdateProfile(name, whatsapp, avatar);
+      await onUpdateProfile(name, whatsapp, avatar, selectedFunctions);
     } catch (e) {
       addToast("Erro ao atualizar perfil", "error");
     } finally {
@@ -197,6 +208,37 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile }) => {
                 />
               </div>
             </div>
+          </div>
+
+          <div className="space-y-3 pt-2">
+             <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
+                Minhas Funções
+                <span className="text-[10px] font-normal lowercase opacity-70">(O que você faz na equipe?)</span>
+             </label>
+             <div className="p-4 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-700">
+                <div className="flex flex-wrap gap-2">
+                    {availableRoles.length === 0 ? (
+                        <span className="text-zinc-400 text-sm italic">Nenhuma função configurada no sistema.</span>
+                    ) : availableRoles.map(role => {
+                        const isSelected = selectedFunctions.includes(role);
+                        return (
+                            <button
+                                key={role}
+                                type="button"
+                                onClick={() => toggleFunction(role)}
+                                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 ${
+                                    isSelected 
+                                    ? 'bg-blue-600 text-white border-blue-500 shadow-md shadow-blue-900/20' 
+                                    : 'bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-zinc-400'
+                                }`}
+                            >
+                                {role}
+                                {isSelected && <Check size={12} />}
+                            </button>
+                        );
+                    })}
+                </div>
+             </div>
           </div>
 
           <button 
