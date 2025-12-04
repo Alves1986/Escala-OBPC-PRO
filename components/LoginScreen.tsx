@@ -1,7 +1,7 @@
 
-import React, { useState } from 'react';
-import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, ShieldCheck, UserPlus, ArrowLeft, CheckCircle2, ChevronDown, Check } from 'lucide-react';
-import { loginWithEmail, registerWithEmail } from '../services/supabaseService';
+import React, { useState, useEffect } from 'react';
+import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, ShieldCheck, UserPlus, ArrowLeft, Check, ChevronDown } from 'lucide-react';
+import { loginWithEmail, registerWithEmail, loadData } from '../services/supabaseService';
 import { User } from '../types';
 
 interface Props {
@@ -11,20 +11,15 @@ interface Props {
 
 // Configuração dos Ministérios Disponíveis
 const MINISTRIES = [
-  { id: 'midia', label: 'Mídia / Projeção' },
-  { id: 'louvor', label: 'Louvor / Banda' },
-  { id: 'infantil', label: 'Ministério Infantil' },
-  { id: 'diaconia', label: 'Diaconia / Recepção' },
-  { id: 'teatro', label: 'Teatro / Artes' }
+  { id: 'midia', label: 'Mídia / Comunicação' },
+  { id: 'louvor', label: 'Louvor / Adoração' }
 ];
 
-// Configuração das Funções por Ministério
-const ROLES_BY_MINISTRY: Record<string, string[]> = {
-  'midia': ['Projeção', 'Transmissão', 'Fotografia', 'Storys', 'Som', 'Iluminação', 'Design'],
-  'louvor': ['Vocal', 'Violão', 'Teclado', 'Bateria', 'Baixo', 'Guitarra', 'Sax', 'Violino'],
-  'infantil': ['Professor(a)', 'Monitor(a)', 'Apoio', 'Berçário'],
-  'diaconia': ['Recepção', 'Portaria', 'Estacionamento', 'Ceia'],
-  'teatro': ['Ator/Atriz', 'Roteiro', 'Figurino', 'Maquiagem']
+// Configuração Padrão das Funções por Ministério
+// OBS: O sistema tentará carregar funções atualizadas do banco de dados se existirem
+const DEFAULT_ROLES: Record<string, string[]> = {
+  'midia': ['Projeção', 'Transmissão', 'Fotografia', 'Storys'],
+  'louvor': ['Ministro', 'Vocal', 'Guitarra', 'Baixo', 'Teclado', 'Bateria', 'Dança', 'Mesa de Som']
 };
 
 export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
@@ -42,10 +37,50 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
   const [regMinistryId, setRegMinistryId] = useState(""); // Stores the ID (e.g., 'midia')
   const [regSelectedRoles, setRegSelectedRoles] = useState<string[]>([]);
   
+  // Dynamic Roles State
+  const [availableRoles, setAvailableRoles] = useState<string[]>([]);
+  const [loadingRoles, setLoadingRoles] = useState(false);
+  
   // UI State
   const [localLoading, setLocalLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+
+  // Effect to load dynamic roles when ministry changes
+  useEffect(() => {
+    async function fetchDynamicRoles() {
+        if (!regMinistryId) {
+            setAvailableRoles([]);
+            return;
+        }
+
+        setLoadingRoles(true);
+        const defaults = DEFAULT_ROLES[regMinistryId] || [];
+        
+        // Define as padrão imediatamente para não deixar o usuário esperando
+        setAvailableRoles(defaults);
+        setRegSelectedRoles([]); // Limpa seleção anterior
+
+        try {
+            // Tenta buscar configurações salvas no banco (caso o admin tenha criado novas funções)
+            // Se falhar ou não tiver internet, mantém os defaults
+            const dynamicRoles = await loadData<string[]>(regMinistryId, 'functions_config', defaults);
+            
+            // Atualiza apenas se houver diferença
+            if (JSON.stringify(dynamicRoles) !== JSON.stringify(defaults)) {
+                setAvailableRoles(dynamicRoles);
+            }
+        } catch (e) {
+            console.warn("Usando funções padrão (offline ou erro)");
+        } finally {
+            setLoadingRoles(false);
+        }
+    }
+
+    if (view === 'register') {
+        fetchDynamicRoles();
+    }
+  }, [regMinistryId, view]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,13 +248,12 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                   </div>
 
                   <div className="space-y-1">
-                      <label className="text-[10px] uppercase text-zinc-500 font-bold">ID do Ministério (Equipe)</label>
+                      <label className="text-[10px] uppercase text-zinc-500 font-bold">Ministério (Equipe)</label>
                       <div className="relative">
                         <select
                           value={regMinistryId}
                           onChange={(e) => {
                             setRegMinistryId(e.target.value);
-                            setRegSelectedRoles([]); // Limpa as funções ao mudar o ministério
                           }}
                           className="w-full bg-zinc-950 border border-zinc-800 focus:border-blue-600 text-white rounded-lg py-2 px-3 text-sm appearance-none outline-none"
                         >
@@ -232,30 +266,38 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                       </div>
                   </div>
 
-                  {/* Seletor de Funções (Aparece apenas quando o ministério é selecionado) */}
-                  {regMinistryId && ROLES_BY_MINISTRY[regMinistryId] && (
+                  {/* Seletor de Funções Dinâmico */}
+                  {regMinistryId && (
                     <div className="space-y-1 animate-fade-in">
-                       <label className="text-[10px] uppercase text-zinc-500 font-bold">Suas Funções (Selecione 1 ou mais)</label>
-                       <div className="flex flex-wrap gap-2 mt-1">
-                          {ROLES_BY_MINISTRY[regMinistryId].map(role => {
-                             const isSelected = regSelectedRoles.includes(role);
-                             return (
-                               <button
-                                 key={role}
-                                 type="button"
-                                 onClick={() => toggleRole(role)}
-                                 className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 ${
-                                   isSelected 
-                                     ? 'bg-blue-600 text-white border-blue-500 shadow-md shadow-blue-900/20' 
-                                     : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:border-zinc-700'
-                                 }`}
-                               >
-                                 {role}
-                                 {isSelected && <Check size={12} />}
-                               </button>
-                             )
-                          })}
-                       </div>
+                       <label className="text-[10px] uppercase text-zinc-500 font-bold flex justify-between">
+                         Suas Funções
+                         {loadingRoles && <Loader2 size={12} className="animate-spin text-blue-500"/>}
+                       </label>
+                       
+                       {availableRoles.length > 0 ? (
+                         <div className="flex flex-wrap gap-2 mt-1">
+                            {availableRoles.map(role => {
+                               const isSelected = regSelectedRoles.includes(role);
+                               return (
+                                 <button
+                                   key={role}
+                                   type="button"
+                                   onClick={() => toggleRole(role)}
+                                   className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 ${
+                                     isSelected 
+                                       ? 'bg-blue-600 text-white border-blue-500 shadow-md shadow-blue-900/20' 
+                                       : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:border-zinc-700'
+                                   }`}
+                                 >
+                                   {role}
+                                   {isSelected && <Check size={12} />}
+                                 </button>
+                               )
+                            })}
+                         </div>
+                       ) : (
+                         <div className="text-xs text-zinc-500 italic p-2">Nenhuma função configurada para esta equipe.</div>
+                       )}
                     </div>
                   )}
 

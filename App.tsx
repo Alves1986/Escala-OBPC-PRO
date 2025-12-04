@@ -36,7 +36,8 @@ import {
   Phone,
   UserCircle2,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Share2
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -213,7 +214,6 @@ const AppContent = () => {
   };
 
   // --- DATA LOADING & SAVING ---
-  // dependência adicionada currentUser para garantir que o self-heal tenha acesso aos dados do usuário
   useEffect(() => {
     if (ministryId) {
       setLoading(true);
@@ -236,8 +236,6 @@ const AppContent = () => {
           setSchedule(s); setAttendance(a); setCustomEvents(c); setIgnoredEvents(ig); setAvailability(av); setRoles(r); setAuditLog(lg); setTheme(th); setNotifications(notif); setRegisteredMembers(regMem);
           setIsConnected(true);
 
-          // LÓGICA DE AUTO-CORREÇÃO (SELF-HEALING)
-          // Verifica se o usuário atual está na lista. Se não, adiciona-o automaticamente.
           if (currentUser && currentUser.email) {
              const isInList = regMem.some(mem => 
                 (mem.email && mem.email.toLowerCase() === currentUser.email?.toLowerCase()) || 
@@ -245,7 +243,6 @@ const AppContent = () => {
              );
 
              if (!isInList) {
-                 console.log("Usuário não encontrado na lista oficial. Sincronizando automaticamente...");
                  syncMemberProfile(ministryId, currentUser).then(newList => {
                      if (newList.length > 0) setRegisteredMembers(newList);
                  });
@@ -257,48 +254,35 @@ const AppContent = () => {
       };
       loadAll();
     }
-  }, [ministryId, currentUser]); // Adicionado currentUser para trigger do self-heal
+  }, [ministryId, currentUser]);
 
-  // --- BACKGROUND SYNC & REALTIME POLLING ---
+  // --- BACKGROUND SYNC ---
   useEffect(() => {
     if (!ministryId) return;
 
     const runSync = async () => {
        try {
-          // 1. Notificações (Global - Sempre verifica)
           const remoteNotifs = await loadData<AppNotification[]>(ministryId, 'notifications_v1', []);
           setNotifications(current => {
-             // Se houver novas notificações (baseado no ID da mais recente), exibe toast
              if (remoteNotifs.length > 0) {
                  const latestRemote = remoteNotifs[0];
                  const latestLocal = current.length > 0 ? current[0] : null;
-                 
-                 // Se é diferente do que temos e não lida
                  if ((!latestLocal || latestRemote.id !== latestLocal.id) && !latestRemote.read) {
-                     // Exibe alerta visual flutuante
                      setTimeout(() => addToast(latestRemote.title, 'info'), 100);
                  }
-                 // Atualiza estado se houve mudança no array
-                 if (JSON.stringify(current) !== JSON.stringify(remoteNotifs)) {
-                     return remoteNotifs;
-                 }
+                 if (JSON.stringify(current) !== JSON.stringify(remoteNotifs)) return remoteNotifs;
              }
              return current;
           });
 
-          // 2. Membros e Disponibilidade (Apenas na aba Team ou quando necessário)
-          // Atualiza a lista pública se estivermos na aba de equipe para ver novos cadastros
           if (currentTab === 'team') {
              const remoteMembers = await loadData<TeamMemberProfile[]>(ministryId, 'public_members_list', []);
              if (remoteMembers.length > 0) {
                  setRegisteredMembers(current => {
-                    if (JSON.stringify(current) !== JSON.stringify(remoteMembers)) {
-                        return remoteMembers;
-                    }
+                    if (JSON.stringify(current) !== JSON.stringify(remoteMembers)) return remoteMembers;
                     return current;
                  });
              }
-             // Também atualiza disponibilidade para ver mudanças de status
              const remoteAvail = await loadData<AvailabilityMap>(ministryId, 'availability_v1', {});
              setAvailability(current => {
                  if (JSON.stringify(current) !== JSON.stringify(remoteAvail)) return remoteAvail;
@@ -309,11 +293,7 @@ const AppContent = () => {
           console.error("Erro no sync de background", e);
        }
     };
-
-    // Executa imediatamente ao mudar aba/ministério
     runSync();
-
-    // Polling a cada 15s para garantir que novos dados cheguem
     const timer = setInterval(runSync, 15000);
     return () => clearInterval(timer);
   }, [ministryId, currentTab]); 
@@ -347,16 +327,6 @@ const AppContent = () => {
 
     if (today === eventDate && lastNotified !== nextEvent.iso) {
       addToast(`Hoje tem ${nextEvent.title}! Envie a escala.`, 'info');
-      
-      if ('Notification' in window && Notification.permission === 'granted') {
-        navigator.serviceWorker.ready.then(registration => {
-          registration.showNotification("Hoje tem Escala!", {
-            body: `Não esqueça de enviar a escala do evento: ${nextEvent.title}`,
-            icon: '/app-icon.png',
-            vibrate: [200, 100, 200]
-          } as any);
-        });
-      }
       localStorage.setItem('last_notified_event', nextEvent.iso);
     }
   }, [nextEvent]);
@@ -372,7 +342,6 @@ const AppContent = () => {
           if (currentUser) {
               const updatedUser = { ...currentUser, name, whatsapp, avatar_url };
               setCurrentUser(updatedUser);
-              // Atualiza na lista local também para refletir imediatamente
               if (ministryId) {
                   const newList = await syncMemberProfile(ministryId, updatedUser);
                   setRegisteredMembers(newList);
@@ -405,17 +374,14 @@ const AppContent = () => {
     finally { setLoading(false); }
   };
   
-  // Notification Wrapper
   const notify = async (type: 'info' | 'success' | 'warning' | 'alert', title: string, message: string) => {
       if (ministryId) {
           await sendNotification(ministryId, { type, title, message });
-          // Atualiza localmente para ver imediatamente
           const newNotif: AppNotification = { id: Date.now().toString(), timestamp: new Date().toISOString(), read: false, type, title, message };
           setNotifications(prev => [newNotif, ...prev]);
       }
   };
 
-  // --- ACTIONS ---
   const updateCell = (key: string, value: string) => {
     setSchedule(prev => ({ ...prev, [key]: value }));
     if (attendance[key]) {
@@ -435,11 +401,9 @@ const AppContent = () => {
     
     if (newVal) {
         addToast("Presença confirmada", "success");
-        // Notifica o líder apenas se for confirmação
         const memberName = schedule[key] || "Alguém";
         const [iso, role] = key.split('_');
         const dateDisplay = iso.split('T')[0].split('-').reverse().join('/');
-        
         notify('success', 'Presença Confirmada', `${memberName} confirmou presença para o dia ${dateDisplay} (${role}).`);
     } else {
         addToast("Confirmação removida", "info");
@@ -454,9 +418,7 @@ const AppContent = () => {
     setAttendance(newAtt);
     saveData(mid, 'attendance_v1', newAtt);
     addToast("Presença confirmada!", "success");
-    
     notify('success', 'Presença Confirmada (Link)', `${memberName} confirmou presença via link para ${date}.`);
-    
     setConfirmationData(null);
   };
   
@@ -465,11 +427,48 @@ const AppContent = () => {
       addToast("Solicitação de troca enviada ao líder.", "success");
   };
 
-  // --- EVENT UPDATE LOGIC ---
+  const handleShareNextEvent = () => {
+     if (!nextEvent) return;
+     
+     const assigned: { role: string; name: string; key: string }[] = [];
+     roles.forEach(role => {
+       const key = `${nextEvent.iso}_${role}`;
+       const member = schedule[key];
+       if (member) assigned.push({ role, name: member, key });
+     });
+
+     const url = new URL(window.location.href);
+     url.search = ''; 
+     url.hash = '';
+     
+     const time = nextEvent.iso.split('T')[1];
+
+     let text = `📢 PRÓXIMO EVENTO - MINISTÉRIO DE MÍDIA 📢\n\n`;
+     text += `🗓 ${nextEvent.title}\n`;
+     text += `🕒 Data: ${nextEvent.dateDisplay} às ${time}\n\n`;
+     text += `👥 Equipe Escalada:\n`;
+     
+     if (assigned.length === 0) {
+       text += `_(Ninguém escalado ainda)_\n`;
+     } else {
+       assigned.forEach(t => {
+         url.searchParams.set('a', 'c');
+         url.searchParams.set('k', t.key);
+         url.searchParams.set('n', t.name);
+         const confirmLink = url.toString();
+         text += `▪ ${t.role}: ${t.name}\n`;
+         text += `   🔗 Confirme: <${confirmLink}>\n\n`;
+       });
+     }
+     text += `🙏🏻 Deus Abençoe a Todos, tenham um ótimo culto.`;
+     
+     const waUrl = new URL("https://wa.me/");
+     waUrl.searchParams.set("text", text);
+     window.open(waUrl.toString(), "_blank");
+  };
+
   const handleUpdateEvent = (oldIso: string, newTitle: string, newTime: string) => {
     if (!ministryId) return;
-    
-    // 1. Calculate new ISO
     const datePart = oldIso.split('T')[0];
     const newIso = `${datePart}T${newTime}`;
 
@@ -477,19 +476,13 @@ const AppContent = () => {
         setSelectedEvent(null);
         return;
     }
-
-    // 2. Logic to update event list
-    // Check if it's already a custom event
     const existingCustom = customEvents.find(c => `${c.date}T${c.time}` === oldIso);
-    
     let newCustomEvents = [...customEvents];
     let newIgnored = [...ignoredEvents];
 
     if (existingCustom) {
-        // Update existing custom event
         newCustomEvents = customEvents.map(c => c.id === existingCustom.id ? { ...c, time: newTime, title: newTitle } : c);
     } else {
-        // It's a generated default event. Hide it and create a custom override
         newIgnored.push(oldIso);
         newCustomEvents.push({
             id: Date.now().toString(),
@@ -504,36 +497,22 @@ const AppContent = () => {
     saveData(ministryId, 'custom_events_v1', newCustomEvents);
     saveData(ministryId, 'ignored_events_v1', newIgnored);
 
-    // 3. Migrate Schedule and Attendance Data
     const newSchedule = { ...schedule };
     const newAttendance = { ...attendance };
-    
     roles.forEach(role => {
         const oldKey = `${oldIso}_${role}`;
         const newKey = `${newIso}_${role}`;
-        
-        // Migrate schedule
-        if (newSchedule[oldKey]) {
-            newSchedule[newKey] = newSchedule[oldKey];
-            delete newSchedule[oldKey];
-        }
-        
-        // Migrate attendance
-        if (newAttendance[oldKey]) {
-            newAttendance[newKey] = newAttendance[oldKey];
-            delete newAttendance[oldKey];
-        }
+        if (newSchedule[oldKey]) { newSchedule[newKey] = newSchedule[oldKey]; delete newSchedule[oldKey]; }
+        if (newAttendance[oldKey]) { newAttendance[newKey] = newAttendance[oldKey]; delete newAttendance[oldKey]; }
     });
 
     setSchedule(newSchedule);
     setAttendance(newAttendance);
     saveData(ministryId, 'escala_full_v7', newSchedule);
     saveData(ministryId, 'attendance_v1', newAttendance);
-
     addToast("Evento e horários atualizados!", "success");
     setSelectedEvent(null);
   };
-
 
   const exportPDF = (memberFilter?: string) => {
     const doc = new jsPDF('landscape'); 
@@ -541,42 +520,14 @@ const AppContent = () => {
     const dateObj = new Date(y, m - 1);
     const monthFull = dateObj.toLocaleDateString('pt-BR', { month: 'long' });
     const title = `Escala - ${monthFull.charAt(0).toUpperCase() + monthFull.slice(1)} de ${y}`;
-    
-    doc.setFontSize(18);
-    doc.setTextColor(40, 40, 40); 
-    doc.text(title, 14, 15);
-    
+    doc.setFontSize(18); doc.setTextColor(40, 40, 40); doc.text(title, 14, 15);
     const head = [['Data', 'Evento', ...roles]];
-    const body = visibleEvents.map(evt => {
-      const row = [
-        evt.dateDisplay,
-        evt.title,
-        ...roles.map(r => schedule[`${evt.iso}_${r}`] || '-')
-      ];
-      return row;
-    });
-
-    if (memberFilter) {
-       doc.setFontSize(12);
-       doc.setTextColor(80, 80, 80);
-       doc.text(`Filtro: ${memberFilter}`, 14, 22);
-    }
-
-    autoTable(doc, {
-      startY: 25,
-      head: head,
-      body: body,
-      theme: 'grid',
-      styles: { fontSize: 10, cellPadding: 3, lineColor: [220, 220, 220], lineWidth: 0.1 },
-      headStyles: { fillColor: [26, 188, 156], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'left' },
-      bodyStyles: { textColor: [50, 50, 50] },
-      alternateRowStyles: { fillColor: [245, 245, 245] }
-    });
-
+    const body = visibleEvents.map(evt => [evt.dateDisplay, evt.title, ...roles.map(r => schedule[`${evt.iso}_${r}`] || '-')]);
+    if (memberFilter) { doc.setFontSize(12); doc.setTextColor(80, 80, 80); doc.text(`Filtro: ${memberFilter}`, 14, 22); }
+    autoTable(doc, { startY: 25, head: head, body: body, theme: 'grid', styles: { fontSize: 10, cellPadding: 3 }, headStyles: { fillColor: [26, 188, 156], textColor: [255, 255, 255] } });
     doc.save(`Escala_${currentMonth}.pdf`);
   };
 
-  // --- AI ---
   const generateAI = async () => {
     const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY as string | undefined;
     if (!apiKey) return addToast("Chave API não configurada", "error");
@@ -601,11 +552,7 @@ const AppContent = () => {
        const response = await genAI.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: "application/json" } });
        if (response.text) setScheduleIssues(JSON.parse(response.text));
        addToast("Análise concluída!", "success");
-     } catch (e) { 
-        addToast("Erro na análise.", "error"); 
-     } finally { 
-        setLoading(false); 
-     }
+     } catch (e) { addToast("Erro na análise.", "error"); } finally { setLoading(false); }
   };
 
   // --- RENDER VIEWS ---
@@ -631,11 +578,6 @@ const AppContent = () => {
       {nextEvent ? (
         <NextEventCard 
           event={nextEvent} schedule={schedule} attendance={attendance} roles={roles}
-          onShare={(txt) => { 
-             const url = new URL("https://wa.me/");
-             url.searchParams.set("text", txt);
-             window.open(url.toString(), "_blank");
-          }}
           onConfirm={(key) => { 
               const mid = ministryId; 
               if (!mid) return; 
@@ -657,7 +599,7 @@ const AppContent = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
          <div className="bg-white dark:bg-zinc-800 p-5 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700">
             <h3 className="text-xs font-bold text-zinc-500 uppercase mb-2">Eventos no Mês</h3>
             <p className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">{visibleEvents.length}</p>
@@ -665,13 +607,6 @@ const AppContent = () => {
          <div className="bg-white dark:bg-zinc-800 p-5 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700">
             <h3 className="text-xs font-bold text-zinc-500 uppercase mb-2">Membros Ativos</h3>
             <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">{allMembersList.length}</p>
-         </div>
-         <div className="bg-white dark:bg-zinc-800 p-5 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 flex flex-col justify-center gap-2">
-            <h3 className="text-xs font-bold text-zinc-500 uppercase">Ações Rápidas</h3>
-            <div className="flex gap-2">
-              <button onClick={() => setCurrentTab('editor')} className="flex-1 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 p-2 rounded text-xs font-bold">Editar Escala</button>
-              <button onClick={() => setCurrentTab('stats')} className="flex-1 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 p-2 rounded text-xs font-bold">Ver Relatórios</button>
-            </div>
          </div>
       </div>
     </div>
@@ -698,7 +633,6 @@ const AppContent = () => {
                   roles.forEach(r => { const w = schedule[`${evt.iso}_${r}`]; if(w) text += `   ▪ ${r}: ${w}\n`; });
                   text += `\n`;
                 });
-                
                 const url = new URL("https://wa.me/");
                 url.searchParams.set("text", text);
                 window.open(url.toString(), "_blank");
@@ -713,7 +647,7 @@ const AppContent = () => {
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a'); a.href = url; a.download = `escala.csv`; a.click();
              }}
-             onImportCSV={() => {}} // Simple placeholder
+             onImportCSV={() => {}} 
              onClearMonth={() => { if(confirm("Limpar mês?")) { const ns = {...schedule}; Object.keys(ns).forEach(k => k.startsWith(currentMonth) && delete ns[k]); setSchedule(ns); } }}
              allMembers={allMembersList}
            />
@@ -721,6 +655,27 @@ const AppContent = () => {
          </div>
       </div>
       
+      {/* ADMIN SHARE ACTION FOR NEXT EVENT */}
+      {nextEvent && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-100 dark:border-blue-800 p-4 rounded-xl flex items-center justify-between shadow-sm">
+           <div className="flex items-center gap-3">
+              <div className="bg-blue-100 dark:bg-blue-900/40 p-2 rounded-lg text-blue-600 dark:text-blue-400">
+                  <Share2 size={20} />
+              </div>
+              <div>
+                  <h3 className="font-bold text-blue-800 dark:text-blue-200 text-sm">Próximo Evento: {nextEvent.title}</h3>
+                  <p className="text-xs text-blue-600 dark:text-blue-400">{nextEvent.dateDisplay} • Enviar escala para equipe</p>
+              </div>
+           </div>
+           <button 
+             onClick={handleShareNextEvent}
+             className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-md shadow-green-600/20 flex items-center gap-2 transition-transform active:scale-95"
+           >
+              <Share2 size={14}/> Enviar no WhatsApp
+           </button>
+        </div>
+      )}
+
       <div className="flex-1 overflow-auto bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700">
          <ScheduleTable 
             events={visibleEvents} roles={roles} schedule={schedule} attendance={attendance} availability={availability} members={members} scheduleIssues={scheduleIssues} memberStats={memberStats}
@@ -732,7 +687,7 @@ const AppContent = () => {
 
   const renderCalendar = () => {
     const daysInMonth = new Date(year, month, 0).getDate();
-    const firstDay = new Date(year, month - 1, 1).getDay(); // 0-6
+    const firstDay = new Date(year, month - 1, 1).getDay(); 
     const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
     return (
@@ -741,7 +696,6 @@ const AppContent = () => {
              <h2 className="text-2xl font-bold text-zinc-800 dark:text-white">Calendário</h2>
              {renderMonthSelector()}
           </div>
-          
           <div className="grid grid-cols-7 gap-4">
              {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
                 <div key={d} className="text-center text-sm font-bold text-zinc-500 uppercase py-2">{d}</div>
@@ -751,7 +705,6 @@ const AppContent = () => {
                const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
                const dayEvents = visibleEvents.filter(e => e.iso.startsWith(dateStr));
                const isToday = new Date().toISOString().startsWith(dateStr);
-
                return (
                  <div key={day} className={`min-h-[100px] bg-white dark:bg-zinc-800 rounded-xl p-3 border ${isToday ? 'border-blue-500 ring-1 ring-blue-500' : 'border-zinc-200 dark:border-zinc-700'} relative`}>
                     <span className={`text-sm font-bold ${isToday ? 'text-blue-500' : 'text-zinc-700 dark:text-zinc-300'}`}>{day}</span>
@@ -778,41 +731,26 @@ const AppContent = () => {
   };
 
   const renderTeam = () => {
-    // Helper to check what roles a member is assigned to in the scheduler
     const getMemberRoles = (memberName: string) => {
         const assignedRoles: string[] = [];
-        Object.keys(members).forEach(role => {
-            if (members[role].includes(memberName)) {
-                assignedRoles.push(role);
-            }
-        });
+        Object.keys(members).forEach(role => { if (members[role].includes(memberName)) assignedRoles.push(role); });
         return assignedRoles;
     };
-
     const filteredMembers = registeredMembers
         .filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()) || m.email?.toLowerCase().includes(memberSearch.toLowerCase()))
         .sort((a, b) => a.name.localeCompare(b.name));
-    
-    // Ghost members: found in allMembersList but not in registeredMembers
     const ghostMembers = allMembersList.filter(name => !registeredMembers.some(rm => rm.name === name));
     
-    // Função manual de refresh
     const handleRefreshList = async () => {
         if (!ministryId) return;
         setLoading(true);
-        // Recarrega TUDO para garantir consistência
         const [regMem, av, notif] = await Promise.all([
              loadData<TeamMemberProfile[]>(ministryId, 'public_members_list', []),
              loadData<AvailabilityMap>(ministryId, 'availability_v1', {}),
              loadData<AppNotification[]>(ministryId, 'notifications_v1', [])
         ]);
-        
-        setRegisteredMembers(regMem);
-        setAvailability(av);
-        setNotifications(notif);
-
-        setLoading(false);
-        addToast("Dados sincronizados!", "success");
+        setRegisteredMembers(regMem); setAvailability(av); setNotifications(notif);
+        setLoading(false); addToast("Dados sincronizados!", "success");
     };
 
     return (
@@ -823,54 +761,26 @@ const AppContent = () => {
             <p className="text-zinc-500 text-sm">Lista de usuários cadastrados e membros ativos no sistema.</p>
          </div>
          <div className="flex gap-2 w-full md:w-auto">
-            <button 
-                onClick={handleRefreshList} 
-                disabled={loading}
-                className="bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 p-2.5 rounded-lg transition-colors border border-blue-100 dark:border-blue-900/30"
-                title="Atualizar Lista"
-            >
-                <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
-            </button>
+            <button onClick={handleRefreshList} disabled={loading} className="bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 p-2.5 rounded-lg transition-colors border border-blue-100 dark:border-blue-900/30" title="Atualizar Lista"><RefreshCw size={18} className={loading ? "animate-spin" : ""} /></button>
             <div className="relative w-full md:w-72">
                 <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-                <input 
-                    type="text" 
-                    placeholder="Buscar membro..." 
-                    value={memberSearch}
-                    onChange={(e) => setMemberSearch(e.target.value)}
-                    className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-10 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                />
+                <input type="text" placeholder="Buscar membro..." value={memberSearch} onChange={(e) => setMemberSearch(e.target.value)} className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-10 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
             </div>
-             <button 
-                onClick={() => setRoles([...roles])} // Just a trigger to show modal or simple add. In this version, we focus on the list.
-                className="hidden md:flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 px-4 py-2 rounded-lg font-medium text-sm transition-colors border border-zinc-200 dark:border-zinc-700"
-                title="Gerenciar Funções"
-             >
-                <Settings size={18} />
-             </button>
+             <button onClick={() => setRoles([...roles])} className="hidden md:flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 px-4 py-2 rounded-lg font-medium text-sm transition-colors border border-zinc-200 dark:border-zinc-700" title="Gerenciar Funções"><Settings size={18} /></button>
          </div>
       </div>
-
       <div className="space-y-6">
-          {/* LISTA OFICIAL (CADASTRADOS) */}
           <div className="bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden">
              <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50">
                  <h3 className="text-xs font-bold text-zinc-500 uppercase">Membros Cadastrados (Login Ativo)</h3>
              </div>
              {filteredMembers.length === 0 ? (
-                <div className="p-8 text-center text-zinc-500">
-                    <Users size={32} className="mx-auto mb-2 opacity-20" />
-                    <p>Nenhum membro cadastrado encontrado.</p>
-                </div>
+                <div className="p-8 text-center text-zinc-500"><Users size={32} className="mx-auto mb-2 opacity-20" /><p>Nenhum membro cadastrado encontrado.</p></div>
              ) : (
                  <div className="overflow-x-auto">
                     <table className="w-full text-left">
                         <thead className="bg-zinc-50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-700 text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                            <tr>
-                                <th className="px-6 py-3">Membro</th>
-                                <th className="px-6 py-3">Contato</th>
-                                <th className="px-6 py-3">Funções</th>
-                            </tr>
+                            <tr><th className="px-6 py-3">Membro</th><th className="px-6 py-3">Contato</th><th className="px-6 py-3">Funções</th></tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
                             {filteredMembers.map(member => {
@@ -879,42 +789,19 @@ const AppContent = () => {
                                     <tr key={member.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-4">
-                                                {member.avatar_url ? (
-                                                    <img src={member.avatar_url} alt={member.name} className="w-10 h-10 rounded-full object-cover border border-zinc-200 dark:border-zinc-700" />
-                                                ) : (
-                                                    <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-                                                        <span className="font-bold text-sm">{member.name.charAt(0).toUpperCase()}</span>
-                                                    </div>
-                                                )}
-                                                <div>
-                                                    <div className="font-bold text-zinc-900 dark:text-zinc-100">{member.name}</div>
-                                                    <div className="text-xs text-zinc-500">ID: {member.id.substring(0, 8)}...</div>
-                                                </div>
+                                                {member.avatar_url ? <img src={member.avatar_url} alt={member.name} className="w-10 h-10 rounded-full object-cover border border-zinc-200 dark:border-zinc-700" /> : <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center"><span className="font-bold text-sm">{member.name.charAt(0).toUpperCase()}</span></div>}
+                                                <div><div className="font-bold text-zinc-900 dark:text-zinc-100">{member.name}</div><div className="text-xs text-zinc-500">ID: {member.id.substring(0, 8)}...</div></div>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="space-y-1">
-                                                {member.email && (
-                                                    <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
-                                                        <Mail size={14} className="opacity-50" /> {member.email}
-                                                    </div>
-                                                )}
-                                                {member.whatsapp && (
-                                                    <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
-                                                        <Phone size={14} className="opacity-50" /> {member.whatsapp}
-                                                    </div>
-                                                )}
+                                                {member.email && <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400"><Mail size={14} className="opacity-50" /> {member.email}</div>}
+                                                {member.whatsapp && <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400"><Phone size={14} className="opacity-50" /> {member.whatsapp}</div>}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex flex-wrap gap-2">
-                                                {assignedRoles.length > 0 ? assignedRoles.map(role => (
-                                                    <span key={role} className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-900/30">
-                                                        {role}
-                                                    </span>
-                                                )) : (
-                                                    <span className="text-zinc-400 text-xs italic">Sem função</span>
-                                                )}
+                                                {assignedRoles.length > 0 ? assignedRoles.map(role => <span key={role} className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-900/30">{role}</span>) : <span className="text-zinc-400 text-xs italic">Sem função</span>}
                                             </div>
                                         </td>
                                     </tr>
@@ -925,70 +812,25 @@ const AppContent = () => {
                  </div>
              )}
           </div>
-
-          {/* LISTA DE FANTASMAS (ATIVOS MAS SEM LOGIN OFICIAL SINCRONIZADO) */}
           {ghostMembers.length > 0 && (
               <div className="bg-amber-50 dark:bg-amber-900/10 rounded-xl shadow-sm border border-amber-200 dark:border-amber-900/30 overflow-hidden">
-                 <div className="px-6 py-4 border-b border-amber-200 dark:border-amber-900/30 bg-amber-100/50 dark:bg-amber-900/20 flex items-center gap-2">
-                     <AlertCircle size={16} className="text-amber-600 dark:text-amber-500"/>
-                     <h3 className="text-xs font-bold text-amber-700 dark:text-amber-500 uppercase">Outros Membros Ativos (Detectados no Sistema)</h3>
-                 </div>
-                 <div className="p-4">
-                    <p className="text-xs text-amber-600 dark:text-amber-400 mb-4">
-                        Estes membros têm dados no sistema (escalas ou disponibilidade salva) mas não foram encontrados na lista oficial de cadastros. 
-                        Isso pode ocorrer se eles usaram o sistema antes da atualização ou se houve falha na sincronização do perfil.
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {ghostMembers.map(name => (
-                            <div key={name} className="flex items-center justify-between p-3 bg-white dark:bg-zinc-800 rounded-lg border border-amber-100 dark:border-amber-900/20">
-                                <span className="font-bold text-zinc-700 dark:text-zinc-300">{name}</span>
-                                <span className="text-[10px] px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full font-bold">Não Sincronizado</span>
-                            </div>
-                        ))}
-                    </div>
-                 </div>
+                 <div className="px-6 py-4 border-b border-amber-200 dark:border-amber-900/30 bg-amber-100/50 dark:bg-amber-900/20 flex items-center gap-2"><AlertCircle size={16} className="text-amber-600 dark:text-amber-500"/><h3 className="text-xs font-bold text-amber-700 dark:text-amber-500 uppercase">Outros Membros Ativos (Detectados no Sistema)</h3></div>
+                 <div className="p-4"><p className="text-xs text-amber-600 dark:text-amber-400 mb-4">Estes membros têm dados no sistema (escalas ou disponibilidade salva) mas não foram encontrados na lista oficial de cadastros. Isso pode ocorrer se eles usaram o sistema antes da atualização ou se houve falha na sincronização do perfil.</p><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">{ghostMembers.map(name => (<div key={name} className="flex items-center justify-between p-3 bg-white dark:bg-zinc-800 rounded-lg border border-amber-100 dark:border-amber-900/20"><span className="font-bold text-zinc-700 dark:text-zinc-300">{name}</span><span className="text-[10px] px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full font-bold">Não Sincronizado</span></div>))}</div></div>
               </div>
           )}
       </div>
-
-      {/* Quick Add Roles for Context */}
       <div className="mt-8 border-t border-zinc-200 dark:border-zinc-700 pt-8">
          <h3 className="text-lg font-bold text-zinc-800 dark:text-white mb-4">Gerenciamento Rápido de Funções</h3>
          <div className="flex flex-wrap gap-4">
              {roles.map(role => (
                  <div key={role} className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 flex items-center justify-between min-w-[200px] shadow-sm">
                      <span className="font-medium text-sm text-zinc-700 dark:text-zinc-300">{role}</span>
-                     <div className="flex items-center gap-2">
-                         <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-400 text-xs px-2 py-1 rounded-full font-bold">
-                             {(members[role] || []).length}
-                         </span>
-                         <button 
-                            onClick={() => {
-                                confirmAction(
-                                "Remover Função",
-                                `Tem certeza que deseja remover a função "${role}"?`,
-                                () => setRoles(prev => prev.filter(r => r !== role))
-                                );
-                            }} 
-                            className="text-zinc-400 hover:text-red-500 p-1"
-                         >
-                            <Trash2 size={14}/>
-                         </button>
-                     </div>
+                     <div className="flex items-center gap-2"><span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-400 text-xs px-2 py-1 rounded-full font-bold">{(members[role] || []).length}</span><button onClick={() => { confirmAction("Remover Função", `Tem certeza que deseja remover a função "${role}"?`, () => setRoles(prev => prev.filter(r => r !== role))); }} className="text-zinc-400 hover:text-red-500 p-1"><Trash2 size={14}/></button></div>
                  </div>
              ))}
-             <div className="flex items-center bg-zinc-50 dark:bg-zinc-900 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg p-3 min-w-[200px]">
-                <input 
-                  type="text" 
-                  placeholder="+ Nova Função" 
-                  className="bg-transparent text-sm w-full outline-none text-zinc-700 dark:text-zinc-300 placeholder-zinc-400"
-                  onKeyDown={(e) => { if(e.key === 'Enter' && e.currentTarget.value) { setRoles([...roles, e.currentTarget.value]); e.currentTarget.value = ''; } }}
-                />
-             </div>
+             <div className="flex items-center bg-zinc-50 dark:bg-zinc-900 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg p-3 min-w-[200px]"><input type="text" placeholder="+ Nova Função" className="bg-transparent text-sm w-full outline-none text-zinc-700 dark:text-zinc-300 placeholder-zinc-400" onKeyDown={(e) => { if(e.key === 'Enter' && e.currentTarget.value) { setRoles([...roles, e.currentTarget.value]); e.currentTarget.value = ''; } }} /></div>
          </div>
-         <p className="text-xs text-zinc-400 mt-2">
-            * Para adicionar membros às funções, use a coluna "Funções na Escala" (lógica a ser implementada) ou adicione manualmente no editor.
-         </p>
+         <p className="text-xs text-zinc-400 mt-2">* Para adicionar membros às funções, use a coluna "Funções na Escala" (lógica a ser implementada) ou adicione manualmente no editor.</p>
       </div>
     </div>
     );
@@ -997,28 +839,19 @@ const AppContent = () => {
   const renderStats = () => {
     const data = Object.entries(memberStats).map(([name, count]) => ({ name, count: Number(count) })).sort((a, b) => b.count - a.count);
     const maxVal = Math.max(...data.map(d => d.count), 1);
-
     return (
        <div className="space-y-6 animate-fade-in max-w-4xl mx-auto">
          <div className="flex justify-between items-center border-b border-zinc-200 dark:border-zinc-700 pb-4">
-             <div>
-                <h2 className="text-2xl font-bold text-zinc-800 dark:text-white">Estatísticas</h2>
-                <p className="text-zinc-500 text-sm">Frequência da equipe no mês atual.</p>
-             </div>
+             <div><h2 className="text-2xl font-bold text-zinc-800 dark:text-white">Estatísticas</h2><p className="text-zinc-500 text-sm">Frequência da equipe no mês atual.</p></div>
              {renderMonthSelector()}
           </div>
-          
           <div className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 p-6 shadow-sm">
              {data.length === 0 ? <p className="text-center text-zinc-500 py-10">Sem dados para exibir.</p> : (
                 <div className="space-y-4">
                    {data.map((item, idx) => (
                       <div key={item.name} className="flex items-center gap-4">
                          <div className="w-32 text-sm font-medium text-zinc-600 dark:text-zinc-300 truncate text-right">{item.name}</div>
-                         <div className="flex-1 h-8 bg-zinc-100 dark:bg-zinc-700 rounded-lg overflow-hidden relative">
-                            <div className="h-full bg-indigo-500 flex items-center justify-end px-3 text-white font-bold text-xs transition-all duration-1000" style={{ width: `${(item.count / maxVal) * 100}%` }}>
-                               {item.count}
-                            </div>
-                         </div>
+                         <div className="flex-1 h-8 bg-zinc-100 dark:bg-zinc-700 rounded-lg overflow-hidden relative"><div className="h-full bg-indigo-500 flex items-center justify-end px-3 text-white font-bold text-xs transition-all duration-1000" style={{ width: `${(item.count / maxVal) * 100}%` }}>{item.count}</div></div>
                       </div>
                    ))}
                 </div>
@@ -1035,17 +868,13 @@ const AppContent = () => {
            {auditLog.map((log, idx) => (
               <div key={idx} className="flex gap-4 p-4 bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
                  <div className="text-xs font-bold text-zinc-500 w-24 pt-1">{log.date.split(' ')[0]}<br/>{log.date.split(' ')[1]}</div>
-                 <div>
-                    <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 mb-1">{log.action}</span>
-                    <p className="text-sm text-zinc-700 dark:text-zinc-300">{log.details}</p>
-                 </div>
+                 <div><span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 mb-1">{log.action}</span><p className="text-sm text-zinc-700 dark:text-zinc-300">{log.details}</p></div>
               </div>
            ))}
         </div>
      </div>
   );
 
-  // --- MAIN RENDER ---
   if (sessionLoading) return <div className="h-screen flex items-center justify-center bg-zinc-950 text-white"><LayoutDashboard className="animate-spin mr-2"/> Carregando...</div>;
   if (!currentUser || !ministryId) return <><LoginScreen isLoading={loading} /><ToastProvider>{null}</ToastProvider></>;
 
@@ -1062,61 +891,31 @@ const AppContent = () => {
         {currentTab === 'editor' && renderEditor()}
         {currentTab === 'calendar' && renderCalendar()}
         {currentTab === 'team' && renderTeam()}
-        
-        {/* Usando os novos componentes extraídos */}
         {currentTab === 'availability' && (
           <AvailabilityScreen 
-            availability={availability} 
-            setAvailability={setAvailability} 
-            allMembersList={allMembersList}
-            currentMonth={currentMonth}
-            onMonthChange={setCurrentMonth}
-            onNotify={(msg) => notify('info', 'Disponibilidade Atualizada', msg)}
-            currentUser={currentUser}
+            availability={availability} setAvailability={setAvailability} allMembersList={allMembersList}
+            currentMonth={currentMonth} onMonthChange={setCurrentMonth} onNotify={(msg) => notify('info', 'Disponibilidade Atualizada', msg)} currentUser={currentUser}
           />
         )}
-        
         {currentTab === 'events' && (
-          <EventsScreen 
-            customEvents={customEvents} 
-            setCustomEvents={setCustomEvents}
-            currentMonth={currentMonth}
-            onMonthChange={setCurrentMonth}
-          />
+          <EventsScreen customEvents={customEvents} setCustomEvents={setCustomEvents} currentMonth={currentMonth} onMonthChange={setCurrentMonth} />
         )}
-        
-        {currentTab === 'profile' && (
-            <ProfileScreen user={currentUser} onUpdateProfile={handleUpdateProfile} />
-        )}
-        
+        {currentTab === 'profile' && <ProfileScreen user={currentUser} onUpdateProfile={handleUpdateProfile} />}
         {currentTab === 'stats' && renderStats()}
         {currentTab === 'logs' && renderLogs()}
       </div>
 
       <div className="fixed bottom-6 right-6 z-50">
-        {loading && (
-           <div className="bg-zinc-900 text-white px-4 py-2 rounded-full shadow-xl flex items-center gap-2 text-sm animate-slide-up">
-              <div className="w-2 h-2 bg-white rounded-full animate-ping"/> Salvando...
-           </div>
-        )}
-        {!loading && (
-           <div className="bg-emerald-600 text-white px-4 py-2 rounded-full shadow-xl flex items-center gap-2 text-xs font-bold opacity-0 hover:opacity-100 transition-opacity cursor-default">
-              <CheckCircle2 size={14}/> Dados salvos na nuvem!
-           </div>
-        )}
+        {loading && <div className="bg-zinc-900 text-white px-4 py-2 rounded-full shadow-xl flex items-center gap-2 text-sm animate-slide-up"><div className="w-2 h-2 bg-white rounded-full animate-ping"/> Salvando...</div>}
+        {!loading && <div className="bg-emerald-600 text-white px-4 py-2 rounded-full shadow-xl flex items-center gap-2 text-xs font-bold opacity-0 hover:opacity-100 transition-opacity cursor-default"><CheckCircle2 size={14}/> Dados salvos na nuvem!</div>}
       </div>
 
       <ConfirmationModal isOpen={!!confirmationData} onClose={() => setConfirmationData(null)} onConfirm={handleConfirmPresence} data={confirmationData} />
       
       <EventDetailsModal 
-        isOpen={!!selectedEvent}
-        onClose={() => setSelectedEvent(null)}
-        event={selectedEvent}
-        schedule={schedule}
-        roles={roles}
-        onSave={handleUpdateEvent}
-        onSwapRequest={handleSwapRequest}
-        currentUser={currentUser}
+        isOpen={!!selectedEvent} onClose={() => setSelectedEvent(null)}
+        event={selectedEvent} schedule={schedule} roles={roles}
+        onSave={handleUpdateEvent} onSwapRequest={handleSwapRequest} currentUser={currentUser}
       />
     </DashboardLayout>
   );
