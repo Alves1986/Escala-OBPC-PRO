@@ -356,6 +356,20 @@ export const registerWithEmail = async (
     }
 };
 
+export const sendPasswordResetEmail = async (email: string): Promise<{ success: boolean; message: string }> => {
+    if (!supabase) return { success: false, message: "Erro de conexão" };
+    try {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: window.location.origin
+        });
+        if (error) return { success: false, message: error.message };
+        return { success: true, message: "Email de recuperação enviado! Verifique sua caixa de entrada." };
+    } catch (e) {
+        console.error(e);
+        return { success: false, message: "Erro ao enviar email." };
+    }
+}
+
 export const logout = async () => {
     if (!supabase) return;
     await supabase.auth.signOut();

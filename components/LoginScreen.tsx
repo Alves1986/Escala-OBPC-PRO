@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, ShieldCheck, UserPlus, ArrowLeft, Check, ChevronDown } from 'lucide-react';
-import { loginWithEmail, registerWithEmail, loadData } from '../services/supabaseService';
+import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, ShieldCheck, UserPlus, ArrowLeft, Check, ChevronDown, HelpCircle, KeyRound } from 'lucide-react';
+import { loginWithEmail, registerWithEmail, loadData, sendPasswordResetEmail } from '../services/supabaseService';
 import { User } from '../types';
 
 interface Props {
@@ -23,7 +23,7 @@ const DEFAULT_ROLES: Record<string, string[]> = {
 };
 
 export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
-  const [view, setView] = useState<'login' | 'register'>('login');
+  const [view, setView] = useState<'login' | 'register' | 'forgot'>('login');
   
   // Login State
   const [email, setEmail] = useState("");
@@ -127,6 +127,27 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
       setLocalLoading(false);
   };
 
+  const handleForgotSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!email) {
+          setErrorMsg("Digite seu e-mail.");
+          return;
+      }
+      
+      setLocalLoading(true);
+      setErrorMsg("");
+      setSuccessMsg("");
+
+      const result = await sendPasswordResetEmail(email);
+      
+      if (result.success) {
+          setSuccessMsg(result.message);
+      } else {
+          setErrorMsg(result.message);
+      }
+      setLocalLoading(false);
+  };
+
   const toggleRole = (role: string) => {
     if (regSelectedRoles.includes(role)) {
       setRegSelectedRoles(regSelectedRoles.filter(r => r !== role));
@@ -151,7 +172,9 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                <ShieldCheck size={32} className="text-white" />
              </div>
              <h1 className="text-xl font-bold text-white tracking-tight">
-                {view === 'login' ? 'Entrar no Sistema' : 'Criar Nova Conta'}
+                {view === 'login' && 'Entrar no Sistema'}
+                {view === 'register' && 'Criar Nova Conta'}
+                {view === 'forgot' && 'Recuperar Senha'}
              </h1>
           </div>
 
@@ -174,7 +197,16 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-semibold text-zinc-500 uppercase ml-1">Senha</label>
+                  <div className="flex justify-between">
+                    <label className="text-[10px] font-semibold text-zinc-500 uppercase ml-1">Senha</label>
+                    <button 
+                        type="button" 
+                        onClick={() => { setErrorMsg(""); setSuccessMsg(""); setView('forgot'); }}
+                        className="text-[10px] text-blue-500 hover:text-blue-400 font-bold"
+                    >
+                        Esqueceu?
+                    </button>
+                  </div>
                   <div className="relative">
                     <Lock size={16} className="absolute left-3 top-3 text-zinc-600" />
                     <input 
@@ -215,6 +247,48 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                   </button>
               </div>
             </>
+          )}
+
+          {/* FORGOT PASSWORD VIEW */}
+          {view === 'forgot' && (
+              <form onSubmit={handleForgotSubmit} className="space-y-4">
+                  <p className="text-xs text-zinc-400 text-center mb-4">
+                      Digite seu e-mail cadastrado para receber um link de redefinição de senha.
+                  </p>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-semibold text-zinc-500 uppercase ml-1">E-mail Cadastrado</label>
+                    <div className="relative">
+                       <Mail size={16} className="absolute left-3 top-3 text-zinc-600" />
+                       <input 
+                          type="email" 
+                          value={email} 
+                          onChange={e => setEmail(e.target.value)}
+                          placeholder="seu@email.com" 
+                          className="w-full bg-zinc-950 border border-zinc-800 focus:border-blue-600 text-white rounded-xl py-2.5 pl-9 pr-3 outline-none transition-colors text-sm"
+                       />
+                    </div>
+                  </div>
+
+                  {successMsg && <div className="p-2 rounded bg-green-500/10 text-green-400 text-xs text-center">{successMsg}</div>}
+                  {errorMsg && <div className="p-2 rounded bg-red-500/10 text-red-400 text-xs text-center">{errorMsg}</div>}
+
+                  <button 
+                    type="submit"
+                    disabled={localLoading}
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 mt-2"
+                  >
+                    {localLoading ? <Loader2 className="animate-spin" size={18} /> : <>Enviar Link <KeyRound size={18} /></>}
+                  </button>
+
+                  <button 
+                    type="button" 
+                    onClick={() => { setErrorMsg(""); setSuccessMsg(""); setView('login'); }}
+                    className="w-full mt-2 text-zinc-400 hover:text-white text-xs font-medium flex items-center justify-center gap-1 transition-colors"
+                  >
+                      <ArrowLeft size={14}/> Voltar para Login
+                  </button>
+              </form>
           )}
 
           {/* REGISTER VIEW */}
