@@ -12,6 +12,7 @@ import { ProfileScreen } from './components/ProfileScreen';
 import { EventDetailsModal } from './components/EventDetailsModal';
 import { AvailabilityReportScreen } from './components/AvailabilityReportScreen';
 import { SwapRequestsScreen } from './components/SwapRequestsScreen';
+import { InstallModal } from './components/InstallModal';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile, SwapRequest } from './types';
 import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap, toggleAdmin } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
@@ -72,6 +73,8 @@ const AppInner = () => {
   
   // PWA Install State
   const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [showInstallModal, setShowInstallModal] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
 
   // Data State
   const [members, setMembers] = useState<MemberMap>({});
@@ -105,20 +108,27 @@ const AppInner = () => {
 
   // --- PWA INSTALL LISTENER ---
   useEffect(() => {
+    // Check if running in standalone mode (already installed)
+    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
+      setIsStandalone(true);
+    }
+
     window.addEventListener('beforeinstallprompt', (e) => {
-      // Prevent the mini-infobar from appearing on mobile
       e.preventDefault();
-      // Stash the event so it can be triggered later.
       setInstallPrompt(e);
     });
   }, []);
 
   const handleInstallApp = async () => {
-    if (!installPrompt) return;
-    installPrompt.prompt();
-    const { outcome } = await installPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setInstallPrompt(null);
+    if (installPrompt) {
+        installPrompt.prompt();
+        const { outcome } = await installPrompt.userChoice;
+        if (outcome === 'accepted') {
+            setInstallPrompt(null);
+        }
+    } else {
+        // If no prompt available (iOS or blocked), show manual instructions
+        setShowInstallModal(true);
     }
   };
 
@@ -809,6 +819,7 @@ const AppInner = () => {
       onNotificationsUpdate={setNotifications}
       installPrompt={installPrompt}
       onInstall={handleInstallApp}
+      isStandalone={isStandalone}
     >
       {currentTab === 'dashboard' && renderDashboard()}
       
@@ -1090,6 +1101,11 @@ const AppInner = () => {
                  addToast("Presença confirmada!", "success");
              }
          }}
+      />
+      
+      <InstallModal 
+         isOpen={showInstallModal}
+         onClose={() => setShowInstallModal(false)}
       />
 
       <EventsModal 

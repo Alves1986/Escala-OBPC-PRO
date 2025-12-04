@@ -30,12 +30,13 @@ interface Props {
   // Props de PWA
   installPrompt?: any;
   onInstall?: () => void;
+  isStandalone?: boolean;
 }
 
 export const DashboardLayout: React.FC<Props> = ({ 
   children, sidebarOpen, setSidebarOpen, theme, toggleTheme, onLogout, title, isConnected, currentUser,
   currentTab, onTabChange, mainNavItems, managementNavItems, notifications, onNotificationsUpdate,
-  installPrompt, onInstall
+  installPrompt, onInstall, isStandalone
 }) => {
   const [imgError, setImgError] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -153,13 +154,13 @@ export const DashboardLayout: React.FC<Props> = ({
         {/* Footer User Profile & Actions */}
         <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 space-y-3 shrink-0">
            
-           {/* Install App Button (Only visible if installable) */}
-           {installPrompt && (
+           {/* Install App Button - Only if NOT standalone */}
+           {!isStandalone && onInstall && (
              <button 
                onClick={onInstall}
-               className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-900/20 hover:scale-[1.02] active:scale-95 transition-all text-xs font-bold mb-2"
+               className="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-900/20 hover:scale-[1.02] active:scale-95 transition-all text-xs font-bold mb-2 animate-pulse"
              >
-               <Download size={16} /> Instalar App
+               <Download size={16} /> Instalar Aplicativo
              </button>
            )}
 
@@ -221,6 +222,13 @@ export const DashboardLayout: React.FC<Props> = ({
            </div>
            
            <div className="flex items-center gap-2">
+               {/* Install Button Mobile Header */}
+               {!isStandalone && onInstall && (
+                 <button onClick={onInstall} className="p-2 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg mr-1 animate-pulse" title="Instalar App">
+                    <Download size={20} />
+                 </button>
+               )}
+
                {/* Notificações Mobile */}
                {currentUser && <NotificationCenter notifications={notifications} ministryId={currentUser.ministryId || null} onNotificationsUpdate={onNotificationsUpdate} />}
                
