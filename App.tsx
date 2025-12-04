@@ -8,6 +8,7 @@ import { EventsScreen } from './components/EventsScreen';
 import { AvailabilityScreen } from './components/AvailabilityScreen';
 import { ProfileScreen } from './components/ProfileScreen';
 import { EventDetailsModal } from './components/EventDetailsModal';
+import { AvailabilityReportScreen } from './components/AvailabilityReportScreen';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile } from './types';
 import { loadData, saveData, getStorageKey, getSupabase, logout, updateUserProfile, sendNotification, syncMemberProfile, deleteMember } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
@@ -38,7 +39,8 @@ import {
   AlertCircle,
   Share2,
   AlertTriangle,
-  Trash
+  Trash,
+  CalendarSearch
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -56,6 +58,7 @@ const MAIN_NAV_ITEMS = [
 
 const MANAGEMENT_NAV_ITEMS = [
   { id: 'editor', label: 'Editor de Escala', icon: <Edit3 size={20} /> },
+  { id: 'availability-report', label: 'Relat. Disponibilidade', icon: <CalendarSearch size={20} /> },
   { id: 'events', label: 'Eventos', icon: <Clock size={20} /> },
   { id: 'team', label: 'Membros & Equipe', icon: <Users size={20} /> },
   { id: 'stats', label: 'Estatísticas', icon: <BarChart2 size={20} /> },
@@ -1008,6 +1011,16 @@ const AppContent = () => {
           <AvailabilityScreen 
             availability={availability} setAvailability={setAvailability} allMembersList={allMembersList}
             currentMonth={currentMonth} onMonthChange={setCurrentMonth} onNotify={(msg) => notify('info', 'Disponibilidade Atualizada', msg)} currentUser={currentUser}
+          />
+        )}
+        {currentTab === 'availability-report' && (
+          <AvailabilityReportScreen 
+            availability={availability} 
+            registeredMembers={registeredMembers}
+            membersMap={members}
+            currentMonth={currentMonth}
+            onMonthChange={setCurrentMonth}
+            availableRoles={roles}
           />
         )}
         {currentTab === 'events' && (
