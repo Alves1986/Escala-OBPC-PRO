@@ -1,6 +1,6 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, DEFAULT_ROLES, AppNotification } from '../types';
+import { SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, DEFAULT_ROLES, AppNotification, TeamMemberProfile } from '../types';
 
 let supabase: SupabaseClient | null = null;
 
@@ -11,6 +11,86 @@ if (SUPABASE_URL && SUPABASE_KEY) {
 export const getStorageKey = (ministryId: string, suffix: string) => `${ministryId}_${suffix}`;
 
 export const getSupabase = () => supabase;
+
+// --- Data Loading/Saving ---
+
+export const loadData = async <T>(ministryId: string, keySuffix: string, fallback: T): Promise<T> => {
+  if (!supabase || !ministryId) return fallback;
+  
+  try {
+    const { data, error } = await supabase
+      .from('app_storage')
+      .select('value')
+      .eq('key', getStorageKey(ministryId, keySuffix))
+      .single();
+
+    if (error || !data) return fallback;
+    return data.value as T;
+  } catch (e) {
+    console.error(`Error loading ${keySuffix}`, e);
+    return fallback;
+  }
+};
+
+export const saveData = async <T>(ministryId: string, keySuffix: string, value: T): Promise<boolean> => {
+  if (!supabase || !ministryId) return false;
+
+  try {
+    const { error } = await supabase
+      .from('app_storage')
+      .upsert(
+        { key: getStorageKey(ministryId, keySuffix), value },
+        { onConflict: 'key' }
+      );
+    return !error;
+  } catch (e) {
+    console.error(`Error saving ${keySuffix}`, e);
+    return false;
+  }
+};
+
+// --- Member Directory Sync ---
+
+export const syncMemberProfile = async (ministryId: string, user: User) => {
+    try {
+        const list = await loadData<TeamMemberProfile[]>(ministryId, 'public_members_list', []);
+        // Find by email or name (fallback)
+        const index = list.findIndex(m => m.email === user.email || m.name === user.name);
+        
+        const newProfile: TeamMemberProfile = {
+            id: user.id || Date.now().toString(),
+            name: user.name,
+            email: user.email,
+            whatsapp: user.whatsapp,
+            avatar_url: user.avatar_url,
+            roles: user.functions || [],
+            createdAt: new Date().toISOString()
+        };
+
+        let newList;
+        if (index >= 0) {
+            newList = [...list];
+            // Merge to preserve existing data like roles if they were manually edited
+            // But we update name/contact info from user profile
+            const existing = newList[index];
+            newList[index] = { 
+                ...existing, 
+                name: user.name,
+                email: user.email,
+                whatsapp: user.whatsapp,
+                avatar_url: user.avatar_url
+            }; 
+        } else {
+            newList = [...list, newProfile];
+        }
+        
+        await saveData(ministryId, 'public_members_list', newList);
+        return newList;
+    } catch (e) {
+        console.error("Erro ao sincronizar perfil do membro", e);
+        return [];
+    }
+};
 
 // --- Native Authentication Logic ---
 
@@ -70,187 +150,156 @@ export const registerWithEmail = async (
                     name,
                     ministryId: cleanMid, // Salva o ID do ministério nos metadados
                     whatsapp,
-                    role: 'admin', // Quem cria a conta define o ID, assumimos Admin/Líder
-                    functions: selectedRoles || []
+                    functions: selectedRoles || [],
+                    role: 'member'
                 }
             }
         });
 
-        if (error) {
-            return { success: false, message: error.message };
-        }
-        
-        // Envia notificação de boas-vindas/novo membro
-        await sendNotification(cleanMid, {
-            type: 'info',
-            title: 'Novo Membro',
-            message: `${name} acabou de se cadastrar no sistema.`,
-        });
+        if (error) return { success: false, message: error.message };
 
-        return { success: true, message: "Conta criada! Verifique seu email se necessário ou faça login." };
+        return { success: true, message: "Cadastro realizado com sucesso!" };
     } catch (e) {
         console.error(e);
-        return { success: false, message: "Erro ao registrar." };
-    }
-};
-
-export const updateUserProfile = async (name: string, whatsapp: string, avatar_url?: string): Promise<{ success: boolean, message: string }> => {
-    if (!supabase) return { success: false, message: "Erro de conexão" };
-    
-    try {
-        const updates: any = { name, whatsapp };
-        if (avatar_url !== undefined) {
-            updates.avatar_url = avatar_url;
-        }
-
-        const { error } = await supabase.auth.updateUser({
-            data: updates
-        });
-
-        if (error) throw error;
-        return { success: true, message: "Perfil atualizado com sucesso!" };
-    } catch (e: any) {
-        console.error(e);
-        return { success: false, message: e.message || "Erro ao atualizar perfil." };
+        return { success: false, message: "Erro interno." };
     }
 };
 
 export const logout = async () => {
-    if (supabase) await supabase.auth.signOut();
+    if (!supabase) return;
+    await supabase.auth.signOut();
 };
 
-export const getCurrentUser = async (): Promise<{ user: User | null, ministryId: string | null }> => {
-    if (!supabase) return { user: null, ministryId: null };
-    
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-        const meta = session.user.user_metadata;
-        return {
-            user: {
-                id: session.user.id,
-                email: session.user.email,
-                name: meta.name,
-                role: meta.role || 'member',
-                ministryId: meta.ministryId,
-                whatsapp: meta.whatsapp,
-                avatar_url: meta.avatar_url
-            },
-            ministryId: meta.ministryId
+export const updateUserProfile = async (name: string, whatsapp: string, avatar_url?: string): Promise<{ success: boolean; message: string }> => {
+    if (!supabase) return { success: false, message: "Erro de conexão" };
+
+    try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        
+        if (error || !user) return { success: false, message: "Usuário não autenticado." };
+
+        const updates = {
+            data: {
+                name,
+                whatsapp,
+                avatar_url
+            }
         };
+
+        const { error: updateError } = await supabase.auth.updateUser(updates);
+
+        if (updateError) {
+            return { success: false, message: "Erro ao atualizar perfil." };
+        }
+        
+        // Sync with public directory if needed
+        const ministryId = user.user_metadata.ministryId;
+        if (ministryId) {
+             const userProfile: User = {
+                id: user.id,
+                email: user.email,
+                name: name,
+                role: user.user_metadata.role || 'member',
+                ministryId: ministryId,
+                whatsapp: whatsapp,
+                avatar_url: avatar_url,
+                functions: user.user_metadata.functions || []
+            };
+            await syncMemberProfile(ministryId, userProfile);
+        }
+
+        return { success: true, message: "Perfil atualizado com sucesso!" };
+    } catch (e) {
+        console.error(e);
+        return { success: false, message: "Erro interno." };
     }
-    return { user: null, ministryId: null };
-}
-
-// --- Data Loading/Saving (Mantido igual para compatibilidade com dados antigos) ---
-
-export const loadData = async <T>(ministryId: string, keySuffix: string, fallback: T): Promise<T> => {
-  if (!supabase || !ministryId) return fallback;
-  
-  try {
-    const { data, error } = await supabase
-      .from('app_storage')
-      .select('value')
-      .eq('key', getStorageKey(ministryId, keySuffix))
-      .single();
-
-    if (error || !data) return fallback;
-    return data.value as T;
-  } catch (e) {
-    console.error(`Error loading ${keySuffix}`, e);
-    return fallback;
-  }
 };
 
-export const saveData = async <T>(ministryId: string, keySuffix: string, value: T): Promise<boolean> => {
-  if (!supabase || !ministryId) return false;
-
-  try {
-    const { error } = await supabase
-      .from('app_storage')
-      .upsert(
-        { key: getStorageKey(ministryId, keySuffix), value },
-        { onConflict: 'key' }
-      );
-    return !error;
-  } catch (e) {
-    console.error(`Error saving ${keySuffix}`, e);
-    return false;
-  }
+export const saveSubscription = async (ministryId: string, subscription: PushSubscription): Promise<boolean> => {
+    if (!supabase || !ministryId) return false;
+    
+    try {
+        const key = getStorageKey(ministryId, 'push_subscriptions_v1');
+        const { data } = await supabase.from('app_storage').select('value').eq('key', key).single();
+        
+        let subs: PushSubscriptionRecord[] = data?.value || [];
+        
+        // Remove duplicate if exists (by endpoint)
+        subs = subs.filter((s: PushSubscriptionRecord) => s.endpoint !== subscription.endpoint);
+        
+        const subJson = subscription.toJSON();
+        
+        // Add new
+        const record: PushSubscriptionRecord = {
+            endpoint: subscription.endpoint,
+            keys: {
+                p256dh: subJson.keys?.p256dh || '',
+                auth: subJson.keys?.auth || ''
+            },
+            device_id: 'browser_' + Date.now(), // Simple ID
+            last_updated: new Date().toISOString()
+        };
+        
+        subs.push(record);
+        
+        const { error } = await supabase.from('app_storage').upsert({ key, value: subs }, { onConflict: 'key' });
+        return !error;
+    } catch (e) {
+        console.error("Erro ao salvar inscrição push", e);
+        return false;
+    }
 };
-
-// --- Notifications System ---
 
 export const sendNotification = async (ministryId: string, notification: Omit<AppNotification, 'id' | 'timestamp' | 'read'>) => {
+    if (!supabase || !ministryId) return;
+
     try {
-        const currentNotifications = await loadData<AppNotification[]>(ministryId, 'notifications_v1', []);
+        const key = getStorageKey(ministryId, 'notifications_v1');
+        const { data } = await supabase.from('app_storage').select('value').eq('key', key).single();
         
-        const newNotification: AppNotification = {
+        let notifs: AppNotification[] = data?.value || [];
+        
+        const newNotif: AppNotification = {
             id: Date.now().toString(),
             timestamp: new Date().toISOString(),
             read: false,
             ...notification
         };
         
-        // Mantém apenas as últimas 50 notificações
-        const updated = [newNotification, ...currentNotifications].slice(0, 50);
+        // Keep last 50
+        notifs = [newNotif, ...notifs].slice(0, 50);
         
-        await saveData(ministryId, 'notifications_v1', updated);
-        return true;
+        await supabase.from('app_storage').upsert({ key, value: notifs }, { onConflict: 'key' });
     } catch (e) {
         console.error("Erro ao enviar notificação", e);
-        return false;
     }
 };
 
 export const markNotificationsRead = async (ministryId: string, notificationIds: string[]) => {
+    if (!supabase || !ministryId) return [];
+
     try {
-        const currentNotifications = await loadData<AppNotification[]>(ministryId, 'notifications_v1', []);
-        const updated = currentNotifications.map(n => 
-            notificationIds.includes(n.id) ? { ...n, read: true } : n
-        );
-        await saveData(ministryId, 'notifications_v1', updated);
-        return updated;
+        const key = getStorageKey(ministryId, 'notifications_v1');
+        const { data } = await supabase.from('app_storage').select('value').eq('key', key).single();
+        
+        let notifs: AppNotification[] = data?.value || [];
+        
+        let updated = false;
+        notifs = notifs.map(n => {
+            if (notificationIds.includes(n.id) && !n.read) {
+                updated = true;
+                return { ...n, read: true };
+            }
+            return n;
+        });
+        
+        if (updated) {
+            await supabase.from('app_storage').upsert({ key, value: notifs }, { onConflict: 'key' });
+        }
+        
+        return notifs;
     } catch (e) {
-        console.error("Erro ao marcar lido", e);
+        console.error("Erro ao marcar lidas", e);
         return [];
     }
-}
-
-// --- Push Notification ---
-
-export const saveSubscription = async (ministryId: string, subscription: PushSubscription) => {
-  if (!supabase || !ministryId) return false;
-
-  let deviceId = localStorage.getItem('escala_device_id');
-  if (!deviceId) {
-    deviceId = crypto.randomUUID();
-    localStorage.setItem('escala_device_id', deviceId);
-  }
-
-  const subRecord: PushSubscriptionRecord = {
-    endpoint: subscription.endpoint,
-    keys: {
-      p256dh: subscription.toJSON().keys?.p256dh || '',
-      auth: subscription.toJSON().keys?.auth || ''
-    },
-    device_id: deviceId,
-    last_updated: new Date().toISOString()
-  };
-
-  const storageKey = getStorageKey(ministryId, `sub_${deviceId}`);
-  
-  try {
-    const { error } = await supabase
-      .from('app_storage')
-      .upsert(
-        { key: storageKey, value: subRecord },
-        { onConflict: 'key' }
-      );
-      
-    if (error) throw error;
-    return true;
-  } catch (e) {
-    console.error("Error saving subscription:", e);
-    return false;
-  }
 };

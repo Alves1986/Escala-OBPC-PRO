@@ -22,10 +22,18 @@ export const ScheduleTable: React.FC<Props> = ({
 }) => {
   
   // Calculate if member is unavailable for a specific date
+  // NOVA LÓGICA: O array 'availability' agora contém os dias DISPONÍVEIS.
+  // Se o array existir e tiver itens, e a data NÃO estiver nele, então é Indisponível.
   const isUnavailable = (member: string, isoDateStr: string) => {
     const datePart = isoDateStr.split('T')[0];
-    // Verifica se a data exata está na lista de indisponibilidade (ignora datas com '+' que são preferenciais)
-    return availability[member]?.includes(datePart);
+    const availableDates = availability[member];
+    
+    // Se não tem dados ou array vazio, assumimos disponível para evitar bloqueio total inicial
+    // (Ou você pode decidir que vazio = indisponível total, mas geralmente é melhor assumir disponível até que se preencha)
+    if (!availableDates || availableDates.length === 0) return false;
+
+    // Se tem datas marcadas, a data atual PRECISA estar lá. Se não estiver, é conflito.
+    return !availableDates.includes(datePart);
   };
 
   return (
@@ -100,8 +108,8 @@ export const ScheduleTable: React.FC<Props> = ({
                             {sortedMembers.map(m => {
                               const unavail = isUnavailable(m, event.iso);
                               return (
-                                <option key={m} value={m} disabled={unavail} className={unavail ? 'text-red-400' : ''}>
-                                  {m} ({memberStats[m] || 0}) {unavail ? '[Indisp.]' : ''}
+                                <option key={m} value={m} className={unavail ? 'text-red-400 bg-red-50 dark:bg-zinc-800' : ''}>
+                                  {m} ({memberStats[m] || 0}) {unavail ? '[Não Disp.]' : ''}
                                 </option>
                               );
                             })}
@@ -109,7 +117,7 @@ export const ScheduleTable: React.FC<Props> = ({
                           
                           {/* Indicador Visual de Conflito Local (Data Bloqueada) */}
                           {hasLocalConflict && (
-                            <div className="absolute right-8 top-1/2 -translate-y-1/2 text-red-500 animate-pulse" title="CONFLITO: Membro marcou indisponibilidade neste dia!">
+                            <div className="absolute right-8 top-1/2 -translate-y-1/2 text-red-500 animate-pulse" title="CONFLITO: Membro não marcou este dia como disponível!">
                               <AlertTriangle size={16} />
                             </div>
                           )}

@@ -9,7 +9,7 @@ import { EventsScreen } from './components/EventsScreen';
 import { AvailabilityScreen } from './components/AvailabilityScreen';
 import { ProfileScreen } from './components/ProfileScreen';
 import { EventDetailsModal } from './components/EventDetailsModal';
-import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification } from './types';
+import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile } from './types';
 import { loadData, saveData, getStorageKey, getSupabase, logout, updateUserProfile, sendNotification } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
 import { 
@@ -31,7 +31,10 @@ import {
   Clock,
   ArrowRight,
   X,
-  CheckCircle2
+  CheckCircle2,
+  Mail,
+  Phone,
+  UserCircle2
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -50,7 +53,7 @@ const MAIN_NAV_ITEMS = [
 const MANAGEMENT_NAV_ITEMS = [
   { id: 'editor', label: 'Editor de Escala', icon: <Edit3 size={20} /> },
   { id: 'events', label: 'Eventos', icon: <Clock size={20} /> },
-  { id: 'team', label: 'Equipe & Funções', icon: <Users size={20} /> },
+  { id: 'team', label: 'Membros & Equipe', icon: <Users size={20} /> },
   { id: 'stats', label: 'Estatísticas', icon: <BarChart2 size={20} /> },
   { id: 'logs', label: 'Logs do Sistema', icon: <Activity size={20} /> },
 ];
@@ -74,6 +77,7 @@ const AppContent = () => {
   
   // Data State
   const [members, setMembers] = useState<MemberMap>({});
+  const [registeredMembers, setRegisteredMembers] = useState<TeamMemberProfile[]>([]); // New State
   const [schedule, setSchedule] = useState<ScheduleMap>({});
   const [attendance, setAttendance] = useState<AttendanceMap>({});
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>([]);
@@ -206,7 +210,7 @@ const AppContent = () => {
       setLoading(true);
       const loadAll = async () => {
         try {
-          const [m, s, a, c, ig, av, r, lg, th, notif] = await Promise.all([
+          const [m, s, a, c, ig, av, r, lg, th, notif, regMem] = await Promise.all([
             loadData<MemberMap>(ministryId, 'members_v7', {}),
             loadData<ScheduleMap>(ministryId, 'escala_full_v7', {}),
             loadData<AttendanceMap>(ministryId, 'attendance_v1', {}),
@@ -216,10 +220,11 @@ const AppContent = () => {
             loadData<string[]>(ministryId, 'functions_config', DEFAULT_ROLES),
             loadData<AuditLogEntry[]>(ministryId, 'audit_log_v1', []),
             loadData<'light'|'dark'>(ministryId, 'theme_pref', 'dark'),
-            loadData<AppNotification[]>(ministryId, 'notifications_v1', [])
+            loadData<AppNotification[]>(ministryId, 'notifications_v1', []),
+            loadData<TeamMemberProfile[]>(ministryId, 'public_members_list', [])
           ]);
           setMembers(Object.keys(m).length === 0 ? (() => {const i:any={}; DEFAULT_ROLES.forEach(r=>i[r]=[]); return i})() : m);
-          setSchedule(s); setAttendance(a); setCustomEvents(c); setIgnoredEvents(ig); setAvailability(av); setRoles(r); setAuditLog(lg); setTheme(th); setNotifications(notif);
+          setSchedule(s); setAttendance(a); setCustomEvents(c); setIgnoredEvents(ig); setAvailability(av); setRoles(r); setAuditLog(lg); setTheme(th); setNotifications(notif); setRegisteredMembers(regMem);
           setIsConnected(true);
         } catch (e) { addToast("Erro ao carregar dados", "error"); setIsConnected(false); } 
         finally { setLoading(false); }
@@ -681,77 +686,169 @@ const AppContent = () => {
     )
   };
 
-  const renderTeam = () => (
-    <div className="space-y-6 animate-fade-in max-w-4xl mx-auto">
-      <div className="flex justify-between items-center border-b border-zinc-200 dark:border-zinc-700 pb-4">
+  const renderTeam = () => {
+    // Helper to check what roles a member is assigned to in the scheduler
+    const getMemberRoles = (memberName: string) => {
+        const assignedRoles: string[] = [];
+        Object.keys(members).forEach(role => {
+            if (members[role].includes(memberName)) {
+                assignedRoles.push(role);
+            }
+        });
+        return assignedRoles;
+    };
+
+    const filteredMembers = registeredMembers
+        .filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()) || m.email?.toLowerCase().includes(memberSearch.toLowerCase()))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+    return (
+    <div className="space-y-6 animate-fade-in max-w-6xl mx-auto">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
          <div>
-            <h2 className="text-2xl font-bold text-zinc-800 dark:text-white">Gerenciar Equipe e Funções</h2>
-            <p className="text-zinc-500 text-sm">Adicione membros, organize funções e remova participantes.</p>
+            <h2 className="text-2xl font-bold text-zinc-800 dark:text-white">Membros Cadastrados</h2>
+            <p className="text-zinc-500 text-sm">Lista oficial de todos os usuários registrados no sistema.</p>
          </div>
-         <div className="flex gap-2">
-            <div className="relative">
-               <input 
-                  type="text" placeholder="Adicionar nova função..." 
-                  className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-3 pr-10 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none w-64"
-                  onKeyDown={(e) => { if(e.key === 'Enter' && e.currentTarget.value) { setRoles([...roles, e.currentTarget.value]); e.currentTarget.value = ''; } }}
-               />
-               <button className="absolute right-2 top-2 text-blue-500 font-bold text-xs bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded">Adicionar</button>
+         <div className="flex gap-2 w-full md:w-auto">
+            <div className="relative w-full md:w-72">
+                <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input 
+                    type="text" 
+                    placeholder="Buscar membro..." 
+                    value={memberSearch}
+                    onChange={(e) => setMemberSearch(e.target.value)}
+                    className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-10 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                />
             </div>
+             <button 
+                onClick={() => setRoles([...roles])} // Just a trigger to show modal or simple add. In this version, we focus on the list.
+                className="hidden md:flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 px-4 py-2 rounded-lg font-medium text-sm transition-colors border border-zinc-200 dark:border-zinc-700"
+                title="Gerenciar Funções"
+             >
+                <Settings size={18} />
+             </button>
          </div>
       </div>
 
-      <div className="space-y-4">
-         {roles.map(role => (
-           <div key={role} className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden shadow-sm">
-              <div className="bg-zinc-50 dark:bg-zinc-900/50 p-4 flex justify-between items-center">
-                 <h3 className="font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
-                    {role} 
-                    <span className="text-xs font-normal text-zinc-500 bg-zinc-200 dark:bg-zinc-800 px-2 py-0.5 rounded-full">{(members[role] || []).length} membros</span>
-                 </h3>
-                 <button onClick={() => {if(confirm("Remover função?")) setRoles(roles.filter(r => r !== role))}} className="text-zinc-400 hover:text-red-500"><X size={16}/></button>
-              </div>
-              <div className="p-4">
-                 <div className="flex flex-wrap gap-2 mb-3">
-                    {(members[role] || []).map(m => (
-                       <div key={m} className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-700 px-3 py-1.5 rounded-lg text-sm">
-                          {m}
-                          <button 
+      <div className="bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+         {filteredMembers.length === 0 ? (
+            <div className="p-12 text-center text-zinc-500">
+                <Users size={48} className="mx-auto mb-4 opacity-20" />
+                <p>Nenhum membro encontrado.</p>
+                <p className="text-xs mt-1">Os membros aparecerão aqui após realizarem o cadastro.</p>
+            </div>
+         ) : (
+             <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                    <thead className="bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700 text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                        <tr>
+                            <th className="px-6 py-4">Membro</th>
+                            <th className="px-6 py-4">Contato</th>
+                            <th className="px-6 py-4">Funções na Escala</th>
+                            <th className="px-6 py-4 text-right">Desde</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
+                        {filteredMembers.map(member => {
+                            const assignedRoles = getMemberRoles(member.name);
+                            return (
+                                <tr key={member.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-4">
+                                            {member.avatar_url ? (
+                                                <img src={member.avatar_url} alt={member.name} className="w-10 h-10 rounded-full object-cover border border-zinc-200 dark:border-zinc-700" />
+                                            ) : (
+                                                <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                                                    <span className="font-bold text-sm">{member.name.charAt(0).toUpperCase()}</span>
+                                                </div>
+                                            )}
+                                            <div>
+                                                <div className="font-bold text-zinc-900 dark:text-zinc-100">{member.name}</div>
+                                                <div className="text-xs text-zinc-500">ID: {member.id.substring(0, 8)}...</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="space-y-1">
+                                            {member.email && (
+                                                <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+                                                    <Mail size={14} className="opacity-50" /> {member.email}
+                                                </div>
+                                            )}
+                                            {member.whatsapp && (
+                                                <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+                                                    <Phone size={14} className="opacity-50" /> {member.whatsapp}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex flex-wrap gap-2">
+                                            {assignedRoles.length > 0 ? assignedRoles.map(role => (
+                                                <span key={role} className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-900/30">
+                                                    {role}
+                                                </span>
+                                            )) : (
+                                                <span className="text-zinc-400 text-xs italic">Sem função atribuída</span>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <span className="text-sm text-zinc-500">
+                                            {member.createdAt ? new Date(member.createdAt).toLocaleDateString('pt-BR') : '-'}
+                                        </span>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+             </div>
+         )}
+      </div>
+
+      {/* Quick Add Roles for Context */}
+      <div className="mt-8 border-t border-zinc-200 dark:border-zinc-700 pt-8">
+         <h3 className="text-lg font-bold text-zinc-800 dark:text-white mb-4">Gerenciamento Rápido de Funções</h3>
+         <div className="flex flex-wrap gap-4">
+             {roles.map(role => (
+                 <div key={role} className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 flex items-center justify-between min-w-[200px] shadow-sm">
+                     <span className="font-medium text-sm text-zinc-700 dark:text-zinc-300">{role}</span>
+                     <div className="flex items-center gap-2">
+                         <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-400 text-xs px-2 py-1 rounded-full font-bold">
+                             {(members[role] || []).length}
+                         </span>
+                         <button 
                             onClick={() => {
-                              confirmAction(
-                                "Remover Membro",
-                                `Tem certeza que deseja remover ${m} da função ${role}?`,
-                                () => {
-                                  setMembers({...members, [role]: members[role].filter(x => x !== m)});
-                                  addToast("Membro removido.", "info");
-                                }
-                              );
+                                confirmAction(
+                                "Remover Função",
+                                `Tem certeza que deseja remover a função "${role}"?`,
+                                () => setRoles(prev => prev.filter(r => r !== role))
+                                );
                             }} 
-                            className="text-zinc-400 hover:text-red-500"
-                          >
-                            <X size={14}/>
-                          </button>
-                       </div>
-                    ))}
+                            className="text-zinc-400 hover:text-red-500 p-1"
+                         >
+                            <Trash2 size={14}/>
+                         </button>
+                     </div>
                  </div>
-                 <input 
-                    placeholder="Adicionar membro..." 
-                    className="text-sm bg-transparent border-b border-zinc-200 dark:border-zinc-700 focus:border-blue-500 outline-none w-full py-1 text-zinc-600 dark:text-zinc-300"
-                    onKeyDown={(e) => {
-                       if(e.key === 'Enter' && e.currentTarget.value) {
-                          const val = e.currentTarget.value;
-                          if(!(members[role] || []).includes(val)) {
-                             setMembers({...members, [role]: [...(members[role] || []), val]});
-                             e.currentTarget.value = "";
-                          }
-                       }
-                    }}
-                 />
-              </div>
-           </div>
-         ))}
+             ))}
+             <div className="flex items-center bg-zinc-50 dark:bg-zinc-900 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg p-3 min-w-[200px]">
+                <input 
+                  type="text" 
+                  placeholder="+ Nova Função" 
+                  className="bg-transparent text-sm w-full outline-none text-zinc-700 dark:text-zinc-300 placeholder-zinc-400"
+                  onKeyDown={(e) => { if(e.key === 'Enter' && e.currentTarget.value) { setRoles([...roles, e.currentTarget.value]); e.currentTarget.value = ''; } }}
+                />
+             </div>
+         </div>
+         <p className="text-xs text-zinc-400 mt-2">
+            * Para adicionar membros às funções, use a coluna "Funções na Escala" (lógica a ser implementada) ou adicione manualmente no editor.
+         </p>
       </div>
     </div>
-  );
+    );
+  };
 
   const renderStats = () => {
     const data = Object.entries(memberStats).map(([name, count]) => ({ name, count: Number(count) })).sort((a, b) => b.count - a.count);
@@ -831,6 +928,7 @@ const AppContent = () => {
             currentMonth={currentMonth}
             onMonthChange={setCurrentMonth}
             onNotify={(msg) => notify('info', 'Disponibilidade Atualizada', msg)}
+            currentUser={currentUser}
           />
         )}
         

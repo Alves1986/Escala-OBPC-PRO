@@ -74,6 +74,16 @@ export interface User {
   createdAt?: string;
 }
 
+export interface TeamMemberProfile {
+    id: string;
+    name: string;
+    email?: string;
+    whatsapp?: string;
+    avatar_url?: string;
+    roles?: string[];
+    createdAt?: string;
+}
+
 export interface AppState {
   ministryId: string | null;
   currentUser: User | null;
