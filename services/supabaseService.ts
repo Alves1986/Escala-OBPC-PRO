@@ -74,14 +74,12 @@ export const syncMemberProfile = async (ministryId: string, user: User) => {
         if (data) {
             list = data.value || [];
         } else if (error) {
+            // Se erro for "Não encontrado", assumimos lista vazia segura
             if (error.code === 'PGRST116') {
-                // PGRST116: Nenhum registro encontrado. Isso é normal na primeira vez.
-                // Podemos criar uma lista nova com segurança.
                 console.log("[Sync] Lista de membros não existe. Criando nova.");
                 list = [];
             } else {
-                // Outro erro (Ex: Timeout, Falha de Rede). 
-                // PERIGO: Se continuarmos, vamos salvar uma lista vazia e apagar todo mundo.
+                // Se for erro de rede ou outro, aborta para proteger dados
                 console.error("[Sync] Erro CRÍTICO ao buscar lista. Abortando para proteger dados.", error);
                 return []; 
             }
@@ -158,7 +156,11 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
     try {
         // 1. Remove da Lista Pública de Membros (Visual)
         const list = await loadData<TeamMemberProfile[]>(ministryId, 'public_members_list', []);
-        const newList = list.filter(m => m.id !== memberId && m.name !== memberName);
+        // Remove por ID (se registrado) ou por Nome (se manual)
+        const newList = list.filter(m => {
+            if (memberId && memberId !== 'manual') return m.id !== memberId;
+            return m.name !== memberName;
+        });
         await saveData(ministryId, 'public_members_list', newList);
 
         // 2. Remove das Atribuições de Cargos (Members Map)

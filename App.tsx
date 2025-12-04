@@ -31,7 +31,9 @@ import {
   Mail,
   Phone,
   Trash2,
-  Plus
+  Plus,
+  AlertTriangle,
+  Link
 } from 'lucide-react';
 import { NextEventCard } from './components/NextEventCard';
 import { ConfirmationModal } from './components/ConfirmationModal';
@@ -421,7 +423,7 @@ const AppInner = () => {
       async () => {
          const success = await deleteMember(ministryId, memberId, memberName);
          if (success) {
-             setRegisteredMembers(prev => prev.filter(m => m.id !== memberId));
+             setRegisteredMembers(prev => prev.filter(m => m.name !== memberName));
              const newMembersMap = { ...members };
              Object.keys(newMembersMap).forEach(role => {
                  newMembersMap[role] = newMembersMap[role].filter(n => n !== memberName);
@@ -565,12 +567,31 @@ const AppInner = () => {
     </div>
   );
 
-  const renderTeam = () => (
+  const renderTeam = () => {
+    // UNIFIED MEMBER LIST: Combines registered profiles AND any manual member found in the system
+    const unifiedTeam = useMemo(() => {
+        const teamMap = new Map<string, TeamMemberProfile | null>();
+        
+        // 1. Add all REGISTERED members
+        registeredMembers.forEach(m => teamMap.set(m.name, m));
+
+        // 2. Add all OTHER members found in the system (Manual/Ghost)
+        allMembersList.forEach(name => {
+            if (!teamMap.has(name)) {
+                teamMap.set(name, null); // Null means "Unsynced/Manual"
+            }
+        });
+        
+        // Sort alphabetically
+        return Array.from(teamMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    }, [registeredMembers, allMembersList]);
+
+    return (
     <div className="space-y-6 animate-fade-in max-w-5xl mx-auto">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-zinc-200 dark:border-zinc-700 pb-4">
         <div>
            <h2 className="text-2xl font-bold text-zinc-800 dark:text-white">Membros & Equipe</h2>
-           <p className="text-zinc-500 text-sm">Lista de usuários cadastrados e membros ativos no sistema.</p>
+           <p className="text-zinc-500 text-sm">Lista unificada de todos os membros (Cadastrados e Locais).</p>
         </div>
         <div className="flex gap-2">
             <button 
@@ -594,60 +615,80 @@ const AppInner = () => {
         </div>
       </div>
 
-      {/* Lista de Membros Registrados */}
+      {/* Tabela de Membros Unificada */}
       <div className="bg-zinc-50 dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 overflow-hidden shadow-sm">
          <div className="px-6 py-3 bg-zinc-100 dark:bg-zinc-800/50 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center">
-            <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Membros Cadastrados (Login Ativo)</h3>
+            <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Membros da Equipe</h3>
+            <span className="text-[10px] bg-zinc-200 dark:bg-zinc-700 px-2 py-1 rounded-full text-zinc-600 dark:text-zinc-300">Total: {unifiedTeam.length}</span>
          </div>
          
          <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
-             {registeredMembers.length === 0 ? (
+             {unifiedTeam.length === 0 ? (
                  <div className="p-12 text-center text-zinc-500 dark:text-zinc-400 flex flex-col items-center">
                      <Users size={48} className="mb-3 opacity-20"/>
                      <p>Nenhum membro encontrado.</p>
-                     <p className="text-xs mt-1">Os membros aparecerão aqui após realizarem o cadastro. Tente clicar no botão de atualizar.</p>
                  </div>
              ) : (
-                 registeredMembers
-                    .filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()))
-                    .map(member => (
-                     <div key={member.id} className="p-4 flex items-center justify-between hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+                 unifiedTeam
+                    .filter(([name]) => name.toLowerCase().includes(memberSearch.toLowerCase()))
+                    .map(([name, profile]) => (
+                     <div key={name} className="p-4 flex items-center justify-between hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
                          <div className="flex items-center gap-4">
-                             {member.avatar_url ? (
-                                 <img src={member.avatar_url} alt={member.name} className="w-10 h-10 rounded-full object-cover shadow-sm" />
+                             {/* Avatar Logic */}
+                             {profile?.avatar_url ? (
+                                 <img src={profile.avatar_url} alt={name} className="w-10 h-10 rounded-full object-cover shadow-sm" />
                              ) : (
-                                 <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
-                                     {member.name.charAt(0).toUpperCase()}
+                                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm ${profile ? 'bg-blue-600' : 'bg-zinc-400 dark:bg-zinc-700'}`}>
+                                     {name.charAt(0).toUpperCase()}
                                  </div>
                              )}
+                             
                              <div>
-                                 <h4 className="font-bold text-zinc-800 dark:text-zinc-100">{member.name}</h4>
-                                 <p className="text-xs text-zinc-500">ID: {member.id.substring(0,8)}...</p>
+                                 <h4 className="font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
+                                     {name}
+                                     {!profile && <AlertTriangle size={14} className="text-amber-500" title="Perfil não sincronizado (Membro Local)"/>}
+                                 </h4>
+                                 <p className="text-xs text-zinc-500">
+                                     {profile ? `ID: ${profile.id.substring(0,8)}...` : 'Membro Local / Não Sincronizado'}
+                                 </p>
                              </div>
                          </div>
                          
                          <div className="hidden md:block text-sm text-zinc-600 dark:text-zinc-400">
-                             {member.email && <div className="flex items-center gap-2"><Mail size={14}/> {member.email}</div>}
-                             {member.whatsapp && <div className="flex items-center gap-2 mt-1"><Phone size={14}/> {member.whatsapp}</div>}
+                             {profile?.email && <div className="flex items-center gap-2"><Mail size={14}/> {profile.email}</div>}
+                             {profile?.whatsapp && <div className="flex items-center gap-2 mt-1"><Phone size={14}/> {profile.whatsapp}</div>}
                          </div>
 
                          <div className="flex items-center gap-4">
                              <div className="text-right">
-                                {member.roles && member.roles.length > 0 ? (
-                                    <div className="flex flex-wrap gap-1 justify-end max-w-[200px]">
-                                        {member.roles.map(r => (
-                                            <span key={r} className="text-[10px] px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-700 rounded text-zinc-600 dark:text-zinc-300 font-medium">
-                                                {r}
-                                            </span>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <span className="text-xs text-zinc-400 italic">Sem função</span>
-                                )}
+                                {/* Roles Logic: Prioritize Profile, Fallback to Manual Map */}
+                                {(() => {
+                                    let rolesToDisplay: string[] = [];
+                                    if (profile?.roles && profile.roles.length > 0) {
+                                        rolesToDisplay = profile.roles;
+                                    } else {
+                                        // Fallback manual map search
+                                        Object.entries(members).forEach(([role, list]) => {
+                                            if ((list as string[]).includes(name)) rolesToDisplay.push(role);
+                                        });
+                                    }
+
+                                    return rolesToDisplay.length > 0 ? (
+                                        <div className="flex flex-wrap gap-1 justify-end max-w-[200px]">
+                                            {rolesToDisplay.map(r => (
+                                                <span key={r} className="text-[10px] px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-700 rounded text-zinc-600 dark:text-zinc-300 font-medium">
+                                                    {r}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <span className="text-xs text-zinc-400 italic">Sem função</span>
+                                    );
+                                })()}
                              </div>
                              
                              <button 
-                                onClick={() => handleDeleteMember(member.id, member.name)}
+                                onClick={() => handleDeleteMember(profile?.id || 'manual', name)}
                                 className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                                 title="Excluir Membro"
                              >
@@ -726,7 +767,7 @@ const AppInner = () => {
         </div>
       </div>
     </div>
-  );
+  )};
 
   if (sessionLoading) {
       return (
