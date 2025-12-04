@@ -11,43 +11,29 @@ import { ProfileScreen } from './components/ProfileScreen';
 import { EventDetailsModal } from './components/EventDetailsModal';
 import { AvailabilityReportScreen } from './components/AvailabilityReportScreen';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile } from './types';
-import { loadData, saveData, getStorageKey, getSupabase, logout, updateUserProfile, sendNotification, syncMemberProfile, deleteMember } from './services/supabaseService';
+import { loadData, saveData, getSupabase, logout, updateUserProfile, syncMemberProfile, deleteMember } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { 
   Calendar as CalendarIcon, 
   BarChart2, 
   Shield, 
-  Settings, 
   Activity, 
   LayoutDashboard, 
   Users, 
   Edit3, 
-  Plus, 
-  Trash2, 
-  Search, 
-  ChevronDown,
-  Wand2,
-  BrainCircuit,
-  FileText,
   Clock,
-  ArrowRight,
-  X,
-  CheckCircle2,
+  CalendarSearch,
+  RefreshCw,
+  Search,
+  Settings,
   Mail,
   Phone,
-  UserCircle2,
-  RefreshCw,
-  AlertCircle,
-  Share2,
-  AlertTriangle,
-  Trash,
-  CalendarSearch
+  Trash2,
+  Plus
 } from 'lucide-react';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { GoogleGenAI } from "@google/genai";
 import { NextEventCard } from './components/NextEventCard';
-import { NotificationToggle } from './components/NotificationToggle';
 import { ConfirmationModal } from './components/ConfirmationModal';
 import { EventsModal, AvailabilityModal, RolesModal, AuditModal } from './components/ManagementModals';
 import { StatsModal } from './components/StatsModal';
@@ -68,7 +54,7 @@ const MANAGEMENT_NAV_ITEMS = [
   { id: 'logs', label: 'Logs do Sistema', icon: <Activity size={20} /> },
 ];
 
-const AppContent = () => {
+const AppInner = () => {
   const { addToast, confirmAction } = useToast();
   // --- STATE ---
   const [sessionLoading, setSessionLoading] = useState(true);
@@ -85,7 +71,7 @@ const AppContent = () => {
   
   // Data State
   const [members, setMembers] = useState<MemberMap>({});
-  const [registeredMembers, setRegisteredMembers] = useState<TeamMemberProfile[]>([]); // New State
+  const [registeredMembers, setRegisteredMembers] = useState<TeamMemberProfile[]>([]);
   const [schedule, setSchedule] = useState<ScheduleMap>({});
   const [attendance, setAttendance] = useState<AttendanceMap>({});
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>([]);
@@ -166,8 +152,8 @@ const AppContent = () => {
     const list = new Set<string>();
     
     // 1. Members from Role Map
-    Object.values(members).forEach(arr => {
-      if (Array.isArray(arr)) arr.forEach(m => list.add(m));
+    Object.values(members).forEach((arr) => {
+      if (Array.isArray(arr)) (arr as string[]).forEach(m => list.add(m));
     });
 
     // 2. Members from Registered List
@@ -232,10 +218,17 @@ const AppContent = () => {
         loadData<TeamMemberProfile[]>(cleanMid, 'public_members_list', [])
       ]);
 
-      const [
-          resMembers, resSchedule, resAvail, resEvents, 
-          resRoles, resLogs, resIgnored, resAttend, resNotif, resRegMembers
-      ] = results;
+      // Extrai os resultados com segurança
+      const resMembers = results[0];
+      const resSchedule = results[1];
+      const resAvail = results[2];
+      const resEvents = results[3];
+      const resRoles = results[4];
+      const resLogs = results[5];
+      const resIgnored = results[6];
+      const resAttend = results[7];
+      const resNotif = results[8];
+      const resRegMembers = results[9];
 
       setMembers(unwrap(resMembers, {}));
       setSchedule(unwrap(resSchedule, {}));
@@ -324,9 +317,6 @@ const AppContent = () => {
     const checkAndFixMembership = async () => {
         if (!currentUser || !ministryId || loading) return;
         
-        // Verifica se o usuário atual está na lista carregada
-        // Se a lista estiver vazia (registeredMembers.length === 0), mas estamos logados, 
-        // significa que provavelmente precisamos nos inserir nela.
         const amIInList = registeredMembers.some(m => 
             (m.id && currentUser.id && m.id === currentUser.id) || 
             (m.email && currentUser.email && m.email === currentUser.email) ||
@@ -335,11 +325,7 @@ const AppContent = () => {
 
         if (!amIInList && registeredMembers) {
             console.log("Self-Healing: Usuário atual não encontrado na lista. Forçando sincronização...");
-            
-            // Força a sincronização
             const updatedList = await syncMemberProfile(ministryId, currentUser);
-            
-            // Atualiza o estado local imediatamente
             if (updatedList.length > 0) {
                 setRegisteredMembers(updatedList);
                 addToast("Perfil sincronizado com a equipe!", "success");
@@ -347,31 +333,25 @@ const AppContent = () => {
         }
     };
 
-    // Delay para garantir que o load inicial terminou
     const timeout = setTimeout(checkAndFixMembership, 3000);
     return () => clearTimeout(timeout);
-  }, [currentUser, ministryId, registeredMembers]); // Removed loading from deps to avoid loop, handled inside
+  }, [currentUser, ministryId, registeredMembers]);
 
   // --- POLLING & SYNC ---
-  // Recarrega notificações e membros a cada 15s para manter sincronia
   useEffect(() => {
       if (!ministryId) return;
 
       const pollData = async () => {
           try {
-              // 1. Notificações
               const latestNotifs = await loadData<AppNotification[]>(ministryId, 'notifications_v1', []);
               if (JSON.stringify(latestNotifs) !== JSON.stringify(notifications)) {
                   setNotifications(latestNotifs);
-                  
-                  // Se houver uma nova não lida, avisa
                   const newUnread = latestNotifs.filter(n => !n.read && !notifications.some(old => old.id === n.id));
                   if (newUnread.length > 0) {
                       addToast(newUnread[0].title, "info");
                   }
               }
 
-              // 2. Membros (apenas se estiver na aba de equipe para economizar recursos)
               if (currentTab === 'team') {
                    const latestMembers = await loadData<TeamMemberProfile[]>(ministryId, 'public_members_list', []);
                    if (JSON.stringify(latestMembers) !== JSON.stringify(registeredMembers)) {
@@ -386,7 +366,7 @@ const AppContent = () => {
           }
       };
 
-      const interval = setInterval(pollData, 15000); // 15s
+      const interval = setInterval(pollData, 15000);
       return () => clearInterval(interval);
   }, [ministryId, notifications, registeredMembers, currentTab]);
 
@@ -411,16 +391,13 @@ const AppContent = () => {
   const handleDeleteEvent = async (iso: string, title: string) => {
     if (!ministryId) return;
     
-    // Check if custom event
     const custom = customEvents.find(e => e.date === iso.split('T')[0] && e.time === iso.split('T')[1]);
     if (custom) {
-       // It's a custom event, delete it
        const newEvents = customEvents.filter(e => e.id !== custom.id);
        setCustomEvents(newEvents);
        await saveData(ministryId, `events_${currentMonth}`, newEvents);
        logAction('Excluir Evento', `Evento extra '${title}' removido.`);
     } else {
-       // It's a standard event, ignore it
        const newIgnored = [...ignoredEvents, iso];
        setIgnoredEvents(newIgnored);
        await saveData(ministryId, `ignored_events_${currentMonth}`, newIgnored);
@@ -444,7 +421,6 @@ const AppContent = () => {
       async () => {
          const success = await deleteMember(ministryId, memberId, memberName);
          if (success) {
-             // Optimistic Update
              setRegisteredMembers(prev => prev.filter(m => m.id !== memberId));
              const newMembersMap = { ...members };
              Object.keys(newMembersMap).forEach(role => {
@@ -482,7 +458,6 @@ const AppContent = () => {
       setCurrentUser(prev => prev ? { ...prev, name, whatsapp, avatar_url, functions: functions || prev.functions } : null);
       addToast("Perfil salvo!", "success");
       
-      // Força recarga imediata dos membros locais e do mapa
       if (ministryId) {
           const updatedMembers = await loadData<TeamMemberProfile[]>(ministryId, 'public_members_list', []);
           const updatedMap = await loadData<MemberMap>(ministryId, 'members_v7', {});
@@ -495,41 +470,38 @@ const AppContent = () => {
   };
 
   const handleShareNextEvent = () => {
-     if (!nextEvent || !ministryId) return;
-     
-     const dateDisplay = nextEvent.dateDisplay;
-     const timeDisplay = nextEvent.iso.split('T')[1];
-     
-     let msg = `*ESCALA - ${nextEvent.title}*\n`;
-     msg += `📅 ${dateDisplay} às ${timeDisplay}\n\n`;
-     
-     roles.forEach(role => {
-         const key = `${nextEvent.iso}_${role}`;
-         const member = schedule[key];
-         if (member) {
-             msg += `*${role}:* ${member}\n`;
-         }
-     });
-     
-     msg += `\nConfira no app: https://escala-midia-pro.vercel.app`;
-     
-     const url = `https://wa.me/?text=${encodeURIComponent(msg)}`;
-     window.open(url, '_blank');
-  };
+    if (!nextEvent) {
+        addToast("Nenhum evento próximo encontrado para compartilhar.", "warning");
+        return;
+    }
 
-  const getDayStatus = (dateStr: string, memberName: string) => {
-    const dates = availability[memberName] || [];
-    const entry = dates.find(d => d.startsWith(dateStr));
-    if (!entry) return null;
-    if (entry.endsWith('_M')) return 'Manhã';
-    if (entry.endsWith('_N')) return 'Noite';
-    return 'Dia Todo';
+    let message = `*ESCALA - ${nextEvent.title.toUpperCase()}*\n`;
+    message += `📅 Data: ${nextEvent.dateDisplay}\n`;
+    const time = nextEvent.iso.split('T')[1];
+    message += `⏰ Horário: ${time}\n\n`;
+    message += `*EQUIPE ESCALADA:*\n`;
+
+    let hasMembers = false;
+    roles.forEach(role => {
+        const key = `${nextEvent.iso}_${role}`;
+        const memberName = schedule[key];
+        if (memberName) {
+            message += `▪️ *${role}:* ${memberName}\n`;
+            hasMembers = true;
+        }
+    });
+
+    if (!hasMembers) message += `_(Ninguém escalado ainda)_\n`;
+    
+    message += `\n✅ Confirme sua presença no App!`;
+
+    const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
   };
 
   // --- VIEWS ---
   const renderDashboard = () => (
     <div className="space-y-6 animate-fade-in">
-       {/* Greeting Section */}
        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
          <div>
             <h2 className="text-2xl font-bold text-zinc-800 dark:text-white">
@@ -539,10 +511,8 @@ const AppContent = () => {
                Bem-vindo ao painel de controle do {getMinistryTitle(ministryId)}.
             </p>
          </div>
-         {/* Botões Rápidos (Apenas para não-admin ou ações gerais) */}
        </div>
 
-       {/* Next Event Card */}
        {nextEvent ? (
          <NextEventCard 
             event={nextEvent}
@@ -570,543 +540,574 @@ const AppContent = () => {
        )}
 
        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-         {/* Events Card */}
          <div onClick={() => setCurrentTab('calendar')} className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md transition-all cursor-pointer group">
             <div className="flex justify-between items-start mb-4">
               <div className="p-3 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform">
                  <CalendarIcon size={24} />
               </div>
-              <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Mês Atual</span>
+              <span className="text-xs font-bold text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors">Visualizar</span>
             </div>
-            <h3 className="text-2xl font-bold text-zinc-900 dark:text-white mb-1">{visibleEvents.length} Eventos</h3>
-            <p className="text-sm text-zinc-500">Agendados para {getMonthName(currentMonth)}</p>
+            <h3 className="text-lg font-bold text-zinc-800 dark:text-white">Escala do Mês</h3>
+            <p className="text-sm text-zinc-500 mt-1">Veja quem está escalado em {getMonthName(currentMonth)}.</p>
          </div>
 
-         {/* Members Card */}
-         <div onClick={() => currentUser?.role === 'admin' ? setCurrentTab('team') : null} className={`bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm transition-all group ${currentUser?.role === 'admin' ? 'cursor-pointer hover:shadow-md' : ''}`}>
+         <div onClick={() => setCurrentTab('availability')} className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md transition-all cursor-pointer group">
             <div className="flex justify-between items-start mb-4">
-              <div className="p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform">
-                 <Users size={24} />
+              <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-xl text-green-600 dark:text-green-400 group-hover:scale-110 transition-transform">
+                 <Shield size={24} />
               </div>
-              <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Equipe</span>
+              <span className="text-xs font-bold text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors">Editar</span>
             </div>
-            <h3 className="text-2xl font-bold text-zinc-900 dark:text-white mb-1">{registeredMembers.length} Membros</h3>
-            <p className="text-sm text-zinc-500">Cadastrados e ativos no sistema</p>
+            <h3 className="text-lg font-bold text-zinc-800 dark:text-white">Minha Disponibilidade</h3>
+            <p className="text-sm text-zinc-500 mt-1">Informe os dias que você pode servir.</p>
          </div>
        </div>
     </div>
   );
-  
-  const renderTeam = () => {
-    // Mescla membros oficiais com qualquer outro nome encontrado na lista de todos os membros
-    // para garantir que ninguém fique de fora visualmente
-    const allUniqueMembers = Array.from(new Set([
-        ...registeredMembers.map(m => m.name),
-        ...allMembersList // Inclui membros fantasmas que podem ter vindo da disponibilidade
-    ])).sort();
 
-    return (
-        <div className="space-y-6 animate-fade-in max-w-5xl mx-auto">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
-                <div>
-                    <h2 className="text-2xl font-bold text-zinc-800 dark:text-white">Membros & Equipe</h2>
-                    <p className="text-zinc-500 text-sm mt-1">Lista de usuários cadastrados e membros ativos no sistema.</p>
-                </div>
-                <div className="flex gap-2">
-                    <button 
-                        onClick={handleRefreshList} 
-                        className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors" 
-                        title="Atualizar Lista"
-                    >
-                        <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
-                    </button>
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
-                        <input 
-                            type="text" 
-                            placeholder="Buscar membro..." 
-                            value={memberSearch}
-                            onChange={(e) => setMemberSearch(e.target.value)}
-                            className="pl-10 pr-4 py-2 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 w-64"
-                        />
-                    </div>
-                    <button onClick={() => setRolesModalOpen(true)} className="p-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-lg border border-zinc-200 dark:border-zinc-700">
-                        <Settings size={20} />
-                    </button>
-                </div>
-            </div>
-
-            {/* TABELA UNIFICADA DE MEMBROS */}
-            <div className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden shadow-sm">
-                <div className="bg-zinc-50 dark:bg-zinc-900/50 px-6 py-3 border-b border-zinc-200 dark:border-zinc-700">
-                    <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Membros Cadastrados (Login Ativo)</h3>
-                </div>
-                
-                {allUniqueMembers.filter(name => name.toLowerCase().includes(memberSearch.toLowerCase())).length === 0 ? (
-                    <div className="p-10 flex flex-col items-center justify-center text-zinc-500">
-                        <Users size={48} className="mb-4 opacity-20" />
-                        <p>Nenhum membro encontrado.</p>
-                        <p className="text-xs mt-2 opacity-60">Os membros aparecerão aqui após realizarem o cadastro. Tente clicar no botão de atualizar.</p>
-                    </div>
-                ) : (
-                    <div className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
-                        {allUniqueMembers
-                            .filter(name => name.toLowerCase().includes(memberSearch.toLowerCase()))
-                            .map(name => {
-                                const profile = registeredMembers.find(m => m.name === name);
-                                const isRegistered = !!profile;
-                                
-                                // Determina as funções para exibir
-                                let displayRoles: string[] = [];
-                                
-                                // Prioridade 1: Funções do Perfil Oficial
-                                if (profile && profile.roles && profile.roles.length > 0) {
-                                    displayRoles = profile.roles;
-                                } else {
-                                    // Prioridade 2: Funções do Mapa Manual (Legado/Fallback)
-                                    Object.entries(members).forEach(([role, list]) => {
-                                        if ((list as string[]).includes(name)) displayRoles.push(role);
-                                    });
-                                }
-
-                                return (
-                                    <div key={name} className="flex items-center justify-between p-4 hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors group">
-                                        <div className="flex items-center gap-4">
-                                            {/* Avatar */}
-                                            {profile?.avatar_url ? (
-                                                <img src={profile.avatar_url} alt={name} className="w-10 h-10 rounded-full object-cover shadow-sm" />
-                                            ) : (
-                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm ${isRegistered ? 'bg-blue-600' : 'bg-orange-500'}`}>
-                                                    {name.charAt(0).toUpperCase()}
-                                                </div>
-                                            )}
-                                            
-                                            <div>
-                                                <h4 className="font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
-                                                    {name}
-                                                    {!isRegistered && (
-                                                        <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 rounded border border-orange-200" title="Este membro usa o sistema mas não tem cadastro oficial linkado">
-                                                            Não Sincronizado
-                                                        </span>
-                                                    )}
-                                                </h4>
-                                                
-                                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-0.5">
-                                                    <span className="text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-1">
-                                                        {profile?.id ? `ID: ${profile.id.substring(0, 8)}...` : 'ID: --'}
-                                                    </span>
-                                                    {profile?.email && (
-                                                        <span className="text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-1">
-                                                            <Mail size={12}/> {profile.email}
-                                                        </span>
-                                                    )}
-                                                    {profile?.whatsapp && (
-                                                        <span className="text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-1">
-                                                            <Phone size={12}/> {profile.whatsapp}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex items-center gap-4">
-                                            {/* Roles Badges */}
-                                            <div className="flex flex-wrap justify-end gap-1 max-w-[200px]">
-                                                {displayRoles.length > 0 ? (
-                                                    displayRoles.map(r => (
-                                                        <span key={r} className="text-[10px] bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-2 py-0.5 rounded-full border border-zinc-200 dark:border-zinc-600">
-                                                            {r}
-                                                        </span>
-                                                    ))
-                                                ) : (
-                                                    <span className="text-[10px] text-zinc-400 italic">Sem função</span>
-                                                )}
-                                            </div>
-
-                                            {/* Delete Button */}
-                                            <button 
-                                                onClick={() => handleDeleteMember(profile?.id || 'ghost', name)}
-                                                className="p-2 text-zinc-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                                                title="Excluir Membro"
-                                            >
-                                                <Trash size={18} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                    </div>
-                )}
-            </div>
-
-            {/* Gerenciamento Rápido de Funções (Visualização legada, mas útil para admin organizar grupos) */}
-            <div className="mt-8">
-                <h3 className="text-lg font-bold text-zinc-800 dark:text-white mb-4">Gerenciamento Rápido de Funções</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {roles.map(role => {
-                         // Conta membros nesta função (usando lista consolidada registeredMembers)
-                         const count = registeredMembers.filter(m => m.roles && m.roles.includes(role)).length 
-                                       + (members[role] || []).filter(m => !registeredMembers.some(rm => rm.name === m)).length;
-
-                         return (
-                            <div key={role} className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3 flex justify-between items-center group">
-                                <span className="font-medium text-sm text-zinc-300">{role}</span>
-                                <div className="flex items-center gap-2">
-                                    <span className="bg-zinc-700 text-xs px-2 py-1 rounded-full text-zinc-400">{count}</span>
-                                    <button onClick={() => {
-                                        if(confirm(`Excluir a função "${role}"?`)) {
-                                            setRoles(prev => prev.filter(r => r !== role));
-                                        }
-                                    }} className="text-zinc-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <Trash2 size={14}/>
-                                    </button>
-                                </div>
-                            </div>
-                         );
-                    })}
-                    <button 
-                        onClick={() => setRolesModalOpen(true)}
-                        className="border border-dashed border-zinc-700 rounded-lg p-3 flex items-center justify-center gap-2 text-zinc-500 hover:text-blue-400 hover:border-blue-500/50 hover:bg-blue-500/5 transition-all text-sm font-medium"
-                    >
-                        <Plus size={16}/> Nova Função
-                    </button>
-                </div>
-                <p className="text-xs text-zinc-500 mt-2">
-                    * Para adicionar membros às funções, peça para eles editarem o "Meu Perfil" ou use o gerenciamento rápido.
-                </p>
-            </div>
+  const renderTeam = () => (
+    <div className="space-y-6 animate-fade-in max-w-5xl mx-auto">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-zinc-200 dark:border-zinc-700 pb-4">
+        <div>
+           <h2 className="text-2xl font-bold text-zinc-800 dark:text-white">Membros & Equipe</h2>
+           <p className="text-zinc-500 text-sm">Lista de usuários cadastrados e membros ativos no sistema.</p>
         </div>
-    );
-  };
+        <div className="flex gap-2">
+            <button 
+                onClick={handleRefreshList} 
+                className="bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded-lg flex items-center justify-center transition-colors"
+                title="Atualizar Lista"
+            >
+                {loading ? <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"/> : <RefreshCw size={20} />}
+            </button>
+            <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+                <input 
+                    type="text" 
+                    placeholder="Buscar membro..." 
+                    value={memberSearch}
+                    onChange={(e) => setMemberSearch(e.target.value)}
+                    className="pl-10 pr-4 py-2.5 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-800 dark:text-zinc-100 outline-none w-64"
+                />
+            </div>
+            <button onClick={() => setRolesModalOpen(true)} className="bg-zinc-800 hover:bg-zinc-700 text-white p-2.5 rounded-lg transition-colors"><Settings size={20}/></button>
+        </div>
+      </div>
 
-  // --- RENDER ---
-  if (sessionLoading) {
-    return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-         <div className="flex flex-col items-center gap-4">
-            <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-zinc-500 text-sm animate-pulse">Carregando sistema...</p>
+      {/* Lista de Membros Registrados */}
+      <div className="bg-zinc-50 dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 overflow-hidden shadow-sm">
+         <div className="px-6 py-3 bg-zinc-100 dark:bg-zinc-800/50 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center">
+            <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Membros Cadastrados (Login Ativo)</h3>
+         </div>
+         
+         <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+             {registeredMembers.length === 0 ? (
+                 <div className="p-12 text-center text-zinc-500 dark:text-zinc-400 flex flex-col items-center">
+                     <Users size={48} className="mb-3 opacity-20"/>
+                     <p>Nenhum membro encontrado.</p>
+                     <p className="text-xs mt-1">Os membros aparecerão aqui após realizarem o cadastro. Tente clicar no botão de atualizar.</p>
+                 </div>
+             ) : (
+                 registeredMembers
+                    .filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()))
+                    .map(member => (
+                     <div key={member.id} className="p-4 flex items-center justify-between hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+                         <div className="flex items-center gap-4">
+                             {member.avatar_url ? (
+                                 <img src={member.avatar_url} alt={member.name} className="w-10 h-10 rounded-full object-cover shadow-sm" />
+                             ) : (
+                                 <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                                     {member.name.charAt(0).toUpperCase()}
+                                 </div>
+                             )}
+                             <div>
+                                 <h4 className="font-bold text-zinc-800 dark:text-zinc-100">{member.name}</h4>
+                                 <p className="text-xs text-zinc-500">ID: {member.id.substring(0,8)}...</p>
+                             </div>
+                         </div>
+                         
+                         <div className="hidden md:block text-sm text-zinc-600 dark:text-zinc-400">
+                             {member.email && <div className="flex items-center gap-2"><Mail size={14}/> {member.email}</div>}
+                             {member.whatsapp && <div className="flex items-center gap-2 mt-1"><Phone size={14}/> {member.whatsapp}</div>}
+                         </div>
+
+                         <div className="flex items-center gap-4">
+                             <div className="text-right">
+                                {member.roles && member.roles.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1 justify-end max-w-[200px]">
+                                        {member.roles.map(r => (
+                                            <span key={r} className="text-[10px] px-1.5 py-0.5 bg-zinc-200 dark:bg-zinc-700 rounded text-zinc-600 dark:text-zinc-300 font-medium">
+                                                {r}
+                                            </span>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <span className="text-xs text-zinc-400 italic">Sem função</span>
+                                )}
+                             </div>
+                             
+                             <button 
+                                onClick={() => handleDeleteMember(member.id, member.name)}
+                                className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                title="Excluir Membro"
+                             >
+                                <Trash2 size={18} />
+                             </button>
+                         </div>
+                     </div>
+                 ))
+             )}
          </div>
       </div>
-    );
+
+      {/* Gerenciamento Rápido de Funções (Legado/Manual) */}
+      <div>
+        <h3 className="text-lg font-bold text-zinc-800 dark:text-white mb-4">Gerenciamento Rápido de Funções</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {roles.map(role => (
+            <div key={role} className="bg-zinc-50 dark:bg-zinc-900 rounded-xl p-4 border border-zinc-200 dark:border-zinc-700">
+                <div className="flex justify-between items-center mb-3">
+                    <h4 className="font-bold text-zinc-700 dark:text-zinc-200">{role}</h4>
+                    <div className="flex gap-2">
+                        <span className="text-xs bg-zinc-200 dark:bg-zinc-800 px-2 py-1 rounded-full text-zinc-600 dark:text-zinc-400">
+                            {(members[role] || []).length}
+                        </span>
+                        <button 
+                            onClick={() => {
+                                if(confirm(`Excluir a função "${role}"?`)) {
+                                    setRoles(roles.filter(r => r !== role));
+                                }
+                            }}
+                            className="text-zinc-400 hover:text-red-500"
+                        >
+                            <Trash2 size={16}/>
+                        </button>
+                    </div>
+                </div>
+                
+                {/* Visualização de Membros na Função (Somente Leitura) */}
+                <div className="flex flex-wrap gap-1 mb-2">
+                    {(members[role] || []).map(m => (
+                        <span key={m} className="text-xs px-2 py-1 bg-zinc-200 dark:bg-zinc-800 rounded text-zinc-600 dark:text-zinc-400">
+                            {m}
+                        </span>
+                    ))}
+                </div>
+
+                <button 
+                    onClick={() => {
+                        const name = prompt(`Adicionar membro em ${role}:`);
+                        if (name) {
+                            const current = members[role] || [];
+                            if (!current.includes(name)) {
+                                const newMap = { ...members, [role]: [...current, name] };
+                                setMembers(newMap);
+                                if(ministryId) saveData(ministryId, 'members_v7', newMap);
+                            }
+                        }
+                    }}
+                    className="w-full py-2 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg text-xs text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                    + Adicionar Manualmente
+                </button>
+                <p className="text-[10px] text-zinc-400 mt-2 text-center">* Para adicionar membros às funções, use a coluna "Funções na Escala" (lógica a ser implementada) ou adicione manualmente no editor.</p>
+            </div>
+            ))}
+            
+            <button 
+                onClick={() => setRolesModalOpen(true)}
+                className="flex items-center justify-center p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-xl text-zinc-500 hover:text-blue-500 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all"
+            >
+                <div className="flex flex-col items-center gap-2">
+                    <Plus size={24}/>
+                    <span className="font-bold">+ Nova Função</span>
+                </div>
+            </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (sessionLoading) {
+      return (
+          <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-white">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+          </div>
+      );
   }
 
   if (!currentUser) {
-    return <LoginScreen />;
+    return <LoginScreen onLoginSuccess={() => {}} />;
   }
 
   return (
-    <ToastProvider>
-      <DashboardLayout
-        sidebarOpen={sidebarOpen}
-        setSidebarOpen={setSidebarOpen}
-        theme={theme}
-        toggleTheme={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
-        onLogout={logout}
-        title={getMinistryTitle(ministryId)}
-        isConnected={isConnected}
-        currentUser={currentUser}
-        currentTab={currentTab}
-        onTabChange={setCurrentTab}
-        mainNavItems={MAIN_NAV_ITEMS}
-        managementNavItems={MANAGEMENT_NAV_ITEMS}
-        notifications={notifications}
-        onNotificationsUpdate={setNotifications}
-      >
-        {currentTab === 'dashboard' && renderDashboard()}
-        
-        {currentTab === 'calendar' && (
-          <div className="animate-fade-in space-y-4">
-             <div className="flex justify-between items-center bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm sticky top-0 z-20">
-                <div className="flex items-center gap-4">
-                   <button onClick={() => {
-                       const prev = new Date(year, month - 2, 1);
-                       setCurrentMonth(prev.toISOString().slice(0, 7));
-                   }} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-300"><ChevronDown className="rotate-90" size={20}/></button>
-                   
-                   <h2 className="text-xl font-bold text-zinc-800 dark:text-white capitalize min-w-[140px] text-center">
-                      {getMonthName(currentMonth)}
-                   </h2>
+    <DashboardLayout
+      sidebarOpen={sidebarOpen}
+      setSidebarOpen={setSidebarOpen}
+      theme={theme}
+      toggleTheme={() => {
+        const newTheme = theme === 'dark' ? 'light' : 'dark';
+        setTheme(newTheme);
+        if (newTheme === 'dark') document.documentElement.classList.add('dark');
+        else document.documentElement.classList.remove('dark');
+      }}
+      onLogout={async () => {
+        await logout();
+        setCurrentUser(null);
+      }}
+      title={getMinistryTitle(ministryId)}
+      isConnected={isConnected}
+      currentUser={currentUser}
+      currentTab={currentTab}
+      onTabChange={setCurrentTab}
+      mainNavItems={MAIN_NAV_ITEMS}
+      managementNavItems={MANAGEMENT_NAV_ITEMS}
+      notifications={notifications}
+      onNotificationsUpdate={setNotifications}
+    >
+      {currentTab === 'dashboard' && renderDashboard()}
+      
+      {currentTab === 'calendar' && (
+        <div className="animate-fade-in space-y-4">
+           <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
+              <div className="flex items-center gap-4 bg-white dark:bg-zinc-800 p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                 <button onClick={() => {
+                    const prev = new Date(year, month - 2, 1);
+                    setCurrentMonth(prev.toISOString().slice(0, 7));
+                 }} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md transition-colors text-zinc-600 dark:text-zinc-400">
+                    ←
+                 </button>
+                 <span className="text-sm font-bold text-zinc-800 dark:text-zinc-100 min-w-[100px] text-center capitalize">
+                    {getMonthName(currentMonth)}
+                 </span>
+                 <button onClick={() => {
+                    const next = new Date(year, month, 1);
+                    setCurrentMonth(next.toISOString().slice(0, 7));
+                 }} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md transition-colors text-zinc-600 dark:text-zinc-400">
+                    →
+                 </button>
+              </div>
 
-                   <button onClick={() => {
-                       const next = new Date(year, month, 1);
-                       setCurrentMonth(next.toISOString().slice(0, 7));
-                   }} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-300"><ChevronDown className="-rotate-90" size={20}/></button>
-                </div>
-                
-                {/* Visual Legend */}
-                <div className="hidden md:flex items-center gap-4 text-xs">
-                    <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500"></span>Confirmado</div>
-                    <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500"></span>Conflito</div>
-                    <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500"></span>Aviso IA</div>
-                </div>
-             </div>
+              {currentUser.role === 'admin' && (
+                 <ToolsMenu 
+                    allMembers={allMembersList}
+                    onExportIndividual={(member) => {
+                        const doc = new jsPDF();
+                        doc.text(`Escala Individual - ${member}`, 14, 20);
+                        doc.text(`Mês: ${getMonthName(currentMonth)}`, 14, 30);
+                        
+                        const data: any[] = [];
+                        visibleEvents.forEach(evt => {
+                           roles.forEach(role => {
+                               if (schedule[`${evt.iso}_${role}`] === member) {
+                                   data.push([evt.dateDisplay, evt.title, role]);
+                               }
+                           });
+                        });
+                        
+                        autoTable(doc, {
+                            head: [['Data', 'Evento', 'Função']],
+                            body: data,
+                            startY: 40
+                        });
+                        doc.save(`escala_${member}.pdf`);
+                    }} 
+                    onExportFull={() => {
+                        const doc = new jsPDF('l', 'mm', 'a4');
+                        doc.setFontSize(16);
+                        doc.text(`Escala Geral - ${getMonthName(currentMonth)}`, 14, 20);
+                        
+                        const head = [['Data', 'Evento', ...roles]];
+                        const body = visibleEvents.map(evt => {
+                            const row = [evt.dateDisplay, evt.title];
+                            roles.forEach(role => {
+                                row.push(schedule[`${evt.iso}_${role}`] || '-');
+                            });
+                            return row;
+                        });
 
-             <ScheduleTable 
-                events={visibleEvents}
-                roles={roles}
-                schedule={schedule}
-                attendance={attendance}
-                availability={availability}
-                members={consolidatedMembers} // Usa a lista consolidada (Manual + Cadastrados)
-                allMembers={allMembersList}   // Usa a lista completa de nomes para o grupo "Outros"
-                scheduleIssues={scheduleIssues}
-                onCellChange={handleCellChange}
-                onAttendanceToggle={handleAttendanceToggle}
-                onDeleteEvent={handleDeleteEvent}
-                memberStats={memberStats}
-             />
-          </div>
-        )}
+                        autoTable(doc, {
+                            head: head,
+                            body: body,
+                            startY: 30,
+                            styles: { fontSize: 8 },
+                        });
+                        doc.save(`escala_${currentMonth}.pdf`);
+                    }}
+                    onWhatsApp={handleShareNextEvent}
+                    onCSV={() => {
+                        const headers = ['Data', 'Evento', ...roles].join(',');
+                        const rows = visibleEvents.map(evt => {
+                            const row = [evt.dateDisplay, evt.title];
+                            roles.forEach(role => row.push(schedule[`${evt.iso}_${role}`] || ''));
+                            return row.join(',');
+                        }).join('\n');
+                        const csvContent = "data:text/csv;charset=utf-8," + headers + '\n' + rows;
+                        const encodedUri = encodeURI(csvContent);
+                        const link = document.createElement("a");
+                        link.setAttribute("href", encodedUri);
+                        link.setAttribute("download", `escala_${currentMonth}.csv`);
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    }}
+                    onImportCSV={(file) => {
+                        const reader = new FileReader();
+                        reader.onload = async (e) => {
+                            const text = e.target?.result as string;
+                            const lines = text.split('\n');
+                            const newMembers = { ...members };
+                            lines.forEach(line => {
+                                const [name, role] = line.split(',').map(s => s.trim());
+                                if (name && role) {
+                                    if (!newMembers[role]) newMembers[role] = [];
+                                    if (!newMembers[role].includes(name)) newMembers[role].push(name);
+                                }
+                            });
+                            setMembers(newMembers);
+                            if(ministryId) await saveData(ministryId, 'members_v7', newMembers);
+                            addToast("Membros importados!", "success");
+                        };
+                        reader.readAsText(file);
+                    }}
+                    onClearMonth={async () => {
+                        if(confirm("Limpar toda a escala deste mês?")) {
+                            const newSchedule = { ...schedule };
+                            Object.keys(newSchedule).forEach(k => {
+                                if(k.startsWith(currentMonth)) delete newSchedule[k];
+                            });
+                            setSchedule(newSchedule);
+                            if(ministryId) await saveData(ministryId, `schedule_${currentMonth}`, newSchedule);
+                            addToast("Mês limpo.", "info");
+                        }
+                    }}
+                 />
+              )}
+           </div>
 
-        {currentTab === 'availability' && (
-          <AvailabilityScreen 
-            availability={availability} 
-            setAvailability={async (newAvail) => {
-               setAvailability(newAvail);
-               if(ministryId) await saveData(ministryId, 'availability_v1', newAvail);
-            }} 
+           <ScheduleTable 
+              events={visibleEvents}
+              roles={roles}
+              schedule={schedule}
+              attendance={attendance}
+              availability={availability}
+              members={consolidatedMembers}
+              allMembers={allMembersList}
+              scheduleIssues={scheduleIssues}
+              onCellChange={handleCellChange}
+              onAttendanceToggle={handleAttendanceToggle}
+              onDeleteEvent={handleDeleteEvent}
+              memberStats={memberStats}
+           />
+           
+           <div className="flex flex-wrap gap-2 text-xs text-zinc-500 mt-2">
+              <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-500"></div> Presença Confirmada</span>
+              <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500"></div> Conflito de Horário</span>
+              <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-500"></div> Aviso IA</span>
+           </div>
+        </div>
+      )}
+
+      {currentTab === 'availability' && (
+         <AvailabilityScreen 
+            availability={availability}
+            setAvailability={setAvailability}
             allMembersList={allMembersList}
             currentMonth={currentMonth}
             onMonthChange={setCurrentMonth}
             currentUser={currentUser}
             onNotify={(msg) => {
-               if(ministryId) sendNotification(ministryId, { title: 'Disponibilidade Atualizada', message: msg, type: 'info' });
+                if(ministryId) {
+                    import('./services/supabaseService').then(s => {
+                        s.sendNotification(ministryId, {
+                            type: 'info',
+                            title: 'Disponibilidade Atualizada',
+                            message: msg
+                        });
+                    });
+                }
             }}
-          />
-        )}
+         />
+      )}
 
-        {currentTab === 'availability-report' && currentUser?.role === 'admin' && (
-           <AvailabilityReportScreen 
+      {currentTab === 'editor' && currentUser?.role === 'admin' && (
+        <div className="animate-fade-in space-y-4">
+            <h2 className="text-2xl font-bold text-zinc-800 dark:text-white mb-4">Editor de Escala</h2>
+            <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl border border-zinc-200 dark:border-zinc-700">
+                <p className="text-zinc-600 dark:text-zinc-300 mb-4">
+                    Ferramentas avançadas para gerenciamento da escala.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                    <button onClick={() => setEventsModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-700 rounded-lg hover:bg-zinc-200 transition-colors">
+                        <Clock size={18}/> Gerenciar Eventos Extras
+                    </button>
+                    <button onClick={() => setAvailModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-700 rounded-lg hover:bg-zinc-200 transition-colors">
+                        <Shield size={18}/> Gerenciar Indisponibilidade (Admin)
+                    </button>
+                    <button onClick={() => setRolesModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-700 rounded-lg hover:bg-zinc-200 transition-colors">
+                        <Settings size={18}/> Editar Funções
+                    </button>
+                </div>
+
+                <div className="mt-8 border-t border-zinc-200 dark:border-zinc-700 pt-6">
+                    <h3 className="font-bold text-lg text-zinc-800 dark:text-white mb-2">Anunciar Próximo Evento</h3>
+                    <p className="text-sm text-zinc-500 mb-4">Envie a escala do próximo culto para o WhatsApp do grupo.</p>
+                    
+                    {nextEvent ? (
+                        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-4 rounded-lg flex justify-between items-center">
+                            <div>
+                                <p className="font-bold text-green-800 dark:text-green-300">{nextEvent.title}</p>
+                                <p className="text-xs text-green-600 dark:text-green-400">{nextEvent.dateDisplay}</p>
+                            </div>
+                            <button 
+                                onClick={handleShareNextEvent}
+                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold shadow-sm transition-colors flex items-center gap-2"
+                            >
+                                <Phone size={18}/> Enviar no WhatsApp
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="p-4 bg-zinc-100 dark:bg-zinc-900 rounded-lg text-zinc-500 text-sm italic">
+                            Nenhum evento próximo encontrado para anunciar.
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+      )}
+
+      {currentTab === 'availability-report' && currentUser?.role === 'admin' && (
+          <AvailabilityReportScreen 
               availability={availability}
               registeredMembers={registeredMembers}
               membersMap={members}
               currentMonth={currentMonth}
               onMonthChange={setCurrentMonth}
               availableRoles={roles}
-           />
-        )}
+          />
+      )}
 
-        {currentTab === 'editor' && currentUser?.role === 'admin' && (
-           <div className="space-y-6 animate-fade-in max-w-4xl mx-auto">
-              <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                 <Edit3 className="text-blue-500"/> Editor de Escala
-              </h2>
+      {currentTab === 'events' && currentUser?.role === 'admin' && (
+         <EventsScreen 
+            customEvents={customEvents}
+            setCustomEvents={async (evts) => {
+                setCustomEvents(evts);
+                if(ministryId) await saveData(ministryId, `events_${currentMonth}`, evts);
+            }}
+            currentMonth={currentMonth}
+            onMonthChange={setCurrentMonth}
+         />
+      )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <button onClick={() => setEventsModalOpen(true)} className="p-4 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl flex items-center gap-3 hover:shadow-md transition-all group">
-                    <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform">
-                       <Clock size={24}/>
-                    </div>
-                    <div className="text-left">
-                       <h3 className="font-bold text-zinc-800 dark:text-white">Gerenciar Eventos</h3>
-                       <p className="text-xs text-zinc-500">Adicionar cultos extras ou ocultar datas.</p>
-                    </div>
-                 </button>
+      {currentTab === 'team' && currentUser?.role === 'admin' && renderTeam()}
 
-                 <button onClick={() => setRolesModalOpen(true)} className="p-4 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl flex items-center gap-3 hover:shadow-md transition-all group">
-                    <div className="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-lg text-orange-600 dark:text-orange-400 group-hover:scale-110 transition-transform">
-                       <Settings size={24}/>
-                    </div>
-                    <div className="text-left">
-                       <h3 className="font-bold text-zinc-800 dark:text-white">Configurar Funções</h3>
-                       <p className="text-xs text-zinc-500">Adicionar ou remover cargos da equipe.</p>
-                    </div>
-                 </button>
-              </div>
+      {currentTab === 'stats' && currentUser?.role === 'admin' && (
+         <div className="text-center p-8">
+            <h2 className="text-2xl font-bold mb-4">Estatísticas</h2>
+            <button onClick={() => setStatsModalOpen(true)} className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 shadow-lg">
+                Ver Gráfico de Participação
+            </button>
+         </div>
+      )}
 
-              {/* Botão de Anunciar Escala */}
-              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 rounded-2xl shadow-lg text-white flex flex-col md:flex-row items-center justify-between gap-4">
-                  <div>
-                      <h3 className="text-lg font-bold flex items-center gap-2"><Share2 size={20}/> Anunciar Próximo Evento</h3>
-                      {nextEvent ? (
-                          <p className="text-blue-100 text-sm mt-1">
-                             Compartilhe a escala de <strong>{nextEvent.title}</strong> ({nextEvent.dateDisplay}) no WhatsApp da equipe.
-                          </p>
-                      ) : (
-                          <p className="text-blue-200 text-sm mt-1">Nenhum evento próximo para anunciar.</p>
-                      )}
-                  </div>
-                  <button 
-                     onClick={handleShareNextEvent}
-                     disabled={!nextEvent}
-                     className="px-6 py-3 bg-white text-blue-600 font-bold rounded-xl shadow-md hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                  >
-                     Enviar no WhatsApp
-                  </button>
-              </div>
-
-              <div className="p-6 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl text-sm text-amber-800 dark:text-amber-200">
-                 <h4 className="font-bold flex items-center gap-2"><Wand2 size={16}/> Dica Pro</h4>
-                 <p>Use a tabela do Calendário para editar a escala. O sistema salva automaticamente. Se precisar de ajustes finos, clique no ícone de IA nas células para ver sugestões.</p>
-              </div>
-           </div>
-        )}
-
-        {currentTab === 'events' && currentUser?.role === 'admin' && (
-           <EventsScreen 
-              customEvents={customEvents} 
-              setCustomEvents={async (evts) => {
-                 setCustomEvents(evts);
-                 if(ministryId) await saveData(ministryId, `events_${currentMonth}`, evts);
-              }}
-              currentMonth={currentMonth}
-              onMonthChange={setCurrentMonth}
-           />
-        )}
-
-        {currentTab === 'team' && currentUser?.role === 'admin' && renderTeam()}
-
-        {currentTab === 'stats' && currentUser?.role === 'admin' && (
-           <div className="animate-fade-in max-w-4xl mx-auto space-y-6">
-              <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                 <BarChart2 className="text-emerald-500"/> Estatísticas
-              </h2>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
-                    <h3 className="font-bold text-zinc-700 dark:text-zinc-300 mb-4">Participação no Mês ({getMonthName(currentMonth)})</h3>
-                    <div className="space-y-3">
-                       {(Object.entries(memberStats) as [string, number][])
-                          .sort(([,a], [,b]) => b - a)
-                          .slice(0, 5)
-                          .map(([name, count]) => (
-                             <div key={name} className="flex items-center gap-3">
-                                <span className="text-sm font-medium w-24 truncate text-right">{name}</span>
-                                <div className="flex-1 h-2 bg-zinc-100 dark:bg-zinc-700 rounded-full overflow-hidden">
-                                   <div className="h-full bg-blue-500" style={{ width: `${(count / 10) * 100}%` }}></div>
-                                </div>
-                                <span className="text-xs font-bold">{count}</span>
-                             </div>
-                          ))}
-                    </div>
-                    <button onClick={() => setStatsModalOpen(true)} className="w-full mt-6 py-2 text-sm text-blue-500 font-medium hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors">
-                       Ver Todos
-                    </button>
-                 </div>
-
-                 <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex flex-col items-center justify-center text-center">
-                    <div className="p-4 bg-zinc-100 dark:bg-zinc-700 rounded-full mb-4">
-                       <FileText size={32} className="text-zinc-400"/>
-                    </div>
-                    <h3 className="font-bold text-zinc-800 dark:text-white">Exportar Relatórios</h3>
-                    <p className="text-sm text-zinc-500 mt-2 mb-6 max-w-xs">Baixe a escala completa em PDF ou gere planilhas para análise externa.</p>
-                    <ToolsMenu 
-                       onExportIndividual={(m) => {
-                          const doc = new jsPDF();
-                          doc.text(`Escala Individual: ${m}`, 10, 10);
-                          // Lógica simples de export
-                          doc.save(`escala_${m}.pdf`);
-                       }}
-                       onExportFull={() => {
-                          const doc = new jsPDF();
-                          autoTable(doc, {
-                             head: [['Data', 'Evento', ...roles]],
-                             body: visibleEvents.map(evt => [
-                                evt.dateDisplay,
-                                evt.title,
-                                ...roles.map(r => schedule[`${evt.iso}_${r}`] || '-')
-                             ])
-                          });
-                          doc.save(`escala_${currentMonth}.pdf`);
-                       }}
-                       onWhatsApp={handleShareNextEvent} // Reusing logic
-                       onCSV={() => {}}
-                       onImportCSV={() => {}}
-                       onClearMonth={() => {}}
-                       allMembers={allMembersList}
-                    />
-                 </div>
-              </div>
-           </div>
-        )}
-
-        {currentTab === 'logs' && currentUser?.role === 'admin' && (
-           <div className="animate-fade-in max-w-4xl mx-auto space-y-4">
-              <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                 <Activity className="text-zinc-500"/> Logs do Sistema
-              </h2>
-              <div className="bg-zinc-950 rounded-xl p-4 font-mono text-xs text-green-400 h-96 overflow-y-auto custom-scrollbar border border-zinc-800 shadow-inner">
-                 {auditLog.length === 0 && <span className="text-zinc-600">// Nenhum registro de atividade.</span>}
+      {currentTab === 'logs' && currentUser?.role === 'admin' && (
+         <div className="p-4 max-w-4xl mx-auto">
+             <h2 className="text-2xl font-bold mb-4">Logs do Sistema</h2>
+             <div className="bg-zinc-900 text-zinc-300 p-4 rounded-xl font-mono text-xs h-[500px] overflow-y-auto custom-scrollbar">
                  {auditLog.map((log, i) => (
-                    <div key={i} className="mb-1 border-b border-zinc-900 pb-1">
-                       <span className="text-zinc-500">[{log.date}]</span> <span className="text-yellow-500">{log.action}:</span> {log.details}
-                    </div>
+                     <div key={i} className="mb-2 border-b border-zinc-800 pb-2">
+                         <span className="text-zinc-500">[{log.date}]</span> <span className="text-blue-400">{log.action}:</span> {log.details}
+                     </div>
                  ))}
-              </div>
-           </div>
-        )}
+             </div>
+         </div>
+      )}
+      
+      {currentTab === 'profile' && currentUser && (
+         <ProfileScreen 
+            user={currentUser} 
+            onUpdateProfile={handleUpdateProfile}
+            availableRoles={roles}
+         />
+      )}
 
-        {currentTab === 'profile' && (
-           <ProfileScreen 
-             user={currentUser} 
-             onUpdateProfile={handleUpdateProfile}
-             availableRoles={roles}
-           />
-        )}
-      </DashboardLayout>
-
-      {/* GLOBAL MODALS */}
-      <EventsModal 
-         isOpen={eventsModalOpen} 
-         onClose={() => setEventsModalOpen(false)}
-         events={customEvents}
-         hiddenEvents={hiddenEventsList}
-         onAdd={async (e) => {
-             const newEvts = [...customEvents, e];
-             setCustomEvents(newEvts);
-             if(ministryId) await saveData(ministryId, `events_${currentMonth}`, newEvts);
-         }}
-         onRemove={async (id) => {
-             const newEvts = customEvents.filter(e => e.id !== id);
-             setCustomEvents(newEvts);
-             if(ministryId) await saveData(ministryId, `events_${currentMonth}`, newEvts);
-         }}
-         onRestore={handleRestoreEvent}
-      />
-
-      <RolesModal 
-         isOpen={rolesModalOpen}
-         onClose={() => setRolesModalOpen(false)}
-         roles={roles}
-         onUpdate={async (newRoles) => {
-             setRoles(newRoles);
-             if(ministryId) {
-                // Salva na config de funções E no mapa de membros (criando chaves vazias se necessário)
-                await saveData(ministryId, 'functions_config', newRoles);
-                
-                // Atualiza members_v7 para garantir que as novas chaves existam
-                const currentMap = { ...members };
-                newRoles.forEach(r => {
-                    if (!currentMap[r]) currentMap[r] = [];
-                });
-                // (Opcional) Poderíamos remover chaves antigas, mas é mais seguro manter por histórico
-                setMembers(currentMap);
-                await saveData(ministryId, 'members_v7', currentMap);
-             }
-         }}
-      />
-
-      <StatsModal 
-         isOpen={statsModalOpen}
-         onClose={() => setStatsModalOpen(false)}
-         stats={memberStats}
-         monthName={getMonthName(currentMonth)}
-      />
-
-      {/* Confirmation Modal */}
+      {/* MODALS */}
       <ConfirmationModal 
          isOpen={!!confirmationData}
          onClose={() => setConfirmationData(null)}
          data={confirmationData}
-         onConfirm={() => {
-            if(confirmationData) handleAttendanceToggle(confirmationData.key);
-            setConfirmationData(null);
-            addToast("Presença confirmada!", "success");
+         onConfirm={async () => {
+             if (confirmationData && ministryId) {
+                 await handleAttendanceToggle(confirmationData.key);
+                 setConfirmationData(null);
+                 addToast("Presença confirmada!", "success");
+             }
          }}
       />
+
+      <EventsModal 
+        isOpen={eventsModalOpen} 
+        onClose={() => setEventsModalOpen(false)}
+        events={customEvents}
+        hiddenEvents={hiddenEventsList}
+        onAdd={async (e) => {
+            const newEvts = [...customEvents, e];
+            setCustomEvents(newEvts);
+            if(ministryId) await saveData(ministryId, `events_${currentMonth}`, newEvts);
+        }}
+        onRemove={async (id) => {
+            const newEvts = customEvents.filter(e => e.id !== id);
+            setCustomEvents(newEvts);
+            if(ministryId) await saveData(ministryId, `events_${currentMonth}`, newEvts);
+        }}
+        onRestore={handleRestoreEvent}
+      />
+
+      <AvailabilityModal 
+        isOpen={availModalOpen} 
+        onClose={() => setAvailModalOpen(false)} 
+        members={Object.keys(availability)}
+        availability={availability}
+        currentMonth={currentMonth}
+        onUpdate={async (m, dates) => {
+            const newAvail = { ...availability, [m]: dates };
+            setAvailability(newAvail);
+            if(ministryId) await saveData(ministryId, 'availability_v1', newAvail);
+        }}
+      />
+
+      <RolesModal 
+        isOpen={rolesModalOpen} 
+        onClose={() => setRolesModalOpen(false)} 
+        roles={roles}
+        onUpdate={async (r) => {
+            setRoles(r);
+            if(ministryId) {
+                await saveData(ministryId, 'functions_config', r);
+                // Also update legacy roles map to keep keys consistent
+                const newMembers = { ...members };
+                r.forEach(role => { if(!newMembers[role]) newMembers[role] = []; });
+                await saveData(ministryId, 'members_v7', newMembers);
+            }
+        }}
+      />
+
+      <AuditModal isOpen={logsModalOpen} onClose={() => setLogsModalOpen(false)} logs={auditLog} />
+      <StatsModal isOpen={statsModalOpen} onClose={() => setStatsModalOpen(false)} stats={memberStats} monthName={getMonthName(currentMonth)} />
+      
+      {/* Event Details (Click on Event Name to Edit) Not implemented in table click yet, but component exists */}
+    </DashboardLayout>
+  );
+};
+
+// --- MAIN APP WRAPPER ---
+// Fixes "useToast must be used within a ToastProvider" error
+const App = () => {
+  return (
+    <ToastProvider>
+      <AppInner />
     </ToastProvider>
   );
 };
 
-export default AppContent;
+export default App;
