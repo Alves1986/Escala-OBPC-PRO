@@ -18,10 +18,11 @@ export const loadData = async <T>(ministryId: string, keySuffix: string, fallbac
   if (!supabase || !ministryId) return fallback;
   
   try {
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     const { data, error } = await supabase
       .from('app_storage')
       .select('value')
-      .eq('key', getStorageKey(ministryId, keySuffix))
+      .eq('key', getStorageKey(cleanMid, keySuffix))
       .single();
 
     if (error || !data) return fallback;
@@ -36,10 +37,11 @@ export const saveData = async <T>(ministryId: string, keySuffix: string, value: 
   if (!supabase || !ministryId) return false;
 
   try {
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     const { error } = await supabase
       .from('app_storage')
       .upsert(
-        { key: getStorageKey(ministryId, keySuffix), value },
+        { key: getStorageKey(cleanMid, keySuffix), value },
         { onConflict: 'key' }
       );
     return !error;
@@ -52,16 +54,40 @@ export const saveData = async <T>(ministryId: string, keySuffix: string, value: 
 // --- Member Directory Sync ---
 
 export const syncMemberProfile = async (ministryId: string, user: User) => {
-    console.log("Sincronizando perfil na lista pública:", user.name);
+    if (!supabase || !ministryId) return [];
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+    console.log(`[Sync] Sincronizando perfil [${user.name}] em [${cleanMid}]`);
+
     try {
-        const list = await loadData<TeamMemberProfile[]>(ministryId, 'public_members_list', []);
+        const storageKey = getStorageKey(cleanMid, 'public_members_list');
         
-        // Find by email (preferred) or name (fallback) - Case insensitive for email
-        const index = list.findIndex(m => 
-            (m.email && user.email && m.email.toLowerCase() === user.email.toLowerCase()) || 
-            m.name === user.name
-        );
+        // 1. Busca Explícita com tratamento de erro robusto
+        // NÃO podemos assumir que falha = lista vazia, pois isso apaga os outros membros
+        const { data, error } = await supabase
+            .from('app_storage')
+            .select('value')
+            .eq('key', storageKey)
+            .single();
+
+        let list: TeamMemberProfile[] = [];
+
+        if (data) {
+            list = data.value || [];
+        } else if (error) {
+            if (error.code === 'PGRST116') {
+                // PGRST116: Nenhum registro encontrado. Isso é normal na primeira vez.
+                // Podemos criar uma lista nova com segurança.
+                console.log("[Sync] Lista de membros não existe. Criando nova.");
+                list = [];
+            } else {
+                // Outro erro (Ex: Timeout, Falha de Rede). 
+                // PERIGO: Se continuarmos, vamos salvar uma lista vazia e apagar todo mundo.
+                console.error("[Sync] Erro CRÍTICO ao buscar lista. Abortando para proteger dados.", error);
+                return []; 
+            }
+        }
         
+        // 2. Prepara o objeto do perfil atualizado
         const newProfile: TeamMemberProfile = {
             id: user.id || Date.now().toString(),
             name: user.name,
@@ -72,40 +98,56 @@ export const syncMemberProfile = async (ministryId: string, user: User) => {
             createdAt: new Date().toISOString()
         };
 
-        let newList;
+        // 3. Verifica se o membro já existe na lista (Merge)
+        const index = list.findIndex(m => 
+            (m.id && user.id && m.id === user.id) || // Match por ID
+            (m.email && user.email && m.email.toLowerCase() === user.email.toLowerCase()) || // Match por Email
+            m.name === user.name // Match por Nome (Fallback)
+        );
+        
+        // Trabalhamos em uma cópia da lista
+        let newList = [...list];
+
         if (index >= 0) {
-            newList = [...list];
+            // ATUALIZAÇÃO: Mescla dados existentes com os novos do login
             const existing = newList[index];
-            
-            // Lógica inteligente de merge:
-            // 1. Atualiza dados de contato (Nome, Whats, Foto) com o que vem do login atual
-            // 2. PRESERVA as funções (roles) que já estão na lista, a menos que o login traga novas
-            // 3. Preserva a data de criação original
-            
             newList[index] = { 
                 ...existing, 
-                id: user.id || existing.id || Date.now().toString(),
-                name: user.name, // Nome sempre atualizado pelo perfil
+                // Prioriza os dados do login atual, mantendo o que não mudou
+                id: user.id || existing.id, 
+                name: user.name, 
                 email: user.email || existing.email,
                 whatsapp: user.whatsapp || existing.whatsapp,
                 avatar_url: user.avatar_url || existing.avatar_url,
-                // Se o usuário logado tiver roles definidas (vindo de update profile), usa elas. Senão mantém as existentes.
+                // Se o login atual trouxe funções, usa elas. Senão, mantém as do banco.
                 roles: (user.functions && user.functions.length > 0) ? user.functions : (existing.roles || []),
                 createdAt: existing.createdAt || newProfile.createdAt
             }; 
+            console.log(`[Sync] Membro atualizado: ${user.name}`);
         } else {
-            // Novo membro na lista
-            newList = [...list, newProfile];
+            // INSERÇÃO: Adiciona novo membro à lista
+            newList.push(newProfile);
+            console.log(`[Sync] Novo membro adicionado: ${user.name}`);
         }
         
-        // Ordena alfabeticamente para manter a organização
+        // 4. Ordenação Alfabética
         newList.sort((a, b) => a.name.localeCompare(b.name));
         
-        const saved = await saveData(ministryId, 'public_members_list', newList);
-        if (saved) console.log("Perfil sincronizado com sucesso.");
+        // 5. Salvamento Seguro
+        const { error: saveError } = await supabase
+            .from('app_storage')
+            .upsert({ key: storageKey, value: newList }, { onConflict: 'key' });
+
+        if (saveError) {
+            console.error("[Sync] Erro ao salvar lista atualizada:", saveError);
+            return [];
+        }
+
+        console.log("[Sync] Lista de membros sincronizada com sucesso.");
         return newList;
+
     } catch (e) {
-        console.error("Erro ao sincronizar perfil do membro", e);
+        console.error("[Sync] Exceção não tratada:", e);
         return [];
     }
 };
@@ -159,22 +201,25 @@ export const loginWithEmail = async (email: string, password: string): Promise<{
 
         if (data.user) {
             const metadata = data.user.user_metadata;
+            const cleanMid = metadata.ministryId?.trim().toLowerCase().replace(/\s+/g, '-');
+            
             const userProfile: User = {
                 id: data.user.id,
                 email: data.user.email,
                 name: metadata.name || 'Usuário',
                 role: metadata.role || 'member',
-                ministryId: metadata.ministryId, 
+                ministryId: cleanMid, 
                 whatsapp: metadata.whatsapp,
                 avatar_url: metadata.avatar_url,
                 functions: metadata.functions || []
             };
 
-            if (metadata.ministryId) {
-                syncMemberProfile(metadata.ministryId, userProfile);
+            if (cleanMid) {
+                // Tenta sincronizar no login para garantir presença na lista
+                syncMemberProfile(cleanMid, userProfile);
             }
 
-            return { success: true, message: "Login realizado.", user: userProfile, ministryId: metadata.ministryId };
+            return { success: true, message: "Login realizado.", user: userProfile, ministryId: cleanMid };
         }
         
         return { success: false, message: "Erro desconhecido." };
@@ -224,8 +269,10 @@ export const registerWithEmail = async (
                 functions: selectedRoles || []
             };
             
+            // Força sincronização imediata
             await syncMemberProfile(cleanMid, userProfile);
 
+            // Se o usuário selecionou funções, já insere ele nos grupos correspondentes
             if (selectedRoles && selectedRoles.length > 0) {
                 const currentRoles = await loadData<MemberMap>(cleanMid, 'members_v7', {});
                 let rolesChanged = false;
@@ -308,7 +355,7 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
                 const currentMap = await loadData<MemberMap>(ministryId, 'members_v7', {});
                 let mapChanged = false;
 
-                // 1. Remove usuário de todas as listas primeiro (para garantir limpeza de funções desmarcadas)
+                // 1. Remove usuário de todas as listas primeiro (para evitar duplicatas ou funções antigas)
                 Object.keys(currentMap).forEach(role => {
                     if (currentMap[role].includes(name)) {
                         currentMap[role] = currentMap[role].filter(n => n !== name);
@@ -340,9 +387,10 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
 
 export const saveSubscription = async (ministryId: string, subscription: PushSubscription): Promise<boolean> => {
     if (!supabase || !ministryId) return false;
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     
     try {
-        const key = getStorageKey(ministryId, 'push_subscriptions_v1');
+        const key = getStorageKey(cleanMid, 'push_subscriptions_v1');
         const { data } = await supabase.from('app_storage').select('value').eq('key', key).single();
         
         let subs: PushSubscriptionRecord[] = data?.value || [];
@@ -371,9 +419,10 @@ export const saveSubscription = async (ministryId: string, subscription: PushSub
 
 export const sendNotification = async (ministryId: string, notification: Omit<AppNotification, 'id' | 'timestamp' | 'read'>) => {
     if (!supabase || !ministryId) return;
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
 
     try {
-        const key = getStorageKey(ministryId, 'notifications_v1');
+        const key = getStorageKey(cleanMid, 'notifications_v1');
         const { data } = await supabase.from('app_storage').select('value').eq('key', key).single();
         
         let notifs: AppNotification[] = data?.value || [];
@@ -392,9 +441,10 @@ export const sendNotification = async (ministryId: string, notification: Omit<Ap
 
 export const markNotificationsRead = async (ministryId: string, notificationIds: string[]) => {
     if (!supabase || !ministryId) return [];
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
 
     try {
-        const key = getStorageKey(ministryId, 'notifications_v1');
+        const key = getStorageKey(cleanMid, 'notifications_v1');
         const { data } = await supabase.from('app_storage').select('value').eq('key', key).single();
         
         let notifs: AppNotification[] = data?.value || [];
@@ -419,9 +469,10 @@ export const markNotificationsRead = async (ministryId: string, notificationIds:
 
 export const clearAllNotifications = async (ministryId: string): Promise<AppNotification[]> => {
     if (!supabase || !ministryId) return [];
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
 
     try {
-        const key = getStorageKey(ministryId, 'notifications_v1');
+        const key = getStorageKey(cleanMid, 'notifications_v1');
         const { error } = await supabase.from('app_storage').upsert({ key, value: [] }, { onConflict: 'key' });
         
         if (error) {
