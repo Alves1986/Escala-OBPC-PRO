@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis } from '../types';
 import { CheckCircle2, AlertTriangle, Trash2 } from 'lucide-react';
@@ -9,7 +10,7 @@ interface Props {
   attendance: AttendanceMap;
   availability: AvailabilityMap;
   members: Record<string, string[]>;
-  allMembers: string[];
+  allMembers: string[]; // Mantido na interface para compatibilidade, mas não usado para listar outros
   scheduleIssues: ScheduleAnalysis;
   onCellChange: (key: string, value: string) => void;
   onAttendanceToggle: (key: string) => void;
@@ -18,7 +19,7 @@ interface Props {
 }
 
 export const ScheduleTable: React.FC<Props> = ({
-  events, roles, schedule, attendance, availability, members, allMembers, scheduleIssues, onCellChange, onAttendanceToggle, onDeleteEvent, memberStats
+  events, roles, schedule, attendance, availability, members, scheduleIssues, onCellChange, onAttendanceToggle, onDeleteEvent, memberStats
 }) => {
   
   // Calculate if member is unavailable for a specific date AND Time
@@ -45,6 +46,22 @@ export const ScheduleTable: React.FC<Props> = ({
 
     // If none of the above matched, the user is NOT available for this specific slot
     return true; 
+  };
+
+  // Sorting function to keep consistency
+  const sortMembers = (list: string[], isoDate: string) => {
+      return list.sort((a, b) => {
+        const unavailA = isUnavailable(a, isoDate);
+        const unavailB = isUnavailable(b, isoDate);
+        // Unavailable members go to bottom
+        if (unavailA && !unavailB) return 1;
+        if (!unavailA && unavailB) return -1;
+        // Then sort by usage count (least used first for balance)
+        const statsDiff = (memberStats[a] || 0) - (memberStats[b] || 0);
+        if (statsDiff !== 0) return statsDiff;
+        // Alphabetical as tie-breaker
+        return a.localeCompare(b);
+      });
   };
 
   return (
@@ -83,17 +100,9 @@ export const ScheduleTable: React.FC<Props> = ({
                   const key = `${event.iso}_${role}`;
                   const currentValue = schedule[key] || "";
                   
-                  // Use allMembers for a flat list, allowing any registered member to be selected
-                  // Sort by availability and then by usage count
-                  const sortedMembers = [...allMembers].sort((a, b) => {
-                        const unavailA = isUnavailable(a, event.iso);
-                        const unavailB = isUnavailable(b, event.iso);
-                        // Unavailable members go to bottom
-                        if (unavailA && !unavailB) return 1;
-                        if (!unavailA && unavailB) return -1;
-                        // Then sort by usage count (least used first for balance, or most used if preferred)
-                        return (memberStats[a] || 0) - (memberStats[b] || 0);
-                  });
+                  // Only get members explicitly assigned to this role
+                  const roleMembers = members[role] || [];
+                  const sortedRoleMembers = sortMembers([...roleMembers], event.iso);
 
                   const isConfirmed = attendance[key];
                   const issue = scheduleIssues[key];
@@ -106,7 +115,7 @@ export const ScheduleTable: React.FC<Props> = ({
                           <select
                             value={currentValue}
                             onChange={(e) => onCellChange(key, e.target.value)}
-                            className={`w-full bg-zinc-100 dark:bg-zinc-900/50 border-0 rounded-md py-1.5 pl-3 pr-8 text-xs ring-1 ring-inset focus:ring-2 sm:text-sm sm:leading-6 cursor-pointer transition-all
+                            className={`w-full bg-zinc-100 dark:bg-zinc-900/50 border-0 rounded-md py-1.5 pl-3 pr-8 text-xs ring-1 ring-inset focus:ring-2 sm:text-sm sm:leading-6 cursor-pointer transition-all appearance-none
                               ${hasLocalConflict 
                                 ? 'text-red-700 dark:text-red-400 ring-red-300 dark:ring-red-900 focus:ring-red-500 bg-red-50 dark:bg-red-900/20 font-medium' 
                                 : issue?.type === 'warning'
@@ -117,7 +126,8 @@ export const ScheduleTable: React.FC<Props> = ({
                             `}
                           >
                             <option value="">-- Selecionar --</option>
-                            {sortedMembers.map(m => {
+                            
+                            {sortedRoleMembers.map(m => {
                                 const unavail = isUnavailable(m, event.iso);
                                 return (
                                     <option key={m} value={m} className={unavail ? 'text-red-400 bg-red-50 dark:bg-zinc-800' : ''}>
@@ -125,6 +135,13 @@ export const ScheduleTable: React.FC<Props> = ({
                                     </option>
                                 );
                             })}
+                            
+                            {/* If current value is not in the list (legacy/removed role), show it as an option so it's not invisible */}
+                            {currentValue && !roleMembers.includes(currentValue) && (
+                                <option value={currentValue} className="text-amber-500 bg-amber-50 dark:bg-zinc-800 italic">
+                                    {currentValue} (Fora da Função)
+                                </option>
+                            )}
                           </select>
                           
                           {/* Indicador Visual de Conflito Local */}
