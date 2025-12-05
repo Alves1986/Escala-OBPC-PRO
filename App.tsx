@@ -1254,6 +1254,7 @@ const AppInner = () => {
          onSave={handleSaveEventDetails}
          onSwapRequest={handleCreateSwapRequest}
          currentUser={currentUser}
+         ministryId={ministryId}
       />
       
     </DashboardLayout>

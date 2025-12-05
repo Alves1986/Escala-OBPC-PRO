@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, Clock, Calendar, Save, User, Briefcase, RefreshCcw } from 'lucide-react';
 import { Role, ScheduleMap, User as UserType } from '../types';
 
@@ -10,11 +10,12 @@ interface Props {
   schedule: ScheduleMap;
   roles: Role[];
   onSave: (oldIso: string, newTitle: string, newTime: string) => void;
-  onSwapRequest?: (eventTitle: string, currentMember: string) => void;
+  onSwapRequest?: (role: string, eventIso: string, eventTitle: string) => void;
   currentUser?: UserType | null;
+  ministryId: string | null;
 }
 
-export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, schedule, roles, onSave, onSwapRequest, currentUser }) => {
+export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, schedule, roles, onSave, onSwapRequest, currentUser, ministryId }) => {
   const [time, setTime] = useState("");
   const [title, setTitle] = useState("");
 
@@ -25,9 +26,22 @@ export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, sch
     }
   }, [event]);
 
+  const expandedRoles = useMemo(() => {
+      return roles.flatMap(role => {
+          if (ministryId === 'louvor' && role === 'Vocal') {
+              return [1, 2, 3, 4, 5].map(i => ({
+                  display: `Vocal ${i}`,
+                  keySuffix: `Vocal_${i}`
+              }));
+          }
+          return [{ display: role, keySuffix: role }];
+      });
+  }, [roles, ministryId]);
+
   if (!isOpen || !event) return null;
 
-  const isUserScheduled = currentUser && roles.some(role => schedule[`${event.iso}_${role}`] === currentUser.name);
+  // Determine if user is scheduled for this event
+  const userAssignment = currentUser ? expandedRoles.find(r => schedule[`${event.iso}_${r.keySuffix}`] === currentUser.name) : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -85,16 +99,16 @@ export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, sch
                         <User size={14}/> Equipe Escalada
                     </h3>
                     <div className="space-y-3">
-                        {roles.map(role => {
-                            const member = schedule[`${event.iso}_${role}`];
+                        {expandedRoles.map(roleObj => {
+                            const member = schedule[`${event.iso}_${roleObj.keySuffix}`];
                             return (
-                                <div key={role} className="flex items-center justify-between group">
+                                <div key={roleObj.keySuffix} className="flex items-center justify-between group">
                                     <div className="flex items-center gap-3">
                                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${member ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-zinc-100 text-zinc-400 dark:bg-zinc-800'}`}>
                                             <Briefcase size={14} />
                                         </div>
                                         <div className="flex flex-col">
-                                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide">{role}</span>
+                                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide">{roleObj.display}</span>
                                             <span className={`text-sm font-medium ${member ? 'text-zinc-800 dark:text-zinc-200' : 'text-zinc-400 italic'}`}>
                                                 {member || 'Vago'}
                                             </span>
@@ -115,9 +129,9 @@ export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, sch
                         <Save size={18} /> Salvar Alterações
                     </button>
                     
-                    {onSwapRequest && currentUser && (
+                    {onSwapRequest && currentUser && userAssignment && (
                         <button 
-                            onClick={() => onSwapRequest(title, currentUser.name)}
+                            onClick={() => onSwapRequest(userAssignment.keySuffix, event.iso, title)}
                             className="w-full bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 dark:text-amber-200 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 text-sm"
                         >
                             <RefreshCcw size={18} /> Solicitar Troca / Indisponibilidade
