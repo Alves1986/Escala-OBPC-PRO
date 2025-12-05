@@ -1,0 +1,45 @@
+
+import React from 'react';
+import { Download, X, Smartphone } from 'lucide-react';
+
+interface Props {
+  isVisible: boolean;
+  onInstall: () => void;
+  onDismiss: () => void;
+  appName: string;
+}
+
+export const InstallBanner: React.FC<Props> = ({ isVisible, onInstall, onDismiss, appName }) => {
+  if (!isVisible) return null;
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-[60] p-4 animate-slide-up pointer-events-none">
+      <div className="max-w-md mx-auto bg-white dark:bg-zinc-800 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-700 p-4 flex items-center justify-between gap-4 pointer-events-auto ring-1 ring-black/5">
+        <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center text-white shrink-0 shadow-lg shadow-blue-600/20">
+                <Smartphone size={24} />
+            </div>
+            <div>
+                <p className="text-sm font-bold text-zinc-900 dark:text-white">Instalar App</p>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">Adicione à tela inicial para acesso rápido.</p>
+            </div>
+        </div>
+        <div className="flex items-center gap-2">
+            <button 
+                onClick={onDismiss}
+                className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
+                aria-label="Dispensar"
+            >
+                <X size={20} />
+            </button>
+            <button 
+                onClick={onInstall}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2.5 rounded-lg transition-colors shadow-md"
+            >
+                Instalar
+            </button>
+        </div>
+      </div>
+    </div>
+  );
+};

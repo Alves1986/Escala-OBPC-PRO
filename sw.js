@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'escala-midia-pwa-v2';
+const CACHE_NAME = 'escala-midia-pwa-v3';
 
 // Lista de arquivos vitais para o funcionamento offline
 // Inclui as bibliotecas do CDN definidas no importmap do index.html

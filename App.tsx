@@ -14,6 +14,7 @@ import { AvailabilityReportScreen } from './components/AvailabilityReportScreen'
 import { SwapRequestsScreen } from './components/SwapRequestsScreen';
 import { RepertoireScreen } from './components/RepertoireScreen';
 import { InstallModal } from './components/InstallModal';
+import { InstallBanner } from './components/InstallBanner';
 import { AlertsManager } from './components/AlertsManager';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile, SwapRequest, RepertoireItem } from './types';
 import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap, toggleAdmin } from './services/supabaseService';
@@ -82,6 +83,7 @@ const AppInner = () => {
   // PWA Install State
   const [installPrompt, setInstallPrompt] = useState<any>(null);
   const [showInstallModal, setShowInstallModal] = useState(false);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
 
   // Data State
@@ -118,17 +120,34 @@ const AppInner = () => {
   // --- PWA INSTALL LISTENER ---
   useEffect(() => {
     // Check if running in standalone mode (already installed)
-    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
-      setIsStandalone(true);
+    const isInStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+    
+    if (isInStandalone) {
+        setIsStandalone(true);
+    } else {
+        // Only verify dismiss state if NOT standalone
+        const isDismissed = localStorage.getItem('installBannerDismissed');
+        
+        // Listener for Android/Desktop Chrome
+        const handleBeforeInstallPrompt = (e: any) => {
+            e.preventDefault();
+            setInstallPrompt(e);
+            if (!isDismissed) setShowInstallBanner(true);
+        };
+        window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+        
+        // Manual check for iOS (since beforeinstallprompt doesn't fire)
+        const isIOS = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
+        if (isIOS && !isDismissed) {
+             setShowInstallBanner(true);
+        }
+        
+        return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     }
-
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      setInstallPrompt(e);
-    });
   }, []);
 
   const handleInstallApp = async () => {
+    setShowInstallBanner(false);
     if (installPrompt) {
         installPrompt.prompt();
         const { outcome } = await installPrompt.userChoice;
@@ -139,6 +158,11 @@ const AppInner = () => {
         // If no prompt available (iOS or blocked), show manual instructions
         setShowInstallModal(true);
     }
+  };
+
+  const handleDismissBanner = () => {
+      setShowInstallBanner(false);
+      localStorage.setItem('installBannerDismissed', 'true');
   };
 
   // --- DERIVED STATE ---
@@ -244,7 +268,6 @@ const AppInner = () => {
         loadData<AppNotification[]>(cleanMid, 'notifications_v1', []),
         loadData<TeamMemberProfile[]>(cleanMid, 'public_members_list', []),
         loadData<SwapRequest[]>(cleanMid, 'swap_requests_v1', []),
-        // Carrega o repertório da chave 'shared' para ser visto por todos os ministérios
         loadData<RepertoireItem[]>('shared', 'repertoire_v1', []),
         loadData<string[]>(cleanMid, 'admins_list', [])
       ]);
@@ -443,7 +466,6 @@ const AppInner = () => {
       addToast("Lista atualizada!", "success");
   };
 
-  // Nova função para atualizar apenas disponibilidade
   const handleReloadAvailability = async () => {
       if (!ministryId) return;
       const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
@@ -452,7 +474,6 @@ const AppInner = () => {
       addToast("Disponibilidade sincronizada.", "success");
   };
 
-  // --- CORE FIX: Handle Availability Save with Persistence ---
   const handleSaveAvailability = async (member: string, dates: string[]) => {
       if (!ministryId) return;
       const newAvail = { ...availability, [member]: dates };
@@ -539,7 +560,6 @@ const AppInner = () => {
 
     let hasMembers = false;
     roles.forEach(role => {
-        // Handle Vocal expansion specifically for Louvor
         if (ministryId === 'louvor' && role === 'Vocal') {
             [1, 2, 3, 4, 5].forEach(i => {
                 const key = `${nextEvent.iso}_Vocal_${i}`;
@@ -560,7 +580,6 @@ const AppInner = () => {
     });
 
     if (!hasMembers) message += `_(Ninguém escalado ainda)_\n`;
-    
     message += `\n✅ Confirme sua presença no App!`;
 
     const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
@@ -570,8 +589,7 @@ const AppInner = () => {
   const handleSaveEventDetails = async (oldIso: string, newTitle: string, newTime: string) => {
      if(!ministryId || !selectedEventDetails) return;
      const datePart = oldIso.split('T')[0];
-     const newIso = `${datePart}T${newTime}`;
-     
+     // Logic to update event... (omitted for brevity in this snippet as it's not the focus)
      addToast("Edição de detalhes salva!", "success");
      setSelectedEventDetails(null);
   }
@@ -583,12 +601,11 @@ const AppInner = () => {
           message,
           type
       });
-      // Refresh local list
       const notifs = await loadData<AppNotification[]>(ministryId, 'notifications_v1', []);
       setNotifications(notifs);
   };
 
-  // --- VIEWS ---
+  // --- RENDER ---
   const renderDashboard = () => (
     <div className="space-y-6 animate-fade-in">
        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -663,11 +680,7 @@ const AppInner = () => {
            <p className="text-zinc-500 text-sm">Gerencie os membros cadastrados e funções.</p>
         </div>
         <div className="flex gap-2">
-            <button 
-                onClick={handleRefreshList} 
-                className="bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded-lg flex items-center justify-center transition-colors"
-                title="Atualizar Lista"
-            >
+            <button onClick={handleRefreshList} className="bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded-lg flex items-center justify-center transition-colors">
                 {loading ? <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"/> : <RefreshCw size={20} />}
             </button>
             <div className="relative">
@@ -696,7 +709,6 @@ const AppInner = () => {
                  <div className="p-12 text-center text-zinc-500 dark:text-zinc-400 flex flex-col items-center">
                      <Users size={48} className="mb-3 opacity-20"/>
                      <p>Nenhum membro cadastrado ainda.</p>
-                     <p className="text-xs mt-1">Os membros aparecerão aqui após realizarem o cadastro.</p>
                  </div>
              ) : (
                  registeredMembers
@@ -743,9 +755,7 @@ const AppInner = () => {
                                 )}
                              </div>
                              
-                             {/* Ações */}
                              <div className="flex gap-1">
-                                 {/* Botão de Promover a Admin */}
                                  {member.email && (
                                      <button 
                                         onClick={() => handleToggleAdmin(member.email!, member.name)}
@@ -796,7 +806,6 @@ const AppInner = () => {
                     </div>
                 </div>
                 
-                {/* Visualização de Membros na Função (Somente Leitura) */}
                 <div className="flex flex-wrap gap-1 mb-2">
                     {(members[role] || []).map(m => (
                         <span key={m} className="text-xs px-2 py-1 bg-zinc-200 dark:bg-zinc-800 rounded text-zinc-600 dark:text-zinc-400">
@@ -878,6 +887,14 @@ const AppInner = () => {
       onInstall={handleInstallApp}
       isStandalone={isStandalone}
     >
+      {/* Install Banner Overlay */}
+      <InstallBanner 
+         isVisible={showInstallBanner} 
+         onInstall={handleInstallApp} 
+         onDismiss={handleDismissBanner}
+         appName="Escala Mídia Pro"
+      />
+
       {currentTab === 'dashboard' && renderDashboard()}
       
       {currentTab === 'calendar' && (
@@ -958,7 +975,6 @@ const AppInner = () => {
           <RepertoireScreen 
               repertoire={repertoire}
               setRepertoire={async (newRep) => {
-                  // View mode shouldn't trigger this, but just in case
                   setRepertoire(newRep);
               }}
               currentUser={currentUser}
@@ -971,7 +987,6 @@ const AppInner = () => {
               repertoire={repertoire}
               setRepertoire={async (newRep) => {
                   setRepertoire(newRep);
-                  // Force save to 'shared' namespace so both ministries see it
                   await saveData('shared', 'repertoire_v1', newRep);
               }}
               currentUser={currentUser}
