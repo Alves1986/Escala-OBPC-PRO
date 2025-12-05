@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ScheduleTable } from './components/ScheduleTable';
@@ -17,8 +18,9 @@ import { InstallModal } from './components/InstallModal';
 import { InstallBanner } from './components/InstallBanner';
 import { AlertsManager } from './components/AlertsManager';
 import { SettingsScreen } from './components/SettingsScreen';
-import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile, SwapRequest, RepertoireItem } from './types';
-import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap, toggleAdmin } from './services/supabaseService';
+import { AnnouncementCard } from './components/AnnouncementCard';
+import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile, SwapRequest, RepertoireItem, Announcement } from './types';
+import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap, toggleAdmin, createAnnouncement, markAnnouncementRead } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -126,6 +128,7 @@ const AppInner = () => {
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [scheduleIssues, setScheduleIssues] = useState<ScheduleAnalysis>({});
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [swapRequests, setSwapRequests] = useState<SwapRequest[]>([]);
   const [repertoire, setRepertoire] = useState<RepertoireItem[]>([]);
   const [adminsList, setAdminsList] = useState<string[]>([]);
@@ -286,7 +289,8 @@ const AppInner = () => {
         resSwaps,
         resRepertoire,
         resAdmins,
-        resConfig
+        resConfig,
+        resAnnouncements
       ] = await Promise.all([
         loadData<MemberMap>(cleanMid, 'members_v7', {}),
         loadData<ScheduleMap>(cleanMid, `schedule_${currentMonth}`, {}),
@@ -301,7 +305,8 @@ const AppInner = () => {
         loadData<SwapRequest[]>(cleanMid, 'swap_requests_v1', []),
         loadData<RepertoireItem[]>('shared', 'repertoire_v1', []),
         loadData<string[]>(cleanMid, 'admins_list', []),
-        loadData<any>(cleanMid, 'ministry_config', { displayName: '' })
+        loadData<any>(cleanMid, 'ministry_config', { displayName: '' }),
+        loadData<Announcement[]>(cleanMid, 'announcements_v1', [])
       ]);
 
       setMembers(resMembers);
@@ -318,6 +323,7 @@ const AppInner = () => {
       setRepertoire(resRepertoire);
       setAdminsList(resAdmins);
       if (resConfig?.displayName) setCustomTitle(resConfig.displayName);
+      setAnnouncements(resAnnouncements);
 
       // Upgrade current user if in admins list
       if (currentUser && currentUser.email && resAdmins.includes(currentUser.email)) {
@@ -628,7 +634,9 @@ const AppInner = () => {
   }
 
   const handleSendGlobalAlert = async (title: string, message: string, type: 'info' | 'success' | 'warning' | 'alert') => {
-      if (!ministryId) return;
+      if (!ministryId || !currentUser) return;
+      
+      // 1. Enviar Notificação Push (Sininho e Celular)
       await sendNotification(ministryId, {
           title,
           message,
@@ -636,6 +644,24 @@ const AppInner = () => {
       });
       const notifs = await loadData<AppNotification[]>(ministryId, 'notifications_v1', []);
       setNotifications(notifs);
+
+      // 2. Criar Comunicado (Card no Dashboard)
+      await createAnnouncement(ministryId, {
+          title,
+          message,
+          type
+      }, currentUser.name);
+      
+      const updatedAnnouncements = await loadData<Announcement[]>(ministryId, 'announcements_v1', []);
+      setAnnouncements(updatedAnnouncements);
+  };
+
+  const handleMarkAnnouncementRead = async (announcementId: string) => {
+      if (!ministryId || !currentUser) return;
+      
+      const updatedList = await markAnnouncementRead(ministryId, announcementId, currentUser);
+      setAnnouncements(updatedList);
+      addToast("Marcado como ciente.", "success");
   };
 
   const handleSaveSettings = async (newName: string) => {
@@ -646,7 +672,18 @@ const AppInner = () => {
   }
 
   // --- RENDER ---
-  const renderDashboard = () => (
+  const renderDashboard = () => {
+    // Filtrar comunicados visíveis
+    const visibleAnnouncements = announcements.filter(announcement => {
+        if (!currentUser) return false;
+        // Admins veem tudo
+        if (currentUser.role === 'admin') return true;
+        // Membros veem apenas não lidos
+        const hasRead = announcement.readBy.some(r => r.userId === currentUser.id);
+        return !hasRead;
+    });
+
+    return (
     <div className="space-y-6 animate-fade-in">
        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
          <div>
@@ -658,6 +695,20 @@ const AppInner = () => {
             </p>
          </div>
        </div>
+
+       {/* ANNOUNCEMENT CARDS - Só renderiza se houver itens visíveis */}
+       {visibleAnnouncements.length > 0 && (
+           <div className="space-y-4">
+               {visibleAnnouncements.map(announcement => (
+                   <AnnouncementCard 
+                       key={announcement.id}
+                       announcement={announcement}
+                       currentUser={currentUser!}
+                       onMarkRead={handleMarkAnnouncementRead}
+                   />
+               ))}
+           </div>
+       )}
 
        {nextEvent ? (
          <NextEventCard 
@@ -711,6 +762,7 @@ const AppInner = () => {
        </div>
     </div>
   );
+  };
 
   const renderTeam = () => (
     <div className="space-y-6 animate-fade-in max-w-5xl mx-auto">

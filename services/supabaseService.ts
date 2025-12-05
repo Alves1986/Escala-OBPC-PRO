@@ -1,6 +1,5 @@
-
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, DEFAULT_ROLES, AppNotification, TeamMemberProfile, AvailabilityMap, SwapRequest, ScheduleMap, RepertoireItem } from '../types';
+import { SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, DEFAULT_ROLES, AppNotification, TeamMemberProfile, AvailabilityMap, SwapRequest, ScheduleMap, RepertoireItem, Announcement } from '../types';
 
 let supabase: SupabaseClient | null = null;
 
@@ -564,6 +563,72 @@ export const clearAllNotifications = async (ministryId: string): Promise<AppNoti
         return [];
     } catch (e) {
         console.error("Erro ao limpar notificações", e);
+        return [];
+    }
+};
+
+// --- ANNOUNCEMENTS (CARDS) LOGIC ---
+
+export const createAnnouncement = async (ministryId: string, announcement: Omit<Announcement, 'id' | 'timestamp' | 'readBy' | 'author'>, authorName: string): Promise<boolean> => {
+    if (!supabase || !ministryId) return false;
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+    const key = getStorageKey(cleanMid, 'announcements_v1');
+
+    try {
+        const { data } = await supabase.from('app_storage').select('value').eq('key', key).single();
+        let list: Announcement[] = data?.value || [];
+
+        const newAnnouncement: Announcement = {
+            id: Date.now().toString(),
+            timestamp: new Date().toISOString(),
+            readBy: [],
+            author: authorName,
+            ...announcement
+        } as Announcement;
+
+        // Mantém apenas os últimos 20 comunicados para não pesar
+        list = [newAnnouncement, ...list].slice(0, 20);
+
+        const { error } = await supabase.from('app_storage').upsert({ key, value: list }, { onConflict: 'key' });
+        return !error;
+    } catch (e) {
+        console.error("Erro ao criar comunicado", e);
+        return false;
+    }
+};
+
+export const markAnnouncementRead = async (ministryId: string, announcementId: string, user: User): Promise<Announcement[]> => {
+    if (!supabase || !ministryId || !user.id) return [];
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+    const key = getStorageKey(cleanMid, 'announcements_v1');
+
+    try {
+        const { data } = await supabase.from('app_storage').select('value').eq('key', key).single();
+        let list: Announcement[] = data?.value || [];
+
+        let updated = false;
+        list = list.map(a => {
+            if (a.id === announcementId) {
+                // Verifica se já leu
+                const alreadyRead = a.readBy.some(reader => reader.userId === user.id);
+                if (!alreadyRead) {
+                    updated = true;
+                    return {
+                        ...a,
+                        readBy: [...a.readBy, { userId: user.id!, name: user.name, timestamp: new Date().toISOString() }]
+                    };
+                }
+            }
+            return a;
+        });
+
+        if (updated) {
+            await supabase.from('app_storage').upsert({ key, value: list }, { onConflict: 'key' });
+        }
+        return list;
+
+    } catch (e) {
+        console.error("Erro ao marcar comunicado como lido", e);
         return [];
     }
 };

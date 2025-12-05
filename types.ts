@@ -41,6 +41,16 @@ export interface AppNotification {
   actionLink?: string; // Opcional: link para redirecionar
 }
 
+export interface Announcement {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'alert';
+  timestamp: string;
+  author: string;
+  readBy: { userId: string; name: string; timestamp: string }[];
+}
+
 export interface ScheduleIssue {
   type: 'error' | 'warning' | 'info';
   message: string;
