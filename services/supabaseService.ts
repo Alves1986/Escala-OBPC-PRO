@@ -1,3 +1,4 @@
+
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, DEFAULT_ROLES, AppNotification, TeamMemberProfile, AvailabilityMap, SwapRequest, ScheduleMap, RepertoireItem, Announcement } from '../types';
 
@@ -341,10 +342,12 @@ export const registerWithEmail = async (
                 }
             }
 
+            // Notifica com deep link para a aba de membros
             await sendNotification(cleanMid, {
                 type: 'info',
                 title: 'Novo Membro Cadastrado',
-                message: `${name} acabou de se cadastrar na equipe.`
+                message: `${name} acabou de se cadastrar na equipe.`,
+                actionLink: 'team' 
             });
         }
 

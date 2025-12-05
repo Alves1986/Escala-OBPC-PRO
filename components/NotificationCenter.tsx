@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Bell, Check, Trash2, Info, AlertTriangle, CheckCircle, AlertOctagon } from 'lucide-react';
+import { Bell, Check, Trash2, Info, AlertTriangle, CheckCircle, AlertOctagon, ExternalLink } from 'lucide-react';
 import { AppNotification } from '../types';
 import { markNotificationsRead, clearAllNotifications } from '../services/supabaseService';
 
@@ -8,9 +8,10 @@ interface Props {
   notifications: AppNotification[];
   ministryId: string | null;
   onNotificationsUpdate: (updated: AppNotification[]) => void;
+  onNavigate?: (tabId: string) => void; // Nova prop para navegação
 }
 
-export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId, onNotificationsUpdate }) => {
+export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId, onNotificationsUpdate, onNavigate }) => {
   const [isOpen, setIsOpen] = useState(false);
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -28,6 +29,13 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
       if (confirm("Tem certeza que deseja limpar todas as notificações?")) {
           await clearAllNotifications(ministryId);
           onNotificationsUpdate([]); // Limpa localmente
+      }
+  };
+
+  const handleNotificationClick = (notification: AppNotification) => {
+      if (notification.actionLink && onNavigate) {
+          onNavigate(notification.actionLink);
+          setIsOpen(false); // Fecha o menu após navegar
       }
   };
 
@@ -83,13 +91,22 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
                  ) : (
                      <div className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
                          {notifications.map(n => (
-                             <div key={n.id} className={`p-4 hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors ${!n.read ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
+                             <div 
+                                key={n.id} 
+                                onClick={() => handleNotificationClick(n)}
+                                className={`p-4 transition-colors relative group ${!n.read ? 'bg-blue-50/50 dark:bg-blue-900/10' : 'hover:bg-zinc-50 dark:hover:bg-zinc-700/30'} ${n.actionLink ? 'cursor-pointer' : ''}`}
+                             >
                                  <div className="flex gap-3">
                                      <div className="mt-1 shrink-0">{getIcon(n.type)}</div>
                                      <div className="flex-1">
-                                         <h4 className={`text-sm ${!n.read ? 'font-bold text-zinc-800 dark:text-zinc-100' : 'font-medium text-zinc-600 dark:text-zinc-400'}`}>
-                                             {n.title}
-                                         </h4>
+                                         <div className="flex justify-between items-start">
+                                            <h4 className={`text-sm ${!n.read ? 'font-bold text-zinc-800 dark:text-zinc-100' : 'font-medium text-zinc-600 dark:text-zinc-400'}`}>
+                                                {n.title}
+                                            </h4>
+                                            {n.actionLink && (
+                                                <ExternalLink size={12} className="text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                            )}
+                                         </div>
                                          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
                                              {n.message}
                                          </p>

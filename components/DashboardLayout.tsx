@@ -230,7 +230,14 @@ export const DashboardLayout: React.FC<Props> = ({
                )}
 
                {/* Notificações Mobile */}
-               {currentUser && <NotificationCenter notifications={notifications} ministryId={currentUser.ministryId || null} onNotificationsUpdate={onNotificationsUpdate} />}
+               {currentUser && (
+                 <NotificationCenter 
+                    notifications={notifications} 
+                    ministryId={currentUser.ministryId || null} 
+                    onNotificationsUpdate={onNotificationsUpdate} 
+                    onNavigate={onTabChange}
+                 />
+               )}
                
                {currentUser && (
                 <button onClick={() => onTabChange('profile')} className="flex items-center justify-center ml-2">
@@ -242,7 +249,14 @@ export const DashboardLayout: React.FC<Props> = ({
 
         {/* Desktop Top Bar (Optional, for notifications) */}
         <div className="hidden lg:flex justify-end items-center px-8 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50">
-             {currentUser && <NotificationCenter notifications={notifications} ministryId={currentUser.ministryId || null} onNotificationsUpdate={onNotificationsUpdate} />}
+             {currentUser && (
+               <NotificationCenter 
+                  notifications={notifications} 
+                  ministryId={currentUser.ministryId || null} 
+                  onNotificationsUpdate={onNotificationsUpdate} 
+                  onNavigate={onTabChange}
+               />
+             )}
         </div>
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-8 custom-scrollbar relative">

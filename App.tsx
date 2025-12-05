@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ScheduleTable } from './components/ScheduleTable';
@@ -1034,11 +1033,13 @@ const AppInner = () => {
             onSaveAvailability={handleSaveAvailability}
             onNotify={(msg) => {
                 if(ministryId) {
+                    // Envia notificação com link para o relatório
                     import('./services/supabaseService').then(s => {
                         s.sendNotification(ministryId, {
                             type: 'info',
                             title: 'Disponibilidade Atualizada',
-                            message: msg
+                            message: msg,
+                            actionLink: 'availability-report' 
                         });
                     });
                 }
