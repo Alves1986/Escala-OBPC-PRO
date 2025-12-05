@@ -26,7 +26,7 @@ export const ConfirmationModal: React.FC<Props> = ({ isOpen, onClose, onConfirm,
              <CheckCircle2 size={32} className="text-white" />
           </div>
           <h2 className="text-xl font-bold text-white">Confirmar Presença</h2>
-          <p className="text-green-100 text-sm mt-1">Escala Mídia OBPC</p>
+          <p className="text-green-100 text-sm mt-1">Gestão de Escala OBPC</p>
         </div>
 
         <div className="p-6 space-y-4">

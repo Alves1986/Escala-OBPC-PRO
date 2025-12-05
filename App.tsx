@@ -262,7 +262,7 @@ const AppContent = () => {
 
   const getMinistryTitle = (id: string | null) => {
     if (customTitle) return customTitle; // Usa título personalizado se existir
-    if (!id) return "Escala Mídia Pro";
+    if (!id) return "Gestão de Escala OBPC";
     const cleanId = id.toLowerCase().trim();
     if (cleanId === 'midia') return "Mídia / Comunicação";
     if (cleanId === 'louvor') return "Louvor / Adoração";
@@ -1221,7 +1221,7 @@ const AppContent = () => {
             isVisible={showInstallBanner} 
             onInstall={handleInstallApp} 
             onDismiss={handleDismissBanner}
-            appName="Escala Mídia Pro"
+            appName="Gestão de Escala OBPC"
         />
     </div>
   );
