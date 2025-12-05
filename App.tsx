@@ -14,6 +14,7 @@ import { AvailabilityReportScreen } from './components/AvailabilityReportScreen'
 import { SwapRequestsScreen } from './components/SwapRequestsScreen';
 import { RepertoireScreen } from './components/RepertoireScreen';
 import { InstallModal } from './components/InstallModal';
+import { AlertsManager } from './components/AlertsManager';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile, SwapRequest, RepertoireItem } from './types';
 import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap, toggleAdmin } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
@@ -38,7 +39,8 @@ import {
   ShieldCheck,
   ShieldAlert,
   Music,
-  ListMusic
+  ListMusic,
+  Megaphone
 } from 'lucide-react';
 import { NextEventCard } from './components/NextEventCard';
 import { ConfirmationModal } from './components/ConfirmationModal';
@@ -58,6 +60,7 @@ const MANAGEMENT_NAV_ITEMS = [
   { id: 'repertoire-manager', label: 'Gerenciar Repertório', icon: <ListMusic size={20} /> },
   { id: 'availability-report', label: 'Relat. Disponibilidade', icon: <CalendarSearch size={20} /> },
   { id: 'events', label: 'Eventos', icon: <Clock size={20} /> },
+  { id: 'alerts', label: 'Enviar Avisos', icon: <Megaphone size={20} /> },
   { id: 'team', label: 'Membros & Equipe', icon: <Users size={20} /> },
 ];
 
@@ -572,6 +575,18 @@ const AppInner = () => {
      addToast("Edição de detalhes salva!", "success");
      setSelectedEventDetails(null);
   }
+
+  const handleSendGlobalAlert = async (title: string, message: string, type: 'info' | 'success' | 'warning' | 'alert') => {
+      if (!ministryId) return;
+      await sendNotification(ministryId, {
+          title,
+          message,
+          type
+      });
+      // Refresh local list
+      const notifs = await loadData<AppNotification[]>(ministryId, 'notifications_v1', []);
+      setNotifications(notifs);
+  };
 
   // --- VIEWS ---
   const renderDashboard = () => (
@@ -1149,6 +1164,10 @@ const AppInner = () => {
          />
       )}
 
+      {currentTab === 'alerts' && currentUser?.role === 'admin' && (
+          <AlertsManager onSend={handleSendGlobalAlert} />
+      )}
+
       {currentTab === 'team' && currentUser?.role === 'admin' && renderTeam()}
       
       {currentTab === 'profile' && currentUser && (
@@ -1233,6 +1252,7 @@ const AppInner = () => {
          schedule={schedule}
          roles={roles}
          onSave={handleSaveEventDetails}
+         onSwapRequest={handleCreateSwapRequest}
          currentUser={currentUser}
       />
       

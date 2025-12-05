@@ -484,6 +484,7 @@ export const sendNotification = async (ministryId: string, notification: Omit<Ap
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
 
     try {
+        // 1. Salva notificação no banco para aparecer no "sininho"
         const key = getStorageKey(cleanMid, 'notifications_v1');
         const { data } = await supabase.from('app_storage').select('value').eq('key', key).single();
         
@@ -496,6 +497,24 @@ export const sendNotification = async (ministryId: string, notification: Omit<Ap
         };
         notifs = [newNotif, ...notifs].slice(0, 50);
         await supabase.from('app_storage').upsert({ key, value: notifs }, { onConflict: 'key' });
+
+        // 2. Dispara a Edge Function para enviar PUSH real (celular fechado)
+        // Isso só funciona se você tiver feito o deploy da função no Supabase
+        const { error } = await supabase.functions.invoke('push-notification', {
+            body: {
+                ministryId: cleanMid,
+                title: notification.title,
+                message: notification.message,
+                type: notification.type
+            }
+        });
+
+        if (error) {
+            console.warn("Backend de Push não configurado ou erro:", error.message);
+        } else {
+            console.log("Push disparado com sucesso!");
+        }
+
     } catch (e) {
         console.error("Erro ao enviar notificação", e);
     }
