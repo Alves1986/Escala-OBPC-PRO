@@ -439,6 +439,16 @@ const AppInner = () => {
       addToast("Disponibilidade sincronizada.", "success");
   };
 
+  // --- CORE FIX: Handle Availability Save with Persistence ---
+  const handleSaveAvailability = async (member: string, dates: string[]) => {
+      if (!ministryId) return;
+      const newAvail = { ...availability, [member]: dates };
+      // 1. Update Local State
+      setAvailability(newAvail);
+      // 2. Persist to Database immediately
+      await saveData(ministryId, 'availability_v1', newAvail);
+  };
+
   const handleUpdateProfile = async (name: string, whatsapp: string, avatar_url?: string, functions?: string[]) => {
     if (!currentUser) return;
     const res = await updateUserProfile(name, whatsapp, avatar_url, functions);
@@ -879,6 +889,7 @@ const AppInner = () => {
             currentMonth={currentMonth}
             onMonthChange={setCurrentMonth}
             currentUser={currentUser}
+            onSaveAvailability={handleSaveAvailability}
             onNotify={(msg) => {
                 if(ministryId) {
                     import('./services/supabaseService').then(s => {

@@ -13,6 +13,7 @@ interface Props {
   onMonthChange: (newMonth: string) => void;
   onNotify?: (message: string) => void;
   currentUser: User | null;
+  onSaveAvailability: (member: string, dates: string[]) => Promise<void>;
 }
 
 // Modal Interno para Seleção de Período
@@ -44,7 +45,7 @@ const SundaySelectionModal = ({ isOpen, onClose, onSelect, currentDateDisplay }:
     );
 };
 
-export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailability, allMembersList, currentMonth, onMonthChange, onNotify, currentUser }) => {
+export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailability, allMembersList, currentMonth, onMonthChange, onNotify, currentUser, onSaveAvailability }) => {
   const [selectedMember, setSelectedMember] = useState("");
   const [tempDates, setTempDates] = useState<string[]>([]); // Formato: "YYYY-MM-DD" ou "YYYY-MM-DD_M" ou "YYYY-MM-DD_N"
   const [hasChanges, setHasChanges] = useState(false);
@@ -129,11 +130,11 @@ export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailabil
       setSundayModal(null);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
       if (!selectedMember) return;
 
-      // Salva no estado global
-      setAvailability({ ...availability, [selectedMember]: tempDates });
+      // Salva no banco de dados
+      await onSaveAvailability(selectedMember, tempDates);
       setHasChanges(false);
       addToast("Disponibilidade salva com sucesso!", "success");
 
