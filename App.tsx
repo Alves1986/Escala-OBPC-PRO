@@ -75,7 +75,7 @@ const MANAGEMENT_NAV_ITEMS = [
   { id: 'settings', label: 'Configurações', icon: <Settings size={20} /> },
 ];
 
-const AppInner = () => {
+const AppContent = () => {
   const { addToast, confirmAction } = useToast();
   // --- STATE ---
   const [sessionLoading, setSessionLoading] = useState(true);
@@ -630,7 +630,6 @@ const AppInner = () => {
 
   const handleSaveEventDetails = async (oldIso: string, newTitle: string, newTime: string) => {
      if(!ministryId || !selectedEventDetails) return;
-     const datePart = oldIso.split('T')[0];
      // Logic to update event... (omitted for brevity in this snippet as it's not the focus)
      addToast("Edição de detalhes salva!", "success");
      setSelectedEventDetails(null);
@@ -1094,7 +1093,6 @@ const AppInner = () => {
 
   return (
     <div className={theme}>
-      <ToastProvider>
         {sessionLoading ? (
             <div className="h-screen w-full flex items-center justify-center bg-zinc-950 text-white">
                 <div className="flex flex-col items-center gap-4">
@@ -1199,10 +1197,16 @@ const AppInner = () => {
             onDismiss={handleDismissBanner}
             appName="Escala Mídia Pro"
         />
-
-      </ToastProvider>
     </div>
   );
 };
 
-export default AppInner;
+const App = () => {
+  return (
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
+  );
+};
+
+export default App;
