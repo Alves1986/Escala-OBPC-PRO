@@ -12,8 +12,9 @@ import { ProfileScreen } from './components/ProfileScreen';
 import { EventDetailsModal } from './components/EventDetailsModal';
 import { AvailabilityReportScreen } from './components/AvailabilityReportScreen';
 import { SwapRequestsScreen } from './components/SwapRequestsScreen';
+import { RepertoireScreen } from './components/RepertoireScreen';
 import { InstallModal } from './components/InstallModal';
-import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile, SwapRequest } from './types';
+import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile, SwapRequest, RepertoireItem } from './types';
 import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap, toggleAdmin } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
 import jsPDF from 'jspdf';
@@ -35,7 +36,9 @@ import {
   Plus,
   RefreshCcw,
   ShieldCheck,
-  ShieldAlert
+  ShieldAlert,
+  Music,
+  ListMusic
 } from 'lucide-react';
 import { NextEventCard } from './components/NextEventCard';
 import { ConfirmationModal } from './components/ConfirmationModal';
@@ -47,10 +50,12 @@ const MAIN_NAV_ITEMS = [
   { id: 'calendar', label: 'Calendário', icon: <CalendarIcon size={20} /> },
   { id: 'availability', label: 'Disponibilidade', icon: <Shield size={20} /> },
   { id: 'swaps', label: 'Trocas de Escala', icon: <RefreshCcw size={20} /> },
+  { id: 'repertoire', label: 'Repertório', icon: <Music size={20} /> },
 ];
 
 const MANAGEMENT_NAV_ITEMS = [
   { id: 'editor', label: 'Editor de Escala', icon: <Edit3 size={20} /> },
+  { id: 'repertoire-manager', label: 'Gerenciar Repertório', icon: <ListMusic size={20} /> },
   { id: 'availability-report', label: 'Relat. Disponibilidade', icon: <CalendarSearch size={20} /> },
   { id: 'events', label: 'Eventos', icon: <Clock size={20} /> },
   { id: 'team', label: 'Membros & Equipe', icon: <Users size={20} /> },
@@ -89,6 +94,7 @@ const AppInner = () => {
   const [scheduleIssues, setScheduleIssues] = useState<ScheduleAnalysis>({});
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [swapRequests, setSwapRequests] = useState<SwapRequest[]>([]);
+  const [repertoire, setRepertoire] = useState<RepertoireItem[]>([]);
   const [adminsList, setAdminsList] = useState<string[]>([]);
   
   // UI State
@@ -221,6 +227,7 @@ const AppInner = () => {
         resNotif,
         resRegMembers,
         resSwaps,
+        resRepertoire,
         resAdmins
       ] = await Promise.all([
         loadData<MemberMap>(cleanMid, 'members_v7', {}),
@@ -234,6 +241,8 @@ const AppInner = () => {
         loadData<AppNotification[]>(cleanMid, 'notifications_v1', []),
         loadData<TeamMemberProfile[]>(cleanMid, 'public_members_list', []),
         loadData<SwapRequest[]>(cleanMid, 'swap_requests_v1', []),
+        // Carrega o repertório da chave 'shared' para ser visto por todos os ministérios
+        loadData<RepertoireItem[]>('shared', 'repertoire_v1', []),
         loadData<string[]>(cleanMid, 'admins_list', [])
       ]);
 
@@ -248,6 +257,7 @@ const AppInner = () => {
       setNotifications(resNotif);
       setRegisteredMembers(resRegMembers);
       setSwapRequests(resSwaps);
+      setRepertoire(resRepertoire);
       setAdminsList(resAdmins);
 
       // Upgrade current user if in admins list
@@ -526,11 +536,23 @@ const AppInner = () => {
 
     let hasMembers = false;
     roles.forEach(role => {
-        const key = `${nextEvent.iso}_${role}`;
-        const memberName = schedule[key];
-        if (memberName) {
-            message += `▪️ *${role}:* ${memberName}\n`;
-            hasMembers = true;
+        // Handle Vocal expansion specifically for Louvor
+        if (ministryId === 'louvor' && role === 'Vocal') {
+            [1, 2, 3, 4, 5].forEach(i => {
+                const key = `${nextEvent.iso}_Vocal_${i}`;
+                const memberName = schedule[key];
+                if (memberName) {
+                    message += `▪️ *Vocal ${i}:* ${memberName}\n`;
+                    hasMembers = true;
+                }
+            });
+        } else {
+            const key = `${nextEvent.iso}_${role}`;
+            const memberName = schedule[key];
+            if (memberName) {
+                message += `▪️ *${role}:* ${memberName}\n`;
+                hasMembers = true;
+            }
         }
     });
 
@@ -571,6 +593,7 @@ const AppInner = () => {
             schedule={schedule}
             attendance={attendance}
             roles={roles}
+            ministryId={ministryId}
             onConfirm={(key) => {
                 const memberName = schedule[key];
                 if(memberName) {
@@ -916,6 +939,31 @@ const AppInner = () => {
           />
       )}
 
+      {currentTab === 'repertoire' && (
+          <RepertoireScreen 
+              repertoire={repertoire}
+              setRepertoire={async (newRep) => {
+                  // View mode shouldn't trigger this, but just in case
+                  setRepertoire(newRep);
+              }}
+              currentUser={currentUser}
+              mode="view"
+          />
+      )}
+
+      {currentTab === 'repertoire-manager' && currentUser?.role === 'admin' && (
+          <RepertoireScreen 
+              repertoire={repertoire}
+              setRepertoire={async (newRep) => {
+                  setRepertoire(newRep);
+                  // Force save to 'shared' namespace so both ministries see it
+                  await saveData('shared', 'repertoire_v1', newRep);
+              }}
+              currentUser={currentUser}
+              mode="manage"
+          />
+      )}
+
       {currentTab === 'editor' && currentUser?.role === 'admin' && (
         <div className="animate-fade-in space-y-4">
             {/* Header com Navegação de Mês e Ferramentas */}
@@ -1072,6 +1120,7 @@ const AppInner = () => {
               onAttendanceToggle={handleAttendanceToggle}
               onDeleteEvent={handleDeleteEvent}
               memberStats={memberStats}
+              ministryId={ministryId}
            />
         </div>
       )}

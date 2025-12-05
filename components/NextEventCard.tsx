@@ -9,18 +9,32 @@ interface Props {
   attendance: AttendanceMap;
   roles: Role[];
   onConfirm: (key: string) => void;
+  ministryId: string | null;
 }
 
-export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, roles, onConfirm }) => {
+export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, roles, onConfirm, ministryId }) => {
   if (!event) return null;
 
   const getAssignedMembers = () => {
     const assigned: { role: string; name: string; key: string }[] = [];
+    
     roles.forEach(role => {
-      const key = `${event.iso}_${role}`;
-      const member = schedule[key];
-      if (member) {
-        assigned.push({ role, name: member, key });
+      // Special logic for Louvor Vocal expansion (Vocal 1-5)
+      if (ministryId === 'louvor' && role === 'Vocal') {
+          [1, 2, 3, 4, 5].forEach(i => {
+              const key = `${event.iso}_Vocal_${i}`;
+              const member = schedule[key];
+              if (member) {
+                  assigned.push({ role: `Vocal ${i}`, name: member, key });
+              }
+          });
+      } else {
+          // Standard logic
+          const key = `${event.iso}_${role}`;
+          const member = schedule[key];
+          if (member) {
+            assigned.push({ role, name: member, key });
+          }
       }
     });
     return assigned;

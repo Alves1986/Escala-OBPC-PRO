@@ -1,4 +1,5 @@
 
+
 export type Role = string;
 
 export interface MemberMap {
@@ -63,6 +64,16 @@ export interface SwapRequest {
   takenByName?: string;
 }
 
+export interface RepertoireItem {
+  id: string;
+  title: string;
+  link: string;
+  date: string; // YYYY-MM-DD (Data do culto/evento)
+  observation?: string;
+  addedBy: string;
+  createdAt: string;
+}
+
 // Push Notification Types
 export interface PushSubscriptionRecord {
   endpoint: string;
@@ -113,7 +124,7 @@ export interface AppState {
 
 export const DEFAULT_ROLES: Record<string, string[]> = {
   'midia': ["Projeção", "Transmissão", "Fotografia", "Storys"],
-  'louvor': ['Ministro', 'Vocal', 'Guitarra', 'Baixo', 'Teclado', 'Bateria', 'Dança', 'Mesa de Som'],
+  'louvor': ['Ministro', 'Vocal', 'Guitarra', 'Baixo', 'Teclado', 'Bateria', 'Mesa de Som'],
   'default': ["Membro"]
 };
 
