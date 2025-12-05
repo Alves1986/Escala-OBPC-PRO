@@ -50,7 +50,8 @@ import {
   Smartphone,
   Moon,
   Sun,
-  BellRing
+  BellRing,
+  CalendarHeart
 } from 'lucide-react';
 import { NextEventCard } from './components/NextEventCard';
 import { ConfirmationModal } from './components/ConfirmationModal';
@@ -816,51 +817,57 @@ const AppContent = () => {
                     .map(member => {
                      const isAdmin = adminsList.includes(member.email || '');
                      return (
-                     <div key={member.id} className="p-4 flex items-center justify-between hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
-                         <div className="flex items-center gap-4">
+                     <div key={member.id} className="p-4 flex flex-col md:flex-row items-start md:items-center justify-between hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors gap-4">
+                         <div className="flex items-start gap-4 flex-1">
                              {member.avatar_url ? (
-                                 <img src={member.avatar_url} alt={member.name} className="w-10 h-10 rounded-full object-cover shadow-sm" />
+                                 <img src={member.avatar_url} alt={member.name} className="w-12 h-12 rounded-full object-cover shadow-sm" />
                              ) : (
-                                 <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                                 <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
                                      {member.name.charAt(0).toUpperCase()}
                                  </div>
                              )}
                              
-                             <div>
+                             <div className="flex-1">
                                  <div className="flex items-center gap-2">
-                                     <h4 className="font-bold text-zinc-800 dark:text-zinc-100">{member.name}</h4>
-                                     {isAdmin && <ShieldCheck size={14} className="text-blue-500" />}
+                                     <h4 className="font-bold text-lg text-zinc-800 dark:text-zinc-100">{member.name}</h4>
+                                     {isAdmin && <ShieldCheck size={16} className="text-blue-500" title="Administrador" />}
                                  </div>
-                                 <p className="text-xs text-zinc-500">ID: {member.id.substring(0,8)}...</p>
-                                 {member.birthDate && <p className="text-[10px] text-pink-500 font-medium">Aniversário: {member.birthDate.split('-').reverse().join('/')}</p>}
+                                 <p className="text-[10px] text-zinc-400 font-mono mb-2">ID: {member.id.substring(0,8)}...</p>
+
+                                 {/* Visual Contact Info Block */}
+                                 <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                     {member.email && (
+                                         <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+                                            <Mail size={12} />
+                                            <span>{member.email}</span>
+                                         </div>
+                                     )}
+                                     {member.whatsapp && (
+                                         <a href={`https://wa.me/${member.whatsapp.replace(/\D/g, '')}`} target="_blank" className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 hover:text-green-600 dark:hover:text-green-400 transition-colors">
+                                            <Phone size={12} />
+                                            <span>{member.whatsapp}</span>
+                                         </a>
+                                     )}
+                                     {member.birthDate && (
+                                         <div className="flex items-center gap-1.5 text-xs text-pink-500 font-medium">
+                                            <CalendarHeart size={12} />
+                                            <span>{member.birthDate.split('-').reverse().join('/')}</span>
+                                         </div>
+                                     )}
+                                 </div>
                              </div>
                          </div>
                          
-                         <div className="flex items-center gap-2">
-                             {member.whatsapp && (
-                                 <a 
-                                   href={`https://wa.me/${member.whatsapp.replace(/\D/g, '')}`} 
-                                   target="_blank" 
-                                   className="p-2 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
-                                 >
-                                     <Phone size={18} />
-                                 </a>
-                             )}
-                             <a 
-                                href={`mailto:${member.email}`}
-                                className="p-2 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg transition-colors"
-                             >
-                                 <Mail size={18} />
-                             </a>
-                             
+                         <div className="flex items-center gap-2 self-end md:self-center">
                              {/* Botão Tornar Admin */}
                              {currentUser?.role === 'admin' && member.email && (
                                  <button 
                                      onClick={() => handleToggleAdmin(member.email!, member.name)}
-                                     className={`p-2 rounded-lg transition-colors ${isAdmin ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700'}`}
+                                     className={`p-2 rounded-lg transition-colors flex items-center gap-2 text-xs font-bold ${isAdmin ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700'}`}
                                      title={isAdmin ? "Remover Admin" : "Tornar Admin"}
                                  >
-                                     {isAdmin ? <ShieldCheck size={18} /> : <ShieldAlert size={18} />}
+                                     {isAdmin ? <ShieldCheck size={16} /> : <ShieldAlert size={16} />}
+                                     <span className="md:hidden">{isAdmin ? 'Admin' : 'Membro'}</span>
                                  </button>
                              )}
 
@@ -868,6 +875,7 @@ const AppContent = () => {
                                  <button 
                                      onClick={() => handleDeleteMember(member.id, member.name)}
                                      className="p-2 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                     title="Excluir Membro"
                                  >
                                      <Trash2 size={18} />
                                  </button>
