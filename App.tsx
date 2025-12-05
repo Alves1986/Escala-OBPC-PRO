@@ -63,6 +63,7 @@ const MANAGEMENT_NAV_ITEMS = [
   { id: 'events', label: 'Eventos', icon: <Clock size={20} /> },
   { id: 'alerts', label: 'Enviar Avisos', icon: <Megaphone size={20} /> },
   { id: 'team', label: 'Membros & Equipe', icon: <Users size={20} /> },
+  { id: 'settings', label: 'Configurações', icon: <Settings size={20} /> },
 ];
 
 const AppInner = () => {
@@ -1184,6 +1185,27 @@ const AppInner = () => {
       )}
 
       {currentTab === 'team' && currentUser?.role === 'admin' && renderTeam()}
+
+      {currentTab === 'settings' && currentUser?.role === 'admin' && (
+          <div className="space-y-6 animate-fade-in max-w-4xl mx-auto">
+             <div className="border-b border-zinc-200 dark:border-zinc-700 pb-4">
+               <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+                 <Settings className="text-zinc-500"/> Configurações
+               </h2>
+               <p className="text-zinc-500 text-sm mt-1">
+                 Ajustes e preferências do sistema.
+               </p>
+             </div>
+             
+             <div className="bg-white dark:bg-zinc-800 p-8 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm text-center">
+                 <Settings size={48} className="mx-auto mb-4 text-zinc-300 dark:text-zinc-600"/>
+                 <h3 className="text-lg font-bold text-zinc-700 dark:text-zinc-300">Configurações do Sistema</h3>
+                 <p className="text-zinc-500 text-sm mt-2 max-w-md mx-auto">
+                     Esta seção está em desenvolvimento. Em breve você poderá configurar parâmetros globais, permissões avançadas e integrações aqui.
+                 </p>
+             </div>
+          </div>
+      )}
       
       {currentTab === 'profile' && currentUser && (
          <ProfileScreen 
