@@ -16,6 +16,7 @@ import { RepertoireScreen } from './components/RepertoireScreen';
 import { InstallModal } from './components/InstallModal';
 import { InstallBanner } from './components/InstallBanner';
 import { AlertsManager } from './components/AlertsManager';
+import { SettingsScreen } from './components/SettingsScreen';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile, SwapRequest, RepertoireItem } from './types';
 import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap, toggleAdmin } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
@@ -41,7 +42,12 @@ import {
   ShieldAlert,
   Music,
   ListMusic,
-  Megaphone
+  Megaphone,
+  Save,
+  Smartphone,
+  Moon,
+  Sun,
+  BellRing
 } from 'lucide-react';
 import { NextEventCard } from './components/NextEventCard';
 import { ConfirmationModal } from './components/ConfirmationModal';
@@ -77,7 +83,28 @@ const AppInner = () => {
   const [currentTab, setCurrentTab] = useState('dashboard');
 
   const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
-  const [theme, setTheme] = useState<'light'|'dark'>('dark');
+  
+  // Theme State with Persistence Fix
+  const [theme, setTheme] = useState<'light'|'dark'>(() => {
+    if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('app_theme');
+        if (saved === 'light' || saved === 'dark') return saved;
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return 'dark';
+  });
+
+  // Apply Theme Effect
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('app_theme', theme);
+  }, [theme]);
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   
@@ -102,6 +129,7 @@ const AppInner = () => {
   const [swapRequests, setSwapRequests] = useState<SwapRequest[]>([]);
   const [repertoire, setRepertoire] = useState<RepertoireItem[]>([]);
   const [adminsList, setAdminsList] = useState<string[]>([]);
+  const [customTitle, setCustomTitle] = useState("");
   
   // UI State
   const [loading, setLoading] = useState(false);
@@ -230,6 +258,7 @@ const AppInner = () => {
   };
 
   const getMinistryTitle = (id: string | null) => {
+    if (customTitle) return customTitle; // Usa título personalizado se existir
     if (!id) return "Escala Mídia Pro";
     const cleanId = id.toLowerCase().trim();
     if (cleanId === 'midia') return "Mídia / Comunicação";
@@ -256,7 +285,8 @@ const AppInner = () => {
         resRegMembers,
         resSwaps,
         resRepertoire,
-        resAdmins
+        resAdmins,
+        resConfig
       ] = await Promise.all([
         loadData<MemberMap>(cleanMid, 'members_v7', {}),
         loadData<ScheduleMap>(cleanMid, `schedule_${currentMonth}`, {}),
@@ -270,7 +300,8 @@ const AppInner = () => {
         loadData<TeamMemberProfile[]>(cleanMid, 'public_members_list', []),
         loadData<SwapRequest[]>(cleanMid, 'swap_requests_v1', []),
         loadData<RepertoireItem[]>('shared', 'repertoire_v1', []),
-        loadData<string[]>(cleanMid, 'admins_list', [])
+        loadData<string[]>(cleanMid, 'admins_list', []),
+        loadData<any>(cleanMid, 'ministry_config', { displayName: '' })
       ]);
 
       setMembers(resMembers);
@@ -286,6 +317,7 @@ const AppInner = () => {
       setSwapRequests(resSwaps);
       setRepertoire(resRepertoire);
       setAdminsList(resAdmins);
+      if (resConfig?.displayName) setCustomTitle(resConfig.displayName);
 
       // Upgrade current user if in admins list
       if (currentUser && currentUser.email && resAdmins.includes(currentUser.email)) {
@@ -606,6 +638,13 @@ const AppInner = () => {
       setNotifications(notifs);
   };
 
+  const handleSaveSettings = async (newName: string) => {
+      if (!ministryId) return;
+      setCustomTitle(newName);
+      await saveData(ministryId, 'ministry_config', { displayName: newName });
+      addToast("Configurações salvas com sucesso!", "success");
+  }
+
   // --- RENDER ---
   const renderDashboard = () => (
     <div className="space-y-6 animate-fade-in">
@@ -865,12 +904,7 @@ const AppInner = () => {
       sidebarOpen={sidebarOpen}
       setSidebarOpen={setSidebarOpen}
       theme={theme}
-      toggleTheme={() => {
-        const newTheme = theme === 'dark' ? 'light' : 'dark';
-        setTheme(newTheme);
-        if (newTheme === 'dark') document.documentElement.classList.add('dark');
-        else document.documentElement.classList.remove('dark');
-      }}
+      toggleTheme={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
       onLogout={async () => {
         await logout();
         setCurrentUser(null);
@@ -1187,24 +1221,13 @@ const AppInner = () => {
       {currentTab === 'team' && currentUser?.role === 'admin' && renderTeam()}
 
       {currentTab === 'settings' && currentUser?.role === 'admin' && (
-          <div className="space-y-6 animate-fade-in max-w-4xl mx-auto">
-             <div className="border-b border-zinc-200 dark:border-zinc-700 pb-4">
-               <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                 <Settings className="text-zinc-500"/> Configurações
-               </h2>
-               <p className="text-zinc-500 text-sm mt-1">
-                 Ajustes e preferências do sistema.
-               </p>
-             </div>
-             
-             <div className="bg-white dark:bg-zinc-800 p-8 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm text-center">
-                 <Settings size={48} className="mx-auto mb-4 text-zinc-300 dark:text-zinc-600"/>
-                 <h3 className="text-lg font-bold text-zinc-700 dark:text-zinc-300">Configurações do Sistema</h3>
-                 <p className="text-zinc-500 text-sm mt-2 max-w-md mx-auto">
-                     Esta seção está em desenvolvimento. Em breve você poderá configurar parâmetros globais, permissões avançadas e integrações aqui.
-                 </p>
-             </div>
-          </div>
+          <SettingsScreen 
+            initialTitle={getMinistryTitle(ministryId)}
+            ministryId={ministryId}
+            theme={theme}
+            onToggleTheme={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
+            onSaveTitle={handleSaveSettings}
+          />
       )}
       
       {currentTab === 'profile' && currentUser && (
