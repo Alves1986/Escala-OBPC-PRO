@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, ShieldCheck, UserPlus, ArrowLeft, Check, ChevronDown, HelpCircle, KeyRound } from 'lucide-react';
 import { loginWithEmail, registerWithEmail, loadData, sendPasswordResetEmail } from '../services/supabaseService';
 import { User } from '../types';
+import { LegalModal, LegalDocType } from './LegalDocuments';
 
 interface Props {
   onLoginSuccess?: () => void; // Apenas para trigger visual, o App.tsx gerencia o estado real via onAuthStateChange
@@ -45,6 +46,9 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
   const [localLoading, setLocalLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+
+  // Legal Modal State
+  const [legalDoc, setLegalDoc] = useState<LegalDocType>(null);
 
   // Effect to load dynamic roles when ministry changes
   useEffect(() => {
@@ -158,6 +162,8 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-zinc-950 relative overflow-hidden font-sans">
+      <LegalModal isOpen={!!legalDoc} type={legalDoc} onClose={() => setLegalDoc(null)} />
+
       {/* Background Effects */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-900/20 rounded-full blur-[120px] animate-pulse"></div>
@@ -393,6 +399,16 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                       <button type="submit" disabled={localLoading} className="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-xl shadow-lg flex justify-center items-center">
                           {localLoading ? <Loader2 className="animate-spin"/> : 'Finalizar Cadastro'}
                       </button>
+                  </div>
+                  
+                  {/* Links de Termos */}
+                  <div className="text-center mt-3">
+                      <p className="text-[10px] text-zinc-500">
+                          Ao se cadastrar, você concorda com nossos <br/>
+                          <button onClick={() => setLegalDoc('terms')} className="text-blue-500 hover:underline">Termos de Uso</button>
+                          {' e '}
+                          <button onClick={() => setLegalDoc('privacy')} className="text-blue-500 hover:underline">Política de Privacidade</button>.
+                      </p>
                   </div>
               </form>
           )}

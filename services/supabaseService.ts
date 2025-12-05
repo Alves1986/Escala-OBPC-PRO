@@ -1,4 +1,5 @@
 
+
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, DEFAULT_ROLES, AppNotification, TeamMemberProfile, AvailabilityMap, SwapRequest, ScheduleMap, RepertoireItem, Announcement } from '../types';
 
@@ -94,6 +95,7 @@ export const syncMemberProfile = async (ministryId: string, user: User) => {
             name: user.name,
             email: user.email,
             whatsapp: user.whatsapp,
+            birthDate: user.birthDate,
             avatar_url: user.avatar_url,
             roles: user.functions || [],
             createdAt: new Date().toISOString()
@@ -265,6 +267,7 @@ export const loginWithEmail = async (email: string, password: string): Promise<{
                 role: metadata.role || 'member',
                 ministryId: cleanMid, 
                 whatsapp: metadata.whatsapp,
+                birthDate: metadata.birthDate,
                 avatar_url: metadata.avatar_url,
                 functions: metadata.functions || []
             };
@@ -377,7 +380,13 @@ export const logout = async () => {
     await supabase.auth.signOut();
 };
 
-export const updateUserProfile = async (name: string, whatsapp: string, avatar_url?: string, functions?: string[]): Promise<{ success: boolean; message: string }> => {
+export const updateUserProfile = async (
+    name: string, 
+    whatsapp: string, 
+    avatar_url?: string, 
+    functions?: string[],
+    birthDate?: string
+): Promise<{ success: boolean; message: string }> => {
     if (!supabase) return { success: false, message: "Erro de conexão" };
 
     try {
@@ -389,7 +398,8 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
             data: {
                 name,
                 whatsapp,
-                avatar_url
+                avatar_url,
+                birthDate
             }
         };
 
@@ -412,6 +422,7 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
                 role: user.user_metadata.role || 'member',
                 ministryId: ministryId,
                 whatsapp: whatsapp,
+                birthDate: birthDate,
                 avatar_url: avatar_url,
                 functions: functions || user.user_metadata.functions || []
             };

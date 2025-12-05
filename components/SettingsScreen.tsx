@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
-import { Settings, Save, Moon, Sun, BellRing, RefreshCw } from 'lucide-react';
+import { Settings, Save, Moon, Sun, BellRing, RefreshCw, FileText, Shield } from 'lucide-react';
 import { useToast } from './Toast';
+import { LegalModal, LegalDocType } from './LegalDocuments';
 
 interface Props {
   initialTitle: string;
@@ -13,10 +14,13 @@ interface Props {
 
 export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, theme, onToggleTheme, onSaveTitle }) => {
   const [tempTitle, setTempTitle] = useState(initialTitle);
+  const [legalDoc, setLegalDoc] = useState<LegalDocType>(null);
   const { addToast } = useToast();
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-4xl mx-auto">
+    <div className="space-y-6 animate-fade-in max-w-4xl mx-auto pb-10">
+         <LegalModal isOpen={!!legalDoc} type={legalDoc} onClose={() => setLegalDoc(null)} />
+
          <div className="border-b border-zinc-200 dark:border-zinc-700 pb-4">
            <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
              <Settings className="text-zinc-500"/> Configurações
@@ -96,6 +100,38 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
                          Testar / Ativar
                      </button>
                  </div>
+             </div>
+         </div>
+
+         {/* SOBRE E LEGAL */}
+         <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+             <h3 className="text-sm font-bold text-zinc-500 uppercase mb-4">Sobre e Legal</h3>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <button 
+                    onClick={() => setLegalDoc('terms')}
+                    className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-900 rounded-lg border border-zinc-100 dark:border-zinc-700/50 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-left"
+                 >
+                    <div className="p-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg text-zinc-600 dark:text-zinc-400">
+                        <FileText size={18} />
+                    </div>
+                    <div>
+                        <p className="font-bold text-zinc-800 dark:text-zinc-200 text-sm">Termos de Uso</p>
+                        <p className="text-xs text-zinc-500">Regras de utilização do serviço.</p>
+                    </div>
+                 </button>
+
+                 <button 
+                    onClick={() => setLegalDoc('privacy')}
+                    className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-900 rounded-lg border border-zinc-100 dark:border-zinc-700/50 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-left"
+                 >
+                    <div className="p-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg text-zinc-600 dark:text-zinc-400">
+                        <Shield size={18} />
+                    </div>
+                    <div>
+                        <p className="font-bold text-zinc-800 dark:text-zinc-200 text-sm">Política de Privacidade</p>
+                        <p className="text-xs text-zinc-500">Como tratamos seus dados.</p>
+                    </div>
+                 </button>
              </div>
          </div>
 

@@ -1,12 +1,13 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { User } from '../types';
-import { User as UserIcon, Mail, Hash, Briefcase, Save, Key, Camera, Image as ImageIcon, Check } from 'lucide-react';
+import { User as UserIcon, Mail, Hash, Briefcase, Save, Key, Camera, Image as ImageIcon, Check, Calendar } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface Props {
   user: User;
-  onUpdateProfile: (name: string, whatsapp: string, avatar_url?: string, functions?: string[]) => Promise<void>;
+  onUpdateProfile: (name: string, whatsapp: string, avatar_url?: string, functions?: string[], birthDate?: string) => Promise<void>;
   availableRoles?: string[];
 }
 
@@ -14,6 +15,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
   const [name, setName] = useState(user.name);
   const [whatsapp, setWhatsapp] = useState(user.whatsapp || '');
   const [avatar, setAvatar] = useState(user.avatar_url || '');
+  const [birthDate, setBirthDate] = useState(user.birthDate || '');
   const [selectedFunctions, setSelectedFunctions] = useState<string[]>(user.functions || []);
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -23,6 +25,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
     setName(user.name);
     setWhatsapp(user.whatsapp || '');
     setAvatar(user.avatar_url || '');
+    setBirthDate(user.birthDate || '');
     setSelectedFunctions(user.functions || []);
   }, [user]);
 
@@ -98,7 +101,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
     
     setLoading(true);
     try {
-      await onUpdateProfile(name, whatsapp, avatar, selectedFunctions);
+      await onUpdateProfile(name, whatsapp, avatar, selectedFunctions, birthDate);
     } catch (e) {
       addToast("Erro ao atualizar perfil", "error");
     } finally {
@@ -183,6 +186,19 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
               </div>
             </div>
 
+             <div className="space-y-2">
+              <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Data de Nascimento</label>
+              <div className="relative">
+                <Calendar size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input 
+                  type="date" 
+                  value={birthDate} 
+                  onChange={e => setBirthDate(e.target.value)} 
+                  className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl py-3 pl-10 pr-4 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                />
+              </div>
+            </div>
+
             <div className="space-y-2 opacity-60">
               <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1">E-mail (Login) <Key size={12}/></label>
               <div className="relative">
@@ -190,19 +206,6 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                 <input 
                   type="email" 
                   value={user.email || ''} 
-                  disabled
-                  className="w-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-zinc-500 cursor-not-allowed"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2 opacity-60">
-              <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1">ID Ministério <Key size={12}/></label>
-              <div className="relative">
-                <Briefcase size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-                <input 
-                  type="text" 
-                  value={user.ministryId || ''} 
                   disabled
                   className="w-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-zinc-500 cursor-not-allowed"
                 />

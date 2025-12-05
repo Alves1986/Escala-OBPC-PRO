@@ -104,6 +104,7 @@ export interface User {
   role: 'admin' | 'member';
   ministryId?: string; // Vínculo com os dados antigos
   whatsapp?: string;
+  birthDate?: string; // YYYY-MM-DD
   functions?: string[];
   createdAt?: string;
 }
@@ -113,6 +114,7 @@ export interface TeamMemberProfile {
     name: string;
     email?: string;
     whatsapp?: string;
+    birthDate?: string; // YYYY-MM-DD
     avatar_url?: string;
     roles?: string[];
     createdAt?: string;
