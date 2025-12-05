@@ -177,6 +177,11 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
              <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
                <ShieldCheck size={32} className="text-white" />
              </div>
+             
+             <h2 className="text-zinc-400 text-xs font-bold uppercase tracking-widest mb-2">
+                Gestão de Escala OBPC <span className="text-blue-400 bg-blue-400/10 px-1 rounded">v2.0</span>
+             </h2>
+
              <h1 className="text-xl font-bold text-white tracking-tight">
                 {view === 'login' && 'Entrar no Sistema'}
                 {view === 'register' && 'Criar Nova Conta'}
