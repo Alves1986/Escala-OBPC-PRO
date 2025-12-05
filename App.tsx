@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ScheduleTable } from './components/ScheduleTable';
@@ -830,7 +828,11 @@ const AppContent = () => {
                              <div className="flex-1">
                                  <div className="flex items-center gap-2">
                                      <h4 className="font-bold text-lg text-zinc-800 dark:text-zinc-100">{member.name}</h4>
-                                     {isAdmin && <ShieldCheck size={16} className="text-blue-500" title="Administrador" />}
+                                     {isAdmin && (
+                                       <span title="Administrador">
+                                          <ShieldCheck size={16} className="text-blue-500" />
+                                       </span>
+                                     )}
                                  </div>
                                  <p className="text-[10px] text-zinc-400 font-mono mb-2">ID: {member.id.substring(0,8)}...</p>
 
