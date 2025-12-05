@@ -836,6 +836,17 @@ const AppContent = () => {
                                  </div>
                                  <p className="text-[10px] text-zinc-400 font-mono mb-2">ID: {member.id.substring(0,8)}...</p>
 
+                                 {/* Funções (Adicionado) */}
+                                 {member.roles && member.roles.length > 0 && (
+                                     <div className="flex flex-wrap gap-1 mb-3">
+                                         {member.roles.map(role => (
+                                             <span key={role} className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                                                 {role}
+                                             </span>
+                                         ))}
+                                     </div>
+                                 )}
+
                                  {/* Visual Contact Info Block */}
                                  <div className="flex flex-wrap gap-x-4 gap-y-1">
                                      {member.email && (
@@ -868,7 +879,12 @@ const AppContent = () => {
                                      className={`p-2 rounded-lg transition-colors flex items-center gap-2 text-xs font-bold ${isAdmin ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700'}`}
                                      title={isAdmin ? "Remover Admin" : "Tornar Admin"}
                                  >
-                                     {isAdmin ? <ShieldCheck size={16} /> : <ShieldAlert size={16} />}
+                                     <span className="group relative">
+                                        {isAdmin ? <ShieldCheck size={16} /> : <ShieldAlert size={16} />}
+                                        <span className="hidden group-hover:block absolute top-full left-1/2 -translate-x-1/2 bg-black text-white text-[10px] p-1 rounded whitespace-nowrap z-10 mt-1">
+                                           {isAdmin ? 'Remover Admin' : 'Tornar Admin'}
+                                        </span>
+                                     </span>
                                      <span className="md:hidden">{isAdmin ? 'Admin' : 'Membro'}</span>
                                  </button>
                              )}
