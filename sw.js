@@ -1,9 +1,9 @@
 
-const CACHE_NAME = 'escala-midia-pwa-v7';
+const CACHE_NAME = 'escala-midia-pwa-v6';
 
 // Lista de arquivos vitais para o funcionamento offline
-// Como este arquivo agora está na pasta public (servido na raiz), 
-// os caminhos relativos "./" referem-se à raiz do domínio.
+// Inclui as bibliotecas do CDN definidas no importmap do index.html
+// Usando caminhos relativos (./) para evitar erros de origem em ambientes de preview
 const PRECACHE_URLS = [
   './',
   './index.html',

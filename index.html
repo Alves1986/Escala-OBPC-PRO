@@ -94,7 +94,8 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          // Changed to relative path to avoid origin mismatch errors in some environments
+          // O Vite serve arquivos da pasta public/ na raiz.
+          // Portanto, ./sw.js aqui irá buscar o arquivo que está fisicamente em public/sw.js
           navigator.serviceWorker.register('./sw.js')
             .then(registration => {
               console.log('SW registered:', registration);
