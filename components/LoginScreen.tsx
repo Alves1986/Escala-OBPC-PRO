@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, ShieldCheck, UserPlus, ArrowLeft, Check, ChevronDown, KeyRound } from 'lucide-react';
 import { loginWithEmail, registerWithEmail, loadData, sendPasswordResetEmail } from '../services/supabaseService';
 import { LegalModal, LegalDocType } from './LegalDocuments';
+import { TypewriterBackground } from './TypewriterBackground';
 
 interface Props {
   onLoginSuccess?: () => void; 
@@ -159,19 +160,17 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
     <div className="fixed inset-0 z-50 w-full h-full bg-zinc-950 flex flex-col items-center justify-center font-sans overflow-hidden">
       <LegalModal isOpen={!!legalDoc} type={legalDoc} onClose={() => setLegalDoc(null)} />
 
-      {/* Background Effects (Fixed Z-Index 0) */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-900/20 rounded-full blur-[100px] animate-pulse"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-indigo-900/20 rounded-full blur-[100px] animate-pulse" style={{ animationDelay: '2s' }}></div>
-      </div>
-
       {/* Main Scrollable Container (Z-Index 10) */}
       <div 
         ref={scrollContainerRef}
         className="relative z-10 w-full h-full overflow-y-auto custom-scrollbar flex items-center justify-center p-4 md:p-6"
       >
-        <div className="w-full max-w-sm my-auto">
-            <div className="bg-zinc-900/90 backdrop-blur-xl border border-zinc-800 rounded-3xl shadow-2xl p-6 md:p-8 transition-all">
+        <div className="w-full max-w-sm my-auto flex flex-col items-center">
+            
+            {/* Frases Efeito Typewriter ACIMA do card */}
+            <TypewriterBackground />
+
+            <div className="w-full bg-zinc-900/90 backdrop-blur-xl border border-zinc-800 rounded-3xl shadow-2xl p-6 md:p-8 transition-all">
             
             {/* Header */}
             <div className="text-center mb-6">

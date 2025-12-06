@@ -244,6 +244,8 @@ const AppContent = () => {
     const sorted = [...visibleEvents].sort((a, b) => a.iso.localeCompare(b.iso));
     return sorted.find(evt => {
       const eventDate = new Date(evt.iso);
+      // Inclui eventos que acabaram de começar ou estão em andamento
+      // Janela de "próximo" vai até 2 horas depois do início
       const eventEnd = new Date(eventDate.getTime() + 2 * 60 * 60 * 1000);
       return eventEnd > now;
     });
@@ -750,17 +752,10 @@ const AppContent = () => {
             attendance={attendance}
             roles={roles}
             ministryId={ministryId}
+            currentUser={currentUser}
             onConfirm={(key) => {
-                const memberName = schedule[key];
-                if(memberName) {
-                   setConfirmationData({
-                      key,
-                      memberName,
-                      eventName: nextEvent.title,
-                      date: nextEvent.dateDisplay,
-                      role: roles.find(r => `${nextEvent.iso}_${r}` === key) || 'Função'
-                   });
-                }
+                handleAttendanceToggle(key);
+                addToast("Presença confirmada! Bom serviço.", "success");
             }}
          />
        ) : (
@@ -951,17 +946,295 @@ const renderTeam = () => {
   );
 };
 
+// --- RENDER CONTENT SWITCHER ---
+const renderContent = () => {
+  if (sessionLoading) {
+    return <div className="h-screen flex items-center justify-center bg-zinc-950 text-white">Carregando...</div>;
+  }
+  
+  if (!currentUser) {
+    return <LoginScreen />;
+  }
+
+  // Dashboard Tab
+  if (currentTab === 'dashboard') {
+    return renderDashboard();
+  }
+
+  // Calendar Tab
+  if (currentTab === 'calendar') {
+     return (
+        <div className="space-y-6 animate-fade-in max-w-4xl mx-auto">
+           <div className="flex justify-between items-center border-b border-zinc-200 dark:border-zinc-700 pb-4">
+              <div>
+                <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+                  <CalendarIcon className="text-indigo-500"/> Calendário
+                </h2>
+                <p className="text-zinc-500 text-sm mt-1">
+                   Visão geral da escala de {getMonthName(currentMonth)}.
+                </p>
+              </div>
+
+               {/* Month Selector Reuse */}
+              <div className="flex items-center gap-4 bg-white dark:bg-zinc-800 p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                  <button onClick={() => {
+                      const prev = new Date(year, month - 2, 1);
+                      setCurrentMonth(prev.toISOString().slice(0, 7));
+                  }} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md">←</button>
+                  <div className="text-center min-w-[120px]">
+                      <span className="block text-xs font-medium text-zinc-500 uppercase">Referência</span>
+                      <span className="block text-sm font-bold text-zinc-900 dark:text-zinc-100">{getMonthName(currentMonth)}</span>
+                  </div>
+                  <button onClick={() => {
+                      const next = new Date(year, month, 1);
+                      setCurrentMonth(next.toISOString().slice(0, 7));
+                  }} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md">→</button>
+              </div>
+           </div>
+
+           <CalendarGrid 
+              currentMonth={currentMonth}
+              events={visibleEvents}
+              schedule={schedule}
+              roles={roles}
+              onEventClick={(evt) => {
+                  setSelectedEventDetails({ iso: evt.iso, title: evt.title, dateDisplay: evt.iso.split('T')[0].split('-').reverse().join('/') });
+              }}
+           />
+
+           <div className="mt-8">
+              <ScheduleTable 
+                events={visibleEvents}
+                roles={roles}
+                schedule={schedule}
+                attendance={attendance}
+                availability={availability}
+                members={members}
+                allMembers={allMembersList}
+                scheduleIssues={scheduleIssues}
+                globalConflicts={globalConflicts}
+                onCellChange={handleCellChange}
+                onAttendanceToggle={handleAttendanceToggle}
+                onDeleteEvent={handleDeleteEvent}
+                memberStats={memberStats}
+                ministryId={ministryId}
+              />
+           </div>
+        </div>
+     );
+  }
+
+  if (currentTab === 'availability') {
+    return (
+      <AvailabilityScreen 
+        availability={availability} 
+        setAvailability={setAvailability}
+        allMembersList={allMembersList}
+        currentMonth={currentMonth}
+        onMonthChange={setCurrentMonth}
+        currentUser={currentUser}
+        onSaveAvailability={handleSaveAvailability}
+      />
+    );
+  }
+
+  if (currentTab === 'profile') {
+    return (
+      <ProfileScreen 
+        user={currentUser}
+        onUpdateProfile={handleUpdateProfile}
+        availableRoles={roles}
+      />
+    );
+  }
+
+  if (currentTab === 'swaps') {
+      return (
+          <SwapRequestsScreen 
+              schedule={schedule}
+              currentUser={currentUser}
+              requests={swapRequests}
+              visibleEvents={visibleEvents}
+              onCreateRequest={handleCreateSwapRequest}
+              onAcceptRequest={handleAcceptSwap}
+              onCancelRequest={()=>{}}
+          />
+      );
+  }
+
+  if (currentTab === 'repertoire') {
+      return (
+          <RepertoireScreen 
+              repertoire={repertoire}
+              setRepertoire={async (newRep) => {
+                  setRepertoire(newRep);
+                  await saveData('shared', 'repertoire_v1', newRep);
+              }}
+              currentUser={currentUser}
+              mode='view'
+          />
+      );
+  }
+
+  // --- MANAGEMENT TABS (ADMIN ONLY) ---
+  if (currentUser.role === 'admin') {
+      if (currentTab === 'editor') {
+          return (
+            <div className="space-y-6 animate-fade-in max-w-6xl mx-auto">
+               <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
+                  <div>
+                    <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+                      <Edit3 className="text-blue-500"/> Editor de Escala
+                    </h2>
+                    <p className="text-zinc-500 text-sm mt-1">
+                       Monte a escala oficial de {getMonthName(currentMonth)}.
+                    </p>
+                  </div>
+
+                   <div className="flex items-center gap-2 self-end">
+                       <ToolsMenu 
+                            allMembers={allMembersList}
+                            onExportIndividual={(m) => {
+                                const doc = new jsPDF();
+                                doc.text(`Escala: ${m}`, 10, 10);
+                                doc.save(`escala_${m}.pdf`);
+                            }}
+                            onExportFull={() => {
+                                const doc = new jsPDF();
+                                autoTable(doc, { html: 'table' });
+                                doc.save('escala_completa.pdf');
+                            }}
+                            onWhatsApp={handleShareNextEvent}
+                            onCSV={() => {}}
+                            onImportCSV={() => {}}
+                            onClearMonth={async () => {
+                                if(confirm("Limpar todo o mês?")) {
+                                    const newSch = {...schedule};
+                                    Object.keys(newSch).forEach(k => {
+                                        if(k.startsWith(currentMonth)) delete newSch[k];
+                                    });
+                                    setSchedule(newSch);
+                                    if (ministryId) await saveData(ministryId, `schedule_${currentMonth}`, newSch);
+                                }
+                            }}
+                       />
+
+                       <div className="flex items-center gap-4 bg-white dark:bg-zinc-800 p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm ml-2">
+                          <button onClick={() => {
+                              const prev = new Date(year, month - 2, 1);
+                              setCurrentMonth(prev.toISOString().slice(0, 7));
+                          }} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md">←</button>
+                          <div className="text-center min-w-[120px]">
+                              <span className="block text-xs font-medium text-zinc-500 uppercase">Referência</span>
+                              <span className="block text-sm font-bold text-zinc-900 dark:text-zinc-100">{getMonthName(currentMonth)}</span>
+                          </div>
+                          <button onClick={() => {
+                              const next = new Date(year, month, 1);
+                              setCurrentMonth(next.toISOString().slice(0, 7));
+                          }} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md">→</button>
+                      </div>
+                   </div>
+               </div>
+
+               <ScheduleTable 
+                  events={visibleEvents}
+                  roles={roles}
+                  schedule={schedule}
+                  attendance={attendance}
+                  availability={availability}
+                  members={members}
+                  allMembers={allMembersList}
+                  scheduleIssues={scheduleIssues}
+                  globalConflicts={globalConflicts}
+                  onCellChange={handleCellChange}
+                  onAttendanceToggle={handleAttendanceToggle}
+                  onDeleteEvent={handleDeleteEvent}
+                  memberStats={memberStats}
+                  ministryId={ministryId}
+               />
+               
+               <div className="flex gap-2 justify-center mt-6">
+                   <button onClick={() => setRolesModalOpen(true)} className="px-4 py-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg text-sm hover:bg-zinc-300 dark:hover:bg-zinc-700">Gerenciar Funções</button>
+                   <button onClick={() => setAvailModalOpen(true)} className="px-4 py-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg text-sm hover:bg-zinc-300 dark:hover:bg-zinc-700">Gerenciar Indisponibilidade</button>
+               </div>
+            </div>
+          );
+      }
+
+      if (currentTab === 'events') {
+          return (
+            <EventsScreen 
+               customEvents={customEvents} 
+               setCustomEvents={async (evts) => {
+                   setCustomEvents(evts);
+                   if (ministryId) await saveData(ministryId, `events_${currentMonth}`, evts);
+               }}
+               currentMonth={currentMonth}
+               onMonthChange={setCurrentMonth}
+            />
+          );
+      }
+
+      if (currentTab === 'team') {
+          return renderTeam();
+      }
+
+      if (currentTab === 'alerts') {
+          return <AlertsManager onSend={handleSendGlobalAlert} />;
+      }
+      
+      if (currentTab === 'settings') {
+          return (
+             <SettingsScreen 
+                initialTitle={customTitle}
+                ministryId={ministryId}
+                theme={theme}
+                onToggleTheme={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
+                onSaveTitle={handleSaveSettings}
+             />
+          );
+      }
+
+      if (currentTab === 'availability-report') {
+          return (
+              <AvailabilityReportScreen 
+                  availability={availability}
+                  registeredMembers={registeredMembers}
+                  membersMap={members}
+                  currentMonth={currentMonth}
+                  onMonthChange={setCurrentMonth}
+                  availableRoles={roles}
+                  onRefresh={handleReloadAvailability}
+              />
+          );
+      }
+
+      if (currentTab === 'repertoire-manager') {
+          return (
+              <RepertoireScreen 
+                  repertoire={repertoire}
+                  setRepertoire={async (newRep) => {
+                      setRepertoire(newRep);
+                      await saveData('shared', 'repertoire_v1', newRep);
+                  }}
+                  currentUser={currentUser}
+                  mode='manage'
+              />
+          );
+      }
+  }
+
+  // Fallback for non-admins trying to access admin tabs
+  return renderDashboard();
+};
+
   return (
-    <DashboardLayout
-      sidebarOpen={sidebarOpen}
-      setSidebarOpen={setSidebarOpen}
-      theme={theme}
-      toggleTheme={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
-      onLogout={async () => {
-         await logout();
-         setCurrentUser(null);
-         setMinistryId(null);
-      }}
+    <DashboardLayout 
+      sidebarOpen={sidebarOpen} 
+      setSidebarOpen={setSidebarOpen} 
+      theme={theme} 
+      toggleTheme={() => setTheme(t => t === 'light' ? 'dark' : 'light')} 
+      onLogout={() => { logout(); setCurrentUser(null); }}
       title={getMinistryTitle(ministryId)}
       isConnected={isConnected}
       currentUser={currentUser}
@@ -971,26 +1244,82 @@ const renderTeam = () => {
       managementNavItems={MANAGEMENT_NAV_ITEMS}
       notifications={notifications}
       onNotificationsUpdate={setNotifications}
-      installPrompt={installPrompt}
-      onInstall={handleInstallApp}
+      onInstall={installPrompt ? handleInstallApp : undefined}
       isStandalone={isStandalone}
     >
-      <InstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />
+      {renderContent()}
+
+      {/* Confirmation Modal */}
       <ConfirmationModal 
-          isOpen={!!confirmationData} 
-          onClose={() => setConfirmationData(null)} 
+          isOpen={!!confirmationData}
+          onClose={() => setConfirmationData(null)}
+          onConfirm={() => {
+              if (confirmationData) {
+                  handleAttendanceToggle(confirmationData.key);
+                  setConfirmationData(null);
+                  addToast("Presença confirmada com sucesso!", "success");
+              }
+          }}
           data={confirmationData}
-          onConfirm={async () => {
-             if(confirmationData && ministryId) {
-                await handleAttendanceToggle(confirmationData.key);
-                setConfirmationData(null);
-                addToast("Presença confirmada!", "success");
-             }
+      />
+      
+      {/* Install Modal (iOS instructions) */}
+      <InstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />
+
+      {/* Install Banner (Bottom) */}
+      <InstallBanner 
+          isVisible={showInstallBanner} 
+          onInstall={handleInstallApp} 
+          onDismiss={handleDismissBanner}
+          appName="Escala OBPC"
+      />
+
+      {/* Admin Modals */}
+      <EventsModal 
+          isOpen={eventsModalOpen} 
+          onClose={() => setEventsModalOpen(false)} 
+          events={customEvents} 
+          hiddenEvents={hiddenEventsList}
+          onAdd={async (e) => {
+              const newEvts = [...customEvents, e];
+              setCustomEvents(newEvts);
+              if (ministryId) await saveData(ministryId, `events_${currentMonth}`, newEvts);
+          }} 
+          onRemove={async (id) => {
+              const newEvts = customEvents.filter(ev => ev.id !== id);
+              setCustomEvents(newEvts);
+              if (ministryId) await saveData(ministryId, `events_${currentMonth}`, newEvts);
+          }}
+          onRestore={handleRestoreEvent}
+      />
+
+      <AvailabilityModal 
+          isOpen={availModalOpen} 
+          onClose={() => setAvailModalOpen(false)} 
+          members={allMembersList}
+          availability={availability}
+          currentMonth={currentMonth}
+          onUpdate={async (member, dates) => {
+               const newAvail = { ...availability, [member]: dates };
+               setAvailability(newAvail);
+               if (ministryId) await saveData(ministryId, 'availability_v1', newAvail);
           }}
       />
+      
+      <RolesModal 
+          isOpen={rolesModalOpen} 
+          onClose={() => setRolesModalOpen(false)} 
+          roles={roles}
+          onUpdate={async (newRoles) => {
+              setRoles(newRoles);
+              if (ministryId) await saveData(ministryId, 'functions_config', newRoles);
+          }}
+      />
+
+      {/* Event Details Modal (Calendar Click) */}
       <EventDetailsModal 
-          isOpen={!!selectedEventDetails} 
-          onClose={() => setSelectedEventDetails(null)} 
+          isOpen={!!selectedEventDetails}
+          onClose={() => setSelectedEventDetails(null)}
           event={selectedEventDetails}
           schedule={schedule}
           roles={roles}
@@ -999,305 +1328,15 @@ const renderTeam = () => {
           currentUser={currentUser}
           ministryId={ministryId}
       />
-      <InstallBanner 
-          isVisible={showInstallBanner} 
-          onInstall={handleInstallApp} 
-          onDismiss={handleDismissBanner}
-          appName={getMinistryTitle(ministryId)}
-      />
 
-      {sessionLoading ? (
-        <div className="flex items-center justify-center h-full">
-           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        </div>
-      ) : !currentUser ? (
-        <LoginScreen onLoginSuccess={() => { /* Handled by auth state listener */ }} />
-      ) : (
-        <>
-          {currentTab === 'dashboard' && renderDashboard()}
-          
-          {currentTab === 'calendar' && (
-             <div className="space-y-6 animate-fade-in">
-                 <div className="flex justify-between items-center border-b border-zinc-200 dark:border-zinc-700 pb-4">
-                    <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                       <CalendarIcon className="text-indigo-500"/> Calendário
-                    </h2>
-                    
-                    {/* Month Selector */}
-                    <div className="flex items-center gap-4 bg-white dark:bg-zinc-800 p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm">
-                        <button onClick={() => {
-                            const [y, m] = currentMonth.split('-').map(Number);
-                            const prev = new Date(y, m - 2, 1);
-                            setCurrentMonth(prev.toISOString().slice(0, 7));
-                        }} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md">←</button>
-                        <div className="text-center min-w-[120px]">
-                            <span className="block text-xs font-medium text-zinc-500 uppercase">Referência</span>
-                            <span className="block text-sm font-bold text-zinc-900 dark:text-zinc-100">{getMonthName(currentMonth)}</span>
-                        </div>
-                        <button onClick={() => {
-                            const [y, m] = currentMonth.split('-').map(Number);
-                            const next = new Date(y, m, 1);
-                            setCurrentMonth(next.toISOString().slice(0, 7));
-                        }} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md">→</button>
-                    </div>
-                 </div>
-
-                 <CalendarGrid 
-                    currentMonth={currentMonth}
-                    events={visibleEvents}
-                    schedule={schedule}
-                    roles={roles}
-                    onEventClick={(evt) => {
-                        const evtFull = visibleEvents.find(e => e.iso === evt.iso);
-                        if (evtFull) {
-                            setSelectedEventDetails({
-                                iso: evt.iso,
-                                title: evt.title,
-                                dateDisplay: evt.iso.split('T')[0].split('-').reverse().join('/')
-                            });
-                        }
-                    }}
-                 />
-
-                 <div className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden shadow-sm">
-                    <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700">
-                        <h3 className="font-bold text-zinc-700 dark:text-zinc-300">Lista Detalhada</h3>
-                    </div>
-                    <ScheduleTable 
-                        events={visibleEvents}
-                        roles={roles}
-                        schedule={schedule}
-                        attendance={attendance}
-                        availability={availability}
-                        members={members}
-                        allMembers={allMembersList}
-                        scheduleIssues={scheduleIssues}
-                        globalConflicts={globalConflicts}
-                        onCellChange={handleCellChange}
-                        onAttendanceToggle={handleAttendanceToggle}
-                        onDeleteEvent={handleDeleteEvent}
-                        memberStats={memberStats}
-                        ministryId={ministryId}
-                    />
-                 </div>
-             </div>
-          )}
-
-          {currentTab === 'editor' && (
-              <div className="space-y-6 animate-fade-in">
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-zinc-200 dark:border-zinc-700 pb-4">
-                      <div>
-                          <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                             <Edit3 className="text-blue-500"/> Editor de Escala
-                          </h2>
-                          <p className="text-zinc-500 text-sm mt-1">Gerencie a escala oficial do mês.</p>
-                      </div>
-
-                      <div className="flex gap-2 self-end">
-                           <ToolsMenu 
-                               allMembers={allMembersList}
-                               onExportIndividual={(m) => {
-                                   const doc = new jsPDF();
-                                   doc.text(`Escala Individual: ${m}`, 10, 10);
-                                   // Logic omitted for brevity
-                                   doc.save(`escala_${m}.pdf`);
-                               }}
-                               onExportFull={() => {
-                                   const doc = new jsPDF();
-                                   doc.text(`Escala Completa - ${getMonthName(currentMonth)}`, 10, 10);
-                                   // Logic omitted for brevity
-                                   doc.save(`escala_${currentMonth}.pdf`);
-                               }}
-                               onWhatsApp={handleShareNextEvent}
-                               onCSV={() => {}}
-                               onImportCSV={() => {}}
-                               onClearMonth={() => {
-                                   if (confirm("Limpar todo o mês?")) {
-                                       // Logic omitted
-                                   }
-                               }}
-                           />
-                      </div>
-                  </div>
-                  
-                  <div className="flex gap-2 overflow-x-auto pb-2">
-                      <button onClick={() => setEventsModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-sm font-medium hover:bg-zinc-200 dark:hover:bg-zinc-700 whitespace-nowrap">
-                          <Plus size={16}/> Gerenciar Eventos
-                      </button>
-                      <button onClick={() => setRolesModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-sm font-medium hover:bg-zinc-200 dark:hover:bg-zinc-700 whitespace-nowrap">
-                          <Settings size={16}/> Gerenciar Funções
-                      </button>
-                      <button onClick={() => setAvailModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-sm font-medium hover:bg-zinc-200 dark:hover:bg-zinc-700 whitespace-nowrap">
-                          <ShieldAlert size={16}/> Gerenciar Indisponibilidade (Admin)
-                      </button>
-                  </div>
-
-                  <ScheduleTable 
-                        events={visibleEvents}
-                        roles={roles}
-                        schedule={schedule}
-                        attendance={attendance}
-                        availability={availability}
-                        members={members}
-                        allMembers={allMembersList}
-                        scheduleIssues={scheduleIssues}
-                        globalConflicts={globalConflicts}
-                        onCellChange={handleCellChange}
-                        onAttendanceToggle={handleAttendanceToggle}
-                        onDeleteEvent={handleDeleteEvent}
-                        memberStats={memberStats}
-                        ministryId={ministryId}
-                    />
-
-                   {/* Modals */}
-                   <EventsModal 
-                      isOpen={eventsModalOpen}
-                      onClose={() => setEventsModalOpen(false)}
-                      events={customEvents}
-                      hiddenEvents={hiddenEventsList}
-                      onAdd={async (evt) => {
-                          const newEvents = [...customEvents, evt];
-                          setCustomEvents(newEvents);
-                          if(ministryId) await saveData(ministryId, `events_${currentMonth}`, newEvents);
-                      }}
-                      onRemove={async (id) => {
-                          const newEvents = customEvents.filter(e => e.id !== id);
-                          setCustomEvents(newEvents);
-                          if(ministryId) await saveData(ministryId, `events_${currentMonth}`, newEvents);
-                      }}
-                      onRestore={handleRestoreEvent}
-                   />
-                   
-                   <RolesModal 
-                      isOpen={rolesModalOpen} 
-                      onClose={() => setRolesModalOpen(false)}
-                      roles={roles}
-                      onUpdate={async (newRoles) => {
-                          setRoles(newRoles);
-                          if(ministryId) await saveData(ministryId, 'functions_config', newRoles);
-                      }}
-                   />
-
-                   <AvailabilityModal 
-                       isOpen={availModalOpen}
-                       onClose={() => setAvailModalOpen(false)}
-                       members={allMembersList}
-                       availability={availability}
-                       onUpdate={handleSaveAvailability}
-                       currentMonth={currentMonth}
-                   />
-              </div>
-          )}
-          
-          {currentTab === 'availability' && (
-              <AvailabilityScreen 
-                 availability={availability}
-                 setAvailability={setAvailability}
-                 allMembersList={allMembersList}
-                 currentMonth={currentMonth}
-                 onMonthChange={setCurrentMonth}
-                 onNotify={(msg) => logAction("Disponibilidade", msg)}
-                 currentUser={currentUser}
-                 onSaveAvailability={handleSaveAvailability}
-              />
-          )}
-
-          {currentTab === 'availability-report' && (
-              <AvailabilityReportScreen 
-                 availability={availability}
-                 registeredMembers={registeredMembers}
-                 membersMap={members}
-                 currentMonth={currentMonth}
-                 onMonthChange={setCurrentMonth}
-                 availableRoles={roles}
-                 onRefresh={handleReloadAvailability}
-              />
-          )}
-
-          {currentTab === 'profile' && currentUser && (
-              <ProfileScreen 
-                  user={currentUser}
-                  onUpdateProfile={handleUpdateProfile}
-                  availableRoles={roles}
-              />
-          )}
-
-          {currentTab === 'events' && (
-              <EventsScreen 
-                 customEvents={customEvents}
-                 setCustomEvents={async (evts) => {
-                     setCustomEvents(evts);
-                     if(ministryId) await saveData(ministryId, `events_${currentMonth}`, evts);
-                 }}
-                 currentMonth={currentMonth}
-                 onMonthChange={setCurrentMonth}
-              />
-          )}
-
-          {currentTab === 'team' && renderTeam()}
-
-          {currentTab === 'swaps' && currentUser && (
-              <SwapRequestsScreen 
-                 schedule={schedule}
-                 currentUser={currentUser}
-                 requests={swapRequests}
-                 visibleEvents={visibleEvents}
-                 onCreateRequest={handleCreateSwapRequest}
-                 onAcceptRequest={handleAcceptSwap}
-                 onCancelRequest={() => {}}
-              />
-          )}
-
-          {currentTab === 'repertoire' && (
-              <RepertoireScreen 
-                  repertoire={repertoire}
-                  setRepertoire={async (items) => {
-                      setRepertoire(items);
-                      await saveData('shared', 'repertoire_v1', items);
-                  }}
-                  currentUser={currentUser}
-                  mode="view"
-              />
-          )}
-
-          {currentTab === 'repertoire-manager' && (
-              <RepertoireScreen 
-                  repertoire={repertoire}
-                  setRepertoire={async (items) => {
-                      setRepertoire(items);
-                      await saveData('shared', 'repertoire_v1', items);
-                  }}
-                  currentUser={currentUser}
-                  mode="manage"
-              />
-          )}
-
-          {currentTab === 'alerts' && (
-              <AlertsManager onSend={handleSendGlobalAlert} />
-          )}
-
-          {currentTab === 'settings' && (
-              <SettingsScreen 
-                  initialTitle={getMinistryTitle(ministryId)}
-                  ministryId={ministryId}
-                  theme={theme}
-                  onToggleTheme={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
-                  onSaveTitle={handleSaveSettings}
-              />
-          )}
-
-        </>
-      )}
     </DashboardLayout>
   );
 };
 
-export const App = () => {
+export default function App() {
   return (
     <ToastProvider>
       <AppContent />
     </ToastProvider>
   );
-};
-
-export default App;
+}
