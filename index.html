@@ -10,12 +10,12 @@
     
     <title>Gestão de Escala OBPC</title>
     
-    <!-- PWA Manifest - Caminho limpo -->
-    <link rel="manifest" href="manifest.json" />
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
     
     <!-- Ícones do App -->
-    <link rel="icon" type="image/png" href="app-icon.png" />
-    <link rel="apple-touch-icon" href="app-icon.png" />
+    <link rel="icon" type="image/png" href="/app-icon.png" />
+    <link rel="apple-touch-icon" href="/app-icon.png" />
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -96,8 +96,8 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          // Registro robusto usando caminho absoluto relativo à raiz
-          navigator.serviceWorker.register('sw.js', { scope: './' })
+          // Registro usando caminho absoluto para a raiz
+          navigator.serviceWorker.register('/sw.js', { scope: '/' })
             .then(registration => {
               console.log('SW registrado com sucesso:', registration.scope);
             })

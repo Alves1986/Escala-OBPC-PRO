@@ -1,34 +1,34 @@
 {
   "name": "Escala Mídia Pro",
   "short_name": "Escala Mídia",
-  "start_url": "./index.html",
+  "start_url": "/",
   "id": "/",
-  "scope": "./",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#09090b",
   "theme_color": "#09090b",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "app-icon.png",
+      "src": "/app-icon.png",
       "type": "image/png",
       "sizes": "192x192",
       "purpose": "any"
     },
     {
-      "src": "app-icon.png",
+      "src": "/app-icon.png",
       "type": "image/png",
       "sizes": "192x192",
       "purpose": "maskable"
     },
     {
-      "src": "app-icon.png",
+      "src": "/app-icon.png",
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "any"
     },
     {
-      "src": "app-icon.png",
+      "src": "/app-icon.png",
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "maskable"

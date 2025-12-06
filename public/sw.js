@@ -1,12 +1,13 @@
 
-const CACHE_NAME = 'escala-midia-pwa-v11';
+const CACHE_NAME = 'escala-midia-pwa-v12';
 
 // Arquivos estáticos fundamentais
+// Usando caminhos absolutos para garantir a integridade do cache
 const PRECACHE_URLS = [
-  './',
-  './index.html',
-  './manifest.json',
-  './app-icon.png',
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/app-icon.png',
   'https://cdn.tailwindcss.com',
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'
 ];
@@ -39,15 +40,13 @@ self.addEventListener('activate', event => {
 
 // Interceptação de Rede
 self.addEventListener('fetch', event => {
-  const url = new URL(event.request.url);
-
-  // 1. Navegação (HTML): Force index.html
+  // 1. Navegação (HTML): Force a raiz / ou index.html
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
         .catch(() => {
-          // Se estiver offline ou falhar, tenta retornar o index.html do cache
-          return caches.match('./index.html')
+          // Se estiver offline, retorna a raiz cacheada
+          return caches.match('/')
             .then(response => response || caches.match('/index.html'));
         })
     );
