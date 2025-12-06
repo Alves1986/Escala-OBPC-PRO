@@ -257,6 +257,11 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                         >
                             <UserPlus size={14}/> Não tem conta? Criar agora
                         </button>
+
+                        <div className="flex justify-center gap-4 mt-4 pt-2">
+                             <button type="button" onClick={() => setLegalDoc('terms')} className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors">Termos de Uso</button>
+                             <button type="button" onClick={() => setLegalDoc('privacy')} className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors">Política de Privacidade</button>
+                        </div>
                     </div>
                 </form>
             )}

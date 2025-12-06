@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'escala-midia-pwa-v9';
+const CACHE_NAME = 'escala-midia-pwa-v10';
 
 // Arquivos estáticos fundamentais
 const PRECACHE_URLS = [

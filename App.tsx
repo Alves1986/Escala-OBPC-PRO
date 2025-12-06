@@ -168,6 +168,7 @@ const AppContent = () => {
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
       setInstallPrompt(e);
+      // Banner flutuante só aparece se não foi dispensado
       if (!isDismissed) {
         setShowInstallBanner(true);
       }
@@ -201,7 +202,7 @@ const AppContent = () => {
 
   const handleInstallApp = async () => {
     if (installPrompt) {
-        // Android / Desktop Chrome
+        // Android / Desktop Chrome (Automático)
         installPrompt.prompt();
         const { outcome } = await installPrompt.userChoice;
         if (outcome === 'accepted') {
@@ -209,10 +210,8 @@ const AppContent = () => {
             setShowInstallBanner(false);
         }
     } else {
-        // iOS or Browser blocking prompt
+        // iOS or Browser blocking prompt (Manual)
         setShowInstallModal(true);
-        // Não ocultamos o banner imediatamente no iOS para permitir acesso fácil ao modal
-        // setShowInstallBanner(false); 
     }
   };
 
@@ -1245,7 +1244,9 @@ const renderContent = () => {
       managementNavItems={MANAGEMENT_NAV_ITEMS}
       notifications={notifications}
       onNotificationsUpdate={setNotifications}
-      onInstall={installPrompt ? handleInstallApp : undefined}
+      // CRITICAL CHANGE: Always pass handleInstallApp if NOT standalone (installed)
+      // This ensures the button appears in the sidebar even if Chrome hasn't fired the event yet.
+      onInstall={!isStandalone ? handleInstallApp : undefined}
       isStandalone={isStandalone}
     >
       {renderContent()}
@@ -1264,10 +1265,10 @@ const renderContent = () => {
           data={confirmationData}
       />
       
-      {/* Install Modal (iOS instructions) */}
+      {/* Install Modal (iOS instructions or Manual Fallback) */}
       <InstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />
 
-      {/* Install Banner (Bottom) */}
+      {/* Install Banner (Bottom) - Only shows if event captured */}
       <InstallBanner 
           isVisible={showInstallBanner} 
           onInstall={handleInstallApp} 
