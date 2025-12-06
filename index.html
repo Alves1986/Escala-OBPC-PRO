@@ -85,6 +85,8 @@
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     window.deferredPrompt = e;
+    // Dispara evento customizado para o React saber que o prompt chegou
+    window.dispatchEvent(new Event('pwa-ready'));
   });
 </script>
 </head>
@@ -94,14 +96,12 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          // O Vite serve arquivos da pasta public/ na raiz.
-          // Portanto, ./sw.js aqui irá buscar o arquivo que está fisicamente em public/sw.js
-          navigator.serviceWorker.register('./sw.js')
+          navigator.serviceWorker.register('./sw.js', { scope: './' })
             .then(registration => {
-              console.log('SW registered:', registration);
+              console.log('SW registrado com sucesso:', registration.scope);
             })
             .catch(error => {
-              console.log('SW registration failed:', error);
+              console.log('Falha ao registrar SW:', error);
             });
         });
       }
