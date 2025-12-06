@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, ShieldCheck, UserPlus, ArrowLeft, Check, ChevronDown, KeyRound } from 'lucide-react';
+import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, ShieldCheck, UserPlus, ArrowLeft, Check, ChevronDown, KeyRound, Download } from 'lucide-react';
 import { loginWithEmail, registerWithEmail, loadData, sendPasswordResetEmail } from '../services/supabaseService';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { TypewriterBackground } from './TypewriterBackground';
@@ -8,6 +7,8 @@ import { TypewriterBackground } from './TypewriterBackground';
 interface Props {
   onLoginSuccess?: () => void; 
   isLoading?: boolean;
+  onInstall?: () => void;
+  showInstallButton?: boolean;
 }
 
 const MINISTRIES = [
@@ -20,7 +21,7 @@ const DEFAULT_ROLES: Record<string, string[]> = {
   'louvor': ['Ministro', 'Vocal', 'Guitarra', 'Baixo', 'Teclado', 'Bateria', 'Dança', 'Mesa de Som']
 };
 
-export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
+export const LoginScreen: React.FC<Props> = ({ isLoading = false, onInstall, showInstallButton = false }) => {
   const [view, setView] = useState<'login' | 'register' | 'forgot'>('login');
   
   // Login State
@@ -163,7 +164,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
       {/* Main Scrollable Container (Z-Index 10) */}
       <div 
         ref={scrollContainerRef}
-        className="relative z-10 w-full h-full overflow-y-auto custom-scrollbar flex items-center justify-center p-4 md:p-6"
+        className="relative z-10 w-full h-full overflow-y-auto custom-scrollbar flex flex-col items-center justify-center p-4 md:p-6"
       >
         <div className="w-full max-w-sm my-auto flex flex-col items-center">
             
@@ -419,6 +420,17 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
             )}
 
             </div>
+            
+            {/* Install Button Footer - Visible on Mobile and Desktop */}
+            {showInstallButton && onInstall && (
+                <button 
+                    onClick={onInstall}
+                    className="mt-6 flex items-center gap-2 px-4 py-2 bg-zinc-900/50 hover:bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:text-white transition-all text-xs font-bold uppercase tracking-wider backdrop-blur-sm shadow-sm"
+                >
+                    <Download size={14} /> Instalar Aplicativo
+                </button>
+            )}
+
         </div>
       </div>
     </div>

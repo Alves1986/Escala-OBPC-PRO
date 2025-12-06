@@ -953,7 +953,11 @@ const renderContent = () => {
   }
   
   if (!currentUser) {
-    return <LoginScreen />;
+    return <LoginScreen 
+        isLoading={loading}
+        onInstall={handleInstallApp}
+        showInstallButton={!isStandalone}
+    />;
   }
 
   // Dashboard Tab
