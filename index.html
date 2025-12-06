@@ -11,11 +11,11 @@
     <title>Gestão de Escala OBPC</title>
     
     <!-- PWA Manifest -->
-    <link rel="manifest" href="/manifest.json" />
+    <link rel="manifest" href="./manifest.json" />
     
     <!-- Ícones do App -->
-    <link rel="icon" type="image/png" href="/app-icon.png" />
-    <link rel="apple-touch-icon" href="/app-icon.png" />
+    <link rel="icon" type="image/png" href="./app-icon.png" />
+    <link rel="apple-touch-icon" href="./app-icon.png" />
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -90,11 +90,12 @@
 </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <script type="module" src="./index.tsx"></script>
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
+          // Changed to relative path to avoid origin mismatch errors in some environments
+          navigator.serviceWorker.register('./sw.js')
             .then(registration => {
               console.log('SW registered:', registration);
             })

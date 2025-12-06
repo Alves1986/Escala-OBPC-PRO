@@ -151,43 +151,55 @@ const AppContent = () => {
 
   // --- PWA INSTALL LISTENER ---
   useEffect(() => {
-    // Check if running in standalone mode (already installed)
-    const isInStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
-    
-    if (isInStandalone) {
-        setIsStandalone(true);
-    } else {
-        // Only verify dismiss state if NOT standalone
-        const isDismissed = localStorage.getItem('installBannerDismissed');
-        
-        // Listener for Android/Desktop Chrome
-        const handleBeforeInstallPrompt = (e: any) => {
-            e.preventDefault();
-            setInstallPrompt(e);
-            if (!isDismissed) setShowInstallBanner(true);
-        };
-        
-        // Check for globally captured prompt from index.html
-        if ((window as any).deferredPrompt) {
-            handleBeforeInstallPrompt((window as any).deferredPrompt);
-            (window as any).deferredPrompt = null;
-        }
+    // 1. Detect if standalone (installed)
+    const isStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+    setIsStandalone(isStandaloneMode);
 
-        window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-        
-        // Manual check for iOS (since beforeinstallprompt doesn't fire)
-        const isIOS = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
-        if (isIOS && !isDismissed) {
-             setShowInstallBanner(true);
-        }
-        
-        return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    if (isStandaloneMode) {
+      setShowInstallBanner(false);
+      return;
     }
+
+    const isDismissed = localStorage.getItem('installBannerDismissed');
+    
+    // 2. Handle 'beforeinstallprompt'
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+      if (!isDismissed) {
+        setShowInstallBanner(true);
+      }
+    };
+
+    // Check if event was already captured in index.html global var
+    if ((window as any).deferredPrompt) {
+        handleBeforeInstallPrompt((window as any).deferredPrompt);
+        (window as any).deferredPrompt = null;
+    }
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // 3. iOS Detection (No beforeinstallprompt support)
+    const isIOS = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
+    if (isIOS && !isStandaloneMode && !isDismissed) {
+         setShowInstallBanner(true);
+    }
+    
+    // 4. Listen for successful install
+    window.addEventListener('appinstalled', () => {
+        setInstallPrompt(null);
+        setShowInstallBanner(false);
+        setIsStandalone(true);
+    });
+
+    return () => {
+        window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
   }, []);
 
   const handleInstallApp = async () => {
-    //setShowInstallBanner(false); // Don't hide immediately on click, wait for action
     if (installPrompt) {
+        // Android / Desktop Chrome
         installPrompt.prompt();
         const { outcome } = await installPrompt.userChoice;
         if (outcome === 'accepted') {
@@ -195,9 +207,10 @@ const AppContent = () => {
             setShowInstallBanner(false);
         }
     } else {
-        // If no prompt available (iOS or blocked), show manual instructions
+        // iOS or Browser blocking prompt
         setShowInstallModal(true);
-        setShowInstallBanner(false);
+        // Não ocultamos o banner imediatamente no iOS para permitir acesso fácil ao modal
+        // setShowInstallBanner(false); 
     }
   };
 

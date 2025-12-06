@@ -1,13 +1,14 @@
 
-const CACHE_NAME = 'escala-midia-pwa-v4';
+const CACHE_NAME = 'escala-midia-pwa-v6';
 
 // Lista de arquivos vitais para o funcionamento offline
 // Inclui as bibliotecas do CDN definidas no importmap do index.html
+// Usando caminhos relativos (./) para evitar erros de origem em ambientes de preview
 const PRECACHE_URLS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/app-icon.png',
+  './',
+  './index.html',
+  './manifest.json',
+  './app-icon.png',
   'https://cdn.tailwindcss.com',
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap',
   // Dependências críticas do CDN
@@ -86,7 +87,8 @@ self.addEventListener('fetch', event => {
            if (response) return response;
            // Fallback para index.html se for navegação
            if (event.request.mode === 'navigate') {
-               return caches.match('/index.html');
+               // Tenta pegar do cache relativo ./index.html ou /index.html como fallback
+               return caches.match('./index.html').then(match => match || caches.match('/index.html'));
            }
            return null;
         });
