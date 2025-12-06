@@ -1,7 +1,7 @@
 
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, DEFAULT_ROLES, AppNotification, TeamMemberProfile, AvailabilityMap, SwapRequest, ScheduleMap, RepertoireItem, Announcement } from '../types';
+import { SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, DEFAULT_ROLES, AppNotification, TeamMemberProfile, AvailabilityMap, SwapRequest, ScheduleMap, RepertoireItem, Announcement, GlobalConflictMap, KNOWN_MINISTRIES, GlobalConflict } from '../types';
 
 let supabase: SupabaseClient | null = null;
 
@@ -50,6 +50,49 @@ export const saveData = async <T>(ministryId: string, keySuffix: string, value: 
     console.error(`Error saving ${keySuffix}`, e);
     return false;
   }
+};
+
+// --- Global Conflict Detection ---
+
+export const fetchGlobalSchedules = async (currentMonth: string, currentMinistryId: string): Promise<GlobalConflictMap> => {
+    if (!supabase || !currentMinistryId) return {};
+    
+    const cleanCurrentMid = currentMinistryId.trim().toLowerCase().replace(/\s+/g, '-');
+    const conflictMap: GlobalConflictMap = {};
+
+    // Filtra ministérios para não buscar o atual
+    const targetMinistries = KNOWN_MINISTRIES.filter(m => m !== cleanCurrentMid);
+
+    // Busca escalas em paralelo
+    const promises = targetMinistries.map(async (mid) => {
+        const schedule = await loadData<ScheduleMap>(mid, `schedule_${currentMonth}`, {});
+        return { mid, schedule };
+    });
+
+    const results = await Promise.all(promises);
+
+    // Processa os resultados
+    results.forEach(({ mid, schedule }) => {
+        Object.entries(schedule).forEach(([key, memberName]) => {
+            if (!memberName) return;
+
+            // Key format: YYYY-MM-DDTHH:mm_Role
+            const [isoDate, role] = key.split('_');
+            const normalizedName = memberName.trim().toLowerCase();
+
+            if (!conflictMap[normalizedName]) {
+                conflictMap[normalizedName] = [];
+            }
+
+            conflictMap[normalizedName].push({
+                ministryId: mid,
+                eventIso: isoDate,
+                role: role
+            });
+        });
+    });
+
+    return conflictMap;
 };
 
 // --- Admin Management ---

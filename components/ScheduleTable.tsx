@@ -1,6 +1,7 @@
 
+
 import React from 'react';
-import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis } from '../types';
+import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis, GlobalConflictMap } from '../types';
 import { CheckCircle2, AlertTriangle, Trash2 } from 'lucide-react';
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
   members: Record<string, string[]>;
   allMembers: string[]; 
   scheduleIssues: ScheduleAnalysis;
+  globalConflicts: GlobalConflictMap; // Mapa de conflitos globais
   onCellChange: (key: string, value: string) => void;
   onAttendanceToggle: (key: string) => void;
   onDeleteEvent: (iso: string, title: string) => void;
@@ -20,7 +22,7 @@ interface Props {
 }
 
 export const ScheduleTable: React.FC<Props> = ({
-  events, roles, schedule, attendance, availability, members, scheduleIssues, onCellChange, onAttendanceToggle, onDeleteEvent, memberStats, ministryId
+  events, roles, schedule, attendance, availability, members, scheduleIssues, globalConflicts, onCellChange, onAttendanceToggle, onDeleteEvent, memberStats, ministryId
 }) => {
   
   // Calculate if member is unavailable for a specific date AND Time
@@ -128,6 +130,22 @@ export const ScheduleTable: React.FC<Props> = ({
                   const isConfirmed = attendance[key];
                   const issue = scheduleIssues[key];
                   const hasLocalConflict = currentValue && isUnavailable(currentValue, event.iso);
+                  
+                  // Verificação de Conflito Global (Outros Ministérios)
+                  let globalConflictMsg = "";
+                  let hasGlobalConflict = false;
+                  
+                  if (currentValue) {
+                      const normalized = currentValue.trim().toLowerCase();
+                      const conflicts = globalConflicts[normalized];
+                      if (conflicts) {
+                          const conflict = conflicts.find(c => c.eventIso === event.iso);
+                          if (conflict) {
+                              hasGlobalConflict = true;
+                              globalConflictMsg = `Conflito: Já escalado em ${conflict.ministryId.toUpperCase()} (${conflict.role})`;
+                          }
+                      }
+                  }
 
                   return (
                     <td key={key} className="px-6 py-4">
@@ -139,11 +157,13 @@ export const ScheduleTable: React.FC<Props> = ({
                             className={`w-full bg-zinc-100 dark:bg-zinc-900/50 border-0 rounded-md py-1.5 pl-3 pr-8 text-xs ring-1 ring-inset focus:ring-2 sm:text-sm sm:leading-6 cursor-pointer transition-all appearance-none
                               ${hasLocalConflict 
                                 ? 'text-red-700 dark:text-red-400 ring-red-300 dark:ring-red-900 focus:ring-red-500 bg-red-50 dark:bg-red-900/20 font-medium' 
-                                : issue?.type === 'warning'
-                                  ? 'text-amber-700 dark:text-amber-400 ring-amber-300 dark:ring-amber-900 focus:ring-amber-500 bg-amber-50 dark:bg-amber-900/20'
-                                  : currentValue 
-                                    ? 'text-zinc-900 dark:text-zinc-100 ring-zinc-300 dark:ring-zinc-600 focus:ring-brand-500' 
-                                    : 'text-zinc-400 ring-zinc-200 dark:ring-zinc-700 focus:ring-brand-500'}
+                                : hasGlobalConflict
+                                  ? 'text-orange-700 dark:text-orange-400 ring-orange-300 dark:ring-orange-900 focus:ring-orange-500 bg-orange-50 dark:bg-orange-900/20 font-medium'
+                                  : issue?.type === 'warning'
+                                    ? 'text-amber-700 dark:text-amber-400 ring-amber-300 dark:ring-amber-900 focus:ring-amber-500 bg-amber-50 dark:bg-amber-900/20'
+                                    : currentValue 
+                                      ? 'text-zinc-900 dark:text-zinc-100 ring-zinc-300 dark:ring-zinc-600 focus:ring-brand-500' 
+                                      : 'text-zinc-400 ring-zinc-200 dark:ring-zinc-700 focus:ring-brand-500'}
                             `}
                           >
                             <option value="">-- Selecionar --</option>
@@ -168,6 +188,13 @@ export const ScheduleTable: React.FC<Props> = ({
                           {/* Indicador Visual de Conflito Local */}
                           {hasLocalConflict && (
                             <div className="absolute right-8 top-1/2 -translate-y-1/2 text-red-500 animate-pulse" title="CONFLITO: Membro indisponível neste horário!">
+                              <AlertTriangle size={16} />
+                            </div>
+                          )}
+
+                          {/* Indicador Visual de Conflito Global (Inter-ministérios) */}
+                          {hasGlobalConflict && (
+                            <div className="absolute right-8 top-1/2 -translate-y-1/2 text-orange-500" title={globalConflictMsg}>
                               <AlertTriangle size={16} />
                             </div>
                           )}

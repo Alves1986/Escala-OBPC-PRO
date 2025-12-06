@@ -61,6 +61,20 @@ export interface ScheduleAnalysis {
   [key: string]: ScheduleIssue;
 }
 
+// --- GLOBAL CONFLICT TYPES ---
+export const KNOWN_MINISTRIES = ['midia', 'louvor', 'infantil', 'recepcao', 'teatro', 'diaconia'];
+
+export interface GlobalConflict {
+    ministryId: string; // Onde ele está escalado (ex: 'louvor')
+    eventIso: string;   // YYYY-MM-DDTHH:mm
+    role: string;       // Qual função ele vai exercer lá
+}
+
+export interface GlobalConflictMap {
+    [normalizedMemberName: string]: GlobalConflict[];
+}
+// -----------------------------
+
 export interface SwapRequest {
   id: string;
   ministryId: string;

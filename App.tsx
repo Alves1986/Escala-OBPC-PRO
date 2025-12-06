@@ -18,8 +18,8 @@ import { AlertsManager } from './components/AlertsManager';
 import { SettingsScreen } from './components/SettingsScreen';
 import { AnnouncementCard } from './components/AnnouncementCard';
 import { BirthdayCard } from './components/BirthdayCard';
-import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile, SwapRequest, RepertoireItem, Announcement } from './types';
-import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap, toggleAdmin, createAnnouncement, markAnnouncementRead } from './services/supabaseService';
+import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile, SwapRequest, RepertoireItem, Announcement, GlobalConflictMap } from './types';
+import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap, toggleAdmin, createAnnouncement, markAnnouncementRead, fetchGlobalSchedules } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -133,6 +133,7 @@ const AppContent = () => {
   const [repertoire, setRepertoire] = useState<RepertoireItem[]>([]);
   const [adminsList, setAdminsList] = useState<string[]>([]);
   const [customTitle, setCustomTitle] = useState("");
+  const [globalConflicts, setGlobalConflicts] = useState<GlobalConflictMap>({});
   
   // UI State
   const [loading, setLoading] = useState(false);
@@ -312,7 +313,8 @@ const AppContent = () => {
         resRepertoire,
         resAdmins,
         resConfig,
-        resAnnouncements
+        resAnnouncements,
+        resGlobalConflicts
       ] = await Promise.all([
         loadData<MemberMap>(cleanMid, 'members_v7', {}),
         loadData<ScheduleMap>(cleanMid, `schedule_${currentMonth}`, {}),
@@ -328,7 +330,8 @@ const AppContent = () => {
         loadData<RepertoireItem[]>('shared', 'repertoire_v1', []),
         loadData<string[]>(cleanMid, 'admins_list', []),
         loadData<any>(cleanMid, 'ministry_config', { displayName: '' }),
-        loadData<Announcement[]>(cleanMid, 'announcements_v1', [])
+        loadData<Announcement[]>(cleanMid, 'announcements_v1', []),
+        fetchGlobalSchedules(currentMonth, cleanMid)
       ]);
 
       setMembers(resMembers);
@@ -346,6 +349,7 @@ const AppContent = () => {
       setAdminsList(resAdmins);
       if (resConfig?.displayName) setCustomTitle(resConfig.displayName);
       setAnnouncements(resAnnouncements);
+      setGlobalConflicts(resGlobalConflicts);
 
       // Upgrade current user if in admins list
       if (currentUser && currentUser.email && resAdmins.includes(currentUser.email)) {
@@ -1068,6 +1072,7 @@ const renderTeam = () => {
                         members={members}
                         allMembers={allMembersList}
                         scheduleIssues={scheduleIssues}
+                        globalConflicts={globalConflicts}
                         onCellChange={handleCellChange}
                         onAttendanceToggle={handleAttendanceToggle}
                         onDeleteEvent={handleDeleteEvent}
@@ -1136,6 +1141,7 @@ const renderTeam = () => {
                         members={members}
                         allMembers={allMembersList}
                         scheduleIssues={scheduleIssues}
+                        globalConflicts={globalConflicts}
                         onCellChange={handleCellChange}
                         onAttendanceToggle={handleAttendanceToggle}
                         onDeleteEvent={handleDeleteEvent}
@@ -1286,7 +1292,7 @@ const renderTeam = () => {
   );
 };
 
-const App = () => {
+export const App = () => {
   return (
     <ToastProvider>
       <AppContent />
