@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'escala-midia-pwa-v7';
+const CACHE_NAME = 'escala-midia-pwa-v8';
 
 // Lista de arquivos vitais para o funcionamento offline
 // Como este arquivo agora está na pasta public (servido na raiz), 

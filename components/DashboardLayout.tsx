@@ -28,7 +28,6 @@ interface Props {
   notifications: AppNotification[];
   onNotificationsUpdate: (n: AppNotification[]) => void;
   // Props de PWA
-  installPrompt?: any;
   onInstall?: () => void;
   isStandalone?: boolean;
 }
@@ -36,7 +35,7 @@ interface Props {
 export const DashboardLayout: React.FC<Props> = ({ 
   children, sidebarOpen, setSidebarOpen, theme, toggleTheme, onLogout, title, isConnected, currentUser,
   currentTab, onTabChange, mainNavItems, managementNavItems, notifications, onNotificationsUpdate,
-  installPrompt, onInstall, isStandalone
+  onInstall, isStandalone
 }) => {
   const [imgError, setImgError] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -154,11 +153,11 @@ export const DashboardLayout: React.FC<Props> = ({
         {/* Footer User Profile & Actions */}
         <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 space-y-3 shrink-0">
            
-           {/* Install App Button - Only if NOT standalone */}
+           {/* Install App Button - Only if NOT standalone and Available */}
            {!isStandalone && onInstall && (
              <button 
                onClick={onInstall}
-               className="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-900/20 hover:scale-[1.02] active:scale-95 transition-all text-xs font-bold mb-2 animate-pulse"
+               className="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-zinc-100 dark:text-zinc-900 shadow-lg hover:scale-[1.02] active:scale-95 transition-all text-xs font-bold mb-2"
              >
                <Download size={16} /> Instalar Aplicativo
              </button>

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ScheduleTable } from './components/ScheduleTable';
@@ -953,11 +954,7 @@ const renderContent = () => {
   }
   
   if (!currentUser) {
-    return <LoginScreen 
-        isLoading={loading}
-        onInstall={handleInstallApp}
-        showInstallButton={!isStandalone}
-    />;
+    return <LoginScreen isLoading={loading} />;
   }
 
   // Dashboard Tab
