@@ -1,3 +1,4 @@
+
 // Copie TODO este código e cole no Editor da Edge Function 'push-notification' no painel do Supabase.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -71,7 +72,7 @@ Deno.serve(async (req: Request) => {
       const payload = JSON.stringify({
         title: title || 'Novo Aviso da Escala',
         body: message,
-        icon: 'https://escala-midia-pro.vercel.app/app-icon.png', // Tenta mostrar o ícone do app
+        icon: 'https://escala-midia-pro.vercel.app/app-icon.svg', // Tenta mostrar o ícone do app
         data: {
             url: '/', // Abre o app ao clicar
             type: type

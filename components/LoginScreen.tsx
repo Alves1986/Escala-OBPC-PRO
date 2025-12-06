@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, ShieldCheck, UserPlus, ArrowLeft, Check, ChevronDown, KeyRound } from 'lucide-react';
+import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, UserPlus, ArrowLeft, Check, ChevronDown, KeyRound } from 'lucide-react';
 import { loginWithEmail, registerWithEmail, loadData, sendPasswordResetEmail } from '../services/supabaseService';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { TypewriterBackground } from './TypewriterBackground';
@@ -173,16 +173,14 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
             <div className="w-full bg-zinc-900/90 backdrop-blur-xl border border-zinc-800 rounded-3xl shadow-2xl p-6 md:p-8 transition-all">
             
             {/* Header */}
-            <div className="text-center mb-6">
-                <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
-                    <ShieldCheck size={32} className="text-white" />
-                </div>
+            <div className="text-center mb-8">
+                <img src="/app-icon.svg" alt="Logo" className="w-20 h-20 mx-auto mb-4 rounded-2xl shadow-xl hover:scale-105 transition-transform duration-300" />
                 
-                <h2 className="text-zinc-400 text-xs font-bold uppercase tracking-widest mb-2">
-                    Gestão de Escala OBPC <span className="text-blue-400 bg-blue-400/10 px-1 rounded">v2.0</span>
+                <h2 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">
+                    Gestão de Escala OBPC
                 </h2>
 
-                <h1 className="text-xl font-bold text-white tracking-tight animate-fade-in">
+                <h1 className="text-2xl font-bold text-white tracking-tight animate-fade-in">
                     {view === 'login' && 'Entrar no Sistema'}
                     {view === 'register' && 'Criar Nova Conta'}
                     {view === 'forgot' && 'Recuperar Senha'}

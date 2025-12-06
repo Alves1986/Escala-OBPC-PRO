@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'escala-midia-pwa-v12';
+const CACHE_NAME = 'escala-midia-pwa-v13';
 
 // Arquivos estáticos fundamentais
 // Usando caminhos absolutos para garantir a integridade do cache
@@ -7,7 +7,7 @@ const PRECACHE_URLS = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/app-icon.png',
+  '/app-icon.svg',
   'https://cdn.tailwindcss.com',
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'
 ];
