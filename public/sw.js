@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'escala-midia-pwa-v10';
+const CACHE_NAME = 'escala-midia-pwa-v11';
 
 // Arquivos estáticos fundamentais
 const PRECACHE_URLS = [
@@ -41,16 +41,12 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // 1. Navegação (HTML): Network First, Fallback to Cache
+  // 1. Navegação (HTML): Force index.html
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
-        .then(response => {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
-          return response;
-        })
         .catch(() => {
+          // Se estiver offline ou falhar, tenta retornar o index.html do cache
           return caches.match('./index.html')
             .then(response => response || caches.match('/index.html'));
         })
@@ -62,7 +58,8 @@ self.addEventListener('fetch', event => {
   if (event.request.destination === 'script' || 
       event.request.destination === 'style' || 
       event.request.destination === 'image' ||
-      event.request.destination === 'font') {
+      event.request.destination === 'font' ||
+      event.request.destination === 'manifest') {
     
     event.respondWith(
       caches.match(event.request).then(cachedResponse => {
@@ -73,7 +70,7 @@ self.addEventListener('fetch', event => {
           }
           return networkResponse;
         }).catch(() => {
-            // Falha silenciosa se offline e sem cache
+            // Falha silenciosa se offline
         });
         return cachedResponse || fetchPromise;
       })
