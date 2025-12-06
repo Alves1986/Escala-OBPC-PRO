@@ -79,6 +79,14 @@
   }
 }
 </script>
+<!-- Capture Install Prompt Early -->
+<script>
+  window.deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    window.deferredPrompt = e;
+  });
+</script>
 </head>
   <body>
     <div id="root"></div>

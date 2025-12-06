@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Music, Plus, Trash2, ExternalLink, PlayCircle, Calendar, Settings } from 'lucide-react';
+import { Music, Plus, Trash2, ExternalLink, PlayCircle, Calendar, Settings, ListMusic } from 'lucide-react';
 import { RepertoireItem, User } from '../types';
 import { useToast } from './Toast';
 
@@ -20,10 +20,18 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   const [date, setDate] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Extrai ID de vídeo único
   const getYouTubeId = (url: string) => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
     const match = url.match(regExp);
     return (match && match[2].length === 11) ? match[2] : null;
+  };
+
+  // Extrai ID de Playlist
+  const getPlaylistId = (url: string) => {
+    const regExp = /[?&]list=([^#\&\?]+)/;
+    const match = url.match(regExp);
+    return match ? match[1] : null;
   };
 
   const handleAdd = async () => {
@@ -33,8 +41,10 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     }
 
     const videoId = getYouTubeId(link);
-    if (!videoId) {
-        addToast("Link do YouTube inválido.", "error");
+    const playlistId = getPlaylistId(link);
+
+    if (!videoId && !playlistId) {
+        addToast("Link inválido. Insira um link do YouTube (Vídeo ou Playlist).", "error");
         return;
     }
 
@@ -54,14 +64,14 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     setTitle("");
     setLink("");
     setIsSubmitting(false);
-    addToast("Música adicionada ao repertório!", "success");
+    addToast(playlistId ? "Playlist adicionada!" : "Música adicionada!", "success");
   };
 
   const handleDelete = (id: string) => {
-      confirmAction("Excluir Música", "Tem certeza que deseja remover esta música do repertório?", async () => {
+      confirmAction("Excluir Item", "Tem certeza que deseja remover este item do repertório?", async () => {
           const newRepertoire = repertoire.filter(item => item.id !== id);
           await setRepertoire(newRepertoire);
-          addToast("Música removida.", "success");
+          addToast("Item removido.", "success");
       });
   };
 
@@ -86,7 +96,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
           </h2>
           <p className="text-zinc-500 text-sm mt-1">
             {mode === 'manage' 
-                ? 'Adicione, edite e remova as músicas dos cultos.' 
+                ? 'Adicione, edite e remova músicas ou playlists dos cultos.' 
                 : 'Lista de louvores e referências para os próximos cultos.'}
           </p>
         </div>
@@ -96,7 +106,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       {mode === 'manage' && (
           <div className="bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-fade-in">
               <h3 className="text-xs font-bold text-zinc-500 uppercase mb-4 flex items-center gap-2">
-                  <Plus size={14}/> Adicionar Novo Louvor
+                  <Plus size={14}/> Adicionar Novo Item
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
@@ -109,7 +119,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                       />
                   </div>
                   <div className="md:col-span-1">
-                      <label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Nome da Música</label>
+                      <label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Título</label>
                       <input 
                           type="text" 
                           placeholder="Ex: Todavia Me Alegrarei"
@@ -122,7 +132,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                       <label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Link YouTube</label>
                       <input 
                           type="text" 
-                          placeholder="Cole o link aqui..."
+                          placeholder="Link do vídeo ou playlist..."
                           value={link} 
                           onChange={e => setLink(e.target.value)}
                           className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-pink-500"
@@ -165,15 +175,25 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                               {groupedRepertoire[dateKey].map(item => {
                                   const videoId = getYouTubeId(item.link);
+                                  const isPlaylist = getPlaylistId(item.link);
+                                  
+                                  // Se for vídeo único, tenta pegar a thumb. Se for playlist, não tem thumb fácil.
                                   const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '';
 
                                   return (
                                       <div key={item.id} className="bg-white dark:bg-zinc-800 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md transition-all group">
                                           {/* Thumbnail Area */}
                                           <div className="relative aspect-video bg-zinc-900 overflow-hidden">
-                                              {thumbnailUrl && (
+                                              {thumbnailUrl ? (
                                                   <img src={thumbnailUrl} alt={item.title} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                                              ) : (
+                                                  // Fallback para Playlist ou links sem thumb
+                                                  <div className="w-full h-full bg-gradient-to-br from-pink-600 to-purple-700 flex flex-col items-center justify-center text-white">
+                                                      <ListMusic size={32} className="mb-2 opacity-80"/>
+                                                      <span className="text-xs font-bold uppercase tracking-widest opacity-80">Playlist</span>
+                                                  </div>
                                               )}
+                                              
                                               <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-colors">
                                                   <a 
                                                       href={item.link} 
@@ -181,9 +201,10 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                                                       rel="noopener noreferrer"
                                                       className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center text-white shadow-lg transform group-hover:scale-110 transition-transform"
                                                   >
-                                                      <PlayCircle size={28} fill="white" />
+                                                      {isPlaylist ? <ListMusic size={24} /> : <PlayCircle size={28} fill="white" />}
                                                   </a>
                                               </div>
+                                              
                                               {mode === 'manage' && (
                                                   <button 
                                                       onClick={() => handleDelete(item.id)}
@@ -202,7 +223,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                                               </h4>
                                               <div className="flex justify-between items-center mt-2">
                                                   <span className="text-[10px] text-zinc-500 uppercase tracking-wider">
-                                                      Youtube
+                                                      {isPlaylist ? 'Playlist' : 'Youtube'}
                                                   </span>
                                                   <a 
                                                       href={item.link} 
