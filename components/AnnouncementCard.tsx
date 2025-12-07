@@ -58,6 +58,32 @@ export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, o
 
   const theme = getTheme(announcement.type);
 
+  // Helper function to convert URLs in text to clickable links
+  const formatMessageWithLinks = (text: string) => {
+    // Regex para detectar URLs começando com http:// ou https://
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    
+    const parts = text.split(urlRegex);
+    
+    return parts.map((part, index) => {
+        if (part.match(urlRegex)) {
+            return (
+                <a 
+                    key={index} 
+                    href={part} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-600 dark:text-blue-400 underline hover:text-blue-800 dark:hover:text-blue-300 break-all font-medium transition-colors"
+                    onClick={(e) => e.stopPropagation()} // Impede clique no card se houver lógica de clique no futuro
+                >
+                    {part}
+                </a>
+            );
+        }
+        return part;
+    });
+  };
+
   // Se o usuário já leu e não é admin, ocultamos o card para não poluir (opcional, mas solicitado pelo fluxo "marcar como visto")
   if (hasRead && !isAdmin) return null;
 
@@ -67,17 +93,17 @@ export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, o
             <div className="shrink-0 mt-1">
                 {theme.icon}
             </div>
-            <div className="flex-1">
+            <div className="flex-1 min-w-0"> {/* min-w-0 ensures text wrap works inside flex */}
                 <div className="flex justify-between items-start">
                     <h3 className={`font-bold text-lg ${theme.accent}`}>{announcement.title}</h3>
-                    <span className="text-[10px] text-zinc-500 dark:text-zinc-400 flex items-center gap-1 bg-white/50 dark:bg-black/20 px-2 py-1 rounded-full">
+                    <span className="text-[10px] text-zinc-500 dark:text-zinc-400 flex items-center gap-1 bg-white/50 dark:bg-black/20 px-2 py-1 rounded-full shrink-0 ml-2">
                         <Clock size={10} /> {new Date(announcement.timestamp).toLocaleDateString('pt-BR')}
                     </span>
                 </div>
                 
-                <p className="text-zinc-700 dark:text-zinc-300 mt-2 text-sm leading-relaxed whitespace-pre-wrap">
-                    {announcement.message}
-                </p>
+                <div className="text-zinc-700 dark:text-zinc-300 mt-2 text-sm leading-relaxed whitespace-pre-wrap break-words">
+                    {formatMessageWithLinks(announcement.message)}
+                </div>
 
                 <div className="mt-4 flex flex-col sm:flex-row justify-between items-center gap-3 pt-3 border-t border-black/5 dark:border-white/5">
                     <div className="text-xs text-zinc-500">
