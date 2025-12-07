@@ -1,5 +1,3 @@
-
-
 import React, { ReactNode, useState } from 'react';
 import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle } from 'lucide-react';
 import { User, AppNotification } from '../types';
@@ -119,7 +117,7 @@ export const DashboardLayout: React.FC<Props> = ({
            {currentUser?.name.charAt(0)}
         </div>
       );
-  }
+    }
 
   // Verifica se o usuário tem múltiplos ministérios
   const hasMultipleMinistries = currentUser?.allowedMinistries && currentUser.allowedMinistries.length > 1;
@@ -142,7 +140,7 @@ export const DashboardLayout: React.FC<Props> = ({
                {imgError ? (
                  <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-900/20"><Layout size={20} /></div>
                ) : (
-                 <img src="/logo.svg" alt="Logo" className="w-10 h-10 rounded-xl shadow-lg" onError={() => setImgError(true)} />
+                 <img src="/app-icon.png?v=2" alt="Logo" className="w-10 h-10 rounded-xl shadow-lg" onError={() => setImgError(true)} />
                )}
                
                <div className="flex-1 min-w-0">

@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, UserPlus, ArrowLeft, Check, ChevronDown, KeyRound, Layers } from 'lucide-react';
 import { loginWithEmail, registerWithEmail, loadData, sendPasswordResetEmail } from '../services/supabaseService';
@@ -177,7 +175,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
             
             {/* Header */}
             <div className="text-center mb-8">
-                <img src="/logo.svg" alt="Logo" className="w-20 h-20 mx-auto mb-4 rounded-2xl shadow-xl hover:scale-105 transition-transform duration-300" />
+                <img src="/app-icon.png?v=2" alt="Logo" className="w-20 h-20 mx-auto mb-4 rounded-2xl shadow-xl hover:scale-105 transition-transform duration-300" />
                 
                 <h2 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">
                     Gestão de Escala OBPC
