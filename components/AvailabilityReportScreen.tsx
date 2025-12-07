@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { AvailabilityMap, TeamMemberProfile, MemberMap } from '../types';
-import { getMonthName } from '../utils/dateUtils';
+import { getMonthName, adjustMonth } from '../utils/dateUtils';
 import { CalendarSearch, Search, Filter, CalendarX, RefreshCw } from 'lucide-react';
 
 interface Props {
@@ -39,16 +39,12 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
       }
   };
 
-  const [year, month] = currentMonth.split('-').map(Number);
-
   const handlePrevMonth = () => {
-    const prev = new Date(year, month - 2, 1);
-    onMonthChange(prev.toISOString().slice(0, 7));
+    onMonthChange(adjustMonth(currentMonth, -1));
   };
 
   const handleNextMonth = () => {
-    const next = new Date(year, month, 1);
-    onMonthChange(next.toISOString().slice(0, 7));
+    onMonthChange(adjustMonth(currentMonth, 1));
   };
 
   // Função auxiliar para normalizar nomes (ignora acentos, case e espaços extras)

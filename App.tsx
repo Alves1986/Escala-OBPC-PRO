@@ -22,7 +22,7 @@ import { BirthdayCard } from './components/BirthdayCard';
 import { JoinMinistryModal } from './components/JoinMinistryModal';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile, SwapRequest, RepertoireItem, Announcement, GlobalConflictMap } from './types';
 import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap, toggleAdmin, createAnnouncement, markAnnouncementRead, fetchGlobalSchedules, joinMinistry, saveSubscription, toggleAnnouncementLike } from './services/supabaseService';
-import { generateMonthEvents, getMonthName } from './utils/dateUtils';
+import { generateMonthEvents, getMonthName, adjustMonth } from './utils/dateUtils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { 
@@ -792,9 +792,7 @@ const AppContent = () => {
                     <div className="flex items-center gap-1 bg-white dark:bg-zinc-800 p-1 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm">
                       <button 
                         onClick={() => {
-                           const [y, m] = currentMonth.split('-').map(Number);
-                           const prev = new Date(y, m - 2, 1).toISOString().slice(0, 7);
-                           setCurrentMonth(prev);
+                           setCurrentMonth(adjustMonth(currentMonth, -1));
                         }}
                         className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md text-zinc-500"
                       >
@@ -803,9 +801,7 @@ const AppContent = () => {
                       <span className="text-sm font-bold w-24 text-center">{currentMonth}</span>
                       <button 
                         onClick={() => {
-                           const [y, m] = currentMonth.split('-').map(Number);
-                           const next = new Date(y, m, 1).toISOString().slice(0, 7);
-                           setCurrentMonth(next);
+                           setCurrentMonth(adjustMonth(currentMonth, 1));
                         }}
                         className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md text-zinc-500"
                       >
@@ -979,9 +975,7 @@ const AppContent = () => {
                                 <div className="flex items-center gap-1 bg-white dark:bg-zinc-800 p-1 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm">
                                     <button 
                                         onClick={() => {
-                                            const [y, m] = currentMonth.split('-').map(Number);
-                                            const prev = new Date(y, m - 2, 1).toISOString().slice(0, 7);
-                                            setCurrentMonth(prev);
+                                            setCurrentMonth(adjustMonth(currentMonth, -1));
                                         }}
                                         className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md text-zinc-500"
                                     >
@@ -990,9 +984,7 @@ const AppContent = () => {
                                     <span className="text-sm font-bold w-24 text-center">{currentMonth}</span>
                                     <button 
                                         onClick={() => {
-                                            const [y, m] = currentMonth.split('-').map(Number);
-                                            const next = new Date(y, m, 1).toISOString().slice(0, 7);
-                                            setCurrentMonth(next);
+                                            setCurrentMonth(adjustMonth(currentMonth, 1));
                                         }}
                                         className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md text-zinc-500"
                                     >

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { ScheduleMap, Role } from '../types';
 
@@ -30,7 +31,8 @@ export const CalendarGrid: React.FC<Props> = ({ currentMonth, events, schedule, 
         ))}
       </div>
       <div className="grid grid-cols-7 gap-2 md:gap-4">
-        {blanks.map(i => <div key={`blank-${i}`} className="hidden md:block" />)}
+        {/* Fix: Removed 'hidden md:block' so blanks are always rendered, keeping alignment correct on mobile */}
+        {blanks.map(i => <div key={`blank-${i}`} />)}
         {days.map(day => {
           const dayEvents = getEventsForDay(day);
           const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;

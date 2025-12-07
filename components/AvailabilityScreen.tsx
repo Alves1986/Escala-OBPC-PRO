@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AvailabilityMap, User } from '../types';
-import { getMonthName } from '../utils/dateUtils';
+import { getMonthName, adjustMonth } from '../utils/dateUtils';
 import { User as UserIcon, CalendarCheck, ChevronDown, Save, CheckCircle2, Sun, Moon, X } from 'lucide-react';
 import { useToast } from './Toast';
 
@@ -72,13 +72,11 @@ export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailabil
   }, [selectedMember, availability, currentMonth]);
 
   const handlePrevMonth = () => {
-    const prev = new Date(year, month - 2, 1);
-    onMonthChange(prev.toISOString().slice(0, 7));
+    onMonthChange(adjustMonth(currentMonth, -1));
   };
 
   const handleNextMonth = () => {
-    const next = new Date(year, month, 1);
-    onMonthChange(next.toISOString().slice(0, 7));
+    onMonthChange(adjustMonth(currentMonth, 1));
   };
 
   const handleToggleDate = (day: number) => {

@@ -1,3 +1,4 @@
+
 import { CustomEvent } from '../types';
 
 export const getMonthName = (monthIso: string) => {
@@ -6,6 +7,14 @@ export const getMonthName = (monthIso: string) => {
   const date = new Date(y, m - 1, 1);
   const name = date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
   return name.charAt(0).toUpperCase() + name.slice(1);
+};
+
+export const adjustMonth = (currentMonth: string, delta: number): string => {
+  const [y, m] = currentMonth.split('-').map(Number);
+  const date = new Date(y, m - 1 + delta, 1);
+  const newY = date.getFullYear();
+  const newM = String(date.getMonth() + 1).padStart(2, '0');
+  return `${newY}-${newM}`;
 };
 
 export const generateMonthEvents = (year: number, month: number, customEvents: CustomEvent[]) => {

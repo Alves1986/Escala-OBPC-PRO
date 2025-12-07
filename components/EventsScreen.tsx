@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { CustomEvent } from '../types';
-import { getMonthName } from '../utils/dateUtils';
+import { getMonthName, adjustMonth } from '../utils/dateUtils';
 
 interface Props {
   customEvents: CustomEvent[];
@@ -16,16 +16,12 @@ export const EventsScreen: React.FC<Props> = ({ customEvents, setCustomEvents, c
   const [newTime, setNewTime] = useState("19:30");
   const [newTitle, setNewTitle] = useState("");
 
-  const [year, month] = currentMonth.split('-').map(Number);
-
   const handlePrevMonth = () => {
-    const prev = new Date(year, month - 2, 1);
-    onMonthChange(prev.toISOString().slice(0, 7));
+    onMonthChange(adjustMonth(currentMonth, -1));
   };
 
   const handleNextMonth = () => {
-    const next = new Date(year, month, 1);
-    onMonthChange(next.toISOString().slice(0, 7));
+    onMonthChange(adjustMonth(currentMonth, 1));
   };
 
   const handleAdd = () => {
