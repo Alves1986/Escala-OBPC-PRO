@@ -1172,7 +1172,11 @@ const AppContent = () => {
                                             {member.birthDate && (
                                                 <div className="flex items-center gap-2 text-xs text-zinc-500">
                                                     <CalendarHeart size={12} className="text-pink-400" /> 
-                                                    {new Date(member.birthDate).toLocaleDateString('pt-BR', {day: 'numeric', month: 'long'})}
+                                                    {(() => {
+                                                        const [y, m, d] = member.birthDate.split('-').map(Number);
+                                                        const localDate = new Date(y, m - 1, d);
+                                                        return localDate.toLocaleDateString('pt-BR', {day: 'numeric', month: 'long'});
+                                                    })()}
                                                 </div>
                                             )}
                                         </div>
