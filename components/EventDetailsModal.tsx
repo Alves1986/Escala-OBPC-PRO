@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Clock, Calendar, Save, User, Briefcase, RefreshCcw } from 'lucide-react';
+import { X, Clock, Calendar, Save, User, Briefcase, RefreshCcw, Lock } from 'lucide-react';
 import { Role, ScheduleMap, User as UserType } from '../types';
 
 interface Props {
@@ -13,9 +13,10 @@ interface Props {
   onSwapRequest?: (role: string, eventIso: string, eventTitle: string) => void;
   currentUser?: UserType | null;
   ministryId: string | null;
+  canEdit?: boolean; // Nova propriedade para controlar permissão de edição
 }
 
-export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, schedule, roles, onSave, onSwapRequest, currentUser, ministryId }) => {
+export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, schedule, roles, onSave, onSwapRequest, currentUser, ministryId, canEdit = false }) => {
   const [time, setTime] = useState("");
   const [title, setTitle] = useState("");
 
@@ -50,7 +51,9 @@ export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, sch
             <div className="bg-zinc-50 dark:bg-zinc-900 p-5 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-start">
                 <div>
                     <h2 className="font-bold text-lg text-zinc-800 dark:text-white leading-tight">Detalhes do Evento</h2>
-                    <p className="text-xs text-zinc-500 mt-1">Visualize a escala ou edite as informações.</p>
+                    <p className="text-xs text-zinc-500 mt-1">
+                        {canEdit ? 'Edite as informações do evento.' : 'Visualize a escala e detalhes.'}
+                    </p>
                 </div>
                 <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
                     <X size={20} />
@@ -62,12 +65,18 @@ export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, sch
                 <div className="space-y-4">
                     <div className="space-y-1.5">
                         <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Nome do Evento</label>
-                        <input 
-                            value={title} 
-                            onChange={e => setTitle(e.target.value)} 
-                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2.5 text-zinc-800 dark:text-zinc-100 focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium"
-                            placeholder="Ex: Culto da Vitória"
-                        />
+                        {canEdit ? (
+                            <input 
+                                value={title} 
+                                onChange={e => setTitle(e.target.value)} 
+                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2.5 text-zinc-800 dark:text-zinc-100 focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium"
+                                placeholder="Ex: Culto da Vitória"
+                            />
+                        ) : (
+                            <div className="text-sm font-bold text-zinc-800 dark:text-zinc-100 px-3 py-2.5 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-zinc-100 dark:border-zinc-700/50">
+                                {title}
+                            </div>
+                        )}
                     </div>
                     
                     <div className="grid grid-cols-2 gap-4">
@@ -82,12 +91,18 @@ export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, sch
                              <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Horário</label>
                              <div className="relative">
                                 <Clock size={16} className="absolute left-3 top-3 text-zinc-400"/>
-                                <input 
-                                    type="time" 
-                                    value={time} 
-                                    onChange={e => setTime(e.target.value)} 
-                                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl pl-9 pr-3 py-2.5 text-zinc-800 dark:text-zinc-100 focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold"
-                                />
+                                {canEdit ? (
+                                    <input 
+                                        type="time" 
+                                        value={time} 
+                                        onChange={e => setTime(e.target.value)} 
+                                        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl pl-9 pr-3 py-2.5 text-zinc-800 dark:text-zinc-100 focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold"
+                                    />
+                                ) : (
+                                    <div className="w-full bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-700/50 rounded-xl pl-9 pr-3 py-2.5 text-zinc-700 dark:text-zinc-300 text-sm font-bold flex items-center">
+                                        {time}
+                                    </div>
+                                )}
                              </div>
                         </div>
                     </div>
@@ -122,12 +137,14 @@ export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, sch
 
                 {/* Actions */}
                 <div className="flex flex-col gap-3">
-                    <button 
-                        onClick={() => onSave(event.iso, title, time)} 
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 active:scale-95 transition-all"
-                    >
-                        <Save size={18} /> Salvar Alterações
-                    </button>
+                    {canEdit && (
+                        <button 
+                            onClick={() => onSave(event.iso, title, time)} 
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 active:scale-95 transition-all"
+                        >
+                            <Save size={18} /> Salvar Alterações
+                        </button>
+                    )}
                     
                     {onSwapRequest && currentUser && userAssignment && (
                         <button 
@@ -136,6 +153,12 @@ export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, sch
                         >
                             <RefreshCcw size={18} /> Solicitar Troca / Indisponibilidade
                         </button>
+                    )}
+
+                    {!canEdit && !userAssignment && (
+                        <div className="text-center text-xs text-zinc-400 flex items-center justify-center gap-1 mt-2">
+                            <Lock size={12} /> Edição restrita a administradores.
+                        </div>
                     )}
                 </div>
             </div>

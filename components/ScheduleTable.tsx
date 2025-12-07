@@ -1,8 +1,7 @@
 
-
 import React from 'react';
 import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis, GlobalConflictMap } from '../types';
-import { CheckCircle2, AlertTriangle, Trash2 } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Trash2, User } from 'lucide-react';
 
 interface Props {
   events: { iso: string; dateDisplay: string; title: string }[];
@@ -19,10 +18,11 @@ interface Props {
   onDeleteEvent: (iso: string, title: string) => void;
   memberStats: Record<string, number>;
   ministryId: string | null;
+  readOnly?: boolean; // Novo modo de leitura
 }
 
 export const ScheduleTable: React.FC<Props> = ({
-  events, roles, schedule, attendance, availability, members, scheduleIssues, globalConflicts, onCellChange, onAttendanceToggle, onDeleteEvent, memberStats, ministryId
+  events, roles, schedule, attendance, availability, members, scheduleIssues, globalConflicts, onCellChange, onAttendanceToggle, onDeleteEvent, memberStats, ministryId, readOnly = false
 }) => {
   
   // Calculate if member is unavailable for a specific date AND Time
@@ -110,13 +110,15 @@ export const ScheduleTable: React.FC<Props> = ({
                       <span className="font-semibold text-zinc-800 dark:text-zinc-100">{event.title}</span>
                       <span className="text-xs text-zinc-500">{event.dateDisplay}</span>
                     </div>
-                    <button 
-                      onClick={() => onDeleteEvent(event.iso, event.title)}
-                      className="text-zinc-300 hover:text-red-500 p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
-                      title="Remover/Ocultar Evento"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    {!readOnly && (
+                        <button 
+                        onClick={() => onDeleteEvent(event.iso, event.title)}
+                        className="text-zinc-300 hover:text-red-500 p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
+                        title="Remover/Ocultar Evento"
+                        >
+                        <Trash2 size={16} />
+                        </button>
+                    )}
                   </div>
                 </td>
                 {columns.map(col => {
@@ -135,7 +137,7 @@ export const ScheduleTable: React.FC<Props> = ({
                   let globalConflictMsg = "";
                   let hasGlobalConflict = false;
                   
-                  if (currentValue) {
+                  if (currentValue && !readOnly) {
                       const normalized = currentValue.trim().toLowerCase();
                       const conflicts = globalConflicts[normalized];
                       if (conflicts) {
@@ -150,55 +152,65 @@ export const ScheduleTable: React.FC<Props> = ({
                   return (
                     <td key={key} className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <div className="relative w-full group/cell">
-                          <select
-                            value={currentValue}
-                            onChange={(e) => onCellChange(key, e.target.value)}
-                            className={`w-full bg-zinc-100 dark:bg-zinc-900/50 border-0 rounded-md py-1.5 pl-3 pr-8 text-xs ring-1 ring-inset focus:ring-2 sm:text-sm sm:leading-6 cursor-pointer transition-all appearance-none
-                              ${hasLocalConflict 
-                                ? 'text-red-700 dark:text-red-400 ring-red-300 dark:ring-red-900 focus:ring-red-500 bg-red-50 dark:bg-red-900/20 font-medium' 
-                                : hasGlobalConflict
-                                  ? 'text-orange-700 dark:text-orange-400 ring-orange-300 dark:ring-orange-900 focus:ring-orange-500 bg-orange-50 dark:bg-orange-900/20 font-medium'
-                                  : issue?.type === 'warning'
-                                    ? 'text-amber-700 dark:text-amber-400 ring-amber-300 dark:ring-amber-900 focus:ring-amber-500 bg-amber-50 dark:bg-amber-900/20'
-                                    : currentValue 
-                                      ? 'text-zinc-900 dark:text-zinc-100 ring-zinc-300 dark:ring-zinc-600 focus:ring-brand-500' 
-                                      : 'text-zinc-400 ring-zinc-200 dark:ring-zinc-700 focus:ring-brand-500'}
-                            `}
-                          >
-                            <option value="">-- Selecionar --</option>
-                            
-                            {sortedRoleMembers.map(m => {
-                                const unavail = isUnavailable(m, event.iso);
-                                return (
-                                    <option key={m} value={m} className={unavail ? 'text-red-400 bg-red-50 dark:bg-zinc-800' : ''}>
-                                    {m} ({memberStats[m] || 0}) {unavail ? '[Indisp.]' : ''}
+                        {readOnly ? (
+                            // MODO LEITURA (Dashboard)
+                            <div className="flex-1 flex items-center gap-2">
+                                <span className={`text-sm font-medium truncate ${currentValue ? 'text-zinc-800 dark:text-zinc-200' : 'text-zinc-300 dark:text-zinc-600'}`}>
+                                    {currentValue || '-'}
+                                </span>
+                            </div>
+                        ) : (
+                            // MODO EDIÇÃO (Gestão)
+                            <div className="relative w-full group/cell">
+                            <select
+                                value={currentValue}
+                                onChange={(e) => onCellChange(key, e.target.value)}
+                                className={`w-full bg-zinc-100 dark:bg-zinc-900/50 border-0 rounded-md py-1.5 pl-3 pr-8 text-xs ring-1 ring-inset focus:ring-2 sm:text-sm sm:leading-6 cursor-pointer transition-all appearance-none
+                                ${hasLocalConflict 
+                                    ? 'text-red-700 dark:text-red-400 ring-red-300 dark:ring-red-900 focus:ring-red-500 bg-red-50 dark:bg-red-900/20 font-medium' 
+                                    : hasGlobalConflict
+                                    ? 'text-orange-700 dark:text-orange-400 ring-orange-300 dark:ring-orange-900 focus:ring-orange-500 bg-orange-50 dark:bg-orange-900/20 font-medium'
+                                    : issue?.type === 'warning'
+                                        ? 'text-amber-700 dark:text-amber-400 ring-amber-300 dark:ring-amber-900 focus:ring-amber-500 bg-amber-50 dark:bg-amber-900/20'
+                                        : currentValue 
+                                        ? 'text-zinc-900 dark:text-zinc-100 ring-zinc-300 dark:ring-zinc-600 focus:ring-brand-500' 
+                                        : 'text-zinc-400 ring-zinc-200 dark:ring-zinc-700 focus:ring-brand-500'}
+                                `}
+                            >
+                                <option value="">-- Selecionar --</option>
+                                
+                                {sortedRoleMembers.map(m => {
+                                    const unavail = isUnavailable(m, event.iso);
+                                    return (
+                                        <option key={m} value={m} className={unavail ? 'text-red-400 bg-red-50 dark:bg-zinc-800' : ''}>
+                                        {m} ({memberStats[m] || 0}) {unavail ? '[Indisp.]' : ''}
+                                        </option>
+                                    );
+                                })}
+                                
+                                {/* If current value is not in the list (legacy/removed role), show it as an option so it's not invisible */}
+                                {currentValue && !roleMembers.includes(currentValue) && (
+                                    <option value={currentValue} className="text-amber-500 bg-amber-50 dark:bg-zinc-800 italic">
+                                        {currentValue} (Fora da Função)
                                     </option>
-                                );
-                            })}
+                                )}
+                            </select>
                             
-                            {/* If current value is not in the list (legacy/removed role), show it as an option so it's not invisible */}
-                            {currentValue && !roleMembers.includes(currentValue) && (
-                                <option value={currentValue} className="text-amber-500 bg-amber-50 dark:bg-zinc-800 italic">
-                                    {currentValue} (Fora da Função)
-                                </option>
+                            {/* Indicador Visual de Conflito Local */}
+                            {hasLocalConflict && (
+                                <div className="absolute right-8 top-1/2 -translate-y-1/2 text-red-500 animate-pulse" title="CONFLITO: Membro indisponível neste horário!">
+                                <AlertTriangle size={16} />
+                                </div>
                             )}
-                          </select>
-                          
-                          {/* Indicador Visual de Conflito Local */}
-                          {hasLocalConflict && (
-                            <div className="absolute right-8 top-1/2 -translate-y-1/2 text-red-500 animate-pulse" title="CONFLITO: Membro indisponível neste horário!">
-                              <AlertTriangle size={16} />
-                            </div>
-                          )}
 
-                          {/* Indicador Visual de Conflito Global (Inter-ministérios) */}
-                          {hasGlobalConflict && (
-                            <div className="absolute right-8 top-1/2 -translate-y-1/2 text-orange-500" title={globalConflictMsg}>
-                              <AlertTriangle size={16} />
+                            {/* Indicador Visual de Conflito Global (Inter-ministérios) */}
+                            {hasGlobalConflict && (
+                                <div className="absolute right-8 top-1/2 -translate-y-1/2 text-orange-500" title={globalConflictMsg}>
+                                <AlertTriangle size={16} />
+                                </div>
+                            )}
                             </div>
-                          )}
-                        </div>
+                        )}
                         
                         {currentValue && (
                           <button

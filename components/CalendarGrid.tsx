@@ -6,7 +6,7 @@ interface Props {
   events: { iso: string; dateDisplay: string; title: string }[];
   schedule: ScheduleMap;
   roles: Role[];
-  onEventClick?: (event: { iso: string; title: string; dateDisplay: string }) => void;
+  onEventClick?: (event: { iso: string; title: string }) => void;
 }
 
 export const CalendarGrid: React.FC<Props> = ({ currentMonth, events, schedule, roles, onEventClick }) => {
@@ -43,7 +43,7 @@ export const CalendarGrid: React.FC<Props> = ({ currentMonth, events, schedule, 
                   {dayEvents.map(evt => (
                     <div 
                         key={evt.iso} 
-                        onClick={() => onEventClick && onEventClick({ iso: evt.iso, title: evt.title, dateDisplay: evt.dateDisplay })}
+                        onClick={() => onEventClick && onEventClick({ iso: evt.iso, title: evt.title })}
                         className="bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 p-1.5 rounded-lg text-[10px] border-l-2 border-blue-500 cursor-pointer transition-colors"
                     >
                        <div className="font-bold text-blue-700 dark:text-blue-300 truncate">{evt.title}</div>
