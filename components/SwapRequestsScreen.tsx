@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { RefreshCcw, User, Calendar, ArrowRight, CheckCircle2, Clock, Info } from 'lucide-react';
 import { SwapRequest, User as UserType, ScheduleMap } from '../types';
@@ -23,8 +24,6 @@ export const SwapRequestsScreen: React.FC<Props> = ({
   // Find my upcoming schedules
   const mySchedules = visibleEvents.map(evt => {
       // Find all roles I am assigned to in this event
-      // This requires iterating roles, but we don't have roles prop here directly unless we pass it or infer
-      // We can infer from schedule keys
       const myRolesInEvent: string[] = [];
       Object.keys(schedule).forEach(key => {
           if (key.startsWith(evt.iso) && schedule[key] === currentUser.name) {

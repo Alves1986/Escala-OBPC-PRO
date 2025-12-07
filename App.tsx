@@ -90,7 +90,7 @@ const AppContent = () => {
 
   const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
   
-  // Theme State with Persistence Fix
+  // Theme State
   const [theme, setTheme] = useState<'light'|'dark'>(() => {
     if (typeof window !== 'undefined') {
         const saved = localStorage.getItem('app_theme');
@@ -100,7 +100,6 @@ const AppContent = () => {
     return 'dark';
   });
 
-  // Apply Theme Effect
   useEffect(() => {
     const root = document.documentElement;
     if (theme === 'dark') {
@@ -150,12 +149,12 @@ const AppContent = () => {
   const [eventsModalOpen, setEventsModalOpen] = useState(false);
   const [availModalOpen, setAvailModalOpen] = useState(false);
   const [rolesModalOpen, setRolesModalOpen] = useState(false);
-  const [joinMinistryModalOpen, setJoinMinistryModalOpen] = useState(false); // New State
+  const [joinMinistryModalOpen, setJoinMinistryModalOpen] = useState(false);
   
   // Event Detail Modal (from Calendar Grid)
   const [selectedEventDetails, setSelectedEventDetails] = useState<{ iso: string; title: string; dateDisplay: string } | null>(null);
 
-  // --- PUSH NOTIFICATION REGISTRATION (GLOBAL) ---
+  // --- PUSH NOTIFICATION REGISTRATION ---
   const registerPushForAllMinistries = async () => {
       if (!currentUser || !('serviceWorker' in navigator)) return;
 
@@ -164,9 +163,6 @@ const AppContent = () => {
           const subscription = await registration.pushManager.getSubscription();
 
           if (subscription && currentUser.allowedMinistries) {
-              console.log("Sincronizando push notifications para todos os ministérios...");
-              // Registra o mesmo endpoint em TODOS os ministérios do usuário
-              // Assim ele recebe notificação independente do contexto atual
               for (const mid of currentUser.allowedMinistries) {
                   await saveSubscription(mid, subscription);
               }
@@ -176,7 +172,6 @@ const AppContent = () => {
       }
   };
 
-  // Sincroniza Push ao carregar o usuário ou mudar contexto
   useEffect(() => {
       if (isConnected && currentUser) {
           registerPushForAllMinistries();
@@ -186,7 +181,6 @@ const AppContent = () => {
 
   // --- PWA INSTALL LISTENER ---
   useEffect(() => {
-    // 1. Detect if standalone (installed)
     const isStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
     setIsStandalone(isStandaloneMode);
 
@@ -197,17 +191,14 @@ const AppContent = () => {
 
     const isDismissed = localStorage.getItem('installBannerDismissed');
     
-    // 2. Handle 'beforeinstallprompt'
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
       setInstallPrompt(e);
-      // Banner flutuante só aparece se não foi dispensado
       if (!isDismissed) {
         setShowInstallBanner(true);
       }
     };
 
-    // Check if event was already captured in index.html global var
     if ((window as any).deferredPrompt) {
         handleBeforeInstallPrompt((window as any).deferredPrompt);
         (window as any).deferredPrompt = null;
@@ -215,13 +206,11 @@ const AppContent = () => {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-    // 3. iOS Detection (No beforeinstallprompt support)
     const isIOS = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
     if (isIOS && !isStandaloneMode && !isDismissed) {
          setShowInstallBanner(true);
     }
     
-    // 4. Listen for successful install
     window.addEventListener('appinstalled', () => {
         setInstallPrompt(null);
         setShowInstallBanner(false);
@@ -235,7 +224,6 @@ const AppContent = () => {
 
   const handleInstallApp = async () => {
     if (installPrompt) {
-        // Android / Desktop Chrome (Automático)
         installPrompt.prompt();
         const { outcome } = await installPrompt.userChoice;
         if (outcome === 'accepted') {
@@ -243,7 +231,6 @@ const AppContent = () => {
             setShowInstallBanner(false);
         }
     } else {
-        // iOS or Browser blocking prompt (Manual)
         setShowInstallModal(true);
     }
   };
@@ -277,8 +264,6 @@ const AppContent = () => {
     const sorted = [...visibleEvents].sort((a, b) => a.iso.localeCompare(b.iso));
     return sorted.find(evt => {
       const eventDate = new Date(evt.iso);
-      // Inclui eventos que acabaram de começar ou estão em andamento
-      // Janela de "próximo" vai até 2 horas depois do início
       const eventEnd = new Date(eventDate.getTime() + 2 * 60 * 60 * 1000);
       return eventEnd > now;
     });
@@ -286,15 +271,10 @@ const AppContent = () => {
   
   const allMembersList = useMemo(() => {
     const list = new Set<string>();
-    
-    // 1. Members from Role Map
     Object.values(members).forEach((arr) => {
       if (Array.isArray(arr)) (arr as string[]).forEach(m => list.add(m));
     });
-
-    // 2. Members from Registered List
     registeredMembers.forEach(m => list.add(m.name));
-
     return Array.from(list).sort();
   }, [members, registeredMembers]);
 
@@ -319,7 +299,7 @@ const AppContent = () => {
   };
 
   const getMinistryTitle = (id: string | null) => {
-    if (customTitle) return customTitle; // Usa título personalizado se existir
+    if (customTitle) return customTitle;
     if (!id) return "Gestão de Escala OBPC";
     const cleanId = id.toLowerCase().trim();
     if (cleanId === 'midia') return "Mídia / Comunicação";
@@ -386,7 +366,6 @@ const AppContent = () => {
       setAnnouncements(resAnnouncements);
       setGlobalConflicts(resGlobalConflicts);
 
-      // Upgrade current user if in admins list
       if (currentUser && currentUser.email && resAdmins.includes(currentUser.email)) {
           if (currentUser.role !== 'admin') {
               setCurrentUser(prev => prev ? { ...prev, role: 'admin' } : null);
@@ -402,7 +381,6 @@ const AppContent = () => {
     }
   };
 
-  // --- AUTH CHECK & SESSION ---
   useEffect(() => {
     const supabase = getSupabase();
     if (!supabase) return;
@@ -412,11 +390,9 @@ const AppContent = () => {
         const metadata = session.user.user_metadata;
         const allowedMinistries = metadata.allowedMinistries || (metadata.ministryId ? [metadata.ministryId] : []);
         
-        // PERSISTENCE CHECK: Read from localStorage
         const savedMid = localStorage.getItem('last_ministry_id');
         let cleanMid = allowedMinistries.length > 0 ? allowedMinistries[0].trim().toLowerCase().replace(/\s+/g, '-') : 'midia';
         
-        // If saved ID is valid and allowed, use it
         if (savedMid && allowedMinistries.some((m: string) => m.trim().toLowerCase().replace(/\s+/g, '-') === savedMid)) {
             cleanMid = savedMid;
         }
@@ -447,7 +423,6 @@ const AppContent = () => {
         const metadata = session.user.user_metadata;
         const allowedMinistries = metadata.allowedMinistries || (metadata.ministryId ? [metadata.ministryId] : []);
         
-        // PERSISTENCE CHECK: Read from localStorage on update too
         const savedMid = localStorage.getItem('last_ministry_id');
         let cleanMid = allowedMinistries.length > 0 ? allowedMinistries[0].trim().toLowerCase().replace(/\s+/g, '-') : 'midia';
         
@@ -478,27 +453,19 @@ const AppContent = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // --- REFRESH DATA ON CHANGE ---
   useEffect(() => {
     if (ministryId) {
       loadAll(ministryId);
     }
   }, [ministryId, currentMonth]);
 
-  // --- MULTI-TENANCY SWITCH HANDLER ---
   const handleSwitchMinistry = async (newMinistryId: string) => {
       if (!currentUser) return;
-      
       const cleanMid = newMinistryId.trim().toLowerCase().replace(/\s+/g, '-');
-      
-      // Save to localStorage for persistence
       localStorage.setItem('last_ministry_id', cleanMid);
-      
-      // Update Local State
       setMinistryId(cleanMid);
       setCurrentUser(prev => prev ? { ...prev, ministryId: cleanMid } : null);
       
-      // Clear data to show loading state effectively
       setMembers({});
       setSchedule({});
       setNotifications([]);
@@ -506,41 +473,30 @@ const AppContent = () => {
       setRegisteredMembers([]);
       setCustomTitle("");
       
-      // Trigger Reload
       addToast(`Trocando para ${getMinistryTitle(cleanMid)}...`, "info");
-      // loadAll will be triggered by useEffect([ministryId])
   };
 
-  // --- JOIN MINISTRY HANDLER ---
   const handleJoinMinistry = async (newMinistryId: string, roles: string[]) => {
       if (!currentUser) return;
-      
       const result = await joinMinistry(newMinistryId, roles);
-      
       if (result.success) {
           addToast(result.message, "success");
-          
-          // Refresh user session/metadata locally to reflect change
           const newAllowed = [...(currentUser.allowedMinistries || []), newMinistryId];
           setCurrentUser(prev => prev ? { ...prev, allowedMinistries: newAllowed } : null);
-          
-          // Switch to new ministry immediately
           handleSwitchMinistry(newMinistryId);
       } else {
           addToast(result.message, "error");
       }
   };
 
-  // --- DAILY SCHEDULE REMINDER (Notification) ---
+  // Daily Reminder Effect
   useEffect(() => {
       if (!currentUser || !nextEvent || !schedule) return;
       
-      // Check if next event is TODAY
       const eventDate = nextEvent.iso.split('T')[0];
       const today = new Date().toISOString().split('T')[0];
       
       if (eventDate === today) {
-          // Check if current user is assigned to any role in this event
           let isScheduled = false;
           let myRole = '';
           
@@ -552,17 +508,14 @@ const AppContent = () => {
           });
 
           if (isScheduled) {
-              // Check if we already notified this session to avoid spam
               const notifiedKey = `notified_schedule_${currentUser.id}_${today}`;
               if (!sessionStorage.getItem(notifiedKey)) {
-                  // Send Local Browser Notification
                   if (Notification.permission === "granted") {
                       new Notification("Lembrete de Escala", {
                           body: `Olá ${currentUser.name}, você está escalado hoje (${myRole}) para o evento ${nextEvent.title}.`,
                           icon: "/app-icon.png"
                       });
                   }
-                  
                   addToast(`Lembrete: Você está escalado hoje como ${myRole}!`, "info");
                   sessionStorage.setItem(notifiedKey, 'true');
               }
@@ -570,23 +523,12 @@ const AppContent = () => {
       }
   }, [currentUser, nextEvent, schedule]);
 
-
-  // --- HANDLERS ---
-
   const handleCellChange = async (key: string, value: string) => {
     if (!ministryId) return;
     const newSchedule = { ...schedule, [key]: value };
-    
-    // Check conflicts
     const [date, role] = key.split('_');
-    if (value && availability[value] && availability[value].includes(date.split('T')[0])) {
-       // Just visual warning handled in table
-    }
-
     setSchedule(newSchedule);
     await saveData(ministryId, `schedule_${currentMonth}`, newSchedule);
-    
-    // Log action
     if (value) {
         logAction('Escala', `Adicionou ${value} para ${role} em ${date}`);
     } else {
@@ -604,15 +546,10 @@ const AppContent = () => {
 
   const handleCreateAnnouncement = async (title: string, message: string, type: 'info' | 'success' | 'warning' | 'alert') => {
       if (!ministryId || !currentUser) return;
-      
       const success = await createAnnouncement(ministryId, { title, message, type }, currentUser.name);
-      
       if (success) {
-          // Recarregar comunicados
           const updated = await loadData<Announcement[]>(ministryId, 'announcements_v1', []);
           setAnnouncements(updated);
-          
-          // Enviar Notificação Push para todos
           await sendNotification(ministryId, {
               title: `Novo Aviso: ${title}`,
               message: message,
@@ -639,9 +576,6 @@ const AppContent = () => {
     setMinistryId(null);
   };
 
-  // --- RENDER CONTENT ---
-
-  // Loading Screen
   if (sessionLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-zinc-950">
@@ -650,12 +584,10 @@ const AppContent = () => {
     );
   }
 
-  // Login Screen
   if (!currentUser) {
     return <LoginScreen onLoginSuccess={() => window.location.reload()} />;
   }
 
-  // Main App Content (Removed ToastProvider from here)
   return (
     <div className="bg-zinc-50 dark:bg-zinc-950 min-h-screen text-zinc-900 dark:text-zinc-100 transition-colors duration-300">
         <InstallBanner 
@@ -690,7 +622,6 @@ const AppContent = () => {
           {currentTab === 'dashboard' && (
             <div className="space-y-8 pb-20 animate-fade-in max-w-5xl mx-auto">
               
-              {/* Header de Boas-vindas */}
               <div>
                   <h1 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
                       Olá, {currentUser.name.split(' ')[0]} <span className="animate-wave text-3xl">👋</span>
@@ -700,13 +631,11 @@ const AppContent = () => {
                   </p>
               </div>
 
-              {/* Comunicados (Cards no Topo) */}
               {announcements.length > 0 && (
                   (() => {
                       const visibleAnnouncements = announcements.filter(a => {
                           const hasRead = a.readBy.some(r => r.userId === currentUser.id);
                           const isAdmin = currentUser.role === 'admin';
-                          // Mostrar se não leu OU se é admin (para gerenciar)
                           return !hasRead || isAdmin;
                       });
 
@@ -728,7 +657,6 @@ const AppContent = () => {
                   })()
               )}
 
-              {/* Próximo Evento (Card Grande) */}
               <NextEventCard 
                   event={nextEvent} 
                   schedule={schedule} 
@@ -739,7 +667,6 @@ const AppContent = () => {
                   currentUser={currentUser}
               />
 
-              {/* Navigation Cards (Botões Grandes) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <button 
                       onClick={() => setCurrentTab('calendar')}
@@ -787,22 +714,16 @@ const AppContent = () => {
              <div className="animate-fade-in max-w-6xl mx-auto">
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="text-2xl font-bold text-zinc-800 dark:text-white">Calendário de Escalas</h2>
-                    
-                    {/* Month Navigation */}
                     <div className="flex items-center gap-1 bg-white dark:bg-zinc-800 p-1 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm">
                       <button 
-                        onClick={() => {
-                           setCurrentMonth(adjustMonth(currentMonth, -1));
-                        }}
+                        onClick={() => setCurrentMonth(adjustMonth(currentMonth, -1))}
                         className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md text-zinc-500"
                       >
                         ←
                       </button>
                       <span className="text-sm font-bold w-24 text-center">{currentMonth}</span>
                       <button 
-                        onClick={() => {
-                           setCurrentMonth(adjustMonth(currentMonth, 1));
-                        }}
+                        onClick={() => setCurrentMonth(adjustMonth(currentMonth, 1))}
                         className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md text-zinc-500"
                       >
                         →
@@ -833,8 +754,6 @@ const AppContent = () => {
                     const newAvail = { ...availability, [member]: dates };
                     setAvailability(newAvail);
                     await saveData(ministryId, 'availability_v1', newAvail);
-                    
-                    // Notificar Admin via Push
                     const count = dates.filter(d => d.startsWith(currentMonth)).length;
                     await sendNotification(ministryId, {
                         type: 'info',
@@ -869,8 +788,6 @@ const AppContent = () => {
                       if (success) {
                           setSwapRequests([newReq, ...swapRequests]);
                           addToast("Solicitação de troca criada!", "success");
-                          
-                          // Notificar todos
                           await sendNotification(ministryId, {
                               type: 'warning',
                               title: 'Pedido de Troca',
@@ -884,7 +801,6 @@ const AppContent = () => {
                       const result = await performSwap(ministryId, reqId, currentUser.name, currentUser.id);
                       if (result.success) {
                           addToast(result.message, "success");
-                          // Reload data to reflect swap
                           loadAll(ministryId);
                       } else {
                           addToast(result.message, "error");
@@ -897,7 +813,6 @@ const AppContent = () => {
               <RepertoireScreen 
                   repertoire={repertoire} 
                   setRepertoire={async (items) => {
-                      // Members generally shouldn't edit, but assuming logic is handled inside
                       setRepertoire(items);
                   }}
                   currentUser={currentUser}
@@ -910,7 +825,6 @@ const AppContent = () => {
               <>
                 {currentTab === 'editor' && (
                     <div className="space-y-6 animate-fade-in">
-                        {/* Header do Editor */}
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b border-zinc-200 dark:border-zinc-700 pb-6">
                             <div>
                                 <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">
@@ -923,13 +837,10 @@ const AppContent = () => {
                             
                             <div className="flex items-center gap-3">
                                 <ToolsMenu 
-                                    onExportIndividual={(member) => {
-                                        // Logic preserved from original
-                                    }}
+                                    onExportIndividual={(member) => {}}
                                     onExportFull={() => {
                                         const doc = new jsPDF('l', 'mm', 'a4');
                                         doc.text(`Escala Completa - ${getMonthName(currentMonth)}`, 14, 15);
-                                        
                                         autoTable(doc, {
                                             startY: 25,
                                             head: [['Evento', ...roles]],
@@ -971,21 +882,16 @@ const AppContent = () => {
                                     allMembers={allMembersList}
                                 />
                                 
-                                {/* Month Navigation */}
                                 <div className="flex items-center gap-1 bg-white dark:bg-zinc-800 p-1 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm">
                                     <button 
-                                        onClick={() => {
-                                            setCurrentMonth(adjustMonth(currentMonth, -1));
-                                        }}
+                                        onClick={() => setCurrentMonth(adjustMonth(currentMonth, -1))}
                                         className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md text-zinc-500"
                                     >
                                         ←
                                     </button>
                                     <span className="text-sm font-bold w-24 text-center">{currentMonth}</span>
                                     <button 
-                                        onClick={() => {
-                                            setCurrentMonth(adjustMonth(currentMonth, 1));
-                                        }}
+                                        onClick={() => setCurrentMonth(adjustMonth(currentMonth, 1))}
                                         className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md text-zinc-500"
                                     >
                                         →
@@ -1020,7 +926,7 @@ const AppContent = () => {
                             }}
                             memberStats={memberStats}
                             ministryId={ministryId}
-                            readOnly={false} // MODO EDIÇÃO
+                            readOnly={false} 
                         />
                     </div>
                 )}
@@ -1120,7 +1026,7 @@ const AppContent = () => {
                                                             async () => {
                                                                 if (ministryId && member.email) {
                                                                     await toggleAdmin(ministryId, member.email);
-                                                                    await loadAll(ministryId); // Refresh lists
+                                                                    await loadAll(ministryId); 
                                                                     addToast("Permissões atualizadas.", "success");
                                                                 }
                                                             }
@@ -1149,7 +1055,6 @@ const AppContent = () => {
                                             </div>
                                         </div>
 
-                                        {/* Visual Badges for Roles (Filtered by current ministry context) */}
                                         <div className="flex flex-wrap gap-1 mt-2 mb-2">
                                             {member.roles?.filter(r => roles.includes(r)).map(role => (
                                                 <span key={role} className="text-[10px] font-medium px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-300 border border-blue-100 dark:border-blue-800">
@@ -1203,7 +1108,6 @@ const AppContent = () => {
                   }}
                   onAnnounceUpdate={currentUser?.role === 'admin' ? async () => {
                       if (!ministryId) return;
-                      // Dispara push notification de sistema
                       await sendNotification(ministryId, {
                           type: 'info',
                           title: 'Nova Atualização Disponível 🚀',
@@ -1296,19 +1200,16 @@ const AppContent = () => {
             roles={roles}
             currentUser={currentUser}
             ministryId={ministryId}
-            canEdit={currentUser?.role === 'admin'} // PERMISSÃO DE EDIÇÃO
+            canEdit={currentUser?.role === 'admin'} 
             onSave={async (iso, newTitle, newTime) => {
                 if (!ministryId) return;
                 
-                // If it's a custom event, update it
                 const customEvt = customEvents.find(e => e.date === iso.split('T')[0] && e.time === iso.split('T')[1]);
                 if (customEvt) {
                     const newEvts = customEvents.map(e => e.id === customEvt.id ? { ...e, title: newTitle, time: newTime } : e);
                     setCustomEvents(newEvts);
                     await saveData(ministryId, `events_${currentMonth}`, newEvts);
-                } else {
-                    // Could handle system events override if needed
-                }
+                } 
                 setSelectedEventDetails(null);
                 addToast("Evento atualizado.", "success");
             }}
@@ -1344,7 +1245,6 @@ const AppContent = () => {
   );
 };
 
-// Root Component wrapping content with Providers
 const App = () => {
   return (
     <ToastProvider>

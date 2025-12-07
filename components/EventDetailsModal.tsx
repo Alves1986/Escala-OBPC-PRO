@@ -13,7 +13,7 @@ interface Props {
   onSwapRequest?: (role: string, eventIso: string, eventTitle: string) => void;
   currentUser?: UserType | null;
   ministryId: string | null;
-  canEdit?: boolean; // Nova propriedade para controlar permissão de edição
+  canEdit?: boolean; // Controls whether the user can edit the event
 }
 
 export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, schedule, roles, onSave, onSwapRequest, currentUser, ministryId, canEdit = false }) => {

@@ -11,6 +11,7 @@ export const getMonthName = (monthIso: string) => {
 
 export const adjustMonth = (currentMonth: string, delta: number): string => {
   const [y, m] = currentMonth.split('-').map(Number);
+  // Safely calculate new month by setting day to 1
   const date = new Date(y, m - 1 + delta, 1);
   const newY = date.getFullYear();
   const newM = String(date.getMonth() + 1).padStart(2, '0');
@@ -42,8 +43,6 @@ export const generateMonthEvents = (year: number, month: number, customEvents: C
       addEvent(date, "Culto (Domingo - Noite)", "18:00");
     }
   }
-
-  // Santa Ceia (First Sunday) Override Logic could go here...
 
   // Custom Events
   const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
