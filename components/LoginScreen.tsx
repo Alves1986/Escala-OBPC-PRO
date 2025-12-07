@@ -1,6 +1,7 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, UserPlus, ArrowLeft, Check, ChevronDown, KeyRound } from 'lucide-react';
+import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, UserPlus, ArrowLeft, Check, ChevronDown, KeyRound, Layers } from 'lucide-react';
 import { loginWithEmail, registerWithEmail, loadData, sendPasswordResetEmail } from '../services/supabaseService';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { TypewriterBackground } from './TypewriterBackground';
@@ -32,7 +33,8 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
   const [regName, setRegName] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
-  const [regMinistryId, setRegMinistryId] = useState(""); 
+  // Agora suporta múltiplos ministérios
+  const [regSelectedMinistries, setRegSelectedMinistries] = useState<string[]>([]);
   const [regSelectedRoles, setRegSelectedRoles] = useState<string[]>([]);
   
   // Roles State
@@ -59,18 +61,20 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
 
   useEffect(() => {
     async function fetchDynamicRoles() {
-        if (!regMinistryId) {
+        // Carrega roles apenas do primeiro ministério selecionado para simplificar o UX inicial
+        // (O usuário pode ajustar roles depois no perfil)
+        if (regSelectedMinistries.length === 0) {
             setAvailableRoles([]);
             return;
         }
 
+        const mainMinistry = regSelectedMinistries[0];
         setLoadingRoles(true);
-        const defaults = DEFAULT_ROLES[regMinistryId] || [];
+        const defaults = DEFAULT_ROLES[mainMinistry] || [];
         setAvailableRoles(defaults);
-        setRegSelectedRoles([]); 
-
+        
         try {
-            const dynamicRoles = await loadData<string[]>(regMinistryId, 'functions_config', defaults);
+            const dynamicRoles = await loadData<string[]>(mainMinistry, 'functions_config', defaults);
             if (JSON.stringify(dynamicRoles) !== JSON.stringify(defaults)) {
                 setAvailableRoles(dynamicRoles);
             }
@@ -84,7 +88,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
     if (view === 'register') {
         fetchDynamicRoles();
     }
-  }, [regMinistryId, view]);
+  }, [regSelectedMinistries, view]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,15 +107,15 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!regName || !regEmail || !regPassword || !regMinistryId) {
-          setErrorMsg("Preencha todos os campos obrigatórios.");
+      if (!regName || !regEmail || !regPassword || regSelectedMinistries.length === 0) {
+          setErrorMsg("Preencha todos os campos e selecione ao menos um ministério.");
           return;
       }
       
       setLocalLoading(true);
       setErrorMsg("");
       
-      const result = await registerWithEmail(regEmail, regPassword, regName, regMinistryId, undefined, regSelectedRoles);
+      const result = await registerWithEmail(regEmail, regPassword, regName, regSelectedMinistries, undefined, regSelectedRoles);
       
       if (result.success) {
           setSuccessMsg(result.message);
@@ -156,6 +160,14 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
     }
   };
 
+  const toggleMinistry = (id: string) => {
+      if (regSelectedMinistries.includes(id)) {
+          setRegSelectedMinistries(regSelectedMinistries.filter(m => m !== id));
+      } else {
+          setRegSelectedMinistries([...regSelectedMinistries, id]);
+      }
+  };
+
   return (
     <div className="fixed inset-0 z-50 w-full h-full bg-zinc-950 flex flex-col items-center justify-center font-sans overflow-hidden">
       <LegalModal isOpen={!!legalDoc} type={legalDoc} onClose={() => setLegalDoc(null)} />
@@ -174,7 +186,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
             
             {/* Header */}
             <div className="text-center mb-8">
-                <img src="/app-icon.png" alt="Logo" className="w-20 h-20 mx-auto mb-4 rounded-2xl shadow-xl hover:scale-105 transition-transform duration-300" />
+                <img src="/logo.svg" alt="Logo" className="w-20 h-20 mx-auto mb-4 rounded-2xl shadow-xl hover:scale-105 transition-transform duration-300" />
                 
                 <h2 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">
                     Gestão de Escala OBPC
@@ -311,7 +323,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                 <form key="register-form" onSubmit={handleRegisterSubmit} className="space-y-3 animate-slide-up">
                     <div className="bg-blue-900/10 p-3 rounded-lg border border-blue-900/30 mb-2">
                         <p className="text-[10px] text-blue-300 leading-tight text-center">
-                            Selecione o ministério correto para sincronizar com a equipe certa.
+                            Você pode participar de vários ministérios com a mesma conta.
                         </p>
                     </div>
 
@@ -337,29 +349,36 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                     </div>
 
                     <div className="space-y-1">
-                        <label className="text-[10px] uppercase text-zinc-500 font-bold">Ministério (Equipe)</label>
-                        <div className="relative">
-                            <select
-                                value={regMinistryId}
-                                onChange={(e) => {
-                                    setRegMinistryId(e.target.value);
-                                }}
-                                className="w-full bg-zinc-950 border border-zinc-800 focus:border-blue-600 text-white rounded-lg py-2 px-3 text-sm appearance-none outline-none"
-                            >
-                                <option value="">Selecione a equipe...</option>
-                                {MINISTRIES.map(m => (
-                                    <option key={m.id} value={m.id}>{m.label}</option>
-                                ))}
-                            </select>
-                            <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+                        <label className="text-[10px] uppercase text-zinc-500 font-bold flex items-center gap-1">
+                            <Layers size={12}/> Ministérios (Selecione um ou mais)
+                        </label>
+                        <div className="grid grid-cols-1 gap-2 bg-zinc-950 border border-zinc-800 p-2 rounded-lg">
+                            {MINISTRIES.map(m => {
+                                const isSelected = regSelectedMinistries.includes(m.id);
+                                return (
+                                    <button
+                                        key={m.id}
+                                        type="button"
+                                        onClick={() => toggleMinistry(m.id)}
+                                        className={`flex items-center justify-between p-2 rounded-md border text-sm transition-all ${
+                                            isSelected 
+                                            ? 'bg-blue-900/20 border-blue-500 text-blue-100' 
+                                            : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800'
+                                        }`}
+                                    >
+                                        <span>{m.label}</span>
+                                        {isSelected && <Check size={14} className="text-blue-500"/>}
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
 
-                    {/* Seletor de Funções Dinâmico */}
-                    {regMinistryId && (
+                    {/* Seletor de Funções Dinâmico (Baseado no primeiro ministério selecionado) */}
+                    {regSelectedMinistries.length > 0 && (
                         <div className="space-y-1 animate-fade-in">
                             <label className="text-[10px] uppercase text-zinc-500 font-bold flex justify-between">
-                                Suas Funções
+                                Suas Funções (Principal)
                                 {loadingRoles && <Loader2 size={12} className="animate-spin text-blue-500"/>}
                             </label>
                             

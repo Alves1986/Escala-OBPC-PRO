@@ -301,7 +301,11 @@ export const loginWithEmail = async (email: string, password: string): Promise<{
 
         if (data.user) {
             const metadata = data.user.user_metadata;
-            const cleanMid = metadata.ministryId?.trim().toLowerCase().replace(/\s+/g, '-');
+            // Se tiver múltiplos ministérios, pega o primeiro, senão usa o padrão legado
+            const allowedMinistries = metadata.allowedMinistries || (metadata.ministryId ? [metadata.ministryId] : []);
+            const cleanMid = allowedMinistries.length > 0 
+                ? allowedMinistries[0].trim().toLowerCase().replace(/\s+/g, '-') 
+                : 'midia';
             
             const userProfile: User = {
                 id: data.user.id,
@@ -309,14 +313,18 @@ export const loginWithEmail = async (email: string, password: string): Promise<{
                 name: metadata.name || 'Usuário',
                 role: metadata.role || 'member',
                 ministryId: cleanMid, 
+                allowedMinistries: allowedMinistries,
                 whatsapp: metadata.whatsapp,
                 birthDate: metadata.birthDate,
                 avatar_url: metadata.avatar_url,
                 functions: metadata.functions || []
             };
 
-            if (cleanMid) {
-                syncMemberProfile(cleanMid, userProfile);
+            // Sincroniza em todos os ministérios permitidos
+            if (allowedMinistries.length > 0) {
+                for (const mid of allowedMinistries) {
+                    await syncMemberProfile(mid, userProfile);
+                }
             }
 
             return { success: true, message: "Login realizado.", user: userProfile, ministryId: cleanMid };
@@ -333,14 +341,15 @@ export const registerWithEmail = async (
     email: string,
     password: string,
     name: string,
-    ministryId: string,
+    ministries: string[], // Alterado para array
     whatsapp?: string,
     selectedRoles?: string[]
 ): Promise<{ success: boolean; message: string }> => {
     if (!supabase) return { success: false, message: "Erro de conexão" };
 
     try {
-        const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+        const cleanMinistries = ministries.map(m => m.trim().toLowerCase().replace(/\s+/g, '-'));
+        const mainMinistry = cleanMinistries[0];
 
         const { data, error } = await supabase.auth.signUp({
             email,
@@ -348,7 +357,8 @@ export const registerWithEmail = async (
             options: {
                 data: {
                     name,
-                    ministryId: cleanMid, 
+                    ministryId: mainMinistry, // Legado (para compatibilidade)
+                    allowedMinistries: cleanMinistries, // Novo: Array de acesso
                     whatsapp,
                     functions: selectedRoles || [],
                     role: 'member'
@@ -364,15 +374,29 @@ export const registerWithEmail = async (
                 email: email,
                 name: name,
                 role: 'member',
-                ministryId: cleanMid,
+                ministryId: mainMinistry,
+                allowedMinistries: cleanMinistries,
                 whatsapp: whatsapp,
                 functions: selectedRoles || []
             };
             
-            await syncMemberProfile(cleanMid, userProfile);
+            // Sincroniza o membro em TODOS os ministérios selecionados
+            for (const mid of cleanMinistries) {
+                await syncMemberProfile(mid, userProfile);
+                
+                // Notifica em cada um
+                await sendNotification(mid, {
+                    type: 'info',
+                    title: 'Novo Membro Cadastrado',
+                    message: `${name} acabou de se cadastrar na equipe.`,
+                    actionLink: 'team' 
+                });
+            }
 
-            if (selectedRoles && selectedRoles.length > 0) {
-                const currentRoles = await loadData<MemberMap>(cleanMid, 'members_v7', {});
+            // (Opcional) Adiciona roles apenas no ministério principal ou tenta distribuir?
+            // Por simplicidade, vamos adicionar as funções no primeiro ministério selecionado
+            if (selectedRoles && selectedRoles.length > 0 && mainMinistry) {
+                const currentRoles = await loadData<MemberMap>(mainMinistry, 'members_v7', {});
                 let rolesChanged = false;
                 
                 selectedRoles.forEach(role => {
@@ -384,17 +408,9 @@ export const registerWithEmail = async (
                 });
                 
                 if (rolesChanged) {
-                    await saveData(cleanMid, 'members_v7', currentRoles);
+                    await saveData(mainMinistry, 'members_v7', currentRoles);
                 }
             }
-
-            // Notifica com deep link para a aba de membros
-            await sendNotification(cleanMid, {
-                type: 'info',
-                title: 'Novo Membro Cadastrado',
-                message: `${name} acabou de se cadastrar na equipe.`,
-                actionLink: 'team' 
-            });
         }
 
         return { success: true, message: "Cadastro realizado com sucesso!" };
@@ -456,23 +472,31 @@ export const updateUserProfile = async (
             return { success: false, message: "Erro ao atualizar perfil." };
         }
         
-        const ministryId = user.user_metadata.ministryId;
-        if (ministryId) {
+        // Sincroniza com TODOS os ministérios que o usuário tem acesso
+        const allowedMinistries = user.user_metadata.allowedMinistries || [user.user_metadata.ministryId];
+        
+        if (allowedMinistries.length > 0) {
              const userProfile: User = {
                 id: user.id,
                 email: user.email,
                 name: name,
                 role: user.user_metadata.role || 'member',
-                ministryId: ministryId,
+                ministryId: allowedMinistries[0],
+                allowedMinistries: allowedMinistries,
                 whatsapp: whatsapp,
                 birthDate: birthDate,
                 avatar_url: avatar_url,
                 functions: functions || user.user_metadata.functions || []
             };
-            await syncMemberProfile(ministryId, userProfile);
 
-            if (functions) {
-                const currentMap = await loadData<MemberMap>(ministryId, 'members_v7', {});
+            for (const mid of allowedMinistries) {
+                if (mid) await syncMemberProfile(mid, userProfile);
+            }
+
+            // Atualiza funções apenas no contexto atual (opcional, pode ser complexo atualizar em todos)
+            if (functions && user.user_metadata.ministryId) {
+                const currentMid = user.user_metadata.ministryId;
+                const currentMap = await loadData<MemberMap>(currentMid, 'members_v7', {});
                 let mapChanged = false;
 
                 Object.keys(currentMap).forEach(role => {
@@ -491,7 +515,7 @@ export const updateUserProfile = async (
                 });
 
                 if (mapChanged) {
-                    await saveData(ministryId, 'members_v7', currentMap);
+                    await saveData(currentMid, 'members_v7', currentMap);
                 }
             }
         }

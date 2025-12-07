@@ -116,7 +116,8 @@ export interface User {
   name: string;       // Nome de exibição
   avatar_url?: string; // Foto de perfil (Base64)
   role: 'admin' | 'member';
-  ministryId?: string; // Vínculo com os dados antigos
+  ministryId?: string; // Vínculo com o ministério atual
+  allowedMinistries?: string[]; // Lista de ministérios que o usuário pode acessar
   whatsapp?: string;
   birthDate?: string; // YYYY-MM-DD
   functions?: string[];

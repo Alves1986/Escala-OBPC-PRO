@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ScheduleTable } from './components/ScheduleTable';
@@ -377,7 +378,9 @@ const AppContent = () => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         const metadata = session.user.user_metadata;
-        const cleanMid = metadata.ministryId?.trim().toLowerCase().replace(/\s+/g, '-') || 'midia';
+        const allowedMinistries = metadata.allowedMinistries || (metadata.ministryId ? [metadata.ministryId] : []);
+        // Default to first allowed or legacy
+        const cleanMid = allowedMinistries.length > 0 ? allowedMinistries[0].trim().toLowerCase().replace(/\s+/g, '-') : 'midia';
         
         const user: User = {
            id: session.user.id,
@@ -385,6 +388,7 @@ const AppContent = () => {
            name: metadata.name || 'Usuário',
            role: metadata.role || 'member',
            ministryId: cleanMid,
+           allowedMinistries: allowedMinistries,
            whatsapp: metadata.whatsapp,
            birthDate: metadata.birthDate,
            avatar_url: metadata.avatar_url,
@@ -402,7 +406,8 @@ const AppContent = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         const metadata = session.user.user_metadata;
-        const cleanMid = metadata.ministryId?.trim().toLowerCase().replace(/\s+/g, '-') || 'midia';
+        const allowedMinistries = metadata.allowedMinistries || (metadata.ministryId ? [metadata.ministryId] : []);
+        const cleanMid = allowedMinistries.length > 0 ? allowedMinistries[0].trim().toLowerCase().replace(/\s+/g, '-') : 'midia';
         
         const user: User = {
            id: session.user.id,
@@ -410,6 +415,7 @@ const AppContent = () => {
            name: metadata.name || 'Usuário',
            role: metadata.role || 'member',
            ministryId: cleanMid,
+           allowedMinistries: allowedMinistries,
            whatsapp: metadata.whatsapp,
            birthDate: metadata.birthDate,
            avatar_url: metadata.avatar_url,
@@ -432,6 +438,29 @@ const AppContent = () => {
       loadAll(ministryId);
     }
   }, [ministryId, currentMonth]);
+
+  // --- MULTI-TENANCY SWITCH HANDLER ---
+  const handleSwitchMinistry = async (newMinistryId: string) => {
+      if (!currentUser) return;
+      
+      const cleanMid = newMinistryId.trim().toLowerCase().replace(/\s+/g, '-');
+      
+      // Update Local State
+      setMinistryId(cleanMid);
+      setCurrentUser(prev => prev ? { ...prev, ministryId: cleanMid } : null);
+      
+      // Clear data to show loading state effectively
+      setMembers({});
+      setSchedule({});
+      setNotifications([]);
+      setAnnouncements([]);
+      setRegisteredMembers([]);
+      setCustomTitle("");
+      
+      // Trigger Reload
+      addToast(`Trocando para ${getMinistryTitle(cleanMid)}...`, "info");
+      // loadAll will be triggered by useEffect([ministryId])
+  };
 
   // --- DAILY SCHEDULE REMINDER (Notification) ---
   useEffect(() => {
@@ -1323,10 +1352,9 @@ const renderContent = () => {
       managementNavItems={MANAGEMENT_NAV_ITEMS}
       notifications={notifications}
       onNotificationsUpdate={setNotifications}
-      // CRITICAL CHANGE: Always pass handleInstallApp if NOT standalone (installed)
-      // This ensures the button appears in the sidebar even if Chrome hasn't fired the event yet.
       onInstall={!isStandalone ? handleInstallApp : undefined}
       isStandalone={isStandalone}
+      onSwitchMinistry={handleSwitchMinistry}
     >
       {renderContent()}
 

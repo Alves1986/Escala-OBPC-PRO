@@ -1,6 +1,7 @@
 
+
 import React, { ReactNode, useState } from 'react';
-import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon } from 'lucide-react';
+import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check } from 'lucide-react';
 import { User, AppNotification } from '../types';
 import { NotificationCenter } from './NotificationCenter';
 
@@ -30,15 +31,25 @@ interface Props {
   // Props de PWA
   onInstall?: () => void;
   isStandalone?: boolean;
+  // Props de Multi-Tenancy
+  onSwitchMinistry?: (id: string) => void;
 }
+
+const getMinistryLabel = (id: string) => {
+    const clean = id.trim().toLowerCase();
+    if (clean === 'midia') return 'Mídia / Comunicação';
+    if (clean === 'louvor') return 'Louvor / Adoração';
+    return id.charAt(0).toUpperCase() + id.slice(1);
+};
 
 export const DashboardLayout: React.FC<Props> = ({ 
   children, sidebarOpen, setSidebarOpen, theme, toggleTheme, onLogout, title, isConnected, currentUser,
   currentTab, onTabChange, mainNavItems, managementNavItems, notifications, onNotificationsUpdate,
-  onInstall, isStandalone
+  onInstall, isStandalone, onSwitchMinistry
 }) => {
   const [imgError, setImgError] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [ministryMenuOpen, setMinistryMenuOpen] = useState(false);
 
   const handleHardReload = async () => {
     setIsUpdating(true);
@@ -107,6 +118,9 @@ export const DashboardLayout: React.FC<Props> = ({
       );
   }
 
+  // Verifica se o usuário tem múltiplos ministérios
+  const hasMultipleMinistries = currentUser?.allowedMinistries && currentUser.allowedMinistries.length > 1;
+
   return (
     <div className={`flex h-screen overflow-hidden bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 transition-colors duration-300 font-sans`}>
       {/* Mobile Backdrop */}
@@ -117,18 +131,56 @@ export const DashboardLayout: React.FC<Props> = ({
       {/* Sidebar Navigation */}
       <aside className={`fixed inset-y-0 left-0 z-30 w-72 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 flex flex-col shadow-xl lg:shadow-none ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         
-        {/* Header Logo */}
-        <div className="flex items-center gap-3 px-6 py-6 border-b border-zinc-200 dark:border-zinc-800/50 shrink-0">
-           {imgError ? (
-             <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-900/20"><Layout size={20} /></div>
-           ) : (
-             <img src="/app-icon.png" alt="Logo" className="w-10 h-10 rounded-xl shadow-lg" onError={() => setImgError(true)} />
-           )}
-           <div>
-             <h1 className="text-lg font-bold text-zinc-900 dark:text-white tracking-tight leading-none">{title}</h1>
-             <span className="text-[10px] text-zinc-500 font-medium tracking-wider uppercase">Painel Administrativo</span>
+        {/* Header Logo & Ministry Selector */}
+        <div className="relative px-6 py-6 border-b border-zinc-200 dark:border-zinc-800/50 shrink-0">
+           <div className="flex items-center gap-3">
+               {imgError ? (
+                 <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-900/20"><Layout size={20} /></div>
+               ) : (
+                 <img src="/logo.svg" alt="Logo" className="w-10 h-10 rounded-xl shadow-lg" onError={() => setImgError(true)} />
+               )}
+               
+               <div className="flex-1 min-w-0">
+                 {/* Seletor de Ministério */}
+                 <button 
+                    onClick={() => hasMultipleMinistries && setMinistryMenuOpen(!ministryMenuOpen)}
+                    disabled={!hasMultipleMinistries}
+                    className={`flex items-center gap-1 w-full group ${hasMultipleMinistries ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+                 >
+                     <h1 className="text-lg font-bold text-zinc-900 dark:text-white tracking-tight leading-none truncate">{title}</h1>
+                     {hasMultipleMinistries && <ChevronDown size={14} className="text-zinc-500 transition-transform duration-200" style={{ transform: ministryMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />}
+                 </button>
+                 <span className="text-[10px] text-zinc-500 font-medium tracking-wider uppercase block mt-0.5">Painel Administrativo</span>
+               </div>
+               
+               <button onClick={() => setSidebarOpen(false)} className="lg:hidden ml-auto text-zinc-500"><X size={24}/></button>
            </div>
-           <button onClick={() => setSidebarOpen(false)} className="lg:hidden ml-auto text-zinc-500"><X size={24}/></button>
+
+           {/* Dropdown de Troca de Ministério */}
+           {ministryMenuOpen && hasMultipleMinistries && (
+               <>
+                   <div className="fixed inset-0 z-30" onClick={() => setMinistryMenuOpen(false)} />
+                   <div className="absolute top-20 left-4 right-4 bg-white dark:bg-zinc-800 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-700 z-40 overflow-hidden animate-fade-in">
+                       <p className="px-3 py-2 text-[10px] font-bold text-zinc-500 uppercase bg-zinc-50 dark:bg-zinc-900/50">Trocar Ministério</p>
+                       {currentUser?.allowedMinistries?.map(mid => {
+                           const isCurrent = currentUser.ministryId === mid;
+                           return (
+                               <button
+                                   key={mid}
+                                   onClick={() => {
+                                       if (onSwitchMinistry) onSwitchMinistry(mid);
+                                       setMinistryMenuOpen(false);
+                                   }}
+                                   className={`w-full text-left px-4 py-3 text-sm flex items-center justify-between hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-colors ${isCurrent ? 'bg-blue-50 dark:bg-blue-900/10 text-blue-600 dark:text-blue-400 font-bold' : 'text-zinc-700 dark:text-zinc-300'}`}
+                               >
+                                   {getMinistryLabel(mid)}
+                                   {isCurrent && <Check size={16} />}
+                               </button>
+                           )
+                       })}
+                   </div>
+               </>
+           )}
         </div>
 
         {/* Navigation Menu */}
@@ -217,7 +269,10 @@ export const DashboardLayout: React.FC<Props> = ({
               <button onClick={() => setSidebarOpen(true)} className="p-2 -ml-2 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg">
                   <Menu size={24} />
               </button>
-              <span className="font-bold text-zinc-800 dark:text-zinc-100">{title}</span>
+              <div className="flex flex-col leading-tight">
+                  <span className="font-bold text-zinc-800 dark:text-zinc-100 text-sm truncate max-w-[150px]">{title}</span>
+                  {hasMultipleMinistries && <span className="text-[10px] text-blue-500 font-medium">Trocar no Menu</span>}
+              </div>
            </div>
            
            <div className="flex items-center gap-2">
