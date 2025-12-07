@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { RefreshCcw, User, Calendar, ArrowRight, CheckCircle2, Clock, Info } from 'lucide-react';
 import { SwapRequest, User as UserType, ScheduleMap } from '../types';
@@ -10,11 +9,11 @@ interface Props {
   visibleEvents: { iso: string; title: string; dateDisplay: string }[];
   onCreateRequest: (role: string, iso: string, title: string) => void;
   onAcceptRequest: (reqId: string) => void;
-  onCancelRequest: (reqId: string) => void; // Optional if you want to implement cancel
+  onCancelRequest?: (reqId: string) => void;
 }
 
 export const SwapRequestsScreen: React.FC<Props> = ({ 
-    schedule, currentUser, requests, visibleEvents, onCreateRequest, onAcceptRequest 
+    schedule, currentUser, requests, visibleEvents, onCreateRequest, onAcceptRequest, onCancelRequest 
 }) => {
   const [activeTab, setActiveTab] = useState<'mine' | 'wall'>('wall');
 
