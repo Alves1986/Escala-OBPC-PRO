@@ -1,7 +1,7 @@
 
 
 import React, { ReactNode, useState } from 'react';
-import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check } from 'lucide-react';
+import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle } from 'lucide-react';
 import { User, AppNotification } from '../types';
 import { NotificationCenter } from './NotificationCenter';
 
@@ -33,19 +33,22 @@ interface Props {
   isStandalone?: boolean;
   // Props de Multi-Tenancy
   onSwitchMinistry?: (id: string) => void;
+  onOpenJoinMinistry?: () => void; // New Prop
 }
 
 const getMinistryLabel = (id: string) => {
     const clean = id.trim().toLowerCase();
     if (clean === 'midia') return 'Mídia / Comunicação';
     if (clean === 'louvor') return 'Louvor / Adoração';
+    if (clean === 'infantil') return 'Ministério Infantil';
+    if (clean === 'recepcao') return 'Recepção / Diaconia';
     return id.charAt(0).toUpperCase() + id.slice(1);
 };
 
 export const DashboardLayout: React.FC<Props> = ({ 
   children, sidebarOpen, setSidebarOpen, theme, toggleTheme, onLogout, title, isConnected, currentUser,
   currentTab, onTabChange, mainNavItems, managementNavItems, notifications, onNotificationsUpdate,
-  onInstall, isStandalone, onSwitchMinistry
+  onInstall, isStandalone, onSwitchMinistry, onOpenJoinMinistry
 }) => {
   const [imgError, setImgError] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -120,6 +123,8 @@ export const DashboardLayout: React.FC<Props> = ({
 
   // Verifica se o usuário tem múltiplos ministérios
   const hasMultipleMinistries = currentUser?.allowedMinistries && currentUser.allowedMinistries.length > 1;
+  // Always allow menu opening if user has multiple OR if we want to show the "Add" button (which we do now)
+  const canOpenMenu = true; 
 
   return (
     <div className={`flex h-screen overflow-hidden bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 transition-colors duration-300 font-sans`}>
@@ -143,12 +148,11 @@ export const DashboardLayout: React.FC<Props> = ({
                <div className="flex-1 min-w-0">
                  {/* Seletor de Ministério */}
                  <button 
-                    onClick={() => hasMultipleMinistries && setMinistryMenuOpen(!ministryMenuOpen)}
-                    disabled={!hasMultipleMinistries}
-                    className={`flex items-center gap-1 w-full group ${hasMultipleMinistries ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+                    onClick={() => setMinistryMenuOpen(!ministryMenuOpen)}
+                    className="flex items-center gap-1 w-full group cursor-pointer hover:opacity-80"
                  >
                      <h1 className="text-lg font-bold text-zinc-900 dark:text-white tracking-tight leading-none truncate">{title}</h1>
-                     {hasMultipleMinistries && <ChevronDown size={14} className="text-zinc-500 transition-transform duration-200" style={{ transform: ministryMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />}
+                     <ChevronDown size={14} className="text-zinc-500 transition-transform duration-200" style={{ transform: ministryMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />
                  </button>
                  <span className="text-[10px] text-zinc-500 font-medium tracking-wider uppercase block mt-0.5">Painel Administrativo</span>
                </div>
@@ -157,7 +161,7 @@ export const DashboardLayout: React.FC<Props> = ({
            </div>
 
            {/* Dropdown de Troca de Ministério */}
-           {ministryMenuOpen && hasMultipleMinistries && (
+           {ministryMenuOpen && (
                <>
                    <div className="fixed inset-0 z-30" onClick={() => setMinistryMenuOpen(false)} />
                    <div className="absolute top-20 left-4 right-4 bg-white dark:bg-zinc-800 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-700 z-40 overflow-hidden animate-fade-in">
@@ -178,6 +182,19 @@ export const DashboardLayout: React.FC<Props> = ({
                                </button>
                            )
                        })}
+                       
+                       {/* Add Ministry Button */}
+                       {onOpenJoinMinistry && (
+                           <button
+                               onClick={() => {
+                                   setMinistryMenuOpen(false);
+                                   onOpenJoinMinistry();
+                               }}
+                               className="w-full text-left px-4 py-3 text-sm flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 border-t border-zinc-100 dark:border-zinc-700 font-bold transition-colors"
+                           >
+                               <PlusCircle size={16} /> Entrar em outro Ministério
+                           </button>
+                       )}
                    </div>
                </>
            )}

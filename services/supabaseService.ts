@@ -140,7 +140,7 @@ export const syncMemberProfile = async (ministryId: string, user: User) => {
             whatsapp: user.whatsapp,
             birthDate: user.birthDate,
             avatar_url: user.avatar_url,
-            roles: user.functions || [],
+            roles: user.functions || [], // Note: functions here might be ministry-specific in advanced scenarios, but for now it syncs all
             createdAt: new Date().toISOString()
         };
 
@@ -416,6 +416,82 @@ export const registerWithEmail = async (
         return { success: true, message: "Cadastro realizado com sucesso!" };
     } catch (e) {
         console.error(e);
+        return { success: false, message: "Erro interno." };
+    }
+};
+
+// --- JOIN NEW MINISTRY (Multi-Tenancy Addition) ---
+export const joinMinistry = async (newMinistryId: string, roles: string[]): Promise<{ success: boolean; message: string }> => {
+    if (!supabase) return { success: false, message: "Erro de conexão" };
+
+    try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error || !user) return { success: false, message: "Usuário não autenticado." };
+
+        const cleanMid = newMinistryId.trim().toLowerCase().replace(/\s+/g, '-');
+        const currentAllowed = user.user_metadata.allowedMinistries || [user.user_metadata.ministryId];
+        
+        if (currentAllowed.includes(cleanMid)) {
+            return { success: false, message: "Você já faz parte deste ministério." };
+        }
+
+        const newAllowed = [...currentAllowed, cleanMid];
+
+        // 1. Atualizar Metadados do Usuário (Auth)
+        const { error: updateError } = await supabase.auth.updateUser({
+            data: {
+                allowedMinistries: newAllowed
+            }
+        });
+
+        if (updateError) return { success: false, message: updateError.message };
+
+        // 2. Sincronizar Perfil no Novo Ministério
+        const userProfile: User = {
+            id: user.id,
+            email: user.email,
+            name: user.user_metadata.name,
+            role: user.user_metadata.role || 'member',
+            ministryId: cleanMid, // Contexto atual da operação
+            allowedMinistries: newAllowed,
+            whatsapp: user.user_metadata.whatsapp,
+            birthDate: user.user_metadata.birthDate,
+            avatar_url: user.user_metadata.avatar_url,
+            functions: roles // Funções específicas para este novo ministério
+        };
+
+        await syncMemberProfile(cleanMid, userProfile);
+
+        // 3. Adicionar Funções Específicas no Novo Ministério
+        if (roles && roles.length > 0) {
+            const currentRoles = await loadData<MemberMap>(cleanMid, 'members_v7', {});
+            let rolesChanged = false;
+            
+            roles.forEach(role => {
+                if (!currentRoles[role]) currentRoles[role] = [];
+                if (!currentRoles[role].includes(userProfile.name)) {
+                    currentRoles[role].push(userProfile.name);
+                    rolesChanged = true;
+                }
+            });
+            
+            if (rolesChanged) {
+                await saveData(cleanMid, 'members_v7', currentRoles);
+            }
+        }
+
+        // 4. Notificar
+        await sendNotification(cleanMid, {
+            type: 'info',
+            title: 'Novo Membro',
+            message: `${userProfile.name} entrou na equipe.`,
+            actionLink: 'team'
+        });
+
+        return { success: true, message: "Você entrou no novo ministério com sucesso!" };
+
+    } catch (e) {
+        console.error("Erro ao entrar em ministério", e);
         return { success: false, message: "Erro interno." };
     }
 };

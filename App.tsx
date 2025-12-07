@@ -20,8 +20,9 @@ import { AlertsManager } from './components/AlertsManager';
 import { SettingsScreen } from './components/SettingsScreen';
 import { AnnouncementCard } from './components/AnnouncementCard';
 import { BirthdayCard } from './components/BirthdayCard';
+import { JoinMinistryModal } from './components/JoinMinistryModal';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile, SwapRequest, RepertoireItem, Announcement, GlobalConflictMap } from './types';
-import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap, toggleAdmin, createAnnouncement, markAnnouncementRead, fetchGlobalSchedules } from './services/supabaseService';
+import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap, toggleAdmin, createAnnouncement, markAnnouncementRead, fetchGlobalSchedules, joinMinistry } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -148,6 +149,7 @@ const AppContent = () => {
   const [eventsModalOpen, setEventsModalOpen] = useState(false);
   const [availModalOpen, setAvailModalOpen] = useState(false);
   const [rolesModalOpen, setRolesModalOpen] = useState(false);
+  const [joinMinistryModalOpen, setJoinMinistryModalOpen] = useState(false); // New State
   
   // Event Detail Modal (from Calendar Grid)
   const [selectedEventDetails, setSelectedEventDetails] = useState<{ iso: string; title: string; dateDisplay: string } | null>(null);
@@ -460,6 +462,26 @@ const AppContent = () => {
       // Trigger Reload
       addToast(`Trocando para ${getMinistryTitle(cleanMid)}...`, "info");
       // loadAll will be triggered by useEffect([ministryId])
+  };
+
+  // --- JOIN MINISTRY HANDLER ---
+  const handleJoinMinistry = async (newMinistryId: string, roles: string[]) => {
+      if (!currentUser) return;
+      
+      const result = await joinMinistry(newMinistryId, roles);
+      
+      if (result.success) {
+          addToast(result.message, "success");
+          
+          // Refresh user session/metadata locally to reflect change
+          const newAllowed = [...(currentUser.allowedMinistries || []), newMinistryId];
+          setCurrentUser(prev => prev ? { ...prev, allowedMinistries: newAllowed } : null);
+          
+          // Switch to new ministry immediately
+          handleSwitchMinistry(newMinistryId);
+      } else {
+          addToast(result.message, "error");
+      }
   };
 
   // --- DAILY SCHEDULE REMINDER (Notification) ---
@@ -1355,6 +1377,7 @@ const renderContent = () => {
       onInstall={!isStandalone ? handleInstallApp : undefined}
       isStandalone={isStandalone}
       onSwitchMinistry={handleSwitchMinistry}
+      onOpenJoinMinistry={() => setJoinMinistryModalOpen(true)}
     >
       {renderContent()}
 
@@ -1423,6 +1446,14 @@ const renderContent = () => {
               setRoles(newRoles);
               if (ministryId) await saveData(ministryId, 'functions_config', newRoles);
           }}
+      />
+
+      {/* Join Ministry Modal */}
+      <JoinMinistryModal 
+          isOpen={joinMinistryModalOpen}
+          onClose={() => setJoinMinistryModalOpen(false)}
+          onJoin={handleJoinMinistry}
+          alreadyJoined={currentUser?.allowedMinistries || []}
       />
 
       {/* Event Details Modal (Calendar Click) */}

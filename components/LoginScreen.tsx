@@ -5,21 +5,12 @@ import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, UserPlus, ArrowLeft, Chec
 import { loginWithEmail, registerWithEmail, loadData, sendPasswordResetEmail } from '../services/supabaseService';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { TypewriterBackground } from './TypewriterBackground';
+import { MINISTRIES, DEFAULT_ROLES } from '../types';
 
 interface Props {
   onLoginSuccess?: () => void; 
   isLoading?: boolean;
 }
-
-const MINISTRIES = [
-  { id: 'midia', label: 'Mídia / Comunicação' },
-  { id: 'louvor', label: 'Louvor / Adoração' }
-];
-
-const DEFAULT_ROLES: Record<string, string[]> = {
-  'midia': ['Projeção', 'Transmissão', 'Fotografia', 'Storys'],
-  'louvor': ['Ministro', 'Vocal', 'Guitarra', 'Baixo', 'Teclado', 'Bateria', 'Dança', 'Mesa de Som']
-};
 
 export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
   const [view, setView] = useState<'login' | 'register' | 'forgot'>('login');

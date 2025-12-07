@@ -64,6 +64,14 @@ export interface ScheduleAnalysis {
 // --- GLOBAL CONFLICT TYPES ---
 export const KNOWN_MINISTRIES = ['midia', 'louvor', 'infantil', 'recepcao', 'teatro', 'diaconia'];
 
+// Lista Oficial de Ministérios Disponíveis para Seleção
+export const MINISTRIES = [
+  { id: 'midia', label: 'Mídia / Comunicação' },
+  { id: 'louvor', label: 'Louvor / Adoração' },
+  { id: 'infantil', label: 'Ministério Infantil' },
+  { id: 'recepcao', label: 'Recepção / Diaconia' }
+];
+
 export interface GlobalConflict {
     ministryId: string; // Onde ele está escalado (ex: 'louvor')
     eventIso: string;   // YYYY-MM-DDTHH:mm
