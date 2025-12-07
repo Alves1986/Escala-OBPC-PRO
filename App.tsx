@@ -55,7 +55,6 @@ import {
 import { NextEventCard } from './components/NextEventCard';
 import { ConfirmationModal } from './components/ConfirmationModal';
 import { EventsModal, AvailabilityModal, RolesModal } from './components/ManagementModals';
-import { VAPID_PUBLIC_KEY, urlBase64ToUint8Array } from './utils/pushUtils';
 
 // --- NAVIGATION ITEMS ---
 const MAIN_NAV_ITEMS = [
@@ -148,7 +147,7 @@ const AppContent = () => {
   const [eventsModalOpen, setEventsModalOpen] = useState(false);
   const [availModalOpen, setAvailModalOpen] = useState(false);
   const [rolesModalOpen, setRolesModalOpen] = useState(false);
-  const [joinMinistryModalOpen, setJoinMinistryModalOpen] = useState(false); // New State
+  const [joinMinistryModalOpen, setJoinMinistryModalOpen] = useState(false);
   
   // Event Detail Modal (from Calendar Grid)
   const [selectedEventDetails, setSelectedEventDetails] = useState<{ iso: string; title: string; dateDisplay: string } | null>(null);
@@ -163,8 +162,6 @@ const AppContent = () => {
 
           if (subscription && currentUser.allowedMinistries) {
               console.log("Sincronizando push notifications para todos os ministérios...");
-              // Registra o mesmo endpoint em TODOS os ministérios do usuário
-              // Assim ele recebe notificação independente do contexto atual
               for (const mid of currentUser.allowedMinistries) {
                   await saveSubscription(mid, subscription);
               }
@@ -557,7 +554,7 @@ const AppContent = () => {
                   if (Notification.permission === "granted") {
                       new Notification("Lembrete de Escala", {
                           body: `Olá ${currentUser.name}, você está escalado hoje (${myRole}) para o evento ${nextEvent.title}.`,
-                          icon: "/app-icon.png"
+                          icon: "/app-icon.png" // Garante que o ícone original do app seja usado
                       });
                   }
                   
