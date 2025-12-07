@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'escala-midia-pwa-v15';
+const CACHE_NAME = 'escala-midia-pwa-v16';
 
 // Arquivos estáticos fundamentais
 // Usando caminhos absolutos para garantir a integridade do cache
@@ -80,5 +80,29 @@ self.addEventListener('fetch', event => {
   // 3. Outras requisições: Network First
   event.respondWith(
     fetch(event.request).catch(() => caches.match(event.request))
+  );
+});
+
+// Evento de Clique na Notificação
+self.addEventListener('notificationclick', function(event) {
+  event.notification.close();
+
+  // URL para abrir (pode vir no data da notificação ou usar a raiz)
+  const urlToOpen = event.notification.data?.url || '/';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
+      // Tenta focar em uma janela já aberta
+      for (var i = 0; i < clientList.length; i++) {
+        var client = clientList[i];
+        if (client.url && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      // Se não tiver janela aberta, abre uma nova
+      if (clients.openWindow) {
+        return clients.openWindow(urlToOpen);
+      }
+    })
   );
 });

@@ -11,9 +11,10 @@ interface Props {
   onToggleTheme: () => void;
   onSaveTitle: (newTitle: string) => Promise<void>;
   onAnnounceUpdate?: () => Promise<void>;
+  onEnableNotifications?: () => Promise<void>;
 }
 
-export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, theme, onToggleTheme, onSaveTitle, onAnnounceUpdate }) => {
+export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, theme, onToggleTheme, onSaveTitle, onAnnounceUpdate, onEnableNotifications }) => {
   const [tempTitle, setTempTitle] = useState(initialTitle);
   const [legalDoc, setLegalDoc] = useState<LegalDocType>(null);
   const { addToast } = useToast();
@@ -87,10 +88,11 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
                      </div>
                      <button 
                         onClick={() => {
-                            Notification.requestPermission().then(perm => {
+                            Notification.requestPermission().then(async (perm) => {
                                 if(perm === 'granted') {
-                                    addToast("Permissão concedida!", "success");
-                                    new Notification("Teste", { body: "As notificações estão funcionando." });
+                                    addToast("Permissão concedida! Registrando...", "success");
+                                    if (onEnableNotifications) await onEnableNotifications();
+                                    new Notification("Notificações Ativas", { body: "Você receberá alertas de todos os seus ministérios.", icon: "/app-icon.png" });
                                 } else {
                                     addToast("Permissão negada pelo navegador.", "error");
                                 }

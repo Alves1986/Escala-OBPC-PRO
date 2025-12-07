@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ScheduleTable } from './components/ScheduleTable';
@@ -22,7 +20,7 @@ import { AnnouncementCard } from './components/AnnouncementCard';
 import { BirthdayCard } from './components/BirthdayCard';
 import { JoinMinistryModal } from './components/JoinMinistryModal';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile, SwapRequest, RepertoireItem, Announcement, GlobalConflictMap } from './types';
-import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap, toggleAdmin, createAnnouncement, markAnnouncementRead, fetchGlobalSchedules, joinMinistry } from './services/supabaseService';
+import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap, toggleAdmin, createAnnouncement, markAnnouncementRead, fetchGlobalSchedules, joinMinistry, saveSubscription } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -57,6 +55,7 @@ import {
 import { NextEventCard } from './components/NextEventCard';
 import { ConfirmationModal } from './components/ConfirmationModal';
 import { EventsModal, AvailabilityModal, RolesModal } from './components/ManagementModals';
+import { VAPID_PUBLIC_KEY, urlBase64ToUint8Array } from './utils/pushUtils';
 
 // --- NAVIGATION ITEMS ---
 const MAIN_NAV_ITEMS = [
@@ -153,6 +152,35 @@ const AppContent = () => {
   
   // Event Detail Modal (from Calendar Grid)
   const [selectedEventDetails, setSelectedEventDetails] = useState<{ iso: string; title: string; dateDisplay: string } | null>(null);
+
+  // --- PUSH NOTIFICATION REGISTRATION (GLOBAL) ---
+  const registerPushForAllMinistries = async () => {
+      if (!currentUser || !('serviceWorker' in navigator)) return;
+
+      try {
+          const registration = await navigator.serviceWorker.ready;
+          const subscription = await registration.pushManager.getSubscription();
+
+          if (subscription && currentUser.allowedMinistries) {
+              console.log("Sincronizando push notifications para todos os ministérios...");
+              // Registra o mesmo endpoint em TODOS os ministérios do usuário
+              // Assim ele recebe notificação independente do contexto atual
+              for (const mid of currentUser.allowedMinistries) {
+                  await saveSubscription(mid, subscription);
+              }
+          }
+      } catch (error) {
+          console.error("Erro ao sincronizar push:", error);
+      }
+  };
+
+  // Sincroniza Push ao carregar o usuário ou mudar contexto
+  useEffect(() => {
+      if (isConnected && currentUser) {
+          registerPushForAllMinistries();
+      }
+  }, [isConnected, currentUser?.id, ministryId]);
+
 
   // --- PWA INSTALL LISTENER ---
   useEffect(() => {
@@ -1335,6 +1363,7 @@ const renderContent = () => {
                         addToast("Anúncio de atualização enviado.", "success");
                     }
                 }}
+                onEnableNotifications={registerPushForAllMinistries}
              />
           );
       }
