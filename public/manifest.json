@@ -1,6 +1,6 @@
 {
-  "name": "Escala Mídia Pro",
-  "short_name": "Escala Mídia",
+  "name": "Gestão Escala OBPC",
+  "short_name": "Gestão Escala",
   "start_url": "/",
   "id": "/",
   "scope": "/",
@@ -18,20 +18,8 @@
     {
       "src": "/app-icon.png",
       "type": "image/png",
-      "sizes": "192x192",
-      "purpose": "maskable"
-    },
-    {
-      "src": "/app-icon.png",
-      "type": "image/png",
       "sizes": "512x512",
       "purpose": "any"
-    },
-    {
-      "src": "/app-icon.png",
-      "type": "image/png",
-      "sizes": "512x512",
-      "purpose": "maskable"
     }
   ]
 }
