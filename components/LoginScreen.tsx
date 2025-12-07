@@ -174,7 +174,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
             
             {/* Header */}
             <div className="text-center mb-8">
-                <img src="/app-icon.svg" alt="Logo" className="w-20 h-20 mx-auto mb-4 rounded-2xl shadow-xl hover:scale-105 transition-transform duration-300" />
+                <img src="/app-icon.png" alt="Logo" className="w-20 h-20 mx-auto mb-4 rounded-2xl shadow-xl hover:scale-105 transition-transform duration-300" />
                 
                 <h2 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">
                     Gestão de Escala OBPC
