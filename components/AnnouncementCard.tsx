@@ -1,21 +1,29 @@
 
+
 import React, { useState } from 'react';
 import { Announcement, User } from '../types';
-import { Megaphone, CheckCircle2, Eye, Clock, AlertTriangle, AlertOctagon, Info, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Megaphone, CheckCircle2, Eye, Clock, AlertTriangle, AlertOctagon, Info, CheckCircle, ChevronDown, ChevronUp, Heart } from 'lucide-react';
 
 interface Props {
   announcement: Announcement;
   currentUser: User;
   onMarkRead: (id: string) => void;
+  onToggleLike?: (id: string) => void; // Nova Prop
 }
 
-export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, onMarkRead }) => {
+export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, onMarkRead, onToggleLike }) => {
   const [showReaders, setShowReaders] = useState(false);
+  const [showLikers, setShowLikers] = useState(false);
   const [isReading, setIsReading] = useState(false);
 
   // Check if current user has read this announcement
   const hasRead = announcement.readBy.some(r => r.userId === currentUser.id);
   const isAdmin = currentUser.role === 'admin';
+  
+  // Like Logic
+  const likes = announcement.likedBy || [];
+  const hasLiked = likes.some(l => l.userId === currentUser.id);
+  const likeCount = likes.length;
 
   const handleRead = async () => {
       setIsReading(true);
@@ -110,7 +118,32 @@ export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, o
                         Enviado por: <span className="font-semibold">{announcement.author}</span>
                     </div>
 
-                    <div className="flex gap-2 w-full sm:w-auto">
+                    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                        {/* Botão de Like (Visível para todos) */}
+                        <div className="flex items-center gap-1 mr-2">
+                            <button
+                                onClick={() => onToggleLike && onToggleLike(announcement.id)}
+                                className={`p-2 rounded-full transition-all active:scale-95 flex items-center gap-1 ${
+                                    hasLiked 
+                                    ? 'text-red-500 bg-red-100 dark:bg-red-900/20' 
+                                    : 'text-zinc-400 hover:text-red-400 hover:bg-zinc-100 dark:hover:bg-zinc-700'
+                                }`}
+                                title={hasLiked ? "Descurtir" : "Curtir para confirmar entendimento"}
+                            >
+                                <Heart size={18} fill={hasLiked ? "currentColor" : "none"} />
+                            </button>
+                            
+                            {/* Contador e Toggle de Lista de Likes */}
+                            {likeCount > 0 && (
+                                <button 
+                                    onClick={() => setShowLikers(!showLikers)}
+                                    className="text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:underline"
+                                >
+                                    {likeCount} {likeCount === 1 ? 'curtida' : 'curtidas'}
+                                </button>
+                            )}
+                        </div>
+
                         {/* Botão de Marcar como Lido (Para Membros que ainda não leram) */}
                         {!hasRead && (
                             <button 
@@ -122,23 +155,39 @@ export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, o
                             </button>
                         )}
 
-                        {/* Visualização de Admin */}
+                        {/* Visualização de Admin (Quem leu) */}
                         {isAdmin && (
                             <button 
                                 onClick={() => setShowReaders(!showReaders)}
                                 className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 text-xs font-medium hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors"
                             >
                                 <Eye size={14} /> 
-                                {showReaders ? 'Ocultar Leituras' : `Visto por ${announcement.readBy.length} pessoas`}
+                                {showReaders ? 'Ocultar Leituras' : `Visto por ${announcement.readBy.length}`}
                                 {showReaders ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
                             </button>
                         )}
                     </div>
                 </div>
 
-                {/* Lista de Leituras (Admin) */}
+                {/* Lista de Quem Curtiu (Pública para a equipe) */}
+                {showLikers && likes.length > 0 && (
+                    <div className="mt-3 bg-red-50 dark:bg-red-900/10 rounded-lg p-3 text-xs animate-fade-in border border-red-100 dark:border-red-900/20">
+                        <p className="font-bold text-red-600 dark:text-red-400 uppercase mb-2 flex items-center gap-1">
+                            <Heart size={12} fill="currentColor"/> Curtido por:
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                            {likes.map((liker, idx) => (
+                                <span key={idx} className="bg-white dark:bg-zinc-800 px-2 py-1 rounded shadow-sm text-zinc-700 dark:text-zinc-300 border border-zinc-100 dark:border-zinc-700">
+                                    {liker.name}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Lista de Leituras (Admin Apenas) */}
                 {isAdmin && showReaders && (
-                    <div className="mt-4 bg-white/80 dark:bg-black/20 rounded-lg p-3 text-xs animate-fade-in">
+                    <div className="mt-3 bg-white/80 dark:bg-black/20 rounded-lg p-3 text-xs animate-fade-in border border-zinc-100 dark:border-zinc-700/50">
                         <p className="font-bold text-zinc-500 uppercase mb-2">Histórico de Visualização</p>
                         {announcement.readBy.length === 0 ? (
                             <p className="text-zinc-400 italic">Ninguém visualizou ainda.</p>

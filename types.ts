@@ -49,6 +49,7 @@ export interface Announcement {
   timestamp: string;
   author: string;
   readBy: { userId: string; name: string; timestamp: string }[];
+  likedBy: { userId: string; name: string; timestamp: string }[]; // Nova propriedade
 }
 
 export interface ScheduleIssue {

@@ -20,7 +20,7 @@ import { AnnouncementCard } from './components/AnnouncementCard';
 import { BirthdayCard } from './components/BirthdayCard';
 import { JoinMinistryModal } from './components/JoinMinistryModal';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile, SwapRequest, RepertoireItem, Announcement, GlobalConflictMap } from './types';
-import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap, toggleAdmin, createAnnouncement, markAnnouncementRead, fetchGlobalSchedules, joinMinistry, saveSubscription } from './services/supabaseService';
+import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap, toggleAdmin, createAnnouncement, markAnnouncementRead, fetchGlobalSchedules, joinMinistry, saveSubscription, toggleAnnouncementLike } from './services/supabaseService';
 import { generateMonthEvents, getMonthName } from './utils/dateUtils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -541,995 +541,815 @@ const AppContent = () => {
           // Check if current user is assigned to any role in this event
           let isScheduled = false;
           let myRole = '';
-
-          roles.forEach(role => {
-              if (ministryId === 'louvor' && role === 'Vocal') {
-                  [1, 2, 3, 4, 5].forEach(i => {
-                      const key = `${nextEvent.iso}_Vocal_${i}`;
-                      if (schedule[key] === currentUser.name) {
-                          isScheduled = true;
-                          myRole = `Vocal ${i}`;
-                      }
-                  });
-              } else {
-                  const key = `${nextEvent.iso}_${role}`;
-                  if (schedule[key] === currentUser.name) {
-                      isScheduled = true;
-                      myRole = role;
-                  }
+          
+          Object.entries(schedule).forEach(([key, memberName]) => {
+              if (key.startsWith(nextEvent.iso) && memberName === currentUser.name) {
+                  isScheduled = true;
+                  myRole = key.split('_').pop() || '';
               }
           });
 
           if (isScheduled) {
-              // Send Local Browser Notification (if granted)
-              if (Notification.permission === 'granted') {
-                  // Use sessionStorage to ensure we only notify once per session
-                  const notifyKey = `notified_event_${nextEvent.iso}`;
-                  if (!sessionStorage.getItem(notifyKey)) {
-                      new Notification("Lembrete de Escala 📅", {
-                          body: `Olá ${currentUser.name.split(' ')[0]}, você está escalado hoje como ${myRole} no evento: ${nextEvent.title}. Bom serviço!`,
-                          icon: '/app-icon.png',
-                          tag: 'schedule-reminder'
+              // Check if we already notified this session to avoid spam
+              const notifiedKey = `notified_schedule_${currentUser.id}_${today}`;
+              if (!sessionStorage.getItem(notifiedKey)) {
+                  // Send Local Browser Notification
+                  if (Notification.permission === "granted") {
+                      new Notification("Lembrete de Escala", {
+                          body: `Olá ${currentUser.name}, você está escalado hoje (${myRole}) para o evento ${nextEvent.title}.`,
+                          icon: "/app-icon.png"
                       });
-                      sessionStorage.setItem(notifyKey, 'true');
                   }
+                  
+                  addToast(`Lembrete: Você está escalado hoje como ${myRole}!`, "info");
+                  sessionStorage.setItem(notifiedKey, 'true');
               }
           }
       }
-  }, [currentUser, nextEvent, schedule, roles, ministryId]);
+  }, [currentUser, nextEvent, schedule]);
 
 
   // --- HANDLERS ---
+
   const handleCellChange = async (key: string, value: string) => {
     if (!ministryId) return;
     const newSchedule = { ...schedule, [key]: value };
-    if (!value) delete newSchedule[key];
     
+    // Check conflicts
+    const [date, role] = key.split('_');
+    if (value && availability[value] && availability[value].includes(date.split('T')[0])) {
+       // Just visual warning handled in table
+    }
+
     setSchedule(newSchedule);
     await saveData(ministryId, `schedule_${currentMonth}`, newSchedule);
+    
+    // Log action
+    if (value) {
+        logAction('Escala', `Adicionou ${value} para ${role} em ${date}`);
+    } else {
+        logAction('Escala', `Removeu membro de ${role} em ${date}`);
+    }
+    await saveData(ministryId, 'audit_logs', auditLog);
   };
 
   const handleAttendanceToggle = async (key: string) => {
     if (!ministryId) return;
-    const newAtt = { ...attendance, [key]: !attendance[key] };
-    setAttendance(newAtt);
-    await saveData(ministryId, `attendance_${currentMonth}`, newAtt);
+    const newAttendance = { ...attendance, [key]: !attendance[key] };
+    setAttendance(newAttendance);
+    await saveData(ministryId, `attendance_${currentMonth}`, newAttendance);
   };
 
-  const handleDeleteEvent = async (iso: string, title: string) => {
-    if (!ministryId) return;
-    
-    const custom = customEvents.find(e => e.date === iso.split('T')[0] && e.time === iso.split('T')[1]);
-    if (custom) {
-       const newEvents = customEvents.filter(e => e.id !== custom.id);
-       setCustomEvents(newEvents);
-       await saveData(ministryId, `events_${currentMonth}`, newEvents);
-       logAction('Excluir Evento', `Evento extra '${title}' removido.`);
-    } else {
-       const newIgnored = [...ignoredEvents, iso];
-       setIgnoredEvents(newIgnored);
-       await saveData(ministryId, `ignored_events_${currentMonth}`, newIgnored);
-       logAction('Ocultar Evento', `Evento padrão '${title}' ocultado.`);
-    }
-  };
-
-  const handleRestoreEvent = async (iso: string) => {
-    if (!ministryId) return;
-    const newIgnored = ignoredEvents.filter(i => i !== iso);
-    setIgnoredEvents(newIgnored);
-    await saveData(ministryId, `ignored_events_${currentMonth}`, newIgnored);
-  };
-
-  const handleDeleteMember = async (memberId: string, memberName: string) => {
-    if (!ministryId) return;
-
-    confirmAction(
-      "Excluir Membro",
-      `Tem certeza que deseja remover ${memberName} da equipe? Isso apagará a disponibilidade e removerá das escalas futuras.`,
-      async () => {
-         const success = await deleteMember(ministryId, memberId, memberName);
-         if (success) {
-             setRegisteredMembers(prev => prev.filter(m => m.name !== memberName));
-             // Update local role maps
-             const newMembersMap = { ...members };
-             Object.keys(newMembersMap).forEach(role => {
-                 newMembersMap[role] = newMembersMap[role].filter(n => n !== memberName);
-             });
-             setMembers(newMembersMap);
-             
-             logAction("Exclusão", `Membro ${memberName} removido da equipe.`);
-             addToast("Membro removido com sucesso.", "success");
-         } else {
-             addToast("Erro ao excluir membro.", "error");
-         }
-      }
-    );
-  };
-
-  const handleToggleAdmin = async (email: string, name: string) => {
-      if (!ministryId) return;
-      if (email === currentUser?.email) {
-          addToast("Você não pode alterar seu próprio nível de acesso.", "warning");
-          return;
-      }
-
-      const isCurrentlyAdmin = adminsList.includes(email);
-      const action = isCurrentlyAdmin ? "remover permissão de Admin" : "promover a Admin";
-
-      confirmAction(
-          "Alterar Permissão",
-          `Deseja ${action} de ${name}?`,
-          async () => {
-              const res = await toggleAdmin(ministryId, email);
-              if (res.success) {
-                  setAdminsList(prev => res.isAdmin ? [...prev, email] : prev.filter(e => e !== email));
-                  addToast(res.isAdmin ? `${name} agora é Admin.` : `${name} agora é Membro.`, "success");
-              } else {
-                  addToast("Erro ao alterar permissão.", "error");
-              }
-          }
-      );
-  };
-
-  const handleRefreshList = async () => {
-      if (!ministryId) return;
-      setLoading(true);
-      const list = await loadData<TeamMemberProfile[]>(ministryId, 'public_members_list', []);
-      setRegisteredMembers(list);
-      setLoading(false);
-      addToast("Lista atualizada!", "success");
-  };
-
-  const handleReloadAvailability = async () => {
-      if (!ministryId) return;
-      const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-      const resAvail = await loadData<AvailabilityMap>(cleanMid, 'availability_v1', {});
-      setAvailability(resAvail);
-      addToast("Disponibilidade sincronizada.", "success");
-  };
-
-  const handleSaveAvailability = async (member: string, dates: string[]) => {
-      if (!ministryId) return;
-      const newAvail = { ...availability, [member]: dates };
-      // 1. Update Local State
-      setAvailability(newAvail);
-      // 2. Persist to Database immediately
-      await saveData(ministryId, 'availability_v1', newAvail);
-      
-      // 3. Send Notification to Admins (via Broadcast channel - all users get it, filtered visually if needed, but push goes to all subscribed)
-      // Note: Idealmente, enviaríamos apenas para admins, mas o sistema de push atual é broadcast. 
-      // Vamos enviar uma notificação de "Info" que é útil.
-      await sendNotification(ministryId, {
-          type: 'info',
-          title: 'Disponibilidade Atualizada',
-          message: `${member} atualizou sua disponibilidade para ${getMonthName(currentMonth)}.`,
-          actionLink: 'availability-report'
-      });
-  };
-
-  const handleUpdateProfile = async (name: string, whatsapp: string, avatar_url?: string, functions?: string[], birthDate?: string) => {
-    if (!currentUser) return;
-    const res = await updateUserProfile(name, whatsapp, avatar_url, functions, birthDate);
-    if (res.success) {
-      // Don't rely solely on update here to change state if we want to preserve ministryId
-      setCurrentUser(prev => prev ? { ...prev, name, whatsapp, avatar_url, functions: functions || prev.functions, birthDate } : null);
-      addToast("Perfil salvo!", "success");
-      
-      if (ministryId) {
-          const updatedMembers = await loadData<TeamMemberProfile[]>(ministryId, 'public_members_list', []);
-          const updatedMap = await loadData<MemberMap>(ministryId, 'members_v7', {});
-          setRegisteredMembers(updatedMembers);
-          setMembers(updatedMap);
-      }
-    } else {
-      addToast(res.message, "error");
-    }
-  };
-
-  const handleCreateSwapRequest = async (role: string, eventIso: string, eventTitle: string) => {
-    if (!ministryId || !currentUser) return;
-    
-    const newReq: SwapRequest = {
-        id: Date.now().toString(),
-        ministryId,
-        requesterName: currentUser.name,
-        requesterId: currentUser.id,
-        role,
-        eventIso,
-        eventTitle,
-        status: 'pending',
-        createdAt: new Date().toISOString()
-    };
-    
-    const success = await createSwapRequest(ministryId, newReq);
-    if (success) {
-        setSwapRequests(prev => [newReq, ...prev]);
-        addToast("Solicitação de troca enviada ao mural!", "success");
-    } else {
-        addToast("Erro ao criar solicitação.", "error");
-    }
-  };
-
-  const handleAcceptSwap = async (reqId: string) => {
-     if (!ministryId || !currentUser) return;
-     
-     const confirm = window.confirm("Você tem certeza que deseja assumir esta escala?");
-     if (!confirm) return;
-
-     const result = await performSwap(ministryId, reqId, currentUser.name, currentUser.id);
-     
-     if (result.success) {
-         addToast(result.message, "success");
-         // Refresh data (schedule and requests)
-         const updatedRequests = await loadData<SwapRequest[]>(ministryId, 'swap_requests_v1', []);
-         const updatedSchedule = await loadData<ScheduleMap>(ministryId, `schedule_${currentMonth}`, {});
-         
-         setSwapRequests(updatedRequests);
-         setSchedule(updatedSchedule);
-     } else {
-         addToast(result.message, "error");
-     }
-  };
-
-  const handleShareNextEvent = () => {
-    if (!nextEvent) {
-        addToast("Nenhum evento próximo encontrado para compartilhar.", "warning");
-        return;
-    }
-
-    let message = `*ESCALA - ${nextEvent.title.toUpperCase()}*\n`;
-    message += `📅 Data: ${nextEvent.dateDisplay}\n`;
-    const time = nextEvent.iso.split('T')[1];
-    message += `⏰ Horário: ${time}\n\n`;
-    message += `*EQUIPE ESCALADA:*\n`;
-
-    let hasMembers = false;
-    roles.forEach(role => {
-        if (ministryId === 'louvor' && role === 'Vocal') {
-            [1, 2, 3, 4, 5].forEach(i => {
-                const key = `${nextEvent.iso}_Vocal_${i}`;
-                const memberName = schedule[key];
-                if (memberName) {
-                    message += `▪️ *Vocal ${i}:* ${memberName}\n`;
-                    hasMembers = true;
-                }
-            });
-        } else {
-            const key = `${nextEvent.iso}_${role}`;
-            const memberName = schedule[key];
-            if (memberName) {
-                message += `▪️ *${role}:* ${memberName}\n`;
-                hasMembers = true;
-            }
-        }
-    });
-
-    if (!hasMembers) message += `_(Ninguém escalado ainda)_\n`;
-    message += `\n✅ Confirme sua presença no App!`;
-
-    const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
-  };
-
-  const handleSaveEventDetails = async (oldIso: string, newTitle: string, newTime: string) => {
-     if(!ministryId || !selectedEventDetails) return;
-     // Logic to update event... (omitted for brevity in this snippet as it's not the focus)
-     addToast("Edição de detalhes salva!", "success");
-     setSelectedEventDetails(null);
-  }
-
-  const handleSendGlobalAlert = async (title: string, message: string, type: 'info' | 'success' | 'warning' | 'alert') => {
+  const handleCreateAnnouncement = async (title: string, message: string, type: 'info' | 'success' | 'warning' | 'alert') => {
       if (!ministryId || !currentUser) return;
       
-      // 1. Enviar Notificação Push (Sininho e Celular)
-      await sendNotification(ministryId, {
-          title,
-          message,
-          type
-      });
-      const notifs = await loadData<AppNotification[]>(ministryId, 'notifications_v1', []);
-      setNotifications(notifs);
-
-      // 2. Criar Comunicado (Card no Dashboard)
-      await createAnnouncement(ministryId, {
-          title,
-          message,
-          type
-      }, currentUser.name);
+      const success = await createAnnouncement(ministryId, { title, message, type }, currentUser.name);
       
-      const updatedAnnouncements = await loadData<Announcement[]>(ministryId, 'announcements_v1', []);
-      setAnnouncements(updatedAnnouncements);
+      if (success) {
+          // Recarregar comunicados
+          const updated = await loadData<Announcement[]>(ministryId, 'announcements_v1', []);
+          setAnnouncements(updated);
+          
+          // Enviar Notificação Push para todos
+          await sendNotification(ministryId, {
+              title: `Novo Aviso: ${title}`,
+              message: message,
+              type: type
+          });
+      }
   };
 
-  const handleMarkAnnouncementRead = async (announcementId: string) => {
+  const handleMarkAnnouncementRead = async (id: string) => {
       if (!ministryId || !currentUser) return;
-      
-      const updatedList = await markAnnouncementRead(ministryId, announcementId, currentUser);
-      setAnnouncements(updatedList);
-      addToast("Marcado como ciente.", "success");
+      const updated = await markAnnouncementRead(ministryId, id, currentUser);
+      setAnnouncements(updated);
   };
 
-  const handleSaveSettings = async (newName: string) => {
-      if (!ministryId) return;
-      setCustomTitle(newName);
-      await saveData(ministryId, 'ministry_config', { displayName: newName });
-      addToast("Configurações salvas com sucesso!", "success");
-  }
+  const handleToggleAnnouncementLike = async (id: string) => {
+      if (!ministryId || !currentUser) return;
+      const updated = await toggleAnnouncementLike(ministryId, id, currentUser);
+      setAnnouncements(updated);
+  };
 
-  // --- RENDER ---
-  const renderDashboard = () => {
-    // Filtrar comunicados visíveis
-    const visibleAnnouncements = announcements.filter(announcement => {
-        if (!currentUser) return false;
-        // Admins veem tudo
-        if (currentUser.role === 'admin') return true;
-        // Membros veem apenas não lidos
-        const hasRead = announcement.readBy.some(r => r.userId === currentUser.id);
-        return !hasRead;
-    });
+  const handleLogout = async () => {
+    await logout();
+    setCurrentUser(null);
+    setMinistryId(null);
+  };
 
+  // --- RENDER CONTENT ---
+
+  // Loading Screen
+  if (sessionLoading) {
     return (
-    <div className="space-y-6 animate-fade-in">
-       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-         <div>
-            <h2 className="text-2xl font-bold text-zinc-800 dark:text-white">
-              Olá, {currentUser?.name.split(' ')[0]} 👋
-            </h2>
-            <p className="text-zinc-500 text-sm mt-1">
-               Bem-vindo ao painel de controle do {getMinistryTitle(ministryId)}.
-            </p>
-         </div>
-       </div>
+      <div className="flex h-screen items-center justify-center bg-zinc-950">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
 
-       {/* ANNOUNCEMENT CARDS - Só renderiza se houver itens visíveis */}
-       {visibleAnnouncements.length > 0 && (
-           <div className="space-y-4">
-               {visibleAnnouncements.map(announcement => (
-                   <AnnouncementCard 
-                       key={announcement.id}
-                       announcement={announcement}
-                       currentUser={currentUser!}
-                       onMarkRead={handleMarkAnnouncementRead}
-                   />
-               ))}
-           </div>
-       )}
+  // Login Screen
+  if (!currentUser) {
+    return <LoginScreen onLoginSuccess={() => window.location.reload()} />;
+  }
 
-        {/* BIRTHDAY CARD - Mostra Aniversariantes do mês atual */}
-        <BirthdayCard 
-          members={registeredMembers} 
-          currentMonthIso={currentMonth} 
+  // Main App Content (Removed ToastProvider from here)
+  return (
+    <div className="bg-zinc-50 dark:bg-zinc-950 min-h-screen text-zinc-900 dark:text-zinc-100 transition-colors duration-300">
+        <InstallBanner 
+            isVisible={showInstallBanner} 
+            onInstall={handleInstallApp} 
+            onDismiss={handleDismissBanner}
+            appName="Gestão Escala OBPC"
+        />
+        <InstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />
+        
+        <DashboardLayout 
+          sidebarOpen={sidebarOpen} 
+          setSidebarOpen={setSidebarOpen}
+          theme={theme}
+          toggleTheme={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
+          onLogout={handleLogout}
+          title={getMinistryTitle(ministryId)}
+          isConnected={isConnected}
+          currentUser={currentUser}
+          currentTab={currentTab}
+          onTabChange={setCurrentTab}
+          mainNavItems={MAIN_NAV_ITEMS}
+          managementNavItems={MANAGEMENT_NAV_ITEMS}
+          notifications={notifications}
+          onNotificationsUpdate={setNotifications}
+          onInstall={!isStandalone ? handleInstallApp : undefined}
+          isStandalone={isStandalone}
+          onSwitchMinistry={handleSwitchMinistry}
+          onOpenJoinMinistry={() => setJoinMinistryModalOpen(true)}
+        >
+          {/* DASHBOARD VIEW */}
+          {currentTab === 'dashboard' && (
+            <div className="space-y-8 pb-20 animate-fade-in">
+              {/* Comunicados (Cards no Topo) */}
+              {announcements.length > 0 && (
+                  (() => {
+                      const visibleAnnouncements = announcements.filter(a => {
+                          const hasRead = a.readBy.some(r => r.userId === currentUser.id);
+                          const isAdmin = currentUser.role === 'admin';
+                          // Mostrar se não leu OU se é admin (para gerenciar)
+                          return !hasRead || isAdmin;
+                      });
+
+                      if (visibleAnnouncements.length === 0) return null;
+
+                      return (
+                          <div className="space-y-4">
+                              {visibleAnnouncements.map(announcement => (
+                                  <AnnouncementCard 
+                                      key={announcement.id} 
+                                      announcement={announcement} 
+                                      currentUser={currentUser}
+                                      onMarkRead={handleMarkAnnouncementRead}
+                                      onToggleLike={handleToggleAnnouncementLike}
+                                  />
+                              ))}
+                          </div>
+                      );
+                  })()
+              )}
+
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-6">
+                <div>
+                  <h2 className="text-3xl font-bold text-zinc-900 dark:text-white tracking-tight">
+                    Escala de {getMonthName(currentMonth)}
+                  </h2>
+                  <p className="text-zinc-500 dark:text-zinc-400 mt-1">
+                    Gerencie a programação e confira a disponibilidade da equipe.
+                  </p>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                   {currentUser.role === 'admin' && (
+                       <ToolsMenu 
+                          onExportIndividual={(member) => {
+                             const doc = new jsPDF();
+                             const memberEvents = visibleEvents.filter(evt => 
+                               roles.some(r => schedule[`${evt.iso}_${r}`] === member)
+                             );
+                             
+                             doc.text(`Escala Individual - ${member}`, 14, 15);
+                             doc.text(`Mês: ${getMonthName(currentMonth)}`, 14, 22);
+                             
+                             autoTable(doc, {
+                               startY: 30,
+                               head: [['Data', 'Evento', 'Função']],
+                               body: memberEvents.map(evt => {
+                                  const myRoles = roles.filter(r => schedule[`${evt.iso}_${r}`] === member);
+                                  return [evt.dateDisplay, evt.title, myRoles.join(', ')];
+                                })
+                             });
+                             doc.save(`escala_${member}_${currentMonth}.pdf`);
+                          }}
+                          onExportFull={() => {
+                             const doc = new jsPDF('l', 'mm', 'a4');
+                             doc.text(`Escala Completa - ${getMonthName(currentMonth)}`, 14, 15);
+                             
+                             autoTable(doc, {
+                                startY: 25,
+                                head: [['Evento', ...roles]],
+                                body: visibleEvents.map(evt => [
+                                   `${evt.dateDisplay} - ${evt.title}`,
+                                   ...roles.map(r => schedule[`${evt.iso}_${r}`] || '-')
+                                ]),
+                                styles: { fontSize: 8 },
+                                headStyles: { fillColor: [66, 133, 244] }
+                             });
+                             doc.save(`escala_completa_${currentMonth}.pdf`);
+                          }}
+                          onWhatsApp={() => {
+                             let text = `*ESCALA ${getMonthName(currentMonth).toUpperCase()}*\n\n`;
+                             visibleEvents.forEach(evt => {
+                                text += `*${evt.dateDisplay} - ${evt.title}*\n`;
+                                roles.forEach(r => {
+                                   const member = schedule[`${evt.iso}_${r}`];
+                                   if (member) text += `> ${r}: ${member}\n`;
+                                });
+                                text += '\n';
+                             });
+                             const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+                             window.open(url, '_blank');
+                          }}
+                          onCSV={() => {
+                             let csv = `Data,Evento,${roles.join(',')}\n`;
+                             visibleEvents.forEach(evt => {
+                                const row = [
+                                   evt.dateDisplay,
+                                   evt.title,
+                                   ...roles.map(r => schedule[`${evt.iso}_${r}`] || '')
+                                ];
+                                csv += row.join(',') + '\n';
+                             });
+                             const blob = new Blob([csv], { type: 'text/csv' });
+                             const url = window.URL.createObjectURL(blob);
+                             const a = document.createElement('a');
+                             a.href = url;
+                             a.download = `escala_${currentMonth}.csv`;
+                             a.click();
+                          }}
+                          onImportCSV={() => {}}
+                          onClearMonth={async () => {
+                             if (confirm("ATENÇÃO: Isso apagará toda a escala deste mês. Continuar?")) {
+                                const newSchedule = { ...schedule };
+                                Object.keys(newSchedule).forEach(k => {
+                                   if (k.startsWith(currentMonth)) delete newSchedule[k];
+                                });
+                                setSchedule(newSchedule);
+                                if (ministryId) await saveData(ministryId, `schedule_${currentMonth}`, newSchedule);
+                                addToast("Mês limpo com sucesso.", "success");
+                             }
+                          }}
+                          allMembers={allMembersList}
+                       />
+                   )}
+                   
+                   {/* Month Navigation */}
+                   <div className="flex items-center gap-1 bg-white dark:bg-zinc-800 p-1 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                      <button 
+                        onClick={() => {
+                           const [y, m] = currentMonth.split('-').map(Number);
+                           const prev = new Date(y, m - 2, 1).toISOString().slice(0, 7);
+                           setCurrentMonth(prev);
+                        }}
+                        className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md text-zinc-500"
+                      >
+                        ←
+                      </button>
+                      <span className="text-sm font-bold w-24 text-center">{currentMonth}</span>
+                      <button 
+                        onClick={() => {
+                           const [y, m] = currentMonth.split('-').map(Number);
+                           const next = new Date(y, m, 1).toISOString().slice(0, 7);
+                           setCurrentMonth(next);
+                        }}
+                        className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md text-zinc-500"
+                      >
+                        →
+                      </button>
+                   </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                 {/* Main Table */}
+                 <div className="lg:col-span-2 space-y-6">
+                    <BirthdayCard members={registeredMembers} currentMonthIso={currentMonth} />
+                    
+                    <NextEventCard 
+                        event={nextEvent} 
+                        schedule={schedule} 
+                        attendance={attendance} 
+                        roles={roles}
+                        onConfirm={handleAttendanceToggle}
+                        ministryId={ministryId}
+                        currentUser={currentUser}
+                    />
+
+                    <ScheduleTable 
+                      events={visibleEvents}
+                      roles={roles}
+                      schedule={schedule}
+                      attendance={attendance}
+                      availability={availability}
+                      members={members}
+                      allMembers={allMembersList}
+                      scheduleIssues={scheduleIssues}
+                      globalConflicts={globalConflicts}
+                      onCellChange={handleCellChange}
+                      onAttendanceToggle={handleAttendanceToggle}
+                      onDeleteEvent={async (iso) => {
+                          if (confirm("Ocultar este evento da escala?")) {
+                              const newIgnored = [...ignoredEvents, iso];
+                              setIgnoredEvents(newIgnored);
+                              if (ministryId) await saveData(ministryId, `ignored_events_${currentMonth}`, newIgnored);
+                          }
+                      }}
+                      memberStats={memberStats}
+                      ministryId={ministryId}
+                    />
+                 </div>
+
+                 {/* Sidebar Widgets (Desktop) */}
+                 <div className="space-y-6">
+                    <div className="bg-white dark:bg-zinc-800 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                       <h3 className="text-xs font-bold text-zinc-500 uppercase mb-4 tracking-wider">Estatísticas ({getMonthName(currentMonth)})</h3>
+                       <div className="space-y-3">
+                          {Object.entries(memberStats)
+                             .sort((a, b) => (b[1] as number) - (a[1] as number))
+                             .slice(0, 5) // Top 5
+                             .map(([name, count]) => (
+                                <div key={name} className="flex items-center justify-between text-sm">
+                                   <div className="flex items-center gap-2">
+                                      <div className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-600 dark:text-zinc-300">
+                                         {name.charAt(0)}
+                                      </div>
+                                      <span className="font-medium">{name}</span>
+                                   </div>
+                                   <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-0.5 rounded-md text-xs font-bold">{count}x</span>
+                                </div>
+                             ))
+                          }
+                          {Object.keys(memberStats).length === 0 && <p className="text-zinc-400 text-sm italic text-center py-4">Nenhum dado ainda.</p>}
+                       </div>
+                    </div>
+                 </div>
+              </div>
+            </div>
+          )}
+
+          {currentTab === 'calendar' && (
+             <div className="animate-fade-in">
+                <CalendarGrid 
+                    currentMonth={currentMonth} 
+                    events={visibleEvents} 
+                    schedule={schedule} 
+                    roles={roles}
+                    onEventClick={(evtData) => setSelectedEventDetails(evtData)}
+                />
+             </div>
+          )}
+
+          {currentTab === 'availability' && (
+             <AvailabilityScreen 
+                availability={availability} 
+                setAvailability={setAvailability}
+                allMembersList={allMembersList}
+                currentMonth={currentMonth}
+                onMonthChange={setCurrentMonth}
+                currentUser={currentUser}
+                onSaveAvailability={async (member, dates) => {
+                    if (!ministryId) return;
+                    const newAvail = { ...availability, [member]: dates };
+                    setAvailability(newAvail);
+                    await saveData(ministryId, 'availability_v1', newAvail);
+                    
+                    // Notificar Admin via Push
+                    const count = dates.filter(d => d.startsWith(currentMonth)).length;
+                    await sendNotification(ministryId, {
+                        type: 'info',
+                        title: 'Disponibilidade Atualizada',
+                        message: `${member} informou disponibilidade para ${count} dias em ${getMonthName(currentMonth)}.`,
+                        actionLink: 'availability-report'
+                    });
+                }}
+             />
+          )}
+
+          {currentTab === 'swaps' && currentUser && (
+              <SwapRequestsScreen
+                  schedule={schedule}
+                  currentUser={currentUser}
+                  requests={swapRequests}
+                  visibleEvents={visibleEvents}
+                  onCreateRequest={async (role, iso, title) => {
+                      if (!ministryId) return;
+                      const newReq: SwapRequest = {
+                          id: Date.now().toString(),
+                          ministryId,
+                          requesterName: currentUser.name,
+                          requesterId: currentUser.id,
+                          role,
+                          eventIso: iso,
+                          eventTitle: title,
+                          status: 'pending',
+                          createdAt: new Date().toISOString()
+                      };
+                      const success = await createSwapRequest(ministryId, newReq);
+                      if (success) {
+                          setSwapRequests([newReq, ...swapRequests]);
+                          addToast("Solicitação de troca criada!", "success");
+                          
+                          // Notificar todos
+                          await sendNotification(ministryId, {
+                              type: 'warning',
+                              title: 'Pedido de Troca',
+                              message: `${currentUser.name} solicitou troca para ${title} (${role}).`,
+                              actionLink: 'swaps'
+                          });
+                      }
+                  }}
+                  onAcceptRequest={async (reqId) => {
+                      if (!ministryId) return;
+                      const result = await performSwap(ministryId, reqId, currentUser.name, currentUser.id);
+                      if (result.success) {
+                          addToast(result.message, "success");
+                          // Reload data to reflect swap
+                          loadAll(ministryId);
+                      } else {
+                          addToast(result.message, "error");
+                      }
+                  }}
+              />
+          )}
+
+          {currentTab === 'repertoire' && (
+              <RepertoireScreen 
+                  repertoire={repertoire} 
+                  setRepertoire={async (items) => {
+                      // Members generally shouldn't edit, but assuming logic is handled inside
+                      setRepertoire(items);
+                  }}
+                  currentUser={currentUser}
+                  mode="view"
+              />
+          )}
+
+          {/* MANAGEMENT TABS (Admin Only) */}
+          {currentUser.role === 'admin' && (
+              <>
+                {currentTab === 'editor' && (
+                    <div className="space-y-6 animate-fade-in">
+                        <div className="flex gap-4 mb-4">
+                            <button onClick={() => setEventsModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg font-bold text-sm hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"><Clock size={16}/> Gerenciar Eventos</button>
+                            <button onClick={() => setAvailModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg font-bold text-sm hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"><Shield size={16}/> Gerenciar Indisponibilidade</button>
+                            <button onClick={() => setRolesModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg font-bold text-sm hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"><Settings size={16}/> Configurar Funções</button>
+                        </div>
+                        <ScheduleTable 
+                            events={visibleEvents}
+                            roles={roles}
+                            schedule={schedule}
+                            attendance={attendance}
+                            availability={availability}
+                            members={members}
+                            allMembers={allMembersList}
+                            scheduleIssues={scheduleIssues}
+                            globalConflicts={globalConflicts}
+                            onCellChange={handleCellChange}
+                            onAttendanceToggle={handleAttendanceToggle}
+                            onDeleteEvent={() => {}}
+                            memberStats={memberStats}
+                            ministryId={ministryId}
+                        />
+                    </div>
+                )}
+
+                {currentTab === 'repertoire-manager' && (
+                    <RepertoireScreen 
+                        repertoire={repertoire} 
+                        setRepertoire={async (items) => {
+                            if (!ministryId) return;
+                            setRepertoire(items);
+                            await saveData('shared', 'repertoire_v1', items);
+                        }}
+                        currentUser={currentUser}
+                        mode="manage"
+                        onItemAdd={async (title) => {
+                            if (ministryId) {
+                                await sendNotification(ministryId, {
+                                    type: 'info',
+                                    title: 'Nova Música / Playlist',
+                                    message: `"${title}" foi adicionada ao repertório.`,
+                                    actionLink: 'repertoire'
+                                });
+                            }
+                        }}
+                    />
+                )}
+
+                {currentTab === 'availability-report' && (
+                    <AvailabilityReportScreen 
+                        availability={availability}
+                        registeredMembers={registeredMembers}
+                        membersMap={members}
+                        currentMonth={currentMonth}
+                        onMonthChange={setCurrentMonth}
+                        availableRoles={roles}
+                        onRefresh={() => loadAll(ministryId!)}
+                    />
+                )}
+
+                {currentTab === 'events' && (
+                    <EventsScreen 
+                        customEvents={customEvents} 
+                        setCustomEvents={async (evts) => {
+                            setCustomEvents(evts);
+                            if (ministryId) await saveData(ministryId, `events_${currentMonth}`, evts);
+                        }}
+                        currentMonth={currentMonth}
+                        onMonthChange={setCurrentMonth}
+                    />
+                )}
+
+                {currentTab === 'alerts' && (
+                    <AlertsManager onSend={handleCreateAnnouncement} />
+                )}
+
+                {currentTab === 'team' && (
+                    <div className="max-w-4xl mx-auto animate-fade-in">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-2xl font-bold">Membros e Equipe</h2>
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={16} />
+                                <input 
+                                    type="text" 
+                                    placeholder="Buscar membro..." 
+                                    value={memberSearch}
+                                    onChange={e => setMemberSearch(e.target.value)}
+                                    className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-9 pr-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none w-64"
+                                />
+                            </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {registeredMembers.filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase())).map(member => (
+                                <div key={member.id} className="bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex items-start gap-4">
+                                    {member.avatar_url ? (
+                                        <img src={member.avatar_url} alt={member.name} className="w-12 h-12 rounded-full object-cover border border-zinc-200 dark:border-zinc-600" />
+                                    ) : (
+                                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-zinc-200 to-zinc-300 dark:from-zinc-700 dark:to-zinc-600 flex items-center justify-center text-zinc-500 dark:text-zinc-300 font-bold text-lg">
+                                            {member.name.charAt(0).toUpperCase()}
+                                        </div>
+                                    )}
+                                    
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <h3 className="font-bold text-zinc-900 dark:text-zinc-100 truncate">{member.name}</h3>
+                                                <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 bg-zinc-100 dark:bg-zinc-700/50 px-2 py-0.5 rounded-full">
+                                                    {adminsList.includes(member.email || '') ? 'Administrador' : 'Membro'}
+                                                </span>
+                                            </div>
+                                            <div className="flex gap-1">
+                                                <button 
+                                                    onClick={() => {
+                                                        confirmAction(
+                                                            adminsList.includes(member.email || '') ? "Remover Admin" : "Tornar Admin",
+                                                            `Tem certeza que deseja ${adminsList.includes(member.email || '') ? 'remover' : 'conceder'} permissão de administrador para ${member.name}?`,
+                                                            async () => {
+                                                                if (ministryId && member.email) {
+                                                                    await toggleAdmin(ministryId, member.email);
+                                                                    await loadAll(ministryId); // Refresh lists
+                                                                    addToast("Permissões atualizadas.", "success");
+                                                                }
+                                                            }
+                                                        );
+                                                    }}
+                                                    className={`p-2 rounded-lg transition-colors ${adminsList.includes(member.email || '') ? 'bg-blue-100 text-blue-600 hover:bg-blue-200' : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200 hover:text-blue-500'}`}
+                                                    title="Alternar Admin"
+                                                >
+                                                    <ShieldCheck size={16} />
+                                                </button>
+                                                <button 
+                                                    onClick={() => {
+                                                        confirmAction("Excluir Membro", `Isso removerá ${member.name} de todas as escalas e registros deste ministério. Continuar?`, async () => {
+                                                            if (ministryId) {
+                                                                await deleteMember(ministryId, member.id, member.name);
+                                                                setRegisteredMembers(prev => prev.filter(m => m.id !== member.id));
+                                                                addToast("Membro removido.", "success");
+                                                            }
+                                                        });
+                                                    }}
+                                                    className="p-2 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
+                                                    title="Excluir da Equipe"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Visual Badges for Roles (Filtered by current ministry context) */}
+                                        <div className="flex flex-wrap gap-1 mt-2 mb-2">
+                                            {member.roles?.filter(r => roles.includes(r)).map(role => (
+                                                <span key={role} className="text-[10px] font-medium px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-300 border border-blue-100 dark:border-blue-800">
+                                                    {role}
+                                                </span>
+                                            ))}
+                                        </div>
+
+                                        <div className="space-y-1 mt-2">
+                                            {member.email && (
+                                                <div className="flex items-center gap-2 text-xs text-zinc-500">
+                                                    <Mail size={12} /> {member.email}
+                                                </div>
+                                            )}
+                                            {member.whatsapp && (
+                                                <div className="flex items-center gap-2 text-xs text-zinc-500">
+                                                    <Phone size={12} /> {member.whatsapp}
+                                                </div>
+                                            )}
+                                            {member.birthDate && (
+                                                <div className="flex items-center gap-2 text-xs text-zinc-500">
+                                                    <CalendarHeart size={12} className="text-pink-400" /> 
+                                                    {new Date(member.birthDate).toLocaleDateString('pt-BR', {day: 'numeric', month: 'long'})}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+              </>
+          )}
+
+          {currentTab === 'settings' && (
+              <SettingsScreen 
+                  initialTitle={customTitle || getMinistryTitle(ministryId)}
+                  ministryId={ministryId}
+                  theme={theme}
+                  onToggleTheme={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
+                  onSaveTitle={async (newTitle) => {
+                      if (!ministryId) return;
+                      setCustomTitle(newTitle);
+                      await saveData(ministryId, 'ministry_config', { displayName: newTitle });
+                      addToast("Título atualizado!", "success");
+                  }}
+                  onAnnounceUpdate={currentUser?.role === 'admin' ? async () => {
+                      if (!ministryId) return;
+                      // Dispara push notification de sistema
+                      await sendNotification(ministryId, {
+                          type: 'info',
+                          title: 'Nova Atualização Disponível 🚀',
+                          message: 'Uma nova versão do App está disponível. Feche e abra o aplicativo para atualizar.',
+                      });
+                      addToast("Notificação de atualização enviada!", "success");
+                  } : undefined}
+                  onEnableNotifications={registerPushForAllMinistries}
+              />
+          )}
+
+          {currentTab === 'profile' && currentUser && (
+              <ProfileScreen 
+                  user={currentUser} 
+                  availableRoles={roles}
+                  onUpdateProfile={async (name, whatsapp, avatar, functions, birthDate) => {
+                      const result = await updateUserProfile(name, whatsapp, avatar, functions, birthDate);
+                      if (result.success) {
+                          setCurrentUser(prev => prev ? { ...prev, name, whatsapp, avatar_url: avatar, functions, birthDate } : null);
+                          addToast(result.message, "success");
+                      } else {
+                          addToast(result.message, "error");
+                      }
+                  }}
+              />
+          )}
+
+        </DashboardLayout>
+
+        {/* Modals */}
+        <ConfirmationModal 
+            isOpen={!!confirmationData} 
+            onClose={() => setConfirmationData(null)} 
+            onConfirm={confirmationData?.onConfirm}
+            data={confirmationData}
         />
 
-       {nextEvent ? (
-         <NextEventCard 
-            event={nextEvent}
-            schedule={schedule}
-            attendance={attendance}
-            roles={roles}
-            ministryId={ministryId}
-            currentUser={currentUser}
-            onConfirm={(key) => {
-                handleAttendanceToggle(key);
-                addToast("Presença confirmada! Bom serviço.", "success");
+        <EventsModal 
+            isOpen={eventsModalOpen} 
+            onClose={() => setEventsModalOpen(false)}
+            events={customEvents}
+            hiddenEvents={hiddenEventsList}
+            onAdd={async (evt) => {
+                const newEvts = [...customEvents, evt];
+                setCustomEvents(newEvts);
+                if (ministryId) await saveData(ministryId, `events_${currentMonth}`, newEvts);
             }}
-         />
-       ) : (
-         <div className="p-6 rounded-2xl bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-500/20 text-center mb-6">
-            <h3 className="text-lg font-bold text-blue-700 dark:text-blue-300">Tudo tranquilo!</h3>
-            <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">Nenhum evento próximo agendado para os próximos dias.</p>
-         </div>
-       )}
+            onRemove={async (id) => {
+                const newEvts = customEvents.filter(e => e.id !== id);
+                setCustomEvents(newEvts);
+                if (ministryId) await saveData(ministryId, `events_${currentMonth}`, newEvts);
+            }}
+            onRestore={async (iso) => {
+                const newIgnored = ignoredEvents.filter(i => i !== iso);
+                setIgnoredEvents(newIgnored);
+                if (ministryId) await saveData(ministryId, `ignored_events_${currentMonth}`, newIgnored);
+            }}
+        />
 
-       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-         <div onClick={() => setCurrentTab('calendar')} className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md transition-all cursor-pointer group">
-            <div className="flex justify-between items-start mb-4">
-              <div className="p-3 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform">
-                 <CalendarIcon size={24} />
-              </div>
-              <span className="text-xs font-bold text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors">Visualizar</span>
-            </div>
-            <h3 className="text-lg font-bold text-zinc-800 dark:text-white">Escala do Mês</h3>
-            <p className="text-sm text-zinc-500 mt-1">Veja quem está escalado em {getMonthName(currentMonth)}.</p>
-         </div>
+        <AvailabilityModal 
+            isOpen={availModalOpen} 
+            onClose={() => setAvailModalOpen(false)}
+            members={allMembersList}
+            availability={availability}
+            currentMonth={currentMonth}
+            onUpdate={async (member, dates) => {
+                if (!ministryId) return;
+                const newAvail = { ...availability, [member]: dates };
+                setAvailability(newAvail);
+                await saveData(ministryId, 'availability_v1', newAvail);
+            }}
+        />
 
-         <div onClick={() => setCurrentTab('availability')} className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md transition-all cursor-pointer group">
-            <div className="flex justify-between items-start mb-4">
-              <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-xl text-green-600 dark:text-green-400 group-hover:scale-110 transition-transform">
-                 <Shield size={24} />
-              </div>
-              <span className="text-xs font-bold text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors">Editar</span>
-            </div>
-            <h3 className="text-lg font-bold text-zinc-800 dark:text-white">Minha Disponibilidade</h3>
-            <p className="text-sm text-zinc-500 mt-1">Informe os dias que você pode servir.</p>
-         </div>
-       </div>
+        <RolesModal 
+            isOpen={rolesModalOpen} 
+            onClose={() => setRolesModalOpen(false)}
+            roles={roles}
+            onUpdate={async (newRoles) => {
+                if (!ministryId) return;
+                setRoles(newRoles);
+                await saveData(ministryId, 'functions_config', newRoles);
+            }}
+        />
+
+        <EventDetailsModal
+            isOpen={!!selectedEventDetails}
+            onClose={() => setSelectedEventDetails(null)}
+            event={selectedEventDetails}
+            schedule={schedule}
+            roles={roles}
+            currentUser={currentUser}
+            ministryId={ministryId}
+            onSave={async (iso, newTitle, newTime) => {
+                if (!ministryId) return;
+                
+                // If it's a custom event, update it
+                const customEvt = customEvents.find(e => e.date === iso.split('T')[0] && e.time === iso.split('T')[1]);
+                if (customEvt) {
+                    const newEvts = customEvents.map(e => e.id === customEvt.id ? { ...e, title: newTitle, time: newTime } : e);
+                    setCustomEvents(newEvts);
+                    await saveData(ministryId, `events_${currentMonth}`, newEvts);
+                } else {
+                    // Could handle system events override if needed
+                }
+                setSelectedEventDetails(null);
+                addToast("Evento atualizado.", "success");
+            }}
+            onSwapRequest={async (role, iso, title) => {
+                if (!ministryId || !currentUser) return;
+                const newReq: SwapRequest = {
+                    id: Date.now().toString(),
+                    ministryId,
+                    requesterName: currentUser.name,
+                    requesterId: currentUser.id,
+                    role,
+                    eventIso: iso,
+                    eventTitle: title,
+                    status: 'pending',
+                    createdAt: new Date().toISOString()
+                };
+                const success = await createSwapRequest(ministryId, newReq);
+                if (success) {
+                    setSwapRequests([newReq, ...swapRequests]);
+                    addToast("Solicitação de troca enviada ao mural!", "success");
+                    setSelectedEventDetails(null);
+                }
+            }}
+        />
+
+        <JoinMinistryModal 
+            isOpen={joinMinistryModalOpen}
+            onClose={() => setJoinMinistryModalOpen(false)}
+            onJoin={handleJoinMinistry}
+            alreadyJoined={currentUser?.allowedMinistries || []}
+        />
     </div>
   );
 };
 
-// Render Team Screen (Membros & Equipe) - Re-implementado com melhor visual e filtro de função
-const renderTeam = () => {
-  // Ordena a lista de membros alfabeticamente
-  const sortedMembers = [...registeredMembers].sort((a, b) => a.name.localeCompare(b.name));
-  
-  // Função para renderizar os Badges de Funções
-  const renderRoleBadges = (memberRoles: string[] | undefined) => {
-    if (!memberRoles || memberRoles.length === 0) return <span className="text-[10px] text-zinc-400 italic">Sem função</span>;
-    
-    // FILTRO IMPORTANTE: Mostra apenas funções que pertencem ao ministério atual
-    const visibleRoles = memberRoles.filter(r => roles.includes(r));
-
-    if (visibleRoles.length === 0) return <span className="text-[10px] text-zinc-400 italic">Sem função (neste ministério)</span>;
-
-    return (
-        <div className="flex flex-wrap gap-1 mt-1">
-            {visibleRoles.map((role, idx) => (
-                <span key={idx} className="text-[10px] px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded font-medium">
-                    {role}
-                </span>
-            ))}
-        </div>
-    );
-  };
-
-  return (
-      <div className="space-y-6 animate-fade-in max-w-5xl mx-auto">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
-              <div>
-                  <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                      <Users className="text-blue-500"/> Equipe e Membros
-                  </h2>
-                  <p className="text-zinc-500 text-sm mt-1">
-                      Gerencie quem faz parte do time e seus níveis de acesso.
-                  </p>
-              </div>
-              <button 
-                  onClick={handleRefreshList} 
-                  className="p-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-400 transition-colors"
-                  title="Atualizar Lista"
-              >
-                  <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
-              </button>
-          </div>
-
-          <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
-              <input 
-                  type="text" 
-                  placeholder="Buscar membro..."
-                  value={memberSearch}
-                  onChange={(e) => setMemberSearch(e.target.value)}
-                  className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl pl-10 pr-4 py-3 shadow-sm outline-none focus:ring-2 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
-              />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {sortedMembers
-                  .filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()))
-                  .map(member => {
-                      const isAdmin = adminsList.includes(member.email || '');
-                      const isMe = currentUser?.email === member.email;
-                      const hasContactInfo = member.email || member.whatsapp || member.birthDate;
-
-                      return (
-                          <div key={member.id} className="bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex items-start gap-4 group hover:border-blue-300 dark:hover:border-blue-700 transition-colors">
-                              {/* Avatar */}
-                              <div className="shrink-0">
-                                  {member.avatar_url ? (
-                                      <img src={member.avatar_url} alt={member.name} className="w-14 h-14 rounded-full object-cover border-2 border-zinc-100 dark:border-zinc-700" />
-                                  ) : (
-                                      <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-blue-500/20">
-                                          {member.name.charAt(0).toUpperCase()}
-                                      </div>
-                                  )}
-                              </div>
-
-                              {/* Info */}
-                              <div className="flex-1 min-w-0">
-                                  <div className="flex justify-between items-start">
-                                      <div>
-                                          <h3 className="font-bold text-zinc-800 dark:text-white truncate text-lg leading-tight">
-                                              {member.name}
-                                          </h3>
-                                          {/* Exibição de Cargo (Admin/Membro) com Ícone */}
-                                          <div className="flex items-center gap-1.5 mt-1 mb-2">
-                                              {isAdmin ? (
-                                                  <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full border border-blue-100 dark:border-blue-800">
-                                                      <span title="Administrador"><ShieldCheck size={12}/></span> Administrador
-                                                  </span>
-                                              ) : (
-                                                  <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 bg-zinc-100 dark:bg-zinc-700 px-2 py-0.5 rounded-full">
-                                                      Membro
-                                                  </span>
-                                              )}
-                                          </div>
-                                          
-                                          {/* Exibição das Funções (Badges) */}
-                                          {renderRoleBadges(member.roles)}
-                                      </div>
-                                  </div>
-
-                                  {/* Contact Details (Visual List) */}
-                                  <div className="mt-4 space-y-1.5">
-                                      {member.email && (
-                                          <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400 truncate">
-                                              <Mail size={14} className="text-zinc-400 shrink-0"/>
-                                              <span className="truncate">{member.email}</span>
-                                          </div>
-                                      )}
-                                      {member.whatsapp && (
-                                          <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
-                                              <Smartphone size={14} className="text-zinc-400 shrink-0"/>
-                                              <span>{member.whatsapp}</span>
-                                          </div>
-                                      )}
-                                      {member.birthDate && (
-                                          <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
-                                              <CalendarHeart size={14} className="text-pink-400 shrink-0"/>
-                                              <span>
-                                                  {new Date(member.birthDate).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', timeZone: 'UTC' })}
-                                              </span>
-                                          </div>
-                                      )}
-                                      
-                                      {!hasContactInfo && (
-                                          <p className="text-[10px] text-zinc-400 italic mt-2">Sem informações de contato.</p>
-                                      )}
-                                  </div>
-                              </div>
-
-                              {/* Actions Column */}
-                              <div className="flex flex-col gap-2">
-                                   {currentUser?.role === 'admin' && !isMe && (
-                                       <>
-                                           <button 
-                                               onClick={() => handleToggleAdmin(member.email || '', member.name)}
-                                               className={`p-2 rounded-lg transition-colors ${isAdmin ? 'bg-blue-100 text-blue-600 hover:bg-blue-200' : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200 dark:bg-zinc-700 dark:text-zinc-300'}`}
-                                               title={isAdmin ? "Remover Admin" : "Tornar Admin"}
-                                           >
-                                               <ShieldCheck size={18} />
-                                           </button>
-                                           <button 
-                                               onClick={() => handleDeleteMember(member.id, member.name)}
-                                               className="p-2 bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 rounded-lg transition-colors"
-                                               title="Excluir Membro"
-                                           >
-                                               <Trash2 size={18} />
-                                           </button>
-                                       </>
-                                   )}
-                              </div>
-                          </div>
-                      );
-                  })}
-          </div>
-      </div>
-  );
-};
-
-// --- RENDER CONTENT SWITCHER ---
-const renderContent = () => {
-  if (sessionLoading) {
-    return <div className="h-screen flex items-center justify-center bg-zinc-950 text-white">Carregando...</div>;
-  }
-  
-  if (!currentUser) {
-    return <LoginScreen isLoading={loading} />;
-  }
-
-  // Dashboard Tab
-  if (currentTab === 'dashboard') {
-    return renderDashboard();
-  }
-
-  // Calendar Tab
-  if (currentTab === 'calendar') {
-     return (
-        <div className="space-y-6 animate-fade-in max-w-4xl mx-auto">
-           <div className="flex justify-between items-center border-b border-zinc-200 dark:border-zinc-700 pb-4">
-              <div>
-                <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                  <CalendarIcon className="text-indigo-500"/> Calendário
-                </h2>
-                <p className="text-zinc-500 text-sm mt-1">
-                   Visão geral da escala de {getMonthName(currentMonth)}.
-                </p>
-              </div>
-
-               {/* Month Selector Reuse */}
-              <div className="flex items-center gap-4 bg-white dark:bg-zinc-800 p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm">
-                  <button onClick={() => {
-                      const prev = new Date(year, month - 2, 1);
-                      setCurrentMonth(prev.toISOString().slice(0, 7));
-                  }} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md">←</button>
-                  <div className="text-center min-w-[120px]">
-                      <span className="block text-xs font-medium text-zinc-500 uppercase">Referência</span>
-                      <span className="block text-sm font-bold text-zinc-900 dark:text-zinc-100">{getMonthName(currentMonth)}</span>
-                  </div>
-                  <button onClick={() => {
-                      const next = new Date(year, month, 1);
-                      setCurrentMonth(next.toISOString().slice(0, 7));
-                  }} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md">→</button>
-              </div>
-           </div>
-
-           <CalendarGrid 
-              currentMonth={currentMonth}
-              events={visibleEvents}
-              schedule={schedule}
-              roles={roles}
-              onEventClick={(evt) => {
-                  setSelectedEventDetails({ iso: evt.iso, title: evt.title, dateDisplay: evt.iso.split('T')[0].split('-').reverse().join('/') });
-              }}
-           />
-
-           <div className="mt-8">
-              <ScheduleTable 
-                events={visibleEvents}
-                roles={roles}
-                schedule={schedule}
-                attendance={attendance}
-                availability={availability}
-                members={members}
-                allMembers={allMembersList}
-                scheduleIssues={scheduleIssues}
-                globalConflicts={globalConflicts}
-                onCellChange={handleCellChange}
-                onAttendanceToggle={handleAttendanceToggle}
-                onDeleteEvent={handleDeleteEvent}
-                memberStats={memberStats}
-                ministryId={ministryId}
-              />
-           </div>
-        </div>
-     );
-  }
-
-  if (currentTab === 'availability') {
-    return (
-      <AvailabilityScreen 
-        availability={availability} 
-        setAvailability={setAvailability}
-        allMembersList={allMembersList}
-        currentMonth={currentMonth}
-        onMonthChange={setCurrentMonth}
-        currentUser={currentUser}
-        onSaveAvailability={handleSaveAvailability}
-      />
-    );
-  }
-
-  if (currentTab === 'profile') {
-    return (
-      <ProfileScreen 
-        user={currentUser}
-        onUpdateProfile={handleUpdateProfile}
-        availableRoles={roles}
-      />
-    );
-  }
-
-  if (currentTab === 'swaps') {
-      return (
-          <SwapRequestsScreen 
-              schedule={schedule}
-              currentUser={currentUser}
-              requests={swapRequests}
-              visibleEvents={visibleEvents}
-              onCreateRequest={handleCreateSwapRequest}
-              onAcceptRequest={handleAcceptSwap}
-              onCancelRequest={()=>{}}
-          />
-      );
-  }
-
-  if (currentTab === 'repertoire') {
-      return (
-          <RepertoireScreen 
-              repertoire={repertoire}
-              setRepertoire={async (newRep) => {
-                  setRepertoire(newRep);
-                  await saveData('shared', 'repertoire_v1', newRep);
-              }}
-              currentUser={currentUser}
-              mode='view'
-          />
-      );
-  }
-
-  // --- MANAGEMENT TABS (ADMIN ONLY) ---
-  if (currentUser.role === 'admin') {
-      if (currentTab === 'editor') {
-          return (
-            <div className="space-y-6 animate-fade-in max-w-6xl mx-auto">
-               <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
-                  <div>
-                    <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                      <Edit3 className="text-blue-500"/> Editor de Escala
-                    </h2>
-                    <p className="text-zinc-500 text-sm mt-1">
-                       Monte a escala oficial de {getMonthName(currentMonth)}.
-                    </p>
-                  </div>
-
-                   <div className="flex items-center gap-2 self-end">
-                       <ToolsMenu 
-                            allMembers={allMembersList}
-                            onExportIndividual={(m) => {
-                                const doc = new jsPDF();
-                                doc.text(`Escala: ${m}`, 10, 10);
-                                doc.save(`escala_${m}.pdf`);
-                            }}
-                            onExportFull={() => {
-                                const doc = new jsPDF();
-                                autoTable(doc, { html: 'table' });
-                                doc.save('escala_completa.pdf');
-                            }}
-                            onWhatsApp={handleShareNextEvent}
-                            onCSV={() => {}}
-                            onImportCSV={() => {}}
-                            onClearMonth={async () => {
-                                if(confirm("Limpar todo o mês?")) {
-                                    const newSch = {...schedule};
-                                    Object.keys(newSch).forEach(k => {
-                                        if(k.startsWith(currentMonth)) delete newSch[k];
-                                    });
-                                    setSchedule(newSch);
-                                    if (ministryId) await saveData(ministryId, `schedule_${currentMonth}`, newSch);
-                                }
-                            }}
-                       />
-
-                       <div className="flex items-center gap-4 bg-white dark:bg-zinc-800 p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm ml-2">
-                          <button onClick={() => {
-                              const prev = new Date(year, month - 2, 1);
-                              setCurrentMonth(prev.toISOString().slice(0, 7));
-                          }} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md">←</button>
-                          <div className="text-center min-w-[120px]">
-                              <span className="block text-xs font-medium text-zinc-500 uppercase">Referência</span>
-                              <span className="block text-sm font-bold text-zinc-900 dark:text-zinc-100">{getMonthName(currentMonth)}</span>
-                          </div>
-                          <button onClick={() => {
-                              const next = new Date(year, month, 1);
-                              setCurrentMonth(next.toISOString().slice(0, 7));
-                          }} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md">→</button>
-                      </div>
-                   </div>
-               </div>
-
-               <ScheduleTable 
-                  events={visibleEvents}
-                  roles={roles}
-                  schedule={schedule}
-                  attendance={attendance}
-                  availability={availability}
-                  members={members}
-                  allMembers={allMembersList}
-                  scheduleIssues={scheduleIssues}
-                  globalConflicts={globalConflicts}
-                  onCellChange={handleCellChange}
-                  onAttendanceToggle={handleAttendanceToggle}
-                  onDeleteEvent={handleDeleteEvent}
-                  memberStats={memberStats}
-                  ministryId={ministryId}
-               />
-               
-               <div className="flex gap-2 justify-center mt-6">
-                   <button onClick={() => setRolesModalOpen(true)} className="px-4 py-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg text-sm hover:bg-zinc-300 dark:hover:bg-zinc-700">Gerenciar Funções</button>
-                   <button onClick={() => setAvailModalOpen(true)} className="px-4 py-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg text-sm hover:bg-zinc-300 dark:hover:bg-zinc-700">Gerenciar Indisponibilidade</button>
-               </div>
-            </div>
-          );
-      }
-
-      if (currentTab === 'events') {
-          return (
-            <EventsScreen 
-               customEvents={customEvents} 
-               setCustomEvents={async (evts) => {
-                   setCustomEvents(evts);
-                   if (ministryId) await saveData(ministryId, `events_${currentMonth}`, evts);
-               }}
-               currentMonth={currentMonth}
-               onMonthChange={setCurrentMonth}
-            />
-          );
-      }
-
-      if (currentTab === 'team') {
-          return renderTeam();
-      }
-
-      if (currentTab === 'alerts') {
-          return <AlertsManager onSend={handleSendGlobalAlert} />;
-      }
-      
-      if (currentTab === 'settings') {
-          return (
-             <SettingsScreen 
-                initialTitle={customTitle}
-                ministryId={ministryId}
-                theme={theme}
-                onToggleTheme={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
-                onSaveTitle={handleSaveSettings}
-                onAnnounceUpdate={async () => {
-                    if (ministryId) {
-                        await sendNotification(ministryId, {
-                            type: 'alert',
-                            title: 'Atualização de Sistema',
-                            message: 'Uma nova versão do app está disponível com melhorias! Por favor, atualize a página ou reabra o app.',
-                        });
-                        addToast("Anúncio de atualização enviado.", "success");
-                    }
-                }}
-                onEnableNotifications={registerPushForAllMinistries}
-             />
-          );
-      }
-
-      if (currentTab === 'availability-report') {
-          return (
-              <AvailabilityReportScreen 
-                  availability={availability}
-                  registeredMembers={registeredMembers}
-                  membersMap={members}
-                  currentMonth={currentMonth}
-                  onMonthChange={setCurrentMonth}
-                  availableRoles={roles}
-                  onRefresh={handleReloadAvailability}
-              />
-          );
-      }
-
-      if (currentTab === 'repertoire-manager') {
-          return (
-              <RepertoireScreen 
-                  repertoire={repertoire}
-                  setRepertoire={async (newRep) => {
-                      setRepertoire(newRep);
-                      await saveData('shared', 'repertoire_v1', newRep);
-                  }}
-                  currentUser={currentUser}
-                  mode='manage'
-                  onItemAdd={async (title) => {
-                      if (ministryId) {
-                          await sendNotification(ministryId, {
-                              type: 'success',
-                              title: 'Novo Repertório',
-                              message: `A música/playlist "${title}" foi adicionada ao repertório.`,
-                              actionLink: 'repertoire'
-                          });
-                      }
-                  }}
-              />
-          );
-      }
-  }
-
-  // Fallback for non-admins trying to access admin tabs
-  return renderDashboard();
-};
-
-  return (
-    <DashboardLayout 
-      sidebarOpen={sidebarOpen} 
-      setSidebarOpen={setSidebarOpen} 
-      theme={theme} 
-      toggleTheme={() => setTheme(t => t === 'light' ? 'dark' : 'light')} 
-      onLogout={() => { logout(); setCurrentUser(null); }}
-      title={getMinistryTitle(ministryId)}
-      isConnected={isConnected}
-      currentUser={currentUser}
-      currentTab={currentTab}
-      onTabChange={setCurrentTab}
-      mainNavItems={MAIN_NAV_ITEMS}
-      managementNavItems={MANAGEMENT_NAV_ITEMS}
-      notifications={notifications}
-      onNotificationsUpdate={setNotifications}
-      onInstall={!isStandalone ? handleInstallApp : undefined}
-      isStandalone={isStandalone}
-      onSwitchMinistry={handleSwitchMinistry}
-      onOpenJoinMinistry={() => setJoinMinistryModalOpen(true)}
-    >
-      {renderContent()}
-
-      {/* Confirmation Modal */}
-      <ConfirmationModal 
-          isOpen={!!confirmationData}
-          onClose={() => setConfirmationData(null)}
-          onConfirm={() => {
-              if (confirmationData) {
-                  handleAttendanceToggle(confirmationData.key);
-                  setConfirmationData(null);
-                  addToast("Presença confirmada com sucesso!", "success");
-              }
-          }}
-          data={confirmationData}
-      />
-      
-      {/* Install Modal (iOS instructions or Manual Fallback) */}
-      <InstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />
-
-      {/* Install Banner (Bottom) - Only shows if event captured */}
-      <InstallBanner 
-          isVisible={showInstallBanner} 
-          onInstall={handleInstallApp} 
-          onDismiss={handleDismissBanner}
-          appName="Escala OBPC"
-      />
-
-      {/* Admin Modals */}
-      <EventsModal 
-          isOpen={eventsModalOpen} 
-          onClose={() => setEventsModalOpen(false)} 
-          events={customEvents} 
-          hiddenEvents={hiddenEventsList}
-          onAdd={async (e) => {
-              const newEvts = [...customEvents, e];
-              setCustomEvents(newEvts);
-              if (ministryId) await saveData(ministryId, `events_${currentMonth}`, newEvts);
-          }} 
-          onRemove={async (id) => {
-              const newEvts = customEvents.filter(ev => ev.id !== id);
-              setCustomEvents(newEvts);
-              if (ministryId) await saveData(ministryId, `events_${currentMonth}`, newEvts);
-          }}
-          onRestore={handleRestoreEvent}
-      />
-
-      <AvailabilityModal 
-          isOpen={availModalOpen} 
-          onClose={() => setAvailModalOpen(false)} 
-          members={allMembersList}
-          availability={availability}
-          currentMonth={currentMonth}
-          onUpdate={async (member, dates) => {
-               const newAvail = { ...availability, [member]: dates };
-               setAvailability(newAvail);
-               if (ministryId) await saveData(ministryId, 'availability_v1', newAvail);
-          }}
-      />
-      
-      <RolesModal 
-          isOpen={rolesModalOpen} 
-          onClose={() => setRolesModalOpen(false)} 
-          roles={roles}
-          onUpdate={async (newRoles) => {
-              setRoles(newRoles);
-              if (ministryId) await saveData(ministryId, 'functions_config', newRoles);
-          }}
-      />
-
-      {/* Join Ministry Modal */}
-      <JoinMinistryModal 
-          isOpen={joinMinistryModalOpen}
-          onClose={() => setJoinMinistryModalOpen(false)}
-          onJoin={handleJoinMinistry}
-          alreadyJoined={currentUser?.allowedMinistries || []}
-      />
-
-      {/* Event Details Modal (Calendar Click) */}
-      <EventDetailsModal 
-          isOpen={!!selectedEventDetails}
-          onClose={() => setSelectedEventDetails(null)}
-          event={selectedEventDetails}
-          schedule={schedule}
-          roles={roles}
-          onSave={handleSaveEventDetails}
-          onSwapRequest={handleCreateSwapRequest}
-          currentUser={currentUser}
-          ministryId={ministryId}
-      />
-
-    </DashboardLayout>
-  );
-};
-
-export default function App() {
+// Root Component wrapping content with Providers
+const App = () => {
   return (
     <ToastProvider>
       <AppContent />
     </ToastProvider>
   );
-}
+};
+
+export default App;

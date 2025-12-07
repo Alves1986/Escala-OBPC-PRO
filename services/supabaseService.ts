@@ -726,7 +726,7 @@ export const clearAllNotifications = async (ministryId: string): Promise<AppNoti
 
 // --- ANNOUNCEMENTS (CARDS) LOGIC ---
 
-export const createAnnouncement = async (ministryId: string, announcement: Omit<Announcement, 'id' | 'timestamp' | 'readBy' | 'author'>, authorName: string): Promise<boolean> => {
+export const createAnnouncement = async (ministryId: string, announcement: Omit<Announcement, 'id' | 'timestamp' | 'readBy' | 'author' | 'likedBy'>, authorName: string): Promise<boolean> => {
     if (!supabase || !ministryId) return false;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     const key = getStorageKey(cleanMid, 'announcements_v1');
@@ -739,6 +739,7 @@ export const createAnnouncement = async (ministryId: string, announcement: Omit<
             id: Date.now().toString(),
             timestamp: new Date().toISOString(),
             readBy: [],
+            likedBy: [], // Inicializa lista de curtidas
             author: authorName,
             ...announcement
         } as Announcement;
@@ -786,6 +787,50 @@ export const markAnnouncementRead = async (ministryId: string, announcementId: s
 
     } catch (e) {
         console.error("Erro ao marcar comunicado como lido", e);
+        return [];
+    }
+};
+
+export const toggleAnnouncementLike = async (ministryId: string, announcementId: string, user: User): Promise<Announcement[]> => {
+    if (!supabase || !ministryId || !user.id) return [];
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+    const key = getStorageKey(cleanMid, 'announcements_v1');
+
+    try {
+        const { data } = await supabase.from('app_storage').select('value').eq('key', key).single();
+        let list: Announcement[] = data?.value || [];
+
+        let updated = false;
+        list = list.map(a => {
+            if (a.id === announcementId) {
+                updated = true;
+                const likedList = a.likedBy || [];
+                const alreadyLiked = likedList.some(liker => liker.userId === user.id);
+                
+                if (alreadyLiked) {
+                    // Remover curtida
+                    return {
+                        ...a,
+                        likedBy: likedList.filter(liker => liker.userId !== user.id)
+                    };
+                } else {
+                    // Adicionar curtida
+                    return {
+                        ...a,
+                        likedBy: [...likedList, { userId: user.id!, name: user.name, timestamp: new Date().toISOString() }]
+                    };
+                }
+            }
+            return a;
+        });
+
+        if (updated) {
+            await supabase.from('app_storage').upsert({ key, value: list }, { onConflict: 'key' });
+        }
+        return list;
+
+    } catch (e) {
+        console.error("Erro ao curtir comunicado", e);
         return [];
     }
 };
