@@ -9,9 +9,10 @@ interface Props {
   setRepertoire: (items: RepertoireItem[]) => Promise<void>;
   currentUser: User | null;
   mode: 'view' | 'manage';
+  onItemAdd?: (title: string) => void;
 }
 
-export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, currentUser, mode }) => {
+export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, currentUser, mode, onItemAdd }) => {
   const { addToast, confirmAction } = useToast();
   
   // Form State
@@ -32,6 +33,17 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     const regExp = /[?&]list=([^#\&\?]+)/;
     const match = url.match(regExp);
     return match ? match[1] : null;
+  };
+
+  // Função para gerar gradiente baseado em string (para playlists)
+  const getGradient = (str: string) => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const c1 = Math.abs(hash % 360);
+    const c2 = (c1 + 40) % 360;
+    return `linear-gradient(135deg, hsl(${c1}, 70%, 60%), hsl(${c2}, 70%, 40%))`;
   };
 
   const handleAdd = async () => {
@@ -60,6 +72,11 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
 
     const newRepertoire = [newItem, ...repertoire];
     await setRepertoire(newRepertoire);
+    
+    // Trigger notification callback
+    if (onItemAdd) {
+        onItemAdd(title);
+    }
     
     setTitle("");
     setLink("");
@@ -187,10 +204,18 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                                               {thumbnailUrl ? (
                                                   <img src={thumbnailUrl} alt={item.title} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
                                               ) : (
-                                                  // Fallback para Playlist ou links sem thumb
-                                                  <div className="w-full h-full bg-gradient-to-br from-pink-600 to-purple-700 flex flex-col items-center justify-center text-white">
-                                                      <ListMusic size={32} className="mb-2 opacity-80"/>
-                                                      <span className="text-xs font-bold uppercase tracking-widest opacity-80">Playlist</span>
+                                                  // Fallback para Playlist ou links sem thumb com Arte Determinística
+                                                  <div 
+                                                    className="w-full h-full flex flex-col items-center justify-center text-white p-4 text-center relative"
+                                                    style={{ background: getGradient(item.title + item.id) }}
+                                                  >
+                                                      <div className="absolute inset-0 bg-black/20" />
+                                                      <div className="relative z-10">
+                                                          <ListMusic size={32} className="mb-2 opacity-90 mx-auto drop-shadow-md"/>
+                                                          <span className="text-xs font-bold uppercase tracking-widest opacity-90 drop-shadow-sm line-clamp-2">
+                                                              {item.title}
+                                                          </span>
+                                                      </div>
                                                   </div>
                                               )}
                                               
@@ -199,7 +224,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                                                       href={item.link} 
                                                       target="_blank" 
                                                       rel="noopener noreferrer"
-                                                      className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center text-white shadow-lg transform group-hover:scale-110 transition-transform"
+                                                      className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center text-white shadow-lg transform group-hover:scale-110 transition-transform z-20"
                                                   >
                                                       {isPlaylist ? <ListMusic size={24} /> : <PlayCircle size={28} fill="white" />}
                                                   </a>
@@ -208,7 +233,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                                               {mode === 'manage' && (
                                                   <button 
                                                       onClick={() => handleDelete(item.id)}
-                                                      className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                                                      className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100 z-30"
                                                       title="Excluir"
                                                   >
                                                       <Trash2 size={14} />

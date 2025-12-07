@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Settings, Save, Moon, Sun, BellRing, RefreshCw, FileText, Shield } from 'lucide-react';
+import { Settings, Save, Moon, Sun, BellRing, RefreshCw, FileText, Shield, Megaphone } from 'lucide-react';
 import { useToast } from './Toast';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 
@@ -10,9 +10,10 @@ interface Props {
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
   onSaveTitle: (newTitle: string) => Promise<void>;
+  onAnnounceUpdate?: () => Promise<void>;
 }
 
-export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, theme, onToggleTheme, onSaveTitle }) => {
+export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, theme, onToggleTheme, onSaveTitle, onAnnounceUpdate }) => {
   const [tempTitle, setTempTitle] = useState(initialTitle);
   const [legalDoc, setLegalDoc] = useState<LegalDocType>(null);
   const { addToast } = useToast();
@@ -149,7 +150,7 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
                      <span className="text-sm font-medium">Recarregar Aplicação (Hard Reload)</span>
                  </button>
                  
-                 <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-800/30 text-center">
+                 <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-800/30 text-center flex flex-col justify-center">
                      <p className="text-xs text-amber-800 dark:text-amber-200 mb-2">
                          Problemas com atualização?
                      </p>
@@ -166,6 +167,19 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
                          Limpar Cache do Service Worker
                      </button>
                  </div>
+
+                 {/* Botão de Anunciar Atualização (Apenas se a prop for passada, indicando Admin) */}
+                 {onAnnounceUpdate && (
+                     <div className="md:col-span-2 mt-2">
+                         <button 
+                             onClick={onAnnounceUpdate}
+                             className="w-full flex items-center justify-center gap-2 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 transition-colors"
+                         >
+                             <Megaphone size={18}/>
+                             <span className="text-sm font-bold">Anunciar Nova Versão do App</span>
+                         </button>
+                     </div>
+                 )}
              </div>
          </div>
     </div>

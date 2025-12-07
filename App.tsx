@@ -433,6 +433,55 @@ const AppContent = () => {
     }
   }, [ministryId, currentMonth]);
 
+  // --- DAILY SCHEDULE REMINDER (Notification) ---
+  useEffect(() => {
+      if (!currentUser || !nextEvent || !schedule) return;
+      
+      // Check if next event is TODAY
+      const eventDate = nextEvent.iso.split('T')[0];
+      const today = new Date().toISOString().split('T')[0];
+      
+      if (eventDate === today) {
+          // Check if current user is assigned to any role in this event
+          let isScheduled = false;
+          let myRole = '';
+
+          roles.forEach(role => {
+              if (ministryId === 'louvor' && role === 'Vocal') {
+                  [1, 2, 3, 4, 5].forEach(i => {
+                      const key = `${nextEvent.iso}_Vocal_${i}`;
+                      if (schedule[key] === currentUser.name) {
+                          isScheduled = true;
+                          myRole = `Vocal ${i}`;
+                      }
+                  });
+              } else {
+                  const key = `${nextEvent.iso}_${role}`;
+                  if (schedule[key] === currentUser.name) {
+                      isScheduled = true;
+                      myRole = role;
+                  }
+              }
+          });
+
+          if (isScheduled) {
+              // Send Local Browser Notification (if granted)
+              if (Notification.permission === 'granted') {
+                  // Use sessionStorage to ensure we only notify once per session
+                  const notifyKey = `notified_event_${nextEvent.iso}`;
+                  if (!sessionStorage.getItem(notifyKey)) {
+                      new Notification("Lembrete de Escala 📅", {
+                          body: `Olá ${currentUser.name.split(' ')[0]}, você está escalado hoje como ${myRole} no evento: ${nextEvent.title}. Bom serviço!`,
+                          icon: '/app-icon.png',
+                          tag: 'schedule-reminder'
+                      });
+                      sessionStorage.setItem(notifyKey, 'true');
+                  }
+              }
+          }
+      }
+  }, [currentUser, nextEvent, schedule, roles, ministryId]);
+
 
   // --- HANDLERS ---
   const handleCellChange = async (key: string, value: string) => {
@@ -550,6 +599,16 @@ const AppContent = () => {
       setAvailability(newAvail);
       // 2. Persist to Database immediately
       await saveData(ministryId, 'availability_v1', newAvail);
+      
+      // 3. Send Notification to Admins (via Broadcast channel - all users get it, filtered visually if needed, but push goes to all subscribed)
+      // Note: Idealmente, enviaríamos apenas para admins, mas o sistema de push atual é broadcast. 
+      // Vamos enviar uma notificação de "Info" que é útil.
+      await sendNotification(ministryId, {
+          type: 'info',
+          title: 'Disponibilidade Atualizada',
+          message: `${member} atualizou sua disponibilidade para ${getMonthName(currentMonth)}.`,
+          actionLink: 'availability-report'
+      });
   };
 
   const handleUpdateProfile = async (name: string, whatsapp: string, avatar_url?: string, functions?: string[], birthDate?: string) => {
@@ -1191,6 +1250,16 @@ const renderContent = () => {
                 theme={theme}
                 onToggleTheme={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
                 onSaveTitle={handleSaveSettings}
+                onAnnounceUpdate={async () => {
+                    if (ministryId) {
+                        await sendNotification(ministryId, {
+                            type: 'alert',
+                            title: 'Atualização de Sistema',
+                            message: 'Uma nova versão do app está disponível com melhorias! Por favor, atualize a página ou reabra o app.',
+                        });
+                        addToast("Anúncio de atualização enviado.", "success");
+                    }
+                }}
              />
           );
       }
@@ -1219,6 +1288,16 @@ const renderContent = () => {
                   }}
                   currentUser={currentUser}
                   mode='manage'
+                  onItemAdd={async (title) => {
+                      if (ministryId) {
+                          await sendNotification(ministryId, {
+                              type: 'success',
+                              title: 'Novo Repertório',
+                              message: `A música/playlist "${title}" foi adicionada ao repertório.`,
+                              actionLink: 'repertoire'
+                          });
+                      }
+                  }}
               />
           );
       }
