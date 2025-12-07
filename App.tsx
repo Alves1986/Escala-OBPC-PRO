@@ -381,8 +381,15 @@ const AppContent = () => {
       if (session?.user) {
         const metadata = session.user.user_metadata;
         const allowedMinistries = metadata.allowedMinistries || (metadata.ministryId ? [metadata.ministryId] : []);
-        // Default to first allowed or legacy
-        const cleanMid = allowedMinistries.length > 0 ? allowedMinistries[0].trim().toLowerCase().replace(/\s+/g, '-') : 'midia';
+        
+        // PERSISTENCE CHECK: Read from localStorage
+        const savedMid = localStorage.getItem('last_ministry_id');
+        let cleanMid = allowedMinistries.length > 0 ? allowedMinistries[0].trim().toLowerCase().replace(/\s+/g, '-') : 'midia';
+        
+        // If saved ID is valid and allowed, use it
+        if (savedMid && allowedMinistries.some((m: string) => m.trim().toLowerCase().replace(/\s+/g, '-') === savedMid)) {
+            cleanMid = savedMid;
+        }
         
         const user: User = {
            id: session.user.id,
@@ -409,7 +416,14 @@ const AppContent = () => {
       if (session?.user) {
         const metadata = session.user.user_metadata;
         const allowedMinistries = metadata.allowedMinistries || (metadata.ministryId ? [metadata.ministryId] : []);
-        const cleanMid = allowedMinistries.length > 0 ? allowedMinistries[0].trim().toLowerCase().replace(/\s+/g, '-') : 'midia';
+        
+        // PERSISTENCE CHECK: Read from localStorage on update too
+        const savedMid = localStorage.getItem('last_ministry_id');
+        let cleanMid = allowedMinistries.length > 0 ? allowedMinistries[0].trim().toLowerCase().replace(/\s+/g, '-') : 'midia';
+        
+        if (savedMid && allowedMinistries.some((m: string) => m.trim().toLowerCase().replace(/\s+/g, '-') === savedMid)) {
+            cleanMid = savedMid;
+        }
         
         const user: User = {
            id: session.user.id,
@@ -446,6 +460,9 @@ const AppContent = () => {
       if (!currentUser) return;
       
       const cleanMid = newMinistryId.trim().toLowerCase().replace(/\s+/g, '-');
+      
+      // Save to localStorage for persistence
+      localStorage.setItem('last_ministry_id', cleanMid);
       
       // Update Local State
       setMinistryId(cleanMid);
@@ -666,6 +683,7 @@ const AppContent = () => {
     if (!currentUser) return;
     const res = await updateUserProfile(name, whatsapp, avatar_url, functions, birthDate);
     if (res.success) {
+      // Don't rely solely on update here to change state if we want to preserve ministryId
       setCurrentUser(prev => prev ? { ...prev, name, whatsapp, avatar_url, functions: functions || prev.functions, birthDate } : null);
       addToast("Perfil salvo!", "success");
       
@@ -902,17 +920,23 @@ const AppContent = () => {
   );
 };
 
-// Render Team Screen (Membros & Equipe) - Re-implementado com melhor visual
+// Render Team Screen (Membros & Equipe) - Re-implementado com melhor visual e filtro de função
 const renderTeam = () => {
   // Ordena a lista de membros alfabeticamente
   const sortedMembers = [...registeredMembers].sort((a, b) => a.name.localeCompare(b.name));
   
   // Função para renderizar os Badges de Funções
-  const renderRoleBadges = (roles: string[] | undefined) => {
-    if (!roles || roles.length === 0) return <span className="text-[10px] text-zinc-400 italic">Sem função</span>;
+  const renderRoleBadges = (memberRoles: string[] | undefined) => {
+    if (!memberRoles || memberRoles.length === 0) return <span className="text-[10px] text-zinc-400 italic">Sem função</span>;
+    
+    // FILTRO IMPORTANTE: Mostra apenas funções que pertencem ao ministério atual
+    const visibleRoles = memberRoles.filter(r => roles.includes(r));
+
+    if (visibleRoles.length === 0) return <span className="text-[10px] text-zinc-400 italic">Sem função (neste ministério)</span>;
+
     return (
         <div className="flex flex-wrap gap-1 mt-1">
-            {roles.map((role, idx) => (
+            {visibleRoles.map((role, idx) => (
                 <span key={idx} className="text-[10px] px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded font-medium">
                     {role}
                 </span>

@@ -216,7 +216,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
           <div className="space-y-3 pt-2">
              <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
                 Minhas Funções
-                <span className="text-[10px] font-normal lowercase opacity-70">(O que você faz na equipe?)</span>
+                <span className="text-[10px] font-normal lowercase opacity-70">(Neste ministério atual)</span>
              </label>
              <div className="p-4 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-700">
                 <div className="flex flex-wrap gap-2">
