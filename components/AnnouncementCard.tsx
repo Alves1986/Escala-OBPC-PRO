@@ -128,7 +128,7 @@ export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, o
                                     ? 'text-red-500 bg-red-100 dark:bg-red-900/20' 
                                     : 'text-zinc-400 hover:text-red-400 hover:bg-zinc-100 dark:hover:bg-zinc-700'
                                 }`}
-                                title={hasLiked ? "Descurtir" : "Curtir para confirmar entendimento"}
+                                title={hasLiked ? "Descurtir" : "Curtir"}
                             >
                                 <Heart size={18} fill={hasLiked ? "currentColor" : "none"} />
                             </button>
