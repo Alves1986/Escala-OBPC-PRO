@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { X, Shield, FileText, ArrowLeft } from 'lucide-react';
+import { X, Shield, FileText, ArrowLeft, Mail } from 'lucide-react';
 
 export type LegalDocType = 'terms' | 'privacy' | null;
 
@@ -60,11 +60,27 @@ const LegalContent: React.FC<{ type: LegalDocType }> = ({ type }) => {
           <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">3. Segurança dos Dados</h3>
           <p>Implementamos medidas de segurança para manter suas informações pessoais protegidas. Os dados são armazenados em bancos de dados seguros (Supabase) com autenticação criptografada.</p>
 
-          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">4. Seus Direitos</h3>
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">4. Dados do Google (Limited Use Policy)</h3>
+          <p>O uso de informações recebidas das APIs do Google por este aplicativo adere à <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">Política de Dados do Usuário dos Serviços de API do Google</a>, incluindo os requisitos de uso limitado.</p>
+          <p>Ao utilizar o login com Google:</p>
+          <ul className="list-disc pl-5 space-y-1">
+             <li>Acessamos apenas seu nome, e-mail e foto de perfil para criar sua conta no sistema.</li>
+             <li>Não compartilhamos seus dados do Google com ferramentas de IA de terceiros para fins de treinamento.</li>
+             <li>Não armazenamos dados além do necessário para a identificação do usuário na escala.</li>
+          </ul>
+
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">5. Seus Direitos</h3>
           <p>Você tem o direito de acessar, corrigir ou solicitar a exclusão de seus dados pessoais a qualquer momento. Para excluir sua conta, entre em contato com o administrador do sistema ou utilize a opção de exclusão nas configurações (se disponível).</p>
 
-          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">5. Alterações nesta Política</h3>
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">6. Alterações nesta Política</h3>
           <p>Podemos atualizar nossa Política de Privacidade periodicamente. Recomendamos que você revise esta página regularmente para quaisquer alterações.</p>
+
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">7. Contato</h3>
+          <p>Se você tiver dúvidas sobre esta Política de Privacidade, entre em contato conosco:</p>
+          <div className="flex items-center gap-2 mt-2 p-3 bg-zinc-100 dark:bg-zinc-800 rounded-lg w-fit">
+             <Mail size={16} className="text-zinc-500"/>
+             <span className="font-medium text-zinc-700 dark:text-zinc-300">cassia.andinho@gmail.com</span>
+          </div>
         </div>
       );
     }
