@@ -1,5 +1,3 @@
-
-
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, DEFAULT_ROLES, AppNotification, TeamMemberProfile, AvailabilityMap, SwapRequest, ScheduleMap, RepertoireItem, Announcement, GlobalConflictMap, KNOWN_MINISTRIES, GlobalConflict } from '../types';
 
@@ -144,6 +142,7 @@ export const syncMemberProfile = async (ministryId: string, user: User) => {
             createdAt: new Date().toISOString()
         };
 
+        // Procura por ID ou Email para atualizar
         const index = list.findIndex(m => 
             (m.id && user.id && m.id === user.id) || 
             (m.email && user.email && m.email === user.email)
@@ -152,7 +151,12 @@ export const syncMemberProfile = async (ministryId: string, user: User) => {
         let newList = [...list];
 
         if (index >= 0) {
-            newList[index] = { ...newList[index], ...newProfile }; 
+            // Merge cuidadoso para não perder dados
+            newList[index] = { 
+                ...newList[index], 
+                ...newProfile,
+                id: user.id || newList[index].id // Garante que o ID do Auth sobrescreva IDs manuais antigos
+            }; 
         } else {
             newList.push(newProfile);
         }
@@ -331,6 +335,28 @@ export const loginWithEmail = async (email: string, password: string): Promise<{
         }
         
         return { success: false, message: "Erro desconhecido." };
+    } catch (e) {
+        console.error(e);
+        return { success: false, message: "Erro interno." };
+    }
+};
+
+export const loginWithGoogle = async (): Promise<{ success: boolean; message: string }> => {
+    if (!supabase) return { success: false, message: "Erro de conexão" };
+    try {
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                redirectTo: window.location.origin,
+                queryParams: {
+                    prompt: 'select_account', // Força o Google a perguntar qual conta usar (evita loop na conta errada)
+                    access_type: 'offline'
+                }
+            },
+        });
+
+        if (error) return { success: false, message: error.message };
+        return { success: true, message: "Redirecionando..." };
     } catch (e) {
         console.error(e);
         return { success: false, message: "Erro interno." };
@@ -520,83 +546,123 @@ export const updateUserProfile = async (
     whatsapp: string, 
     avatar_url?: string, 
     functions?: string[],
-    birthDate?: string
+    birthDate?: string,
+    currentMinistryId?: string // Parametro opcional para garantir sync no contexto atual
 ): Promise<{ success: boolean; message: string }> => {
     if (!supabase) return { success: false, message: "Erro de conexão" };
 
     try {
+        // 1. Get current user state (includes metadata BEFORE update)
         const { data: { user }, error } = await supabase.auth.getUser();
-        
         if (error || !user) return { success: false, message: "Usuário não autenticado." };
 
+        // Save old name for cleanup later
+        const oldName = user.user_metadata.name;
+
+        // 2. Prepare Updates
         const updates: any = {
             data: {
                 name,
                 whatsapp,
                 avatar_url,
-                birthDate
+                birthDate,
+                functions
             }
         };
 
-        if (functions) {
-            updates.data.functions = functions;
+        const cleanCurrentMid = currentMinistryId ? currentMinistryId.trim().toLowerCase().replace(/\s+/g, '-') : null;
+        let finalAllowedMinistries = user.user_metadata.allowedMinistries || [];
+
+        // Fix for manual users or missing ministry association
+        // We force currentMinistryId into allowedMinistries if it's missing, to ensure sync works.
+        if (cleanCurrentMid) {
+            if (!finalAllowedMinistries.includes(cleanCurrentMid)) {
+                finalAllowedMinistries = [...finalAllowedMinistries, cleanCurrentMid];
+                updates.data.allowedMinistries = finalAllowedMinistries;
+            }
+            // If main ministry ID is missing, set it to current
+            if (!user.user_metadata.ministryId) {
+                updates.data.ministryId = cleanCurrentMid;
+            }
         }
 
+        // 3. Apply Updates to Auth
         const { error: updateError } = await supabase.auth.updateUser(updates);
+        if (updateError) return { success: false, message: "Erro ao atualizar perfil." };
 
-        if (updateError) {
-            return { success: false, message: "Erro ao atualizar perfil." };
+        // 4. Construct the full user profile object for syncing
+        const updatedProfile: User = {
+            id: user.id,
+            email: user.email,
+            name: name,
+            role: user.user_metadata.role || 'member',
+            ministryId: cleanCurrentMid || user.user_metadata.ministryId || finalAllowedMinistries[0],
+            allowedMinistries: finalAllowedMinistries,
+            whatsapp: whatsapp,
+            birthDate: birthDate,
+            avatar_url: avatar_url,
+            functions: functions || []
+        };
+
+        // 5. Sync with Public Member Lists (Visual Directory)
+        // Ensure we sync to the current ministry even if metadata was lagging/empty
+        const ministriesToSync = new Set([...finalAllowedMinistries]);
+        if (cleanCurrentMid) ministriesToSync.add(cleanCurrentMid);
+
+        for (const mid of ministriesToSync) {
+            if (mid) await syncMemberProfile(mid, updatedProfile);
         }
-        
-        // Sincroniza com TODOS os ministérios que o usuário tem acesso
-        const allowedMinistries = user.user_metadata.allowedMinistries || [user.user_metadata.ministryId];
-        
-        if (allowedMinistries.length > 0) {
-             const userProfile: User = {
-                id: user.id,
-                email: user.email,
-                name: name,
-                role: user.user_metadata.role || 'member',
-                ministryId: allowedMinistries[0],
-                allowedMinistries: allowedMinistries,
-                whatsapp: whatsapp,
-                birthDate: birthDate,
-                avatar_url: avatar_url,
-                functions: functions || user.user_metadata.functions || []
-            };
 
-            for (const mid of allowedMinistries) {
-                if (mid) await syncMemberProfile(mid, userProfile);
-            }
+        // 6. Sync Roles Map (members_v7) - Crucial for Schedule Dropdowns
+        // Only for current ministry context
+        if (cleanCurrentMid && functions) {
+             const memberMap = await loadData<MemberMap>(cleanCurrentMid, 'members_v7', {});
+             let mapChanged = false;
 
-            // Atualiza funções apenas no contexto atual (opcional, pode ser complexo atualizar em todos)
-            if (functions && user.user_metadata.ministryId) {
-                const currentMid = user.user_metadata.ministryId;
-                const currentMap = await loadData<MemberMap>(currentMid, 'members_v7', {});
-                let mapChanged = false;
+             // Logic to ensure user is in the lists for their selected functions
+             Object.keys(memberMap).forEach(role => {
+                 const members = memberMap[role];
+                 
+                 // 6a. CLEANUP OLD NAME if name changed
+                 if (oldName && oldName !== name && members.includes(oldName)) {
+                     memberMap[role] = members.filter(m => m !== oldName);
+                     mapChanged = true;
+                 }
+                 
+                 // 6b. Update lists based on selected functions
+                 if (functions.includes(role)) {
+                     // Should be in list
+                     if (!memberMap[role].includes(name)) {
+                         memberMap[role].push(name);
+                         mapChanged = true;
+                     }
+                 } else {
+                     // Should NOT be in list (if they were previously added under current name)
+                     if (memberMap[role].includes(name)) {
+                         memberMap[role] = memberMap[role].filter(m => m !== name);
+                         mapChanged = true;
+                     }
+                 }
+             });
 
-                Object.keys(currentMap).forEach(role => {
-                    if (currentMap[role].includes(name)) {
-                        currentMap[role] = currentMap[role].filter(n => n !== name);
-                        mapChanged = true;
-                    }
-                });
+             // Ensure all selected functions exist as keys (create new roles if needed)
+             functions.forEach(role => {
+                 if (!memberMap[role]) {
+                     memberMap[role] = [name];
+                     mapChanged = true;
+                 } else if (!memberMap[role].includes(name)) {
+                     memberMap[role].push(name);
+                     mapChanged = true;
+                 }
+             });
 
-                functions.forEach(role => {
-                    if (!currentMap[role]) currentMap[role] = [];
-                    if (!currentMap[role].includes(name)) {
-                        currentMap[role].push(name);
-                        mapChanged = true;
-                    }
-                });
-
-                if (mapChanged) {
-                    await saveData(currentMid, 'members_v7', currentMap);
-                }
-            }
+             if (mapChanged) {
+                 await saveData(cleanCurrentMid, 'members_v7', memberMap);
+             }
         }
 
         return { success: true, message: "Perfil atualizado com sucesso!" };
+
     } catch (e) {
         console.error(e);
         return { success: false, message: "Erro interno." };

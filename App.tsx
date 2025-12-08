@@ -1,6 +1,4 @@
 
-
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ScheduleTable } from './components/ScheduleTable';
@@ -23,6 +21,7 @@ import { AnnouncementCard } from './components/AnnouncementCard';
 import { BirthdayCard } from './components/BirthdayCard';
 import { JoinMinistryModal } from './components/JoinMinistryModal';
 import { AnnouncementsScreen } from './components/AnnouncementsScreen';
+import { PublicLegalPage, LegalDocType } from './components/LegalDocuments';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile, SwapRequest, RepertoireItem, Announcement, GlobalConflictMap } from './types';
 import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap, toggleAdmin, createAnnouncement, markAnnouncementRead, fetchGlobalSchedules, joinMinistry, saveSubscription, toggleAnnouncementLike } from './services/supabaseService';
 import { generateMonthEvents, getMonthName, adjustMonth } from './utils/dateUtils';
@@ -88,6 +87,19 @@ const AppContent = () => {
   const [sessionLoading, setSessionLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [ministryId, setMinistryId] = useState<string | null>(null);
+
+  // --- ROUTING FOR PUBLIC PAGES (LEGAL) ---
+  const [publicLegalDoc, setPublicLegalDoc] = useState<LegalDocType>(null);
+  
+  useEffect(() => {
+    // Verifica se há parametro ?legal=terms ou ?legal=privacy na URL
+    const params = new URLSearchParams(window.location.search);
+    const legalParam = params.get('legal');
+    if (legalParam === 'terms' || legalParam === 'privacy') {
+        setPublicLegalDoc(legalParam as LegalDocType);
+        setSessionLoading(false); // Stop loading to show public page
+    }
+  }, []);
 
   // Navigation State
   const [currentTab, setCurrentTab] = useState('dashboard');
@@ -404,6 +416,9 @@ const AppContent = () => {
   };
 
   useEffect(() => {
+    // Se for página pública de documentos, não carrega sessão
+    if (publicLegalDoc) return;
+
     const supabase = getSupabase();
     if (!supabase) return;
 
@@ -473,7 +488,7 @@ const AppContent = () => {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [publicLegalDoc]);
 
   useEffect(() => {
     if (ministryId) {
@@ -597,6 +612,11 @@ const AppContent = () => {
     setCurrentUser(null);
     setMinistryId(null);
   };
+
+  // --- RENDER PUBLIC LEGAL PAGE ---
+  if (publicLegalDoc) {
+      return <PublicLegalPage type={publicLegalDoc} />;
+  }
 
   if (sessionLoading) {
     return (
@@ -1154,7 +1174,7 @@ const AppContent = () => {
                   user={currentUser} 
                   availableRoles={roles}
                   onUpdateProfile={async (name, whatsapp, avatar, functions, birthDate) => {
-                      const result = await updateUserProfile(name, whatsapp, avatar, functions, birthDate);
+                      const result = await updateUserProfile(name, whatsapp, avatar, functions, birthDate, ministryId || undefined);
                       if (result.success) {
                           setCurrentUser(prev => prev ? { ...prev, name, whatsapp, avatar_url: avatar, functions, birthDate } : null);
                           addToast(result.message, "success");

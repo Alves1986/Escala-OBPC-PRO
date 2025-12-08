@@ -1,22 +1,14 @@
 
 import React from 'react';
-import { X, Shield, FileText } from 'lucide-react';
+import { X, Shield, FileText, ArrowLeft } from 'lucide-react';
 
 export type LegalDocType = 'terms' | 'privacy' | null;
 
-interface Props {
-  isOpen: boolean;
-  type: LegalDocType;
-  onClose: () => void;
-}
-
-export const LegalModal: React.FC<Props> = ({ isOpen, type, onClose }) => {
-  if (!isOpen || !type) return null;
-
-  const renderContent = () => {
-    if (type === 'terms') {
+// --- CONTEÚDO PURO (Reutilizável) ---
+const LegalContent: React.FC<{ type: LegalDocType }> = ({ type }) => {
+  if (type === 'terms') {
       return (
-        <div className="space-y-4 text-zinc-700 dark:text-zinc-300 text-sm leading-relaxed">
+        <div className="space-y-4 text-zinc-700 dark:text-zinc-300 text-sm leading-relaxed text-justify">
           <p><strong>Última atualização: {new Date().toLocaleDateString('pt-BR')}</strong></p>
           
           <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">1. Aceitação dos Termos</h3>
@@ -43,7 +35,7 @@ export const LegalModal: React.FC<Props> = ({ isOpen, type, onClose }) => {
 
     if (type === 'privacy') {
       return (
-        <div className="space-y-4 text-zinc-700 dark:text-zinc-300 text-sm leading-relaxed">
+        <div className="space-y-4 text-zinc-700 dark:text-zinc-300 text-sm leading-relaxed text-justify">
           <p><strong>Última atualização: {new Date().toLocaleDateString('pt-BR')}</strong></p>
 
           <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">1. Coleta de Informações</h3>
@@ -76,7 +68,18 @@ export const LegalModal: React.FC<Props> = ({ isOpen, type, onClose }) => {
         </div>
       );
     }
-  };
+    return null;
+};
+
+// --- MODAL (Uso interno no App) ---
+interface Props {
+  isOpen: boolean;
+  type: LegalDocType;
+  onClose: () => void;
+}
+
+export const LegalModal: React.FC<Props> = ({ isOpen, type, onClose }) => {
+  if (!isOpen || !type) return null;
 
   return (
     <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
@@ -99,7 +102,7 @@ export const LegalModal: React.FC<Props> = ({ isOpen, type, onClose }) => {
 
         {/* Content */}
         <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
-           {renderContent()}
+           <LegalContent type={type} />
         </div>
 
         {/* Footer */}
@@ -114,4 +117,41 @@ export const LegalModal: React.FC<Props> = ({ isOpen, type, onClose }) => {
       </div>
     </div>
   );
+};
+
+// --- PÁGINA PÚBLICA (Uso Externo/Google Cloud) ---
+export const PublicLegalPage: React.FC<{ type: LegalDocType }> = ({ type }) => {
+    if (!type) return null;
+
+    return (
+        <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col items-center py-10 px-4">
+            <div className="w-full max-w-3xl bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+                <div className="p-8 border-b border-zinc-200 dark:border-zinc-800 flex items-center gap-4 bg-zinc-50/50 dark:bg-zinc-900/50">
+                     <button 
+                        onClick={() => window.location.href = '/'}
+                        className="p-2 -ml-2 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full transition-colors"
+                        title="Voltar ao início"
+                     >
+                        <ArrowLeft size={24} className="text-zinc-500" />
+                     </button>
+                     <div>
+                        <h1 className="text-2xl font-bold">
+                            {type === 'terms' ? 'Termos de Uso' : 'Política de Privacidade'}
+                        </h1>
+                        <p className="text-sm text-zinc-500">Gestão de Escala OBPC</p>
+                     </div>
+                </div>
+                
+                <div className="p-8 md:p-12">
+                    <LegalContent type={type} />
+                </div>
+
+                <div className="p-6 bg-zinc-50 dark:bg-black/20 border-t border-zinc-200 dark:border-zinc-800 text-center">
+                    <p className="text-xs text-zinc-400">
+                        &copy; {new Date().getFullYear()} Gestão Escala OBPC. Todos os direitos reservados.
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
 };
