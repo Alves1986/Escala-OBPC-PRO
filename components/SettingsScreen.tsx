@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { Settings, Save, Moon, Sun, BellRing, RefreshCw, FileText, Shield, Megaphone } from 'lucide-react';
 import { useToast } from './Toast';
@@ -92,7 +93,7 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
                                 if(perm === 'granted') {
                                     addToast("Permissão concedida! Registrando...", "success");
                                     if (onEnableNotifications) await onEnableNotifications();
-                                    new Notification("Notificações Ativas", { body: "Você receberá alertas de todos os seus ministérios.", icon: "/app-icon.png" });
+                                    new Notification("Notificações Ativas", { body: "Você receberá alertas de todos os seus ministérios.", icon: "/icon.png" });
                                 } else {
                                     addToast("Permissão negada pelo navegador.", "error");
                                 }

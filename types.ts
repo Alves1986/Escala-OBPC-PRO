@@ -47,9 +47,10 @@ export interface Announcement {
   message: string;
   type: 'info' | 'success' | 'warning' | 'alert';
   timestamp: string;
+  expirationDate?: string; // Data de validade do aviso (ISO)
   author: string;
   readBy: { userId: string; name: string; timestamp: string }[];
-  likedBy: { userId: string; name: string; timestamp: string }[]; // Nova propriedade
+  likedBy: { userId: string; name: string; timestamp: string }[]; 
 }
 
 export interface ScheduleIssue {

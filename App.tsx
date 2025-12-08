@@ -1,4 +1,6 @@
 
+
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ScheduleTable } from './components/ScheduleTable';
@@ -20,6 +22,7 @@ import { SettingsScreen } from './components/SettingsScreen';
 import { AnnouncementCard } from './components/AnnouncementCard';
 import { BirthdayCard } from './components/BirthdayCard';
 import { JoinMinistryModal } from './components/JoinMinistryModal';
+import { AnnouncementsScreen } from './components/AnnouncementsScreen';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile, SwapRequest, RepertoireItem, Announcement, GlobalConflictMap } from './types';
 import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap, toggleAdmin, createAnnouncement, markAnnouncementRead, fetchGlobalSchedules, joinMinistry, saveSubscription, toggleAnnouncementLike } from './services/supabaseService';
 import { generateMonthEvents, getMonthName, adjustMonth } from './utils/dateUtils';
@@ -62,6 +65,7 @@ import { VAPID_PUBLIC_KEY, urlBase64ToUint8Array } from './utils/pushUtils';
 // --- NAVIGATION ITEMS ---
 const MAIN_NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
+  { id: 'announcements', label: 'Avisos', icon: <Megaphone size={20} /> },
   { id: 'calendar', label: 'Calendário', icon: <CalendarIcon size={20} /> },
   { id: 'availability', label: 'Disponibilidade', icon: <Shield size={20} /> },
   { id: 'swaps', label: 'Trocas de Escala', icon: <RefreshCcw size={20} /> },
@@ -289,6 +293,24 @@ const AppContent = () => {
     return counts;
   }, [schedule, currentMonth]);
 
+  // Filtra avisos expirados e ordena por data
+  const activeAnnouncements = useMemo(() => {
+      const now = new Date();
+      return announcements
+          .filter(a => {
+              if (a.expirationDate) {
+                  return new Date(a.expirationDate) > now;
+              }
+              return true; // Se não tiver validade, mostra sempre (compatibilidade)
+          })
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [announcements]);
+
+  const unreadAnnouncementsCount = useMemo(() => {
+      if (!currentUser) return 0;
+      return activeAnnouncements.filter(a => !a.readBy.some(r => r.userId === currentUser.id)).length;
+  }, [activeAnnouncements, currentUser]);
+
   const logAction = (action: string, details: string) => {
     const newEntry: AuditLogEntry = {
       date: new Date().toLocaleString("pt-BR"),
@@ -513,7 +535,7 @@ const AppContent = () => {
                   if (Notification.permission === "granted") {
                       new Notification("Lembrete de Escala", {
                           body: `Olá ${currentUser.name}, você está escalado hoje (${myRole}) para o evento ${nextEvent.title}.`,
-                          icon: "/app-icon.png"
+                          icon: "/icon.png"
                       });
                   }
                   addToast(`Lembrete: Você está escalado hoje como ${myRole}!`, "info");
@@ -544,9 +566,9 @@ const AppContent = () => {
     await saveData(ministryId, `attendance_${currentMonth}`, newAttendance);
   };
 
-  const handleCreateAnnouncement = async (title: string, message: string, type: 'info' | 'success' | 'warning' | 'alert') => {
+  const handleCreateAnnouncement = async (title: string, message: string, type: 'info' | 'success' | 'warning' | 'alert', expirationDate: string) => {
       if (!ministryId || !currentUser) return;
-      const success = await createAnnouncement(ministryId, { title, message, type }, currentUser.name);
+      const success = await createAnnouncement(ministryId, { title, message, type, expirationDate }, currentUser.name);
       if (success) {
           const updated = await loadData<Announcement[]>(ministryId, 'announcements_v1', []);
           setAnnouncements(updated);
@@ -631,31 +653,30 @@ const AppContent = () => {
                   </p>
               </div>
 
-              {announcements.length > 0 && (
-                  (() => {
-                      const visibleAnnouncements = announcements.filter(a => {
-                          const hasRead = a.readBy.some(r => r.userId === currentUser.id);
-                          const isAdmin = currentUser.role === 'admin';
-                          return !hasRead || isAdmin;
-                      });
-
-                      if (visibleAnnouncements.length === 0) return null;
-
-                      return (
-                          <div className="space-y-4">
-                              {visibleAnnouncements.map(announcement => (
-                                  <AnnouncementCard 
-                                      key={announcement.id} 
-                                      announcement={announcement} 
-                                      currentUser={currentUser}
-                                      onMarkRead={handleMarkAnnouncementRead}
-                                      onToggleLike={handleToggleAnnouncementLike}
-                                  />
-                              ))}
+              {/* CARD DE RESUMO DE AVISOS */}
+              <div 
+                  onClick={() => setCurrentTab('announcements')}
+                  className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl p-6 text-white shadow-lg cursor-pointer hover:scale-[1.02] transition-transform relative overflow-hidden group"
+              >
+                  <div className="absolute right-0 top-0 h-full w-32 bg-white/10 skew-x-12 translate-x-10 group-hover:translate-x-0 transition-transform"/>
+                  <div className="flex items-center justify-between relative z-10">
+                      <div className="flex items-center gap-4">
+                          <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
+                              <Megaphone size={28} />
                           </div>
-                      );
-                  })()
-              )}
+                          <div>
+                              <h3 className="font-bold text-lg">Central de Avisos</h3>
+                              <p className="text-indigo-100 text-sm">
+                                  {unreadAnnouncementsCount > 0 
+                                      ? `Você tem ${unreadAnnouncementsCount} aviso(s) não lido(s).` 
+                                      : "Nenhum aviso novo no momento."
+                                  }
+                              </p>
+                          </div>
+                      </div>
+                      <ChevronRight size={24} className="opacity-70 group-hover:translate-x-1 transition-transform"/>
+                  </div>
+              </div>
 
               <NextEventCard 
                   event={nextEvent} 
@@ -708,6 +729,15 @@ const AppContent = () => {
               </div>
 
             </div>
+          )}
+
+          {currentTab === 'announcements' && (
+              <AnnouncementsScreen 
+                  announcements={activeAnnouncements}
+                  currentUser={currentUser}
+                  onMarkRead={handleMarkAnnouncementRead}
+                  onToggleLike={handleToggleAnnouncementLike}
+              />
           )}
 
           {currentTab === 'calendar' && (

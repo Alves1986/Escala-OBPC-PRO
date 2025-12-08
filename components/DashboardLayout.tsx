@@ -142,7 +142,7 @@ export const DashboardLayout: React.FC<Props> = ({
                {imgError ? (
                  <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-900/20"><Layout size={20} /></div>
                ) : (
-                 <img src="/app-icon.png?v=2" alt="Logo" className="w-10 h-10 rounded-xl shadow-lg" onError={() => setImgError(true)} />
+                 <img src="/icon.png?v=2" alt="Logo" className="w-10 h-10 rounded-xl shadow-lg" onError={() => setImgError(true)} />
                )}
                
                <div className="flex-1 min-w-0">

@@ -1,4 +1,5 @@
 
+
 import React, { useEffect, useState } from 'react';
 import { Bell, BellOff, Loader2 } from 'lucide-react';
 import { useToast } from './Toast';
@@ -30,7 +31,7 @@ export const NotificationToggle: React.FC<Props> = ({ ministryId }) => {
             addToast("Notificações permitidas!", "success");
             new Notification("Notificações Ativas", {
                 body: "Você receberá alertas no navegador.",
-                icon: "/app-icon.png"
+                icon: "/icon.png"
             });
         } else {
             addToast("Permissão negada.", "warning");

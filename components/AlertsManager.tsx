@@ -1,17 +1,19 @@
 
+
 import React, { useState } from 'react';
-import { Megaphone, Send, Info, CheckCircle, AlertTriangle, AlertOctagon } from 'lucide-react';
+import { Megaphone, Send, Info, CheckCircle, AlertTriangle, AlertOctagon, CalendarClock } from 'lucide-react';
 import { AppNotification } from '../types';
 import { useToast } from './Toast';
 
 interface Props {
-  onSend: (title: string, message: string, type: 'info' | 'success' | 'warning' | 'alert') => Promise<void>;
+  onSend: (title: string, message: string, type: 'info' | 'success' | 'warning' | 'alert', expirationDate: string) => Promise<void>;
 }
 
 export const AlertsManager: React.FC<Props> = ({ onSend }) => {
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [type, setType] = useState<'info' | 'success' | 'warning' | 'alert'>('info');
+  const [durationDays, setDurationDays] = useState(7); // Default 7 days
   const [isSending, setIsSending] = useState(false);
   const { addToast } = useToast();
 
@@ -23,7 +25,13 @@ export const AlertsManager: React.FC<Props> = ({ onSend }) => {
     }
 
     setIsSending(true);
-    await onSend(title, message, type);
+    
+    // Calcula a data de expiração
+    const expirationDate = new Date();
+    expirationDate.setDate(expirationDate.getDate() + durationDays);
+    const expirationIso = expirationDate.toISOString();
+
+    await onSend(title, message, type, expirationIso);
     setTitle("");
     setMessage("");
     setType('info');
@@ -103,6 +111,24 @@ export const AlertsManager: React.FC<Props> = ({ onSend }) => {
                 </div>
 
                 <div>
+                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-1">Duração do Aviso (Validade)</label>
+                    <div className="relative">
+                        <CalendarClock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                        <select 
+                            value={durationDays} 
+                            onChange={e => setDurationDays(Number(e.target.value))}
+                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg py-3 pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-orange-500"
+                        >
+                            <option value={3}>3 dias</option>
+                            <option value={7}>7 dias (1 Semana)</option>
+                            <option value={15}>15 dias</option>
+                            <option value={30}>30 dias (1 Mês)</option>
+                        </select>
+                    </div>
+                    <p className="text-[10px] text-zinc-400 mt-1">O aviso será removido automaticamente dos painéis após este período.</p>
+                </div>
+
+                <div>
                     <label className="text-xs font-bold text-zinc-500 uppercase block mb-1">Mensagem</label>
                     <textarea 
                         value={message}
@@ -139,7 +165,7 @@ export const AlertsManager: React.FC<Props> = ({ onSend }) => {
                                     {message || "O conteúdo da mensagem aparecerá aqui."}
                                 </p>
                                 <span className="text-[10px] text-zinc-400 mt-2 block">
-                                    Agora
+                                    Agora • Válido por {durationDays} dias
                                 </span>
                             </div>
                         </div>
@@ -152,7 +178,7 @@ export const AlertsManager: React.FC<Props> = ({ onSend }) => {
                 )}
             </div>
             <p className="text-xs text-zinc-500 mt-4 text-center">
-                * Este aviso aparecerá no ícone de "Sino" de todos os membros do ministério atual.
+                * Este aviso aparecerá na aba "Avisos" de todos os membros.
             </p>
         </div>
       </div>

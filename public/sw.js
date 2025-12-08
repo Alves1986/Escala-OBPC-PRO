@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'escala-midia-pwa-v16';
+const CACHE_NAME = 'escala-midia-pwa-v17';
 
 // Arquivos estáticos fundamentais
 // Usando caminhos absolutos para garantir a integridade do cache
@@ -7,7 +7,7 @@ const PRECACHE_URLS = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/app-icon.png',
+  '/icon.png',
   'https://cdn.tailwindcss.com',
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'
 ];
@@ -105,4 +105,21 @@ self.addEventListener('notificationclick', function(event) {
       }
     })
   );
+});
+
+// Evento de Recebimento de Push (Mobile/Background)
+self.addEventListener('push', function(event) {
+  if (event.data) {
+    const data = event.data.json();
+    const options = {
+      body: data.body,
+      icon: data.icon || '/icon.png',
+      badge: '/icon.png',
+      data: data.data || { url: '/' }
+    };
+
+    event.waitUntil(
+      self.registration.showNotification(data.title, options)
+    );
+  }
 });
