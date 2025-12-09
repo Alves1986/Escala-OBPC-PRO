@@ -1070,10 +1070,16 @@ export const loginWithEmail = async (email: string, pass: string) => {
 export const loginWithGoogle = async () => {
     if (!supabase) return { success: false, message: "Erro conexão" };
     
+    // Fix: Force redirect to canonical production URL to avoid Vercel preview URLs
+    let redirectUrl = window.location.origin;
+    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        redirectUrl = "https://escalaobpcpro.vercel.app";
+    }
+    
     const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-            redirectTo: window.location.origin
+            redirectTo: redirectUrl
         }
     });
     return { success: !error, message: error?.message || "" };
@@ -1165,8 +1171,14 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
 
 export const sendPasswordResetEmail = async (email: string) => {
     if (!supabase) return { success: false, message: "Erro conexão" };
+    
+    let redirectUrl = window.location.origin;
+    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        redirectUrl = "https://escalaobpcpro.vercel.app";
+    }
+
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin + '?reset=true',
+        redirectTo: redirectUrl + '?reset=true',
     });
     if (error) return { success: false, message: error.message };
     return { success: true, message: "Link de recuperação enviado para o e-mail." };

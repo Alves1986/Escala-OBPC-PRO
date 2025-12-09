@@ -68,7 +68,11 @@ export const DashboardLayout: React.FC<Props> = ({
       } catch (e) {
         console.error("Erro geral na atualização:", e);
       } finally {
-        window.location.reload();
+        if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+             window.location.href = "https://escalaobpcpro.vercel.app";
+        } else {
+             window.location.reload();
+        }
       }
     }, 500);
   };

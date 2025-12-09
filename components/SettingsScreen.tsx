@@ -144,7 +144,11 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  <button 
                      onClick={() => {
-                         window.location.reload();
+                         if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                             window.location.href = "https://escalaobpcpro.vercel.app";
+                         } else {
+                             window.location.reload();
+                         }
                      }}
                      className="flex items-center justify-center gap-2 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 transition-colors"
                  >
@@ -162,7 +166,11 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
                                  const registrations = await navigator.serviceWorker.getRegistrations();
                                  for (let registration of registrations) await registration.unregister();
                              }
-                             window.location.reload();
+                             if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                                 window.location.href = "https://escalaobpcpro.vercel.app";
+                             } else {
+                                 window.location.reload();
+                             }
                          }}
                          className="text-xs font-bold underline text-amber-700 dark:text-amber-400"
                      >
