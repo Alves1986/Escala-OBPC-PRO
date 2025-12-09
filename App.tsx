@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ScheduleTable } from './components/ScheduleTable';
@@ -34,7 +33,6 @@ import {
     toggleAdminSQL, markNotificationsReadSQL, saveSubscriptionSQL,
     fetchAuditLogs, logActionSQL
 } from './services/supabaseService';
-import { generateScheduleWithAI } from './services/aiService';
 import { generateMonthEvents, getMonthName, adjustMonth } from './utils/dateUtils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -100,8 +98,10 @@ const AppContent = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [ministryId, setMinistryId] = useState<string | null>(null);
 
-  // Ref para rastrear se a sessão foi encontrada (evita race conditions)
+  // CACHE SYSTEM
+  const monthCacheRef = useRef<Record<string, { schedule: ScheduleMap, events: any[], attendance: AttendanceMap }>>({});
   const sessionFoundRef = useRef(false);
+  const lastLoadedMinistryRef = useRef<string | null>(null);
 
   const [publicLegalDoc, setPublicLegalDoc] = useState<LegalDocType>(null);
   
@@ -162,7 +162,6 @@ const AppContent = () => {
   const [globalConflicts, setGlobalConflicts] = useState<GlobalConflictMap>({});
   
   const [loading, setLoading] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
   const [memberSearch, setMemberSearch] = useState("");
   
   const [confirmationData, setConfirmationData] = useState<any>(null);
@@ -339,64 +338,103 @@ const AppContent = () => {
   }
 
   const loadAll = async (mid: string) => {
-    setLoading(true);
+    const cleanMid = mid.trim().toLowerCase().replace(/\s+/g, '-');
+    const isSameMinistry = lastLoadedMinistryRef.current === cleanMid;
+    const cacheKey = `${cleanMid}_${currentMonth}`;
+
+    // CHECK CACHE FIRST (TURBO MODE)
+    if (monthCacheRef.current[cacheKey]) {
+        const cached = monthCacheRef.current[cacheKey];
+        setSchedule(cached.schedule);
+        setCustomEvents(cached.events);
+        setAttendance(cached.attendance);
+        // Don't return here, proceed to background fetch to update if needed
+    } else {
+        setLoading(true); // Only show spinner if not in cache
+    }
+
     try {
-      const cleanMid = mid.trim().toLowerCase().replace(/\s+/g, '-');
+      // 1. Iniciar Promises dos dados dinâmicos (dependentes de data)
+      const pSchedule = fetchMinistrySchedule(cleanMid, currentMonth);
+      const pAvailability = fetchMinistryAvailability(cleanMid);
+      const pGlobalConflicts = fetchGlobalSchedules(currentMonth, cleanMid);
+      const pSwaps = fetchSwapRequests(cleanMid);
+
+      // 2. Se mudou o ministério, carrega também os dados estáticos (Membros, Configs, Logs, etc.)
+      let staticDataPromise: Promise<any[]> = Promise.resolve([]);
       
+      if (!isSameMinistry) {
+          staticDataPromise = Promise.all([
+            fetchMinistryMembers(cleanMid),
+            fetchMinistrySettings(cleanMid),
+            fetchAuditLogs(cleanMid),
+            fetchNotificationsSQL(cleanMid, currentUser?.id || ''),
+            fetchRepertoire(cleanMid),
+            fetchAdminsSQL(cleanMid),
+            fetchAnnouncementsSQL(cleanMid),
+          ]);
+      }
+
       const [
-        resMemberData,
         resScheduleData,
         resAvailability,
         resGlobalConflicts,
-        resSettings,
-        resLogs,
-        resNotif,
         resSwaps,
-        resRepertoire,
-        resAdmins,
-        resAnnouncements,
-      ] = await Promise.all([
-        fetchMinistryMembers(cleanMid),
-        fetchMinistrySchedule(cleanMid, currentMonth),
-        fetchMinistryAvailability(cleanMid),
-        fetchGlobalSchedules(currentMonth, cleanMid),
-        fetchMinistrySettings(cleanMid),
-        fetchAuditLogs(cleanMid),
-        fetchNotificationsSQL(cleanMid, currentUser?.id || ''),
-        fetchSwapRequests(cleanMid),
-        fetchRepertoire(cleanMid),
-        fetchAdminsSQL(cleanMid),
-        fetchAnnouncementsSQL(cleanMid),
-      ]);
+      ] = await Promise.all([pSchedule, pAvailability, pGlobalConflicts, pSwaps]);
 
-      setMembers(resMemberData.memberMap);
-      setRegisteredMembers(resMemberData.publicList);
+      // UPDATE CACHE
+      monthCacheRef.current[cacheKey] = {
+          schedule: resScheduleData.schedule,
+          events: resScheduleData.events,
+          attendance: resScheduleData.attendance
+      };
+
+      // Processa dados de data (mensais)
       setSchedule(resScheduleData.schedule);
       setCustomEvents(resScheduleData.events);
       setAttendance(resScheduleData.attendance); 
       setAvailability(resAvailability);
       setGlobalConflicts(resGlobalConflicts);
-      
-      setRoles(resSettings.roles);
-      setCustomTitle(resSettings.displayName);
-      setAuditLog(resLogs);
-      setNotifications(resNotif);
       setSwapRequests(resSwaps);
-      setRepertoire(resRepertoire);
-      setAdminsList(resAdmins);
-      setAnnouncements(resAnnouncements);
 
-      if (currentUser && currentUser.email && resAdmins.includes(currentUser.email)) {
-          if (currentUser.role !== 'admin') {
-              setCurrentUser(prev => prev ? { ...prev, role: 'admin' } : null);
+      // Processa dados estáticos se necessário
+      if (!isSameMinistry) {
+          const staticResults = await staticDataPromise;
+          const [
+              resMemberData,
+              resSettings,
+              resLogs,
+              resNotif,
+              resRepertoire,
+              resAdmins,
+              resAnnouncements
+          ] = staticResults;
+
+          setMembers(resMemberData.memberMap);
+          setRegisteredMembers(resMemberData.publicList);
+          setRoles(resSettings.roles);
+          setCustomTitle(resSettings.displayName);
+          setAuditLog(resLogs);
+          setNotifications(resNotif);
+          setRepertoire(resRepertoire);
+          setAdminsList(resAdmins);
+          setAnnouncements(resAnnouncements);
+
+          if (currentUser && currentUser.email && resAdmins.includes(currentUser.email)) {
+              if (currentUser.role !== 'admin') {
+                  setCurrentUser(prev => prev ? { ...prev, role: 'admin' } : null);
+              }
           }
+          
+          lastLoadedMinistryRef.current = cleanMid;
       }
 
       setIsConnected(true);
       
       // FORÇA A ATUALIZAÇÃO DO PUSH ASSIM QUE OS DADOS CARREGAM
-      // Isso garante o vínculo correto do dispositivo com o usuário atual
-      registerPushForAllMinistries();
+      if (!isSameMinistry) {
+          registerPushForAllMinistries();
+      }
 
     } catch (e) {
       console.error("Load Error", e);
@@ -446,9 +484,10 @@ const AppContent = () => {
                ministryId: cleanMid,
                allowedMinistries: allowedMinistries,
                whatsapp: metadata.whatsapp,
-               birthDate: metadata.birthDate,
+               birthDate: metadata.birthDate || metadata.birth_date, // FIX: Check both casing styles
                avatar_url: metadata.avatar_url,
-               functions: metadata.functions || []
+               functions: metadata.functions || [],
+               createdAt: metadata.createdAt || metadata.created_at
             };
             
             // Define o usuário IMEDIATAMENTE e para o loading
@@ -470,6 +509,8 @@ const AppContent = () => {
             // NÃO paramos o loading aqui durante a inicialização.
             // Deixamos o timeout do getSession decidir se deve mostrar a tela de login.
             sessionFoundRef.current = false;
+            lastLoadedMinistryRef.current = null; // Reset cache on logout
+            monthCacheRef.current = {}; // Clear month cache
             if (mounted) {
                 setCurrentUser(null);
                 setMinistryId(null);
@@ -514,7 +555,7 @@ const AppContent = () => {
     if (ministryId) {
       loadAll(ministryId);
     }
-  }, [ministryId, currentMonth, currentUser?.id]); // Adicionado currentUser?.id para recarregar ao mudar usuário
+  }, [ministryId, currentMonth, currentUser?.id]); 
 
   const handleSwitchMinistry = async (newMinistryId: string) => {
       if (!currentUser) return;
@@ -523,12 +564,17 @@ const AppContent = () => {
       setMinistryId(cleanMid);
       setCurrentUser(prev => prev ? { ...prev, ministryId: cleanMid } : null);
       
+      // Reseta estados para evitar flash de dados antigos
       setMembers({});
       setSchedule({});
       setNotifications([]);
       setAnnouncements([]);
       setRegisteredMembers([]);
       setCustomTitle("");
+      
+      // Force reload on next effect due to ministryId change
+      lastLoadedMinistryRef.current = null;
+      monthCacheRef.current = {}; // Clear cache on switch
       
       addToast(`Trocando para ${getMinistryTitle(cleanMid)}...`, "info");
   };
@@ -546,58 +592,6 @@ const AppContent = () => {
       }
   };
 
-  const handleAutoGenerateSchedule = async () => {
-    if (!ministryId) return;
-
-    const hasExistingSchedule = Object.keys(schedule).some(k => k.startsWith(currentMonth) && schedule[k]);
-    
-    if (hasExistingSchedule) {
-        if (!confirm("Já existe uma escala preenchida para este mês. Deseja sobrescrever os espaços vazios e ajustar conforme a IA?")) {
-            return;
-        }
-    }
-
-    setAiLoading(true);
-
-    try {
-        const eventsToFill = visibleEvents.map(e => ({ iso: e.iso, title: e.title }));
-        
-        const result = await generateScheduleWithAI({
-            events: eventsToFill,
-            members: registeredMembers, 
-            availability: availability,
-            roles: roles,
-            ministryId: ministryId
-        });
-
-        if (result) {
-            const newSchedule = { ...schedule, ...result };
-            
-            Object.keys(result).forEach(k => {
-                if (!newSchedule[k]) delete newSchedule[k];
-            });
-
-            setSchedule(newSchedule);
-            
-            const success = await saveScheduleBulk(ministryId, result);
-            
-            if (success) {
-                addToast("Escala gerada com IA com sucesso!", "success");
-            } else {
-                addToast("Escala gerada, mas erro ao salvar no banco. Tente novamente.", "warning");
-            }
-        } else {
-            addToast("Falha ao gerar escala. Verifique a configuração da API ou tente novamente.", "error");
-        }
-    } catch (e: any) {
-        console.error(e);
-        addToast(e.message || "Erro interno ao gerar escala.", "error");
-    } finally {
-        setAiLoading(false);
-        await loadAll(ministryId);
-    }
-  };
-
   const handleResetMonth = async () => {
     if (!ministryId) return;
     
@@ -607,13 +601,17 @@ const AppContent = () => {
         async () => {
             const success = await resetToDefaultEvents(ministryId, currentMonth);
             if (success) {
-                setSchedule(prev => {
-                    const next = { ...prev };
-                    Object.keys(next).forEach(k => {
-                        if (k.startsWith(currentMonth)) delete next[k];
-                    });
-                    return next;
+                // Update Cache and State
+                const newSchedule = { ...schedule };
+                Object.keys(newSchedule).forEach(k => {
+                    if (k.startsWith(currentMonth)) delete newSchedule[k];
                 });
+                
+                // Clear cache for current month to force reload
+                const cacheKey = `${ministryId}_${currentMonth}`;
+                delete monthCacheRef.current[cacheKey];
+                
+                setSchedule(newSchedule);
                 setCustomEvents([]);
                 
                 await loadAll(ministryId);
@@ -667,7 +665,13 @@ const AppContent = () => {
     } else {
         newSchedule[key] = value;
     }
-    setSchedule(newSchedule); 
+    setSchedule(newSchedule);
+    
+    // Update Cache Immediately
+    const cacheKey = `${ministryId}_${currentMonth}`;
+    if (monthCacheRef.current[cacheKey]) {
+        monthCacheRef.current[cacheKey].schedule = newSchedule;
+    }
     
     const success = await saveScheduleAssignment(ministryId, key, value);
     if (!success) {
@@ -687,6 +691,12 @@ const AppContent = () => {
     
     const newAttendance = { ...attendance, [key]: !attendance[key] };
     setAttendance(newAttendance);
+
+    // Update Cache Immediately
+    const cacheKey = `${ministryId}_${currentMonth}`;
+    if (monthCacheRef.current[cacheKey]) {
+        monthCacheRef.current[cacheKey].attendance = newAttendance;
+    }
     
     const success = await toggleAssignmentConfirmation(ministryId, key);
     if (!success) {
@@ -736,6 +746,8 @@ const AppContent = () => {
     await logout();
     setCurrentUser(null);
     setMinistryId(null);
+    lastLoadedMinistryRef.current = null;
+    monthCacheRef.current = {};
   };
 
   if (publicLegalDoc) {
@@ -1005,7 +1017,12 @@ const AppContent = () => {
                       const result = await updateUserProfile(name, whatsapp, avatar_url, functions, birthDate, ministryId);
                       if (result.success) {
                           addToast(result.message, "success");
+                          // Update Current User
                           setCurrentUser(prev => prev ? { ...prev, name, whatsapp, avatar_url, functions, birthDate } : null);
+                          // FORCE RELOAD MEMBERS LIST to reflect changes in Team tab immediately
+                          const { memberMap, publicList } = await fetchMinistryMembers(ministryId);
+                          setMembers(memberMap);
+                          setRegisteredMembers(publicList);
                       } else {
                           addToast(result.message, "error");
                       }
@@ -1113,6 +1130,15 @@ const AppContent = () => {
                                         if (confirm("Tem certeza que deseja LIMPAR TODA a escala deste mês? Isso não pode ser desfeito.")) {
                                             const success = await clearScheduleForMonth(ministryId, currentMonth);
                                             if (success) {
+                                                // Clear cache and state
+                                                const newSchedule = { ...schedule };
+                                                Object.keys(newSchedule).forEach(k => {
+                                                    if (k.startsWith(currentMonth)) delete newSchedule[k];
+                                                });
+                                                const cacheKey = `${ministryId}_${currentMonth}`;
+                                                delete monthCacheRef.current[cacheKey];
+
+                                                setSchedule(newSchedule);
                                                 await loadAll(ministryId);
                                                 addToast("Escala do mês limpa com sucesso.", "success");
                                             } else {
@@ -1121,8 +1147,6 @@ const AppContent = () => {
                                         }
                                     }}
                                     onResetEvents={handleResetMonth}
-                                    onGenerateAI={handleAutoGenerateSchedule}
-                                    isGeneratingAI={aiLoading}
                                     allMembers={allMembersList}
                                 />
                                 
@@ -1134,26 +1158,17 @@ const AppContent = () => {
                             </div>
                         </div>
 
-                        {/* Botão de Geração com IA em Destaque */}
-                        <div className="bg-gradient-to-r from-violet-600 to-indigo-600 rounded-xl p-6 text-white shadow-lg mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
-                            <div>
-                                <h3 className="text-xl font-bold flex items-center gap-2">
-                                    ✨ Escala Inteligente (IA)
-                                </h3>
-                                <p className="text-indigo-100 text-sm mt-1 max-w-lg">
-                                    Preencha automaticamente os espaços vazios da escala baseando-se na disponibilidade e histórico dos membros.
-                                </p>
-                            </div>
-                            <button 
-                                onClick={handleAutoGenerateSchedule}
-                                disabled={aiLoading}
-                                className="px-6 py-3 bg-white text-indigo-600 font-bold rounded-lg shadow-md hover:bg-indigo-50 transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
-                            >
-                                {aiLoading ? 'Gerando...' : 'Gerar Escala Agora'}
-                            </button>
-                        </div>
-
-                        <div className="overflow-x-auto">
+                        <div className="overflow-x-auto relative">
+                            {/* Overlay de Loading da Tabela */}
+                            {loading && (
+                                <div className="absolute inset-0 z-20 bg-white/50 dark:bg-zinc-900/50 backdrop-blur-[1px] flex items-center justify-center transition-opacity">
+                                    <div className="bg-white dark:bg-zinc-800 p-3 rounded-xl shadow-lg border border-zinc-200 dark:border-zinc-700 flex items-center gap-3">
+                                        <RefreshCw size={20} className="animate-spin text-blue-500" />
+                                        <span className="text-sm font-medium">Carregando mês...</span>
+                                    </div>
+                                </div>
+                            )}
+                            
                             <ScheduleTable
                                 events={visibleEvents}
                                 roles={roles}
@@ -1170,6 +1185,9 @@ const AppContent = () => {
                                     if (confirm(`Excluir evento "${title}"?`)) {
                                         if (ministryId) {
                                             await deleteMinistryEvent(ministryId, iso);
+                                            // Force reload from cache bypass
+                                            const cacheKey = `${ministryId}_${currentMonth}`;
+                                            delete monthCacheRef.current[cacheKey];
                                             await loadAll(ministryId);
                                         }
                                     }
@@ -1177,6 +1195,7 @@ const AppContent = () => {
                                 onEditEvent={(evt) => setSelectedEventDetails(evt)}
                                 memberStats={memberStats}
                                 ministryId={ministryId}
+                                readOnly={loading} // Bloqueia edição enquanto carrega
                             />
                         </div>
                     </div>
@@ -1216,6 +1235,9 @@ const AppContent = () => {
                             const success = await createMinistryEvent(ministryId, evt);
                             if (success) {
                                 addToast("Evento criado!", "success");
+                                // Clear cache to reflect new event
+                                const cacheKey = `${ministryId}_${currentMonth}`;
+                                delete monthCacheRef.current[cacheKey];
                                 await loadAll(ministryId);
                             } else {
                                 addToast("Erro ao criar evento.", "error");
@@ -1229,10 +1251,10 @@ const AppContent = () => {
                                 await deleteMinistryEvent(ministryId, iso);
                             } else {
                                 // Se for ID (caso venha do DB com ID)
-                                // deleteMinistryEvent atualmente espera ISO no client-side logic,
-                                // mas idealmente deveria aceitar ID. 
-                                // O EventsScreen passa ISO se disponível.
                             }
+                            // Clear cache
+                            const cacheKey = `${ministryId}_${currentMonth}`;
+                            delete monthCacheRef.current[cacheKey];
                             await loadAll(ministryId);
                             addToast("Evento removido.", "success");
                         }}
@@ -1349,12 +1371,14 @@ const AppContent = () => {
                                              <Phone size={14} className="shrink-0 opacity-70"/>
                                              <span className="truncate">{member.whatsapp || "—"}</span>
                                          </div>
-                                         {member.createdAt && (
-                                            <div className="flex items-center gap-2 text-[10px] text-zinc-400 mt-1">
-                                                <Calendar size={12} className="shrink-0 opacity-70"/>
-                                                <span>Desde {new Date(member.createdAt).toLocaleDateString('pt-BR')}</span>
-                                            </div>
-                                         )}
+                                         <div className="flex items-center gap-2 text-[10px] text-zinc-400 mt-1">
+                                            <CalendarHeart size={12} className={`shrink-0 opacity-70 ${member.birthDate ? 'text-pink-500' : ''}`}/>
+                                            <span>
+                                                {member.birthDate
+                                                  ? `Aniversário: ${member.birthDate.split('-').reverse().slice(0, 2).join('/')}`
+                                                  : "Aniversário não informado"}
+                                            </span>
+                                         </div>
                                      </div>
                                  </div>
                              ))}
@@ -1416,6 +1440,9 @@ const AppContent = () => {
                 
                 if (success) {
                     addToast("Evento atualizado!", "success");
+                    // Update cache
+                    const cacheKey = `${ministryId}_${currentMonth}`;
+                    delete monthCacheRef.current[cacheKey];
                     await loadAll(ministryId);
                     setSelectedEventDetails(null);
                 } else {

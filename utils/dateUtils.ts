@@ -21,34 +21,26 @@ export const adjustMonth = (currentMonth: string, delta: number): string => {
 export const generateMonthEvents = (year: number, month: number, customEvents: CustomEvent[]) => {
   const events: { iso: string; dateDisplay: string; title: string }[] = [];
   
-  // Helper to add event
-  const addEvent = (date: Date, title: string, time: string) => {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    const dateStr = `${d}/${m}`;
-    const iso = `${y}-${m}-${d}T${time}`;
-    events.push({ iso, dateDisplay: dateStr, title });
-  };
-
-  // REMOVIDO: Lógica antiga que gerava Quartas e Domingos automaticamente via código.
-  // AGORA: O sistema confia 100% nos eventos passados via 'customEvents' (que vêm do banco de dados).
-  // Isso resolve o problema de duplicidade visual (um evento do código + um evento do banco).
-
-  // Process Database Events (passed as customEvents)
+  // Format target month string YYYY-MM to filter events
   const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
   
   if (customEvents && customEvents.length > 0) {
       customEvents.forEach(evt => {
-        // Ensure we only show events for the requested month to avoid border leakage
+        // Ensure we only show events for the requested month
         if (evt.date.startsWith(monthStr)) {
-           const [y, m, d] = evt.date.split('-').map(Number);
-           const date = new Date(y, m - 1, d);
-           addEvent(date, evt.title, evt.time);
+           // Direct string manipulation to avoid Timezone bugs with new Date()
+           // evt.date format is YYYY-MM-DD
+           const parts = evt.date.split('-');
+           if (parts.length === 3) {
+               const [y, m, d] = parts;
+               const dateDisplay = `${d}/${m}`;
+               const iso = `${evt.date}T${evt.time}`;
+               events.push({ iso, dateDisplay, title: evt.title });
+           }
         }
       });
   }
 
-  // Sort by ISO Date
+  // Sort by ISO Date String directly
   return events.sort((a, b) => a.iso.localeCompare(b.iso));
 };

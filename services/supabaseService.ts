@@ -1,5 +1,3 @@
-
-
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
     SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, 
@@ -281,8 +279,6 @@ export const markNotificationsReadSQL = async (ids: string[], userId: string) =>
 export const clearAllNotificationsSQL = async (ministryId: string) => {
     if (!supabase || !ministryId) return;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-    // Em produção, talvez queira apenas marcar como deletado ou arquivado para o usuário
-    // Aqui vamos apagar do banco para simplificar, já que é "limpar tudo"
     await supabase.from('notifications').delete().eq('ministry_id', cleanMid);
 };
 
@@ -453,9 +449,9 @@ export const fetchMinistryMembers = async (ministryId: string): Promise<{
                 email: p.email || undefined,
                 whatsapp: p.whatsapp,
                 avatar_url: p.avatar_url,
-                birthDate: p.birth_date,
+                birthDate: p.birth_date, // Mapeia corretamente a data de nascimento
                 roles: userRoles,
-                createdAt: new Date().toISOString(),
+                createdAt: p.created_at, // FIX: Removido fallback para Date.now() para evitar que todos pareçam novos
                 isAdmin: p.is_admin
             };
         }).sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
@@ -488,9 +484,11 @@ export const fetchMinistrySchedule = async (ministryId: string, monthIso: string
     try {
         const startOfMonth = `${monthIso}-01T00:00:00`;
         const [y, m] = monthIso.split('-').map(Number);
-        const nextMonth = new Date(y, m, 1).toISOString().split('T')[0];
+        const nextMonthDate = new Date(y, m, 1);
+        const nextMonth = nextMonthDate.toISOString().split('T')[0];
 
-        const { data: events, error: eventError } = await supabase
+        // 1. Tenta buscar eventos existentes
+        let { data: events, error: eventError } = await supabase
             .from('events')
             .select('id, title, date_time')
             .eq('ministry_id', cleanMid)
@@ -499,6 +497,50 @@ export const fetchMinistrySchedule = async (ministryId: string, monthIso: string
             .order('date_time', { ascending: true });
 
         if (eventError) throw eventError;
+
+        // 2. AUTO-GERAÇÃO (INFINITE SCROLL): Se não houver eventos, cria os padrões
+        if (!events || events.length === 0) {
+            const daysInMonth = new Date(y, m, 0).getDate();
+            const eventsToCreate = [];
+
+            for (let d = 1; d <= daysInMonth; d++) {
+                const date = new Date(y, m - 1, d);
+                const dayOfWeek = date.getDay(); // 0 = Sun, 3 = Wed
+                const dateStr = date.toISOString().split('T')[0];
+
+                if (dayOfWeek === 3) {
+                    eventsToCreate.push({
+                        ministry_id: cleanMid,
+                        title: "Culto (Quarta)",
+                        date_time: `${dateStr}T19:30:00`
+                    });
+                } else if (dayOfWeek === 0) {
+                    eventsToCreate.push({
+                        ministry_id: cleanMid,
+                        title: "Culto (Domingo - Manhã)",
+                        date_time: `${dateStr}T09:00:00`
+                    });
+                    eventsToCreate.push({
+                        ministry_id: cleanMid,
+                        title: "Culto (Domingo - Noite)",
+                        date_time: `${dateStr}T18:00:00`
+                    });
+                }
+            }
+
+            if (eventsToCreate.length > 0) {
+                const { data: newEvents, error: createError } = await supabase
+                    .from('events')
+                    .insert(eventsToCreate)
+                    .select('id, title, date_time')
+                    .order('date_time', { ascending: true });
+                
+                if (!createError && newEvents) {
+                    events = newEvents;
+                }
+            }
+        }
+
         if (!events || events.length === 0) return { schedule: {}, events: [], attendance: {} };
 
         const eventIds = events.map(e => e.id);
@@ -508,7 +550,6 @@ export const fetchMinistrySchedule = async (ministryId: string, monthIso: string
             .select(`
                 event_id,
                 role,
-                member_id,
                 confirmed,
                 profiles ( name )
             `)
@@ -1197,7 +1238,18 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
     if (!user) return { success: false, message: "Usuário não logado" };
 
     try {
-        const updates: any = {
+        // Auth Metadata (CamelCase for App Consistency)
+        const authUpdates = {
+            name,
+            whatsapp,
+            avatar_url,
+            functions,
+            birthDate,
+            ministryId // Ensure this is kept
+        };
+        
+        // Database Profile (SnakeCase for SQL)
+        const dbUpdates = {
             name,
             whatsapp,
             avatar_url,
@@ -1206,12 +1258,12 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
         };
         
         await supabase.auth.updateUser({
-            data: updates
+            data: authUpdates
         });
 
         const { error } = await supabase
             .from('profiles')
-            .update(updates)
+            .update(dbUpdates)
             .eq('id', user.id);
 
         if (error) throw error;
