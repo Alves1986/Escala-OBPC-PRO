@@ -3,7 +3,7 @@ import {
     SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, 
     AppNotification, TeamMemberProfile, AvailabilityMap, SwapRequest, 
     ScheduleMap, RepertoireItem, Announcement, GlobalConflictMap, 
-    KNOWN_MINISTRIES, GlobalConflict, DatabaseProfile, DatabaseEvent, DatabaseAssignment, DEFAULT_ROLES 
+    GlobalConflict, DEFAULT_ROLES 
 } from '../types';
 
 let supabase: SupabaseClient | null = null;
@@ -85,7 +85,6 @@ export const removeDuplicateProfiles = async (): Promise<{ success: boolean; mes
                 console.log(`Duplicata encontrada para ${email}: ${duplicates.length} perfis.`);
                 
                 // Sort to pick the "Master" (Prefer the one with Google Avatar or most recently created/updated logic)
-                // Here we prefer the one that looks like a Google Profile (has avatar) or simply the first one.
                 const sorted = duplicates.sort((a, b) => {
                     if (a.avatar_url && !b.avatar_url) return -1;
                     if (!a.avatar_url && b.avatar_url) return 1;
@@ -431,7 +430,7 @@ export const fetchMinistryMembers = async (ministryId: string): Promise<{
 
         const publicList: TeamMemberProfile[] = (ministryProfiles || []).map((p: any) => ({
             id: p.id,
-            name: p.name || 'Membro sem nome', // Robustez para nome nulo
+            name: p.name || 'Membro sem nome',
             email: p.email || undefined,
             whatsapp: p.whatsapp,
             avatar_url: p.avatar_url,
@@ -529,7 +528,6 @@ export const updateMinistryEvent = async (ministryId: string, oldIso: string, ne
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     
     // Converte ISO local para timestamp with time zone (assumindo UTC ou local)
-    // Para simplificar, armazenamos como string no ISO format, mas o PostgREST espera timestamp válido
     const formatTimestamp = (iso: string) => `${iso}:00`; 
 
     try {
@@ -642,7 +640,6 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
         }
 
         // 3. Upsert Assignment
-        // Primeiro remove qualquer atribuição existente para esse evento/role (evitar dups)
         await supabase
             .from('schedule_assignments')
             .delete()
@@ -745,16 +742,6 @@ export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap
         // 3. Prepare Batch Upserts for Assignments
         const assignmentsToUpsert = [];
         
-        // First, clear existing assignments for the affected events/roles to avoid duplicates logic complexity
-        // (Alternatively, we could use upsert with a unique constraint on event_id + role, but Supabase constraints vary)
-        // For safety/speed in this context, we will perform deletions if needed or rely on upsert if constraints exist.
-        // Assuming `schedule_assignments` has a UNIQUE(event_id, role) constraint is best practice.
-        // If not, we should delete first. Let's try deletion of affected scopes first to be safe.
-        
-        // Optimization: Delete all assignments for the involved events in one go? 
-        // Risk: Might delete manual entries not in the new schedule? 
-        // Better: Process individually or trust upsert. Let's iterate.
-
         for (const [key, memberName] of Object.entries(schedule)) {
             if (!memberName) continue;
             
@@ -776,23 +763,12 @@ export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap
         }
 
         if (assignmentsToUpsert.length > 0) {
-            // Delete old ones first to be clean (simulating replacement)
-            const eventIds = Array.from(eventIdMap.values());
-            // This is a bit aggressive (deletes everything for these events). 
-            // Better to match event_id + role.
-            // Since SQL `DELETE WHERE (event_id, role) IN ...` is hard via JS client without RPC,
-            // we will loop delete (slower) OR assuming we are overwriting the whole month schedule mostly.
-            
-            // Current strategy: UPSERT. Requires DB unique constraint on (event_id, role).
-            // If constraint exists:
             const { error: upsertError } = await supabase
                 .from('schedule_assignments')
-                .upsert(assignmentsToUpsert, { onConflict: 'event_id,role' }); // Assumes constraint name or inference
+                .upsert(assignmentsToUpsert, { onConflict: 'event_id,role' }); 
             
             if (upsertError) {
-                // Fallback: Delete then Insert if upsert fails (e.g. no constraint)
                 console.warn("Upsert failed, trying Delete+Insert strategy...", upsertError);
-                
                 for (const item of assignmentsToUpsert) {
                      await supabase.from('schedule_assignments').delete().match({ event_id: item.event_id, role: item.role });
                 }
@@ -825,10 +801,6 @@ export const fetchMinistryAvailability = async (ministryId: string): Promise<Ava
                 profiles!inner ( id, name, ministry_id, allowed_ministries )
             `);
 
-        // Filter in JS for complex "allowed_ministries contains" logic if needed,
-        // but `!inner` join usually filters rows where profile exists.
-        // We need to ensure we only get members relevant to this ministry.
-        
         const relevantData = availData?.filter((row: any) => {
             const p = row.profiles;
             return p.ministry_id === cleanMid || (p.allowed_ministries && p.allowed_ministries.includes(cleanMid));
@@ -878,17 +850,7 @@ export const saveMemberAvailability = async (userId: string, memberName: string,
             return { member_id: member.id, date, status };
         });
 
-        // 3. Transaction-like replacement
-        // Delete all for this member (simpler than diffing)
-        // Optimization: Delete only for the months involved in `dates`? 
-        // For simplicity/robustness, we delete all future availability or specific dates?
-        // To avoid wiping history, let's delete only the dates that are being updated? 
-        // No, `dates` usually represents the *full* known availability for a period viewed in UI.
-        // But the UI sends *all* selected dates for that user. So wiping user's availability is safe IF the UI holds all of it.
-        // RISK: The UI usually only loads the current month? 
-        // The `AvailabilityScreen` loads `availability` map which usually contains ALL loaded availability.
-        // Let's assume safely we delete all for this member to be consistent with V1 logic.
-        
+        // 3. Replace Data
         await supabase.from('availability').delete().eq('member_id', member.id);
         
         if (rows.length > 0) {
@@ -975,12 +937,19 @@ export const loginWithEmail = async (email: string, pass: string) => {
 export const loginWithGoogle = async () => {
     if (!supabase) return { success: false, message: "Erro conexão" };
     
-    // Simplificando o login para evitar telas extras e problemas de redirecionamento no PWA
-    // Removemos queryParams forçados (prompt: consent) que causam comportamento estranho em mobile
+    // CORREÇÃO CRÍTICA: Força o redirecionamento para a URL correta configurada no Supabase
+    // Isso evita que o Google redirecione para URLs de preview da Vercel que não estão na allowlist
+    const productionURL = "https://escalaobpcpro.vercel.app";
+    
+    // Usa a URL de produção se estiver em ambiente online, senão usa localhost
+    const redirectUrl = window.location.hostname === 'localhost' 
+        ? window.location.origin 
+        : productionURL;
+
     const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-            redirectTo: window.location.origin
+            redirectTo: redirectUrl
         }
     });
     return { success: !error, message: error?.message || "" };
@@ -1016,10 +985,7 @@ export const syncMemberProfile = async (ministryId: string, user: User) => {
             await supabase.from('profiles').update({
                 allowed_ministries: newAllowed,
                 functions: newFunctions,
-                // Only update basic info if missing or user explicitly logged in with newer provider data
-                // Assuming Google login provides fresh avatar/name
                 avatar_url: user.avatar_url || existing.avatar_url,
-                // Don't overwrite phone/birthdate with nulls if they exist
                 whatsapp: existing.whatsapp || user.whatsapp,
                 birth_date: existing.birth_date || user.birthDate
             }).eq('id', user.id);
@@ -1183,9 +1149,6 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
         
         // 3. Delete Profile
         await supabase.from('profiles').delete().eq('id', memberId);
-        
-        // 4. (Legacy) Clean up JSON storage if needed (Optional)
-        // ...
     } catch (e) {
         console.error("Erro ao deletar membro:", e);
     }
@@ -1194,11 +1157,6 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
 export const toggleAdmin = async (ministryId: string, email: string) => {
     if (!supabase || !ministryId) return;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-    
-    // In V2, we might want a 'role' column in profiles or a join table.
-    // For now, keeping V1 logic (list in app_storage) for admin management is simpler
-    // UNLESS we want to fully migrate to SQL roles.
-    // Let's stick to app_storage for admin list for now as it's Ministry-Specific configuration.
     
     const admins = await loadData<string[]>(cleanMid, 'admins_list', []);
     let newAdmins;
@@ -1215,7 +1173,6 @@ export const saveSubscription = async (ministryId: string, sub: PushSubscription
     if (!supabase || !ministryId) return;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     
-    // Use JSON storage for subscriptions (easier than SQL schema for now)
     const currentSubs = await loadData<PushSubscriptionRecord[]>(cleanMid, 'push_subscriptions_v1', []);
     
     const subJSON = sub.toJSON();
@@ -1229,7 +1186,6 @@ export const saveSubscription = async (ministryId: string, sub: PushSubscription
         last_updated: new Date().toISOString()
     };
 
-    // Remove old sub for same device
     const filtered = currentSubs.filter(s => s.device_id !== newRecord.device_id);
     filtered.push(newRecord);
 
@@ -1248,7 +1204,6 @@ const getDeviceId = () => {
 export const sendNotification = async (ministryId: string, payload: { title: string; message: string; type?: string; actionLink?: string }) => {
     if (!supabase) return;
     
-    // Add to in-app notifications
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     const currentNotifs = await loadData<AppNotification[]>(cleanMid, 'notifications_v1', []);
     const newNotif: AppNotification = {
@@ -1262,7 +1217,6 @@ export const sendNotification = async (ministryId: string, payload: { title: str
     };
     await saveData(cleanMid, 'notifications_v1', [newNotif, ...currentNotifs].slice(0, 50));
 
-    // Call Edge Function for Push
     try {
         await supabase.functions.invoke('push-notification', {
             body: {
