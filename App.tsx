@@ -64,7 +64,8 @@ import {
   Sun,
   BellRing,
   CalendarHeart,
-  ChevronRight
+  ChevronRight,
+  Calendar
 } from 'lucide-react';
 import { NextEventCard } from './components/NextEventCard';
 import { ConfirmationModal } from './components/ConfirmationModal';
@@ -1242,7 +1243,7 @@ const AppContent = () => {
                 )}
 
                 {currentTab === 'team' && (
-                    <div className="space-y-6 animate-fade-in max-w-4xl mx-auto">
+                    <div className="space-y-6 animate-fade-in max-w-5xl mx-auto">
                         <div className="border-b border-zinc-200 dark:border-zinc-700 pb-4">
                             <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
                                 <Users className="text-blue-500"/> Gestão de Membros
@@ -1254,47 +1255,58 @@ const AppContent = () => {
                         
                         <BirthdayCard members={registeredMembers} currentMonthIso={currentMonth} />
 
-                        <div className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm overflow-hidden">
-                             <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center">
-                                 <h3 className="font-bold text-zinc-700 dark:text-zinc-300 text-sm uppercase">Lista de Membros ({registeredMembers.length})</h3>
-                                 <input 
+                        <div className="flex justify-end mb-4">
+                             <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={16} />
+                                <input 
                                     type="text" 
                                     placeholder="Buscar membro..." 
                                     value={memberSearch}
                                     onChange={e => setMemberSearch(e.target.value)}
-                                    className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-xs w-48"
-                                 />
+                                    className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-9 pr-4 py-2 text-sm w-64 shadow-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
                              </div>
-                             <div className="divide-y divide-zinc-100 dark:divide-zinc-700">
-                                 {registeredMembers
-                                    .filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()))
-                                    .map(member => (
-                                     <div key={member.id} className="p-4 flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors">
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                             {registeredMembers
+                                .filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()))
+                                .map(member => (
+                                 <div key={member.id} className="group relative bg-white dark:bg-zinc-800 rounded-2xl p-5 border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md transition-all">
+                                     
+                                     {/* Header: Avatar, Name, Actions */}
+                                     <div className="flex justify-between items-start mb-4">
                                          <div className="flex items-center gap-3">
                                              {member.avatar_url ? (
-                                                 <img src={member.avatar_url} alt={member.name} className="w-10 h-10 rounded-full object-cover" />
+                                                 <img src={member.avatar_url} alt={member.name} className="w-12 h-12 rounded-full object-cover border-2 border-zinc-100 dark:border-zinc-700" />
                                              ) : (
-                                                 <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 flex items-center justify-center font-bold">
+                                                 <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-lg border-2 border-zinc-100 dark:border-zinc-700">
                                                      {member.name.charAt(0)}
                                                  </div>
                                              )}
                                              <div>
-                                                 <p className="font-bold text-sm text-zinc-800 dark:text-zinc-200">{member.name}</p>
-                                                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                                                     {member.email || "Sem e-mail"} • {member.roles?.join(', ') || "Sem função"}
-                                                 </p>
+                                                 <h3 className="font-bold text-base text-zinc-800 dark:text-white leading-tight">{member.name}</h3>
+                                                 <span className="text-[10px] uppercase font-bold tracking-wide text-zinc-400">
+                                                     {member.isAdmin ? 'Administrador' : 'Membro'}
+                                                 </span>
                                              </div>
                                          </div>
-                                         <div className="flex items-center gap-2">
+
+                                         <div className="flex gap-2">
                                              {member.email && (
                                                  <button 
                                                      onClick={() => toggleAdminSQL(member.email!, !member.isAdmin).then(() => {
                                                          if(ministryId) loadAll(ministryId);
-                                                         addToast("Permissão de Admin alterada!", "success");
+                                                         addToast(member.isAdmin ? "Removido de Admin" : "Tornado Admin", "success");
                                                      })}
-                                                     className={`px-3 py-1 rounded text-xs font-bold ${member.isAdmin ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400'}`}
+                                                     className={`p-2 rounded-lg border transition-colors ${
+                                                         member.isAdmin 
+                                                         ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400' 
+                                                         : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-400 hover:text-purple-500 hover:border-purple-300'
+                                                     }`}
+                                                     title={member.isAdmin ? "Remover Admin" : "Tornar Admin"}
                                                  >
-                                                     {member.isAdmin ? 'Admin' : 'Membro'}
+                                                     <ShieldCheck size={18} />
                                                  </button>
                                              )}
                                              
@@ -1305,15 +1317,46 @@ const AppContent = () => {
                                                      await loadAll(ministryId);
                                                      addToast("Membro removido.", "success");
                                                  })}
-                                                 className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                                 className="p-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-400 hover:text-red-500 hover:border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                                                  title="Remover da equipe"
                                              >
-                                                 <Trash2 size={16} />
+                                                 <Trash2 size={18} />
                                              </button>
                                          </div>
                                      </div>
-                                 ))}
-                             </div>
+
+                                     {/* Roles Badges */}
+                                     <div className="flex flex-wrap gap-2 mb-4 min-h-[32px]">
+                                         {member.roles && member.roles.length > 0 ? (
+                                             member.roles.map(role => (
+                                                 <span key={role} className="text-[10px] font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 px-2.5 py-1 rounded-md">
+                                                     {role}
+                                                 </span>
+                                             ))
+                                         ) : (
+                                             <span className="text-[10px] text-zinc-400 italic py-1">Sem função definida</span>
+                                         )}
+                                     </div>
+
+                                     {/* Footer Info */}
+                                     <div className="space-y-2 pt-3 border-t border-zinc-100 dark:border-zinc-700/50">
+                                         <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                                             <Mail size={14} className="shrink-0 opacity-70"/>
+                                             <span className="truncate">{member.email || "—"}</span>
+                                         </div>
+                                         <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                                             <Phone size={14} className="shrink-0 opacity-70"/>
+                                             <span className="truncate">{member.whatsapp || "—"}</span>
+                                         </div>
+                                         {member.createdAt && (
+                                            <div className="flex items-center gap-2 text-[10px] text-zinc-400 mt-1">
+                                                <Calendar size={12} className="shrink-0 opacity-70"/>
+                                                <span>Desde {new Date(member.createdAt).toLocaleDateString('pt-BR')}</span>
+                                            </div>
+                                         )}
+                                     </div>
+                                 </div>
+                             ))}
                         </div>
                     </div>
                 )}
