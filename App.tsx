@@ -397,74 +397,74 @@ const AppContent = () => {
     const supabase = getSupabase();
     if (!supabase) return;
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        const metadata = session.user.user_metadata;
-        const allowedMinistries = metadata.allowedMinistries || (metadata.ministryId ? [metadata.ministryId] : []);
-        
-        const savedMid = localStorage.getItem('last_ministry_id');
-        let cleanMid = allowedMinistries.length > 0 ? allowedMinistries[0].trim().toLowerCase().replace(/\s+/g, '-') : 'midia';
-        
-        if (savedMid && allowedMinistries.some((m: string) => m.trim().toLowerCase().replace(/\s+/g, '-') === savedMid)) {
-            cleanMid = savedMid;
+    // Função centralizada para processar a sessão
+    const handleSession = async (session: any) => {
+        if (session?.user) {
+            const metadata = session.user.user_metadata;
+            const allowedMinistries = metadata.allowedMinistries || (metadata.ministryId ? [metadata.ministryId] : []);
+            
+            const savedMid = localStorage.getItem('last_ministry_id');
+            let cleanMid = allowedMinistries.length > 0 ? allowedMinistries[0].trim().toLowerCase().replace(/\s+/g, '-') : 'midia';
+            
+            if (savedMid && allowedMinistries.some((m: string) => m.trim().toLowerCase().replace(/\s+/g, '-') === savedMid)) {
+                cleanMid = savedMid;
+            }
+            
+            const user: User = {
+               id: session.user.id,
+               email: session.user.email,
+               name: metadata.name || 'Usuário',
+               role: metadata.role || 'member',
+               ministryId: cleanMid,
+               allowedMinistries: allowedMinistries,
+               whatsapp: metadata.whatsapp,
+               birthDate: metadata.birthDate,
+               avatar_url: metadata.avatar_url,
+               functions: metadata.functions || []
+            };
+            
+            // Sincroniza e define o usuário
+            await syncMemberProfile(cleanMid, user);
+            setCurrentUser(user);
+            setMinistryId(cleanMid);
+        } else {
+            setCurrentUser(null);
+            setMinistryId(null);
         }
-        
-        const user: User = {
-           id: session.user.id,
-           email: session.user.email,
-           name: metadata.name || 'Usuário',
-           role: metadata.role || 'member',
-           ministryId: cleanMid,
-           allowedMinistries: allowedMinistries,
-           whatsapp: metadata.whatsapp,
-           birthDate: metadata.birthDate,
-           avatar_url: metadata.avatar_url,
-           functions: metadata.functions || []
-        };
-        
-        await syncMemberProfile(cleanMid, user);
+        // Só remove o loading no final do processamento
+        setSessionLoading(false);
+    };
 
-        setCurrentUser(user);
-        setMinistryId(cleanMid);
-        setSessionLoading(false);
-      } else {
-        setSessionLoading(false);
-      }
+    // Listener de Mudança de Estado (Prioritário)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        // Eventos que indicam uma sessão válida ou atualização
+        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+            if (session) await handleSession(session);
+        } 
+        // Evento de saída explícita
+        else if (event === 'SIGNED_OUT') {
+            setCurrentUser(null);
+            setMinistryId(null);
+            setSessionLoading(false);
+        }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        const metadata = session.user.user_metadata;
-        const allowedMinistries = metadata.allowedMinistries || (metadata.ministryId ? [metadata.ministryId] : []);
-        
-        const savedMid = localStorage.getItem('last_ministry_id');
-        let cleanMid = allowedMinistries.length > 0 ? allowedMinistries[0].trim().toLowerCase().replace(/\s+/g, '-') : 'midia';
-        
-        if (savedMid && allowedMinistries.some((m: string) => m.trim().toLowerCase().replace(/\s+/g, '-') === savedMid)) {
-            cleanMid = savedMid;
+    // Verificação Inicial (Fallback)
+    // Se o listener INITIAL_SESSION não disparar rápido o suficiente ou não houver sessão
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+        if (session) {
+            // Se tem sessão, o listener acima vai pegar (ou já pegou), mas garantimos aqui
+            await handleSession(session);
+        } else {
+            // Se NÃO tem sessão no storage, ainda não paramos o loading imediatamente 
+            // se houver chance de um refresh token pendente. 
+            // Mas para não travar, damos um pequeno delay ou paramos se não houver hash na URL.
+            // Na maioria dos casos de "Flash", o getSession retorna null mas o listener recupera em seguida.
+            // Vamos deixar o listener controlar o sucesso, e aqui tratamos o caso de "realmente deslogado".
+            if (!currentUser) {
+                 setSessionLoading(false);
+            }
         }
-        
-        const user: User = {
-           id: session.user.id,
-           email: session.user.email,
-           name: metadata.name || 'Usuário',
-           role: metadata.role || 'member',
-           ministryId: cleanMid,
-           allowedMinistries: allowedMinistries,
-           whatsapp: metadata.whatsapp,
-           birthDate: metadata.birthDate,
-           avatar_url: metadata.avatar_url,
-           functions: metadata.functions || []
-        };
-        
-        await syncMemberProfile(cleanMid, user);
-        
-        setCurrentUser(user);
-        setMinistryId(cleanMid);
-      } else {
-        setCurrentUser(null);
-        setMinistryId(null);
-      }
     });
 
     return () => subscription.unsubscribe();
