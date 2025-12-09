@@ -442,17 +442,22 @@ export const fetchMinistryMembers = async (ministryId: string): Promise<{
 
         if (error) throw error;
 
-        const publicList: TeamMemberProfile[] = (ministryProfiles || []).map((p: any) => ({
-            id: p.id,
-            name: p.name || 'Membro sem nome', 
-            email: p.email || undefined,
-            whatsapp: p.whatsapp,
-            avatar_url: p.avatar_url,
-            birthDate: p.birth_date,
-            roles: p.functions || [],
-            createdAt: new Date().toISOString(),
-            isAdmin: p.is_admin
-        })).sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
+        const publicList: TeamMemberProfile[] = (ministryProfiles || []).map((p: any) => {
+            // Filter roles to only show those belonging to the current ministry settings
+            const userRoles = (p.functions || []).filter((r: string) => validRoles.includes(r));
+            
+            return {
+                id: p.id,
+                name: p.name || 'Membro sem nome', 
+                email: p.email || undefined,
+                whatsapp: p.whatsapp,
+                avatar_url: p.avatar_url,
+                birthDate: p.birth_date,
+                roles: userRoles,
+                createdAt: new Date().toISOString(),
+                isAdmin: p.is_admin
+            };
+        }).sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
 
         const memberMap: MemberMap = {};
         ministryProfiles?.forEach((p: any) => {
@@ -487,6 +492,7 @@ export const fetchMinistrySchedule = async (ministryId: string, monthIso: string
         const { data: events, error: eventError } = await supabase
             .from('events')
             .select('id, title, date_time')
+            .eq('ministry_id: cleanMid') // Incorrect syntax in previous code? Fixed below.
             .eq('ministry_id', cleanMid)
             .gte('date_time', startOfMonth)
             .lt('date_time', `${nextMonth}T00:00:00`)
