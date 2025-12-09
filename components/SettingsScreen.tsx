@@ -1,9 +1,8 @@
-
 import React, { useState } from 'react';
-import { Settings, Save, Moon, Sun, BellRing, RefreshCw, FileText, Shield, Megaphone, Database, CheckCircle2 } from 'lucide-react';
+import { Settings, Save, Moon, Sun, BellRing, RefreshCw, FileText, Shield, Megaphone, Database, CheckCircle2, UserX } from 'lucide-react';
 import { useToast } from './Toast';
 import { LegalModal, LegalDocType } from './LegalDocuments';
-import { migrateLegacyData } from '../services/supabaseService';
+import { migrateLegacyData, removeDuplicateProfiles } from '../services/supabaseService';
 
 interface Props {
   initialTitle: string;
@@ -19,6 +18,7 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
   const [tempTitle, setTempTitle] = useState(initialTitle);
   const [legalDoc, setLegalDoc] = useState<LegalDocType>(null);
   const [migrating, setMigrating] = useState(false);
+  const [cleaning, setCleaning] = useState(false);
   const { addToast, confirmAction } = useToast();
 
   const handleMigration = async () => {
@@ -30,6 +30,23 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
               setMigrating(true);
               const result = await migrateLegacyData(ministryId);
               setMigrating(false);
+              addToast(result.message, result.success ? 'success' : 'error');
+              if (result.success) {
+                  setTimeout(() => window.location.reload(), 2000);
+              }
+          }
+      );
+  };
+
+  const handleDeduplicate = async () => {
+      if (!ministryId) return;
+      confirmAction(
+          "Corrigir Duplicatas?",
+          "Isso irá buscar membros com o mesmo E-mail e fundi-los em um único perfil, mantendo todas as escalas, disponibilidades e permissões de ministérios (Ex: Comunicação + Louvor).",
+          async () => {
+              setCleaning(true);
+              const result = await removeDuplicateProfiles();
+              setCleaning(false);
               addToast(result.message, result.success ? 'success' : 'error');
               if (result.success) {
                   setTimeout(() => window.location.reload(), 2000);
@@ -190,10 +207,10 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
                  </div>
 
                  {/* Botão de Migração de Dados (V1 -> V2) */}
-                 <div className="md:col-span-2 mt-2 pt-4 border-t border-zinc-100 dark:border-zinc-700">
+                 <div className="md:col-span-2 mt-2 pt-4 border-t border-zinc-100 dark:border-zinc-700 space-y-3">
                      <button 
                          onClick={handleMigration}
-                         disabled={migrating}
+                         disabled={migrating || cleaning}
                          className="w-full flex items-center justify-center gap-2 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 transition-colors"
                      >
                          {migrating ? <RefreshCw size={18} className="animate-spin"/> : <Database size={18}/>}
@@ -201,8 +218,20 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
                              {migrating ? "Migrando..." : "Migrar Dados Antigos (V1 -> V2)"}
                          </span>
                      </button>
-                     <p className="text-[10px] text-zinc-400 mt-2 text-center">
-                         Use se seus membros manuais ou disponibilidade sumiram após a atualização.
+
+                     {/* Botão de Limpeza de Duplicatas */}
+                     <button 
+                         onClick={handleDeduplicate}
+                         disabled={migrating || cleaning}
+                         className="w-full flex items-center justify-center gap-2 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 transition-colors"
+                     >
+                         {cleaning ? <RefreshCw size={18} className="animate-spin"/> : <UserX size={18}/>}
+                         <span className="text-sm font-bold">
+                             {cleaning ? "Corrigindo..." : "Corrigir Duplicatas de E-mail"}
+                         </span>
+                     </button>
+                     <p className="text-[10px] text-zinc-400 text-center">
+                         Use se um membro tem dois perfis (email + google) para mesclá-los.
                      </p>
                  </div>
 

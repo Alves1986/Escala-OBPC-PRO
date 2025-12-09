@@ -1,5 +1,3 @@
-
-
 // Copie TODO este código e cole no Editor da Edge Function 'push-notification' no painel do Supabase.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -28,7 +26,7 @@ Deno.serve(async (req: Request) => {
     )
 
     // 3. Recebe os dados enviados pelo seu App (Título, Mensagem, etc)
-    const { ministryId, title, message, type } = await req.json()
+    const { ministryId, title, message, type, actionLink } = await req.json()
 
     // 4. CONFIGURAÇÃO VAPID (SUAS CHAVES REAIS)
     const publicKey = 'BF16yQvZzPhqIFKl0CVYgNtjonnfgGI39QPOHXcmu0_kGL9V9llvULEMaQajIxT8nEW8rRQ_kWacpDc1zQi9EYs'
@@ -75,7 +73,7 @@ Deno.serve(async (req: Request) => {
         body: message,
         icon: 'https://escala-midia-pro.vercel.app/icon.png', // Tenta mostrar o ícone do app
         data: {
-            url: '/', // Abre o app ao clicar
+            url: actionLink ? `/?tab=${actionLink}` : '/', // Abre o app ao clicar (com tab se houver)
             type: type
         }
       })

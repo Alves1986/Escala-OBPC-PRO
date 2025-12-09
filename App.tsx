@@ -27,7 +27,7 @@ import {
     loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, 
     createSwapRequest, performSwap, toggleAdmin, createAnnouncement, markAnnouncementRead, 
     fetchGlobalSchedules, joinMinistry, saveSubscription, toggleAnnouncementLike,
-    fetchMinistryMembers, fetchMinistrySchedule, fetchMinistryAvailability, saveScheduleAssignment, saveMemberAvailability, updateMinistryEvent 
+    fetchMinistryMembers, fetchMinistrySchedule, fetchMinistryAvailability, saveScheduleAssignment, saveScheduleBulk, saveMemberAvailability, updateMinistryEvent, syncMemberProfile 
 } from './services/supabaseService';
 // Importação do Serviço de IA
 import { generateScheduleWithAI } from './services/aiService';
@@ -430,7 +430,8 @@ const AppContent = () => {
     const supabase = getSupabase();
     if (!supabase) return;
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Initial session load
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         const metadata = session.user.user_metadata;
         const allowedMinistries = metadata.allowedMinistries || (metadata.ministryId ? [metadata.ministryId] : []);
@@ -455,6 +456,9 @@ const AppContent = () => {
            functions: metadata.functions || []
         };
         
+        // CRITICAL: Ensure profile exists for Google Logins
+        await syncMemberProfile(cleanMid, user);
+
         setCurrentUser(user);
         setMinistryId(cleanMid);
         setSessionLoading(false);
@@ -463,7 +467,7 @@ const AppContent = () => {
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
         const metadata = session.user.user_metadata;
         const allowedMinistries = metadata.allowedMinistries || (metadata.ministryId ? [metadata.ministryId] : []);
@@ -487,6 +491,10 @@ const AppContent = () => {
            avatar_url: metadata.avatar_url,
            functions: metadata.functions || []
         };
+        
+        // CRITICAL: Ensure profile exists for Google Logins
+        await syncMemberProfile(cleanMid, user);
+        
         setCurrentUser(user);
         setMinistryId(cleanMid);
       } else {
@@ -573,19 +581,21 @@ const AppContent = () => {
             // Atualiza UI
             setSchedule(newSchedule);
             
-            // Salva no SQL: Itera sobre as chaves geradas pela IA e salva uma por uma
-            // Nota: Em produção, o ideal seria um batchSave no supabaseService
-            for (const [key, value] of Object.entries(result)) {
-                await saveScheduleAssignment(ministryId, key, value);
+            // Salva no SQL em BULK para performance
+            const success = await saveScheduleBulk(ministryId, result);
+            
+            if (success) {
+                addToast("Escala gerada com IA com sucesso!", "success");
+            } else {
+                addToast("Escala gerada, mas erro ao salvar no banco. Tente novamente.", "warning");
             }
-
-            addToast("Escala gerada com IA com sucesso!", "success");
         } else {
             addToast("Falha ao gerar escala. Verifique a configuração da API ou tente novamente.", "error");
         }
-    } catch (e) {
+    } catch (e: any) {
         console.error(e);
-        addToast("Erro interno ao gerar escala.", "error");
+        // Exibe a mensagem real do erro (Ex: "Chave de API não configurada")
+        addToast(e.message || "Erro interno ao gerar escala.", "error");
     } finally {
         setAiLoading(false);
     }
@@ -1176,7 +1186,7 @@ const AppContent = () => {
                                                 </button>
                                                 <button 
                                                     onClick={() => {
-                                                        confirmAction("Excluir Membro", `Isso removerá ${member.name} de todas as escalas e registros deste ministério. Continuar?`, async () => {
+                                                        confirmAction("Excluir Membro", `Isso removerá ${member.name} e TODOS os seus dados de escalas deste ministério. Continuar?`, async () => {
                                                             if (ministryId) {
                                                                 await deleteMember(ministryId, member.id, member.name);
                                                                 setRegisteredMembers(prev => prev.filter(m => m.id !== member.id));

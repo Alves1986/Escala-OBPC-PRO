@@ -27,10 +27,6 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
   const [selectedRole, setSelectedRole] = useState("Todos");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Removido o useEffect de auto-refresh para evitar que dados locais recentes 
-  // sejam sobrescritos por dados antigos do servidor (flickering).
-  // O app já tem os dados na memória. O refresh deve ser apenas manual.
-
   const handleManualRefresh = async () => {
       if (onRefresh) {
           setIsRefreshing(true);
@@ -58,30 +54,25 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
 
   // Processa e combina os dados
   const reportData = useMemo(() => {
-    // 1. Pega todos os membros registrados
-    // 2. Adiciona membros "fantasmas" que tem disponibilidade mas não registro
-    const allMemberNames = new Set<string>(registeredMembers.map(m => m.name));
-    Object.keys(availability).forEach(name => allMemberNames.add(name));
-
-    const data = Array.from(allMemberNames).map((name: string) => {
-      // Tenta achar o perfil completo
-      const profile = registeredMembers.find(m => normalizeString(m.name) === normalizeString(name));
-      
+    // FIX: Utiliza APENAS membros registrados (que já passaram pelo filtro do SupabaseService)
+    // Isso remove membros de outros ministérios ou dados órfãos da visualização.
+    
+    const data = registeredMembers.map((profile) => {
       // Determina as funções (Perfil > Mapa Manual)
       let roles: string[] = [];
-      if (profile && profile.roles && profile.roles.length > 0) {
+      if (profile.roles && profile.roles.length > 0) {
         roles = profile.roles;
       } else {
         // Fallback: Procura no mapa manual
         Object.entries(membersMap).forEach(([role, members]) => {
-          if ((members as string[]).some(m => normalizeString(m) === normalizeString(name))) {
+          if ((members as string[]).some(m => normalizeString(m) === normalizeString(profile.name))) {
               roles.push(role);
           }
         });
       }
 
       // Pega dias disponíveis no mês atual com busca insensível a case/trim/acentos
-      const normalizedName = normalizeString(name);
+      const normalizedName = normalizeString(profile.name);
       let dates: string[] = [];
       
       // Tenta encontrar a chave no mapa de disponibilidade usando a string normalizada
@@ -102,8 +93,8 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
         .sort((a, b) => a.day - b.day);
 
       return {
-        name: profile ? profile.name : name, // Usa o nome oficial do perfil se existir
-        avatar_url: profile?.avatar_url,
+        name: profile.name,
+        avatar_url: profile.avatar_url,
         roles,
         days: monthDates,
         count: monthDates.length
