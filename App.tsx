@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ScheduleTable } from './components/ScheduleTable';
 import { CalendarGrid } from './components/CalendarGrid';
@@ -98,6 +98,9 @@ const AppContent = () => {
   const [sessionLoading, setSessionLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [ministryId, setMinistryId] = useState<string | null>(null);
+
+  // Ref para rastrear se a sessão foi encontrada (evita race conditions)
+  const sessionFoundRef = useRef(false);
 
   const [publicLegalDoc, setPublicLegalDoc] = useState<LegalDocType>(null);
   
@@ -397,9 +400,16 @@ const AppContent = () => {
     const supabase = getSupabase();
     if (!supabase) return;
 
+    let mounted = true;
+
     // Função centralizada para processar a sessão
     const handleSession = async (session: any) => {
+        if (!mounted) return;
+
         if (session?.user) {
+            // Marca que encontramos uma sessão válida
+            sessionFoundRef.current = true;
+
             const metadata = session.user.user_metadata;
             const allowedMinistries = metadata.allowedMinistries || (metadata.ministryId ? [metadata.ministryId] : []);
             
@@ -423,51 +433,66 @@ const AppContent = () => {
                functions: metadata.functions || []
             };
             
-            // Sincroniza e define o usuário
-            await syncMemberProfile(cleanMid, user);
-            setCurrentUser(user);
-            setMinistryId(cleanMid);
-        } else {
-            setCurrentUser(null);
-            setMinistryId(null);
+            // Define o usuário IMEDIATAMENTE para evitar flash de login
+            if (mounted) {
+                setCurrentUser(user);
+                setMinistryId(cleanMid);
+                setSessionLoading(false);
+            }
+
+            // Sincroniza em background (sem await bloqueante)
+            syncMemberProfile(cleanMid, user).catch(console.error);
         }
-        // Só remove o loading no final do processamento
-        setSessionLoading(false);
     };
 
-    // Listener de Mudança de Estado (Prioritário)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-        // Eventos que indicam uma sessão válida ou atualização
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
         if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-            if (session) await handleSession(session);
-        } 
-        // Evento de saída explícita
-        else if (event === 'SIGNED_OUT') {
-            setCurrentUser(null);
-            setMinistryId(null);
-            setSessionLoading(false);
-        }
-    });
-
-    // Verificação Inicial (Fallback)
-    // Se o listener INITIAL_SESSION não disparar rápido o suficiente ou não houver sessão
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-        if (session) {
-            // Se tem sessão, o listener acima vai pegar (ou já pegou), mas garantimos aqui
-            await handleSession(session);
-        } else {
-            // Se NÃO tem sessão no storage, ainda não paramos o loading imediatamente 
-            // se houver chance de um refresh token pendente. 
-            // Mas para não travar, damos um pequeno delay ou paramos se não houver hash na URL.
-            // Na maioria dos casos de "Flash", o getSession retorna null mas o listener recupera em seguida.
-            // Vamos deixar o listener controlar o sucesso, e aqui tratamos o caso de "realmente deslogado".
-            if (!currentUser) {
-                 setSessionLoading(false);
+            if (session) handleSession(session);
+        } else if (event === 'SIGNED_OUT') {
+            sessionFoundRef.current = false;
+            if (mounted) {
+                setCurrentUser(null);
+                setMinistryId(null);
+                setSessionLoading(false);
             }
         }
     });
 
-    return () => subscription.unsubscribe();
+    // Verificação Inicial Otimizada com check de Token Local
+    supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+            handleSession(session);
+        } else {
+            // Se não tem sessão ativa imediata, verificamos se há indícios de token no storage
+            // para decidir se esperamos um refresh ou mostramos login logo.
+            let hasLocalToken = false;
+            try {
+                if (typeof localStorage !== 'undefined') {
+                    const keys = Object.keys(localStorage);
+                    hasLocalToken = keys.some(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
+                }
+            } catch(e) {}
+            
+            if (hasLocalToken) {
+                // Tem token antigo: Pode ser um refresh lento. Aguarda um pouco.
+                setTimeout(() => {
+                    if (mounted && !sessionFoundRef.current) {
+                        setSessionLoading(false);
+                    }
+                }, 2000);
+            } else {
+                // Não tem token: Usuário novo ou deslogado. Mostra login imediatamente.
+                if (mounted && !sessionFoundRef.current) {
+                    setSessionLoading(false);
+                }
+            }
+        }
+    });
+
+    return () => {
+        mounted = false;
+        subscription.unsubscribe();
+    };
   }, [publicLegalDoc]);
 
   useEffect(() => {
@@ -663,7 +688,8 @@ const AppContent = () => {
           await sendNotificationSQL(ministryId, {
               title: `Novo Aviso: ${title}`,
               message: message,
-              type: type
+              type: type,
+              actionLink: 'announcements'
           });
       }
   };
