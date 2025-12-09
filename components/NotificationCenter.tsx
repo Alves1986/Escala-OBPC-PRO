@@ -1,8 +1,7 @@
-
 import React, { useState } from 'react';
 import { Bell, Check, Trash2, Info, AlertTriangle, CheckCircle, AlertOctagon, ExternalLink } from 'lucide-react';
 import { AppNotification } from '../types';
-import { markNotificationsRead, clearAllNotifications } from '../services/supabaseService';
+import { markNotificationsReadSQL, clearAllNotificationsSQL, getSupabase } from '../services/supabaseService';
 
 interface Props {
   notifications: AppNotification[];
@@ -17,17 +16,27 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
 
   const handleMarkAllRead = async () => {
     if (!ministryId) return;
+    
+    // Attempt to get user ID since it is required by SQL service but not passed in props
+    const supabase = getSupabase();
+    if (!supabase) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
     const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
     if (unreadIds.length === 0) return;
     
-    const updated = await markNotificationsRead(ministryId, unreadIds);
+    await markNotificationsReadSQL(unreadIds, user.id);
+    
+    // Optimistic update
+    const updated = notifications.map(n => ({...n, read: true}));
     onNotificationsUpdate(updated);
   };
 
   const handleClearAll = async () => {
       if (!ministryId) return;
       if (confirm("Tem certeza que deseja limpar todas as notificações?")) {
-          await clearAllNotifications(ministryId);
+          await clearAllNotificationsSQL(ministryId);
           onNotificationsUpdate([]); // Limpa localmente
       }
   };

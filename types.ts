@@ -1,6 +1,4 @@
 
-
-
 export type Role = string;
 
 export interface MemberMap {
@@ -20,6 +18,7 @@ export interface CustomEvent {
   title: string;
   date: string; // YYYY-MM-DD
   time: string; // HH:mm
+  iso: string; // Helper for UI
 }
 
 export interface AvailabilityMap {
@@ -27,6 +26,7 @@ export interface AvailabilityMap {
 }
 
 export interface AuditLogEntry {
+  id?: string;
   date: string;
   action: string;
   details: string;
@@ -39,7 +39,7 @@ export interface AppNotification {
   message: string;
   timestamp: string;
   read: boolean;
-  actionLink?: string; // Opcional: link para redirecionar
+  actionLink?: string; 
 }
 
 export interface Announcement {
@@ -48,7 +48,7 @@ export interface Announcement {
   message: string;
   type: 'info' | 'success' | 'warning' | 'alert';
   timestamp: string;
-  expirationDate?: string; // Data de validade do aviso (ISO)
+  expirationDate?: string; 
   author: string;
   readBy: { userId: string; name: string; timestamp: string }[];
   likedBy: { userId: string; name: string; timestamp: string }[]; 
@@ -67,7 +67,6 @@ export interface ScheduleAnalysis {
 // --- GLOBAL CONFLICT TYPES ---
 export const KNOWN_MINISTRIES = ['midia', 'louvor', 'infantil', 'recepcao', 'teatro', 'diaconia'];
 
-// Lista Oficial de Ministérios Disponíveis para Seleção
 export const MINISTRIES = [
   { id: 'midia', label: 'Mídia / Comunicação' },
   { id: 'louvor', label: 'Louvor / Adoração' },
@@ -76,15 +75,14 @@ export const MINISTRIES = [
 ];
 
 export interface GlobalConflict {
-    ministryId: string; // Onde ele está escalado (ex: 'louvor')
-    eventIso: string;   // YYYY-MM-DDTHH:mm
-    role: string;       // Qual função ele vai exercer lá
+    ministryId: string; 
+    eventIso: string;   
+    role: string;       
 }
 
 export interface GlobalConflictMap {
     [normalizedMemberName: string]: GlobalConflict[];
 }
-// -----------------------------
 
 export interface SwapRequest {
   id: string;
@@ -109,28 +107,27 @@ export interface RepertoireItem {
   createdAt: string;
 }
 
-// Push Notification Types
 export interface PushSubscriptionRecord {
   endpoint: string;
   keys: {
     p256dh: string;
     auth: string;
   };
-  device_id: string; // Unique ID stored in localStorage to identify this device
+  device_id: string; 
   last_updated: string;
 }
 
 export interface User {
-  id?: string;        // UUID do Supabase Auth
-  email?: string;     // Email de login
-  username?: string;  // ID legado ou Display Name
-  name: string;       // Nome de exibição
-  avatar_url?: string; // Foto de perfil (Base64)
+  id?: string;        
+  email?: string;     
+  username?: string;  
+  name: string;       
+  avatar_url?: string; 
   role: 'admin' | 'member';
-  ministryId?: string; // Vínculo com o ministério atual
-  allowedMinistries?: string[]; // Lista de ministérios que o usuário pode acessar
+  ministryId?: string; 
+  allowedMinistries?: string[]; 
   whatsapp?: string;
-  birthDate?: string; // YYYY-MM-DD
+  birthDate?: string; 
   functions?: string[];
   createdAt?: string;
 }
@@ -140,54 +137,17 @@ export interface TeamMemberProfile {
     name: string;
     email?: string;
     whatsapp?: string;
-    birthDate?: string; // YYYY-MM-DD
+    birthDate?: string; 
     avatar_url?: string;
     roles?: string[];
     createdAt?: string;
+    isAdmin?: boolean;
 }
-
-// --- DATABASE ENTITIES (SQL MIGRATION) ---
-export interface DatabaseProfile {
-  id: string;
-  name: string;
-  role: string;
-  ministry_id: string;
-  whatsapp?: string;
-  email?: string;
-  avatar_url?: string;
-  birth_date?: string;
-  functions: string[];
-  allowed_ministries?: string[]; // Assuming stored as array or JSON
-}
-
-export interface DatabaseEvent {
-  id: string;
-  ministry_id: string;
-  title: string;
-  date_time: string; // timestamptz
-}
-
-export interface DatabaseAssignment {
-  id: string;
-  event_id: string;
-  role: string;
-  member_id: string;
-  // Joins
-  member_name?: string; // Virtual property from join
-}
-
-export interface DatabaseAvailability {
-  id: string;
-  member_id: string;
-  date: string;
-  status: string; // 'M', 'N', 'BOTH'
-}
-// -----------------------------------------
 
 export interface AppState {
   ministryId: string | null;
   currentUser: User | null;
-  currentMonth: string; // YYYY-MM
+  currentMonth: string; 
   members: MemberMap;
   schedule: ScheduleMap;
   attendance: AttendanceMap;
@@ -204,7 +164,7 @@ export const DEFAULT_ROLES: Record<string, string[]> = {
   'default': ["Membro"]
 };
 
-// Supabase Credentials - Updated to support Vercel/Next.js environment variables
+// Supabase Credentials
 export const SUPABASE_URL = 
   (import.meta as any).env?.VITE_SUPABASE_URL || 
   (import.meta as any).env?.NEXT_PUBLIC_SUPABASE_URL || 

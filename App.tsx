@@ -25,10 +25,14 @@ import { PublicLegalPage, LegalDocType } from './components/LegalDocuments';
 import { WeatherWidget } from './components/WeatherWidget';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile, SwapRequest, RepertoireItem, Announcement, GlobalConflictMap } from './types';
 import { 
-    loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, 
-    createSwapRequest, performSwap, toggleAdmin, createAnnouncement, markAnnouncementRead, 
-    fetchGlobalSchedules, joinMinistry, saveSubscription, toggleAnnouncementLike,
-    fetchMinistryMembers, fetchMinistrySchedule, fetchMinistryAvailability, saveScheduleAssignment, saveScheduleBulk, saveMemberAvailability, updateMinistryEvent, syncMemberProfile, deleteMinistryEvent, resetToDefaultEvents, clearScheduleForMonth, toggleAssignmentConfirmation, createMinistryEvent
+    getSupabase, logout, updateUserProfile, deleteMember, 
+    fetchGlobalSchedules, joinMinistry,
+    fetchMinistryMembers, fetchMinistrySchedule, fetchMinistryAvailability, saveScheduleAssignment, saveScheduleBulk, saveMemberAvailability, updateMinistryEvent, syncMemberProfile, deleteMinistryEvent, resetToDefaultEvents, clearScheduleForMonth, toggleAssignmentConfirmation, createMinistryEvent,
+    fetchMinistrySettings, fetchRepertoire, fetchSwapRequests, fetchNotificationsSQL, fetchAnnouncementsSQL, fetchAdminsSQL,
+    saveMinistrySettings, addToRepertoire, deleteFromRepertoire,
+    createSwapRequestSQL, performSwapSQL, sendNotificationSQL, createAnnouncementSQL, interactAnnouncementSQL,
+    toggleAdminSQL, markNotificationsReadSQL, saveSubscriptionSQL,
+    fetchAuditLogs, logActionSQL
 } from './services/supabaseService';
 import { generateScheduleWithAI } from './services/aiService';
 import { generateMonthEvents, getMonthName, adjustMonth } from './utils/dateUtils';
@@ -141,7 +145,6 @@ const AppContent = () => {
   const [schedule, setSchedule] = useState<ScheduleMap>({});
   const [attendance, setAttendance] = useState<AttendanceMap>({});
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>([]);
-  const [ignoredEvents, setIgnoredEvents] = useState<string[]>([]);
   const [availability, setAvailability] = useState<AvailabilityMap>({});
   const [roles, setRoles] = useState<string[]>([]); 
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
@@ -176,7 +179,7 @@ const AppContent = () => {
 
           if (subscription && currentUser.allowedMinistries) {
               for (const mid of currentUser.allowedMinistries) {
-                  await saveSubscription(mid, subscription);
+                  await saveSubscriptionSQL(mid, subscription);
               }
           }
       } catch (error) {
@@ -252,21 +255,10 @@ const AppContent = () => {
 
   const [year, month] = currentMonth.split('-').map(Number);
   
-  const { visibleEvents, hiddenEventsList } = useMemo(() => {
+  const { visibleEvents } = useMemo(() => {
     const allGenerated = generateMonthEvents(year, month - 1, customEvents);
-    const visible: typeof allGenerated = [];
-    const hidden: typeof allGenerated = [];
-
-    allGenerated.forEach(evt => {
-      if (ignoredEvents.includes(evt.iso)) {
-        hidden.push(evt);
-      } else {
-        visible.push(evt);
-      }
-    });
-
-    return { visibleEvents: visible, hiddenEventsList: hidden };
-  }, [year, month, customEvents, ignoredEvents]);
+    return { visibleEvents: allGenerated, hiddenEventsList: [] };
+  }, [year, month, customEvents]);
 
   const nextEvent = useMemo(() => {
     const now = new Date();
@@ -322,6 +314,9 @@ const AppContent = () => {
       details
     };
     setAuditLog(prev => [newEntry, ...prev].slice(0, 200));
+    if (ministryId) {
+        logActionSQL(ministryId, action, details);
+    }
   };
 
   const getMinistryTitle = (id: string | null) => {
@@ -343,29 +338,25 @@ const AppContent = () => {
         resScheduleData,
         resAvailability,
         resGlobalConflicts,
-        resRoles,
+        resSettings,
         resLogs,
-        resIgnored,
         resNotif,
         resSwaps,
         resRepertoire,
         resAdmins,
-        resConfig,
         resAnnouncements,
       ] = await Promise.all([
         fetchMinistryMembers(cleanMid),
         fetchMinistrySchedule(cleanMid, currentMonth),
         fetchMinistryAvailability(cleanMid),
         fetchGlobalSchedules(currentMonth, cleanMid),
-        loadData<string[]>(cleanMid, 'functions_config', DEFAULT_ROLES[cleanMid] || DEFAULT_ROLES['midia']),
-        loadData<AuditLogEntry[]>(cleanMid, 'audit_logs', []),
-        loadData<string[]>(cleanMid, `ignored_events_${currentMonth}`, []),
-        loadData<AppNotification[]>(cleanMid, 'notifications_v1', []),
-        loadData<SwapRequest[]>(cleanMid, 'swap_requests_v1', []),
-        loadData<RepertoireItem[]>('shared', 'repertoire_v1', []),
-        loadData<string[]>(cleanMid, 'admins_list', []),
-        loadData<any>(cleanMid, 'ministry_config', { displayName: '' }),
-        loadData<Announcement[]>(cleanMid, 'announcements_v1', []),
+        fetchMinistrySettings(cleanMid),
+        fetchAuditLogs(cleanMid),
+        fetchNotificationsSQL(cleanMid, currentUser?.id || ''),
+        fetchSwapRequests(cleanMid),
+        fetchRepertoire(cleanMid),
+        fetchAdminsSQL(cleanMid),
+        fetchAnnouncementsSQL(cleanMid),
       ]);
 
       setMembers(resMemberData.memberMap);
@@ -376,14 +367,13 @@ const AppContent = () => {
       setAvailability(resAvailability);
       setGlobalConflicts(resGlobalConflicts);
       
-      setRoles(resRoles);
+      setRoles(resSettings.roles);
+      setCustomTitle(resSettings.displayName);
       setAuditLog(resLogs);
-      setIgnoredEvents(resIgnored);
       setNotifications(resNotif);
       setSwapRequests(resSwaps);
       setRepertoire(resRepertoire);
       setAdminsList(resAdmins);
-      if (resConfig?.displayName) setCustomTitle(resConfig.displayName);
       setAnnouncements(resAnnouncements);
 
       if (currentUser && currentUser.email && resAdmins.includes(currentUser.email)) {
@@ -585,7 +575,6 @@ const AppContent = () => {
                     return next;
                 });
                 setCustomEvents([]);
-                setIgnoredEvents([]);
                 
                 await loadAll(ministryId);
                 addToast("Eventos restaurados para o padrão com sucesso!", "success");
@@ -651,7 +640,6 @@ const AppContent = () => {
     } else {
         logAction('Escala', `Removeu membro de ${role} em ${date}`);
     }
-    await saveData(ministryId, 'audit_logs', auditLog);
   };
 
   const handleAttendanceToggle = async (key: string) => {
@@ -669,11 +657,10 @@ const AppContent = () => {
 
   const handleCreateAnnouncement = async (title: string, message: string, type: 'info' | 'success' | 'warning' | 'alert', expirationDate: string) => {
       if (!ministryId || !currentUser) return;
-      const success = await createAnnouncement(ministryId, { title, message, type, expirationDate }, currentUser.name);
+      const success = await createAnnouncementSQL(ministryId, { title, message, type, expirationDate }, currentUser.name);
       if (success) {
-          const updated = await loadData<Announcement[]>(ministryId, 'announcements_v1', []);
-          setAnnouncements(updated);
-          await sendNotification(ministryId, {
+          await loadAll(ministryId);
+          await sendNotificationSQL(ministryId, {
               title: `Novo Aviso: ${title}`,
               message: message,
               type: type
@@ -682,15 +669,19 @@ const AppContent = () => {
   };
 
   const handleMarkAnnouncementRead = async (id: string) => {
-      if (!ministryId || !currentUser) return;
-      const updated = await markAnnouncementRead(ministryId, id, currentUser);
-      setAnnouncements(updated);
+      if (!ministryId || !currentUser || !currentUser.id) return;
+      await interactAnnouncementSQL(id, currentUser.id, currentUser.name, 'read');
+      // Optimistic update
+      setAnnouncements(prev => prev.map(a => 
+          a.id === id ? { ...a, readBy: [...a.readBy, { userId: currentUser.id!, name: currentUser.name, timestamp: new Date().toISOString() }] } : a
+      ));
   };
 
   const handleToggleAnnouncementLike = async (id: string) => {
-      if (!ministryId || !currentUser) return;
-      const updated = await toggleAnnouncementLike(ministryId, id, currentUser);
-      setAnnouncements(updated);
+      if (!ministryId || !currentUser || !currentUser.id) return;
+      await interactAnnouncementSQL(id, currentUser.id, currentUser.name, 'like');
+      // Optimistic update logic slightly complex for likes, simpler to reload or just UI toggle
+      await loadAll(ministryId);
   };
 
   const handleLogout = async () => {
@@ -894,7 +885,7 @@ const AppContent = () => {
                     setAvailability(newAvail);
                     
                     const count = dates.filter(d => d.startsWith(currentMonth)).length;
-                    await sendNotification(ministryId, {
+                    await sendNotificationSQL(ministryId, {
                         type: 'info',
                         title: 'Disponibilidade Atualizada',
                         message: `${member} informou disponibilidade para ${count} dias em ${getMonthName(currentMonth)}.`,
@@ -911,7 +902,7 @@ const AppContent = () => {
                   requests={swapRequests}
                   visibleEvents={visibleEvents}
                   onCreateRequest={async (role, iso, title) => {
-                      if (!ministryId) return;
+                      if (!ministryId || !currentUser.id) return;
                       const newReq: SwapRequest = {
                           id: Date.now().toString(),
                           ministryId,
@@ -923,11 +914,11 @@ const AppContent = () => {
                           status: 'pending',
                           createdAt: new Date().toISOString()
                       };
-                      const success = await createSwapRequest(ministryId, newReq);
+                      const success = await createSwapRequestSQL(ministryId, newReq);
                       if (success) {
                           setSwapRequests([newReq, ...swapRequests]);
                           addToast("Solicitação de troca criada!", "success");
-                          await sendNotification(ministryId, {
+                          await sendNotificationSQL(ministryId, {
                               type: 'warning',
                               title: 'Pedido de Troca',
                               message: `${currentUser.name} solicitou troca para ${title} (${role}).`,
@@ -936,8 +927,8 @@ const AppContent = () => {
                       }
                   }}
                   onAcceptRequest={async (reqId) => {
-                      if (!ministryId) return;
-                      const result = await performSwap(ministryId, reqId, currentUser.name, currentUser.id);
+                      if (!ministryId || !currentUser.id) return;
+                      const result = await performSwapSQL(ministryId, reqId, currentUser.name, currentUser.id);
                       if (result.success) {
                           addToast(result.message, "success");
                           loadAll(ministryId);
@@ -1071,7 +1062,6 @@ const AppContent = () => {
                                         if (ministryId) {
                                             await deleteMinistryEvent(ministryId, iso);
                                             setCustomEvents(prev => prev.filter(e => e.iso !== iso));
-                                            setIgnoredEvents(prev => [...prev, iso]);
                                             await loadAll(ministryId); 
                                             addToast("Evento excluído permanentemente.", "success");
                                         }
@@ -1092,13 +1082,12 @@ const AppContent = () => {
                         setRepertoire={async (items) => {
                             if (!ministryId) return;
                             setRepertoire(items);
-                            await saveData('shared', 'repertoire_v1', items);
                         }}
                         currentUser={currentUser}
                         mode="manage"
                         onItemAdd={async (title) => {
                             if (ministryId) {
-                                await sendNotification(ministryId, {
+                                await sendNotificationSQL(ministryId, {
                                     type: 'info',
                                     title: 'Nova Música / Playlist',
                                     message: `"${title}" foi adicionada ao repertório.`,
@@ -1117,7 +1106,9 @@ const AppContent = () => {
                         currentMonth={currentMonth}
                         onMonthChange={setCurrentMonth}
                         availableRoles={roles}
-                        onRefresh={() => loadAll(ministryId!)}
+                        onRefresh={async () => {
+                            if (ministryId) await loadAll(ministryId);
+                        }}
                     />
                 )}
 
@@ -1131,8 +1122,6 @@ const AppContent = () => {
                             }
                         }}
                         onDeleteEvent={async (id) => {
-                            // Note: EventsScreen needs to handle deletion logic which might be by ID or by ISO
-                            // For simplicity, we just reload all
                             if (ministryId) await loadAll(ministryId);
                         }}
                         currentMonth={currentMonth}
@@ -1176,25 +1165,25 @@ const AppContent = () => {
                                             <div>
                                                 <h3 className="font-bold text-zinc-900 dark:text-zinc-100 truncate">{member.name}</h3>
                                                 <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 bg-zinc-100 dark:bg-zinc-700/50 px-2 py-0.5 rounded-full">
-                                                    {adminsList.includes(member.email || '') ? 'Administrador' : 'Membro'}
+                                                    {member.isAdmin ? 'Administrador' : 'Membro'}
                                                 </span>
                                             </div>
                                             <div className="flex gap-1">
                                                 <button 
                                                     onClick={() => {
                                                         confirmAction(
-                                                            adminsList.includes(member.email || '') ? "Remover Admin" : "Tornar Admin",
-                                                            `Tem certeza que deseja ${adminsList.includes(member.email || '') ? 'remover' : 'conceder'} permissão de administrador para ${member.name}?`,
+                                                            member.isAdmin ? "Remover Admin" : "Tornar Admin",
+                                                            `Tem certeza que deseja ${member.isAdmin ? 'remover' : 'conceder'} permissão de administrador para ${member.name}?`,
                                                             async () => {
                                                                 if (ministryId && member.email) {
-                                                                    await toggleAdmin(ministryId, member.email);
+                                                                    await toggleAdminSQL(member.email, !member.isAdmin);
                                                                     await loadAll(ministryId); 
                                                                     addToast("Permissões atualizadas.", "success");
                                                                 }
                                                             }
                                                         );
                                                     }}
-                                                    className={`p-2 rounded-lg transition-colors ${adminsList.includes(member.email || '') ? 'bg-blue-100 text-blue-600 hover:bg-blue-200' : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200 hover:text-blue-500'}`}
+                                                    className={`p-2 rounded-lg transition-colors ${member.isAdmin ? 'bg-blue-100 text-blue-600 hover:bg-blue-200' : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200 hover:text-blue-500'}`}
                                                     title="Alternar Admin"
                                                 >
                                                     <ShieldCheck size={16} />
@@ -1265,12 +1254,12 @@ const AppContent = () => {
                   onSaveTitle={async (newTitle) => {
                       if (!ministryId) return;
                       setCustomTitle(newTitle);
-                      await saveData(ministryId, 'ministry_config', { displayName: newTitle });
+                      await saveMinistrySettings(ministryId, newTitle, undefined);
                       addToast("Título atualizado!", "success");
                   }}
                   onAnnounceUpdate={currentUser?.role === 'admin' ? async () => {
                       if (!ministryId) return;
-                      await sendNotification(ministryId, {
+                      await sendNotificationSQL(ministryId, {
                           type: 'info',
                           title: 'Nova Atualização Disponível 🚀',
                           message: 'Uma nova versão do App está disponível. Feche e abra o aplicativo para atualizar.',
@@ -1310,7 +1299,6 @@ const AppContent = () => {
             isOpen={eventsModalOpen} 
             onClose={() => setEventsModalOpen(false)}
             events={customEvents}
-            hiddenEvents={hiddenEventsList}
             onAdd={async (evt) => {
                 if (ministryId) {
                     await createMinistryEvent(ministryId, evt);
@@ -1318,16 +1306,7 @@ const AppContent = () => {
                 }
             }}
             onRemove={async (id) => {
-                // Delete logic needs ISO but customEvents usually has ID or ISO.
-                // Assuming ID mapping is handled or we iterate to find ISO.
-                // For direct SQL delete we need ISO (date_time). 
-                // Currently simplified to reload.
                 if (ministryId) await loadAll(ministryId);
-            }}
-            onRestore={async (iso) => {
-                const newIgnored = ignoredEvents.filter(i => i !== iso);
-                setIgnoredEvents(newIgnored);
-                if (ministryId) await saveData(ministryId, `ignored_events_${currentMonth}`, newIgnored);
             }}
         />
 
@@ -1354,7 +1333,7 @@ const AppContent = () => {
             onUpdate={async (newRoles) => {
                 if (!ministryId) return;
                 setRoles(newRoles);
-                await saveData(ministryId, 'functions_config', newRoles);
+                await saveMinistrySettings(ministryId, undefined, newRoles);
             }}
         />
 
@@ -1370,14 +1349,10 @@ const AppContent = () => {
             onSave={async (oldIso, newTitle, newTime, applyToAll) => {
                 if (!ministryId) return;
                 
-                const oldDate = oldIso.split('T')[0];
-                let newCustomEvents = [...customEvents];
-                let newIgnoredEvents = [...ignoredEvents];
                 let newSchedule = { ...schedule };
 
                 const processEvent = async (iso: string, currentTitle: string) => {
                     const date = iso.split('T')[0];
-                    const time = iso.split('T')[1];
                     const newIso = `${date}T${newTime}`;
 
                     await updateMinistryEvent(ministryId, iso, newTitle, newIso);
@@ -1419,7 +1394,7 @@ const AppContent = () => {
                 setSelectedEventDetails(null);
             }}
             onSwapRequest={async (role, iso, title) => {
-                if (!ministryId || !currentUser) return;
+                if (!ministryId || !currentUser || !currentUser.id) return;
                 const newReq: SwapRequest = {
                     id: Date.now().toString(),
                     ministryId,
@@ -1431,7 +1406,7 @@ const AppContent = () => {
                     status: 'pending',
                     createdAt: new Date().toISOString()
                 };
-                const success = await createSwapRequest(ministryId, newReq);
+                const success = await createSwapRequestSQL(ministryId, newReq);
                 if (success) {
                     setSwapRequests([newReq, ...swapRequests]);
                     addToast("Solicitação de troca enviada ao mural!", "success");

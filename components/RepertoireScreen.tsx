@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Music, Plus, Trash2, ExternalLink, PlayCircle, Calendar, Settings, ListMusic } from 'lucide-react';
 import { RepertoireItem, User } from '../types';
 import { useToast } from './Toast';
+import { addToRepertoire, deleteFromRepertoire } from '../services/supabaseService';
 
 interface Props {
   repertoire: RepertoireItem[];
@@ -35,7 +36,6 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     return match ? match[1] : null;
   };
 
-  // Função para gerar gradiente baseado em string (para playlists)
   const getGradient = (str: string) => {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -60,23 +60,30 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
         return;
     }
 
+    if (!currentUser?.ministryId) {
+        addToast("Erro: Ministério não identificado.", "error");
+        return;
+    }
+
     setIsSubmitting(true);
-    const newItem: RepertoireItem = {
-        id: Date.now().toString(),
+    
+    // Add via SQL Service
+    await addToRepertoire(currentUser.ministryId, {
         title,
         link,
         date,
-        addedBy: currentUser?.name || 'Admin',
-        createdAt: new Date().toISOString()
-    };
+        addedBy: currentUser.name
+    });
 
-    const newRepertoire = [newItem, ...repertoire];
-    await setRepertoire(newRepertoire);
-    
-    // Trigger notification callback
+    // Notify Parent to Reload (Optimistic update or full reload trigger via callback)
     if (onItemAdd) {
         onItemAdd(title);
     }
+    
+    // Trigger generic reload via setRepertoire (which calls loadAll in parent)
+    // We pass empty array just to trigger the effect in parent if configured, 
+    // but really the parent should reload from DB.
+    await setRepertoire([]); 
     
     setTitle("");
     setLink("");
@@ -86,13 +93,12 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
 
   const handleDelete = (id: string) => {
       confirmAction("Excluir Item", "Tem certeza que deseja remover este item do repertório?", async () => {
-          const newRepertoire = repertoire.filter(item => item.id !== id);
-          await setRepertoire(newRepertoire);
+          await deleteFromRepertoire(id);
+          await setRepertoire([]); // Trigger reload
           addToast("Item removido.", "success");
       });
   };
 
-  // Group items by date
   const groupedRepertoire = repertoire.reduce((acc, item) => {
       const dateKey = item.date;
       if (!acc[dateKey]) acc[dateKey] = [];
@@ -100,7 +106,6 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       return acc;
   }, {} as Record<string, RepertoireItem[]>);
 
-  // Sort dates (newest first)
   const sortedDates = Object.keys(groupedRepertoire).sort((a, b) => b.localeCompare(a));
 
   return (
@@ -119,7 +124,6 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
         </div>
       </div>
 
-      {/* Admin Form - Only visible in MANAGE mode */}
       {mode === 'manage' && (
           <div className="bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-fade-in">
               <h3 className="text-xs font-bold text-zinc-500 uppercase mb-4 flex items-center gap-2">
@@ -168,7 +172,6 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
           </div>
       )}
 
-      {/* List View */}
       <div className="space-y-8">
           {sortedDates.length === 0 ? (
               <div className="text-center py-12 text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
@@ -193,18 +196,14 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                               {groupedRepertoire[dateKey].map(item => {
                                   const videoId = getYouTubeId(item.link);
                                   const isPlaylist = getPlaylistId(item.link);
-                                  
-                                  // Se for vídeo único, tenta pegar a thumb. Se for playlist, não tem thumb fácil.
                                   const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '';
 
                                   return (
                                       <div key={item.id} className="bg-white dark:bg-zinc-800 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md transition-all group">
-                                          {/* Thumbnail Area */}
                                           <div className="relative aspect-video bg-zinc-900 overflow-hidden">
                                               {thumbnailUrl ? (
                                                   <img src={thumbnailUrl} alt={item.title} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
                                               ) : (
-                                                  // Fallback para Playlist ou links sem thumb com Arte Determinística
                                                   <div 
                                                     className="w-full h-full flex flex-col items-center justify-center text-white p-4 text-center relative"
                                                     style={{ background: getGradient(item.title + item.id) }}
@@ -241,7 +240,6 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                                               )}
                                           </div>
                                           
-                                          {/* Content */}
                                           <div className="p-4">
                                               <h4 className="font-bold text-zinc-800 dark:text-white line-clamp-1" title={item.title}>
                                                   {item.title}

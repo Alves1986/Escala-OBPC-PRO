@@ -1,3 +1,4 @@
+
 // Copie TODO este código e cole no Editor da Edge Function 'push-notification' no painel do Supabase.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -36,18 +37,33 @@ Deno.serve(async (req: Request) => {
     // Configura a biblioteca de Push
     webpush.setVapidDetails(subject, publicKey, privateKey)
 
-    // 5. Busca os celulares inscritos no banco de dados
+    // 5. Busca os celulares inscritos no banco de dados (Nova Tabela SQL)
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-')
-    const storageKey = `${cleanMid}_push_subscriptions_v1`
 
-    const { data: storageData, error: storageError } = await supabase
-      .from('app_storage')
-      .select('value')
-      .eq('key', storageKey)
-      .single()
+    // Busca IDs de usuários que pertencem a este ministério
+    const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id')
+        .or(`ministry_id.eq.${cleanMid},allowed_ministries.cs.{${cleanMid}}`)
+        
+    const userIds = profiles?.map((p: any) => p.id) || []
+    
+    if (userIds.length === 0) {
+      console.log('Nenhum usuário encontrado neste ministério.')
+      return new Response(JSON.stringify({ message: 'Nenhum usuário no ministério.' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    }
+
+    // Busca subscrições apenas desses usuários
+    const { data: subscriptions, error: storageError } = await supabase
+      .from('push_subscriptions')
+      .select('endpoint, p256dh, auth') // Select SQL columns
+      .in('user_id', userIds)
 
     // Se não tiver ninguém inscrito, retorna sucesso mas avisa
-    if (storageError || !storageData?.value) {
+    if (storageError || !subscriptions || subscriptions.length === 0) {
       console.log('Nenhum dispositivo encontrado para notificar.')
       return new Response(JSON.stringify({ message: 'Nenhum dispositivo inscrito.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -55,16 +71,17 @@ Deno.serve(async (req: Request) => {
       })
     }
 
-    const subscriptions = storageData.value
     const results = []
-
     console.log(`Enviando notificação para ${subscriptions.length} dispositivos...`)
 
     // 6. Loop para enviar a notificação para cada celular
     for (const record of subscriptions) {
       const pushSubscription = {
         endpoint: record.endpoint,
-        keys: record.keys,
+        keys: {
+            p256dh: record.p256dh,
+            auth: record.auth
+        },
       }
 
       // O que vai aparecer no celular

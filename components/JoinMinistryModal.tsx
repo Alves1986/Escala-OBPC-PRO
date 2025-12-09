@@ -1,9 +1,8 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { X, Check, Loader2, Plus, Building2 } from 'lucide-react';
 import { MINISTRIES, DEFAULT_ROLES } from '../types';
-import { loadData } from '../services/supabaseService';
+import { fetchMinistrySettings } from '../services/supabaseService';
 
 interface Props {
   isOpen: boolean;
@@ -35,7 +34,8 @@ export const JoinMinistryModal: React.FC<Props> = ({ isOpen, onClose, onJoin, al
       const defaults = DEFAULT_ROLES[selectedMinistry] || [];
       
       try {
-        const dynamicRoles = await loadData<string[]>(selectedMinistry, 'functions_config', defaults);
+        const settings = await fetchMinistrySettings(selectedMinistry);
+        const dynamicRoles = settings.roles;
         setAvailableRoles(dynamicRoles && dynamicRoles.length > 0 ? dynamicRoles : defaults);
       } catch (e) {
         setAvailableRoles(defaults);

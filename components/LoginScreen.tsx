@@ -1,8 +1,7 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, UserPlus, ArrowLeft, Check, ChevronDown, KeyRound, Layers } from 'lucide-react';
-import { loginWithEmail, loginWithGoogle, registerWithEmail, loadData, sendPasswordResetEmail } from '../services/supabaseService';
+import { loginWithEmail, loginWithGoogle, registerWithEmail, fetchMinistrySettings, sendPasswordResetEmail } from '../services/supabaseService';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { TypewriterBackground } from './TypewriterBackground';
 import { MINISTRIES, DEFAULT_ROLES } from '../types';
@@ -65,8 +64,9 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
         setAvailableRoles(defaults);
         
         try {
-            const dynamicRoles = await loadData<string[]>(mainMinistry, 'functions_config', defaults);
-            if (JSON.stringify(dynamicRoles) !== JSON.stringify(defaults)) {
+            const settings = await fetchMinistrySettings(mainMinistry);
+            const dynamicRoles = settings.roles;
+            if (dynamicRoles && dynamicRoles.length > 0) {
                 setAvailableRoles(dynamicRoles);
             }
         } catch (e) {

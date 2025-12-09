@@ -28,39 +28,28 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
 };
 
 // --- Custom Events Modal ---
-export const EventsModal = ({ isOpen, onClose, events, hiddenEvents, onAdd, onRemove, onRestore }: { 
-  isOpen: boolean; onClose: () => void; events: CustomEvent[]; hiddenEvents: { iso: string, title: string, dateDisplay: string }[]; onAdd: (e: CustomEvent) => void; onRemove: (id: string) => void; onRestore: (iso: string) => void;
+export const EventsModal = ({ isOpen, onClose, events, onAdd, onRemove }: { 
+  isOpen: boolean; onClose: () => void; events: CustomEvent[]; onAdd: (e: CustomEvent) => void; onRemove: (id: string) => void;
 }) => {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("19:30");
   const [title, setTitle] = useState("");
-  const [tab, setTab] = useState<'custom'|'hidden'>('custom');
 
   const handleAdd = () => {
     if (!date || !title) return;
-    onAdd({ id: Date.now().toString(), date, time, title });
+    onAdd({ 
+      id: Date.now().toString(), 
+      date, 
+      time, 
+      title,
+      iso: `${date}T${time}`
+    });
     setTitle("");
   };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Gerenciar Eventos">
-      <div className="flex gap-2 mb-4 border-b border-zinc-200 dark:border-zinc-700">
-        <button 
-          onClick={() => setTab('custom')}
-          className={`pb-2 px-2 text-sm font-medium ${tab === 'custom' ? 'text-blue-500 border-b-2 border-blue-500' : 'text-zinc-500'}`}
-        >
-          Eventos Extras
-        </button>
-        <button 
-          onClick={() => setTab('hidden')}
-          className={`pb-2 px-2 text-sm font-medium ${tab === 'hidden' ? 'text-blue-500 border-b-2 border-blue-500' : 'text-zinc-500'}`}
-        >
-          Eventos Ocultos ({hiddenEvents.length})
-        </button>
-      </div>
-
-      {tab === 'custom' && (
-        <div className="space-y-4">
+      <div className="space-y-4">
           <div className="bg-zinc-50 dark:bg-zinc-900 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 space-y-2">
             <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded p-2 text-sm" />
             <div className="flex gap-2">
@@ -81,25 +70,7 @@ export const EventsModal = ({ isOpen, onClose, events, hiddenEvents, onAdd, onRe
               </li>
             ))}
           </ul>
-        </div>
-      )}
-
-      {tab === 'hidden' && (
-        <div className="space-y-2">
-          {hiddenEvents.length === 0 && <p className="text-center text-zinc-500 text-sm italic">Nenhum evento oculto para este mês.</p>}
-          {hiddenEvents.map(evt => (
-            <li key={evt.iso} className="flex justify-between items-center bg-zinc-100 dark:bg-zinc-800 p-2 rounded border border-zinc-200 dark:border-zinc-700">
-               <div>
-                 <div className="font-semibold text-sm">{evt.title}</div>
-                 <div className="text-xs text-zinc-500">{evt.dateDisplay}</div>
-               </div>
-               <button onClick={() => onRestore(evt.iso)} className="text-blue-500 hover:text-blue-700 p-1" title="Restaurar">
-                 <Undo2 size={16}/>
-               </button>
-            </li>
-          ))}
-        </div>
-      )}
+      </div>
     </Modal>
   );
 };
