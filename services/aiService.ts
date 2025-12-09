@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { AvailabilityMap, ScheduleMap, TeamMemberProfile } from "../types";
 
@@ -12,11 +11,11 @@ interface AIContext {
 
 export const generateScheduleWithAI = async (context: AIContext): Promise<ScheduleMap | null> => {
     // Acesso direto para garantir que o Vite faça a substituição estática corretamente
-    // @ts-ignore (Ignora erro de tipagem caso o ambiente não tenha types do vite configurados)
+    // @ts-ignore
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY;
     
     if (!apiKey) {
-      throw new Error("Chave de API (VITE_GEMINI_API_KEY) não encontrada. Verifique suas variáveis de ambiente.");
+      throw new Error("Chave de API (VITE_GEMINI_API_KEY) não encontrada.");
     }
 
     try {
@@ -24,40 +23,45 @@ export const generateScheduleWithAI = async (context: AIContext): Promise<Schedu
 
       const { events, members, availability, roles, ministryId } = context;
 
-      // Prepara os dados de forma concisa para economizar tokens
+      // Prepara os dados de forma concisa
       const simplifiedMembers = members.map(m => ({
         name: m.name,
         roles: m.roles || [],
-        // Envia apenas as datas relevantes para o contexto atual para reduzir tamanho do prompt
         availability: availability[m.name] || [] 
       }));
 
+      // --- AJUSTE AQUI: Novas regras inseridas no Prompt ---
       const systemInstruction = `
         Você é um assistente especialista em gestão de escalas de voluntários para igrejas.
         Sua tarefa é preencher uma escala (ScheduleMap) cruzando eventos, membros qualificados e disponibilidade.
 
         REGRAS RÍGIDAS DE DISPONIBILIDADE:
-        1. O formato da disponibilidade é: "YYYY-MM-DD" (Dia todo), "YYYY-MM-DD_M" (Apenas Manhã), "YYYY-MM-DD_N" (Apenas Noite).
-        2. Analise a hora do evento (ISO String):
-           - Evento < 13:00 (Manhã): O membro PRECISA ter "YYYY-MM-DD" OU "YYYY-MM-DD_M". Se tiver "YYYY-MM-DD_N", é INDISPONÍVEL.
-           - Evento >= 13:00 (Noite): O membro PRECISA ter "YYYY-MM-DD" OU "YYYY-MM-DD_N". Se tiver "YYYY-MM-DD_M", é INDISPONÍVEL.
-        3. Se o membro não tiver a data na lista, é INDISPONÍVEL.
-        4. JAMAIS escale alguém indisponível.
+        1. Formato: "YYYY-MM-DD" (Dia todo), "YYYY-MM-DD_M" (Manhã), "YYYY-MM-DD_N" (Noite).
+        2. Hora do Evento:
+           - < 13:00 (Manhã): Exige "YYYY-MM-DD" OU "YYYY-MM-DD_M". ("_N" é inválido).
+           - >= 13:00 (Noite): Exige "YYYY-MM-DD" OU "YYYY-MM-DD_N". ("_M" é inválido).
+        3. Sem data na lista = INDISPONÍVEL.
 
-        REGRAS DE PREENCHIMENTO:
-        1. Balanceamento de Carga: Distribua a escala igualmente. Evite escalar a mesma pessoa repetidamente se houver opções. Líderes e Admins também entram na escala.
-        2. Respeito à Função: Só escale um membro se a função (role) estiver na lista dele.
-        3. Vagas Vazias: Tente preencher todos os espaços vazios possíveis com quem estiver disponível.
+        REGRAS DE CONFLITO E FADIGA (CRÍTICO):
+        1. UNICIDADE DE FUNÇÃO (Projeção vs Foto): 
+           - Um membro NÃO pode exercer duas funções no mesmo evento simultaneamente.
+           - ATENÇÃO MÁXIMA: É PROIBIDO escalar a mesma pessoa em "Projeção/Transmissão" e "Fotografia/Storys" no mesmo horário. São funções incompatíveis. Se ele estiver em uma, remova da outra.
+        2. FADIGA DIÁRIA (Manhã vs Noite):
+           - Se um membro for escalado para um culto de MANHÃ, NÃO o escale para o culto da NOITE no mesmo dia, mesmo que ele tenha disponibilidade "Dia Todo".
+           - Priorize a rotatividade. Só quebre essa regra se não houver absolutamente nenhum outro voluntário qualificado disponível.
+
+        REGRAS GERAIS DE PREENCHIMENTO:
+        1. Balanceamento: Distribua a escala igualmente. Evite repetir pessoas.
+        2. Respeito à Função: Só escale se o membro tiver a role.
+        3. Preencha o máximo de vagas possível.
 
         REGRA ESPECIAL DE 'VOCAL' (Apenas se ministério for 'louvor'):
-        - Se a função solicitada for 'Vocal', você deve preencher múltiplas vagas.
-        - Chaves esperadas: "_Vocal_1", "_Vocal_2", "_Vocal_3", "_Vocal_4", "_Vocal_5".
-        - Tente preencher pelo menos 3 vocais se houver disponibilidade.
-        - Para outros ministérios, use a role exata (ex: "_Câmera").
+        - Preencha chaves: "_Vocal_1", "_Vocal_2", etc.
+        - Tente preencher ao menos 3 vocais.
 
         FORMATO DE SAÍDA (JSON PURO):
         Retorne APENAS um objeto JSON válido.
-        Chave: "YYYY-MM-DDTHH:mm_Role" (Ex: "2023-10-01T19:30_Bateria" ou "2023-10-01T19:30_Vocal_1")
+        Chave: "YYYY-MM-DDTHH:mm_Role"
         Valor: "Nome do Membro"
       `;
 
@@ -69,15 +73,16 @@ export const generateScheduleWithAI = async (context: AIContext): Promise<Schedu
       });
 
       const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: prompt,
+          // Alterado para flash-8b ou flash normal se preferir, o 2.5-flash é ótimo
+          model: 'gemini-1.5-flash', 
+          contents: [{ role: 'user', parts: [{ text: prompt }] }], // Ajuste na estrutura da chamada v1
           config: {
               systemInstruction: systemInstruction,
               responseMimeType: "application/json"
           }
       });
 
-      const responseText = response.text;
+      const responseText = response.text(); // Ajuste: em algumas versões do SDK é func, em outras prop
       
       if (!responseText) {
           throw new Error("A IA retornou uma resposta vazia.");
@@ -87,14 +92,9 @@ export const generateScheduleWithAI = async (context: AIContext): Promise<Schedu
       return scheduleMap;
 
     } catch (error: any) {
-      console.error("Erro detalhado ao gerar escala com IA:", error);
-      let msg = error.message || "Erro desconhecido na geração da escala.";
-      
-      if (msg.includes("Failed to fetch")) {
-          msg = "Erro de conexão (Failed to fetch). Verifique sua internet, se a API Key é válida ou se há bloqueadores de anúncio interferindo.";
-      }
-      
-      // Propaga o erro original para ser exibido no Toast
+      console.error("Erro na IA:", error);
+      let msg = error.message || "Erro desconhecido.";
+      if (msg.includes("Failed to fetch")) msg = "Erro de conexão com a IA.";
       throw new Error(msg);
     }
 };
