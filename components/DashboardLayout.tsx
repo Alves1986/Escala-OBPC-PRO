@@ -273,7 +273,7 @@ export const DashboardLayout: React.FC<Props> = ({
               
               <button onClick={handleHardReload} className="flex items-center gap-1 text-[10px] text-zinc-500 hover:text-blue-500 transition-colors">
                   <RefreshCw size={10} className={isUpdating ? 'animate-spin' : ''} />
-                  {isUpdating ? 'v2.0' : 'v2.0'}
+                  {isUpdating ? 'v2.1' : 'v2.1'}
               </button>
            </div>
         </div>

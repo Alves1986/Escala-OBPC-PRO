@@ -1,8 +1,8 @@
-
 import React, { useState } from 'react';
 import { Settings, Save, Moon, Sun, BellRing, RefreshCw, FileText, Shield, Megaphone } from 'lucide-react';
 import { useToast } from './Toast';
 import { LegalModal, LegalDocType } from './LegalDocuments';
+import { VAPID_PUBLIC_KEY } from '../utils/pushUtils';
 
 interface Props {
   initialTitle: string;
@@ -90,9 +90,33 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
                         onClick={() => {
                             Notification.requestPermission().then(async (perm) => {
                                 if(perm === 'granted') {
-                                    addToast("Permissão concedida! Registrando...", "success");
-                                    if (onEnableNotifications) await onEnableNotifications();
-                                    new Notification("Notificações Ativas", { body: "Você receberá alertas de todos os seus ministérios.", icon: "/icon.png" });
+                                    if ('serviceWorker' in navigator) {
+                                        try {
+                                            const registration = await navigator.serviceWorker.ready;
+                                            
+                                            // Tenta obter existente ou assinar novamente
+                                            let sub = await registration.pushManager.getSubscription();
+                                            if (!sub) {
+                                                sub = await registration.pushManager.subscribe({
+                                                    userVisibleOnly: true,
+                                                    applicationServerKey: VAPID_PUBLIC_KEY
+                                                });
+                                            }
+                                            
+                                            // Chama a função de prop para salvar no banco (Sync)
+                                            if (onEnableNotifications) {
+                                                await onEnableNotifications();
+                                            }
+                                            
+                                            addToast("Notificações sincronizadas com este dispositivo!", "success");
+                                            new Notification("Escala Mídia", { body: "Dispositivo vinculado com sucesso.", icon: "/icon.png" });
+                                        } catch (e) {
+                                            console.error(e);
+                                            // Se falhar o subscribe, tenta apenas o callback de sync se houver algo
+                                            if (onEnableNotifications) await onEnableNotifications();
+                                            addToast("Permissão ok! Tentando sincronizar...", "info");
+                                        }
+                                    }
                                 } else {
                                     addToast("Permissão negada pelo navegador.", "error");
                                 }
@@ -100,7 +124,7 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
                         }}
                         className="text-xs font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-3 py-1.5 rounded-lg"
                      >
-                         Testar / Ativar
+                         Sincronizar / Ativar
                      </button>
                  </div>
              </div>

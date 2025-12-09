@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'escala-midia-pwa-v17';
+const CACHE_NAME = 'escala-midia-pwa-v18';
 
 // Arquivos estáticos fundamentais
 // Usando caminhos absolutos para garantir a integridade do cache
