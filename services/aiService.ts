@@ -12,13 +12,14 @@ interface AIContext {
 
 export const generateScheduleWithAI = async (context: AIContext): Promise<ScheduleMap | null> => {
   try {
-    // Inicializa o cliente APENAS quando a função é chamada para evitar erros de carregamento
-    // A chave deve vir de process.env.API_KEY conforme as diretrizes
-    const apiKey = process.env.API_KEY;
+    // Correção Crítica: Em Vite, usa-se import.meta.env.VITE_...
+    // O fallback para process.env é mantido apenas por compatibilidade com outros ambientes de build.
+    const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || process.env.API_KEY;
     
     if (!apiKey) {
-      console.error("API Key não encontrada. Verifique se process.env.API_KEY está configurada.");
-      return null;
+      console.error("CRITICAL: API Key not found. Ensure VITE_GEMINI_API_KEY is set in your .env or Vercel settings.");
+      // Lança um erro que será capturado pelo bloco catch abaixo
+      throw new Error("Chave de API (VITE_GEMINI_API_KEY) não configurada.");
     }
 
     const ai = new GoogleGenAI({ apiKey: apiKey });
@@ -80,13 +81,19 @@ export const generateScheduleWithAI = async (context: AIContext): Promise<Schedu
 
     const responseText = response.text;
     
-    if (!responseText) return null;
+    if (!responseText) {
+        console.error("IA retornou resposta vazia.");
+        return null;
+    }
 
     const scheduleMap: ScheduleMap = JSON.parse(responseText);
     return scheduleMap;
 
-  } catch (error) {
-    console.error("Erro ao gerar escala com IA:", error);
+  } catch (error: any) {
+    console.error("Erro detalhado ao gerar escala com IA:", error);
+    if (error.message?.includes("API key")) {
+        console.error("Verifique se a chave VITE_GEMINI_API_KEY está correta nas configurações do projeto.");
+    }
     return null;
   }
 };
