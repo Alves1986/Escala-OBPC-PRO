@@ -178,6 +178,10 @@ export const ScheduleTable: React.FC<Props> = ({
                             >
                                 <option value="">-- Selecionar --</option>
                                 
+                                {currentValue && (
+                                    <option value="" className="text-red-500 font-bold bg-red-50 dark:bg-red-900/20">-- Remover / Limpar --</option>
+                                )}
+                                
                                 {sortedRoleMembers.map(m => {
                                     const unavail = isUnavailable(m, event.iso);
                                     return (

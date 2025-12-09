@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Share2, FileText, FileSpreadsheet, Trash, ChevronDown, Upload, FileDown, Sparkles, Loader2 } from 'lucide-react';
+import { Share2, FileText, FileSpreadsheet, Trash, ChevronDown, Upload, FileDown, Sparkles, Loader2, RotateCcw } from 'lucide-react';
 
 interface Props {
   onExportIndividual: (member: string) => void;
@@ -8,6 +8,7 @@ interface Props {
   onCSV: () => void;
   onImportCSV: (file: File) => void;
   onClearMonth: () => void;
+  onResetEvents: () => void;
   onGenerateAI: () => void;
   isGeneratingAI: boolean;
   allMembers: string[];
@@ -19,7 +20,8 @@ export const ToolsMenu: React.FC<Props> = ({
   onWhatsApp, 
   onCSV, 
   onImportCSV, 
-  onClearMonth, 
+  onClearMonth,
+  onResetEvents,
   onGenerateAI,
   isGeneratingAI,
   allMembers 
@@ -52,7 +54,7 @@ export const ToolsMenu: React.FC<Props> = ({
       {isOpen && (
         <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-zinc-800 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-700 z-50 overflow-hidden animate-fade-in">
           
-          {/* AI Generator Button - DESTAQUE */}
+          {/* AI Generator Button - DESABILITADO TEMPORARIAMENTE
           <div className="p-2 border-b border-zinc-100 dark:border-zinc-700">
              <button 
                 onClick={() => {
@@ -69,6 +71,7 @@ export const ToolsMenu: React.FC<Props> = ({
              </button>
              <p className="text-[10px] text-zinc-400 mt-1 px-1 text-center">Preenche automaticamente baseado na disponibilidade.</p>
           </div>
+          */}
 
           <div className="p-2 border-b border-zinc-100 dark:border-zinc-700">
             <p className="text-xs font-bold text-zinc-500 uppercase px-2 mb-2">Exportar Individual</p>
@@ -112,8 +115,14 @@ export const ToolsMenu: React.FC<Props> = ({
             </button>
             
             <div className="border-t border-zinc-100 dark:border-zinc-700 my-1"></div>
+            
+            {/* Botão Restaurar Padrão */}
+            <button onClick={() => { setIsOpen(false); onResetEvents(); }} className="w-full text-left px-3 py-2 text-sm text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded flex items-center gap-2">
+              <RotateCcw size={16} /> Restaurar Eventos Padrão
+            </button>
+
             <button onClick={onClearMonth} className="w-full text-left px-3 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded flex items-center gap-2">
-              <Trash size={16} /> Limpar Mês Atual
+              <Trash size={16} /> Limpar Escala do Mês
             </button>
           </div>
         </div>

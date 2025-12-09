@@ -20,8 +20,8 @@ export const adjustMonth = (currentMonth: string, delta: number): string => {
 
 export const generateMonthEvents = (year: number, month: number, customEvents: CustomEvent[]) => {
   const events: { iso: string; dateDisplay: string; title: string }[] = [];
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-
+  
+  // Helper to add event
   const addEvent = (date: Date, title: string, time: string) => {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -31,28 +31,23 @@ export const generateMonthEvents = (year: number, month: number, customEvents: C
     events.push({ iso, dateDisplay: dateStr, title });
   };
 
-  // Standard Schedule Rules (from legacy code)
-  for (let d = 1; d <= daysInMonth; d++) {
-    const date = new Date(year, month, d);
-    const dayOfWeek = date.getDay(); // 0 = Sun, 3 = Wed
+  // REMOVIDO: Lógica antiga que gerava Quartas e Domingos automaticamente via código.
+  // AGORA: O sistema confia 100% nos eventos passados via 'customEvents' (que vêm do banco de dados).
+  // Isso resolve o problema de duplicidade visual (um evento do código + um evento do banco).
 
-    if (dayOfWeek === 3) {
-      addEvent(date, "Culto (Quarta)", "19:30");
-    } else if (dayOfWeek === 0) {
-      addEvent(date, "Culto (Domingo - Manhã)", "09:00");
-      addEvent(date, "Culto (Domingo - Noite)", "18:00");
-    }
-  }
-
-  // Custom Events
+  // Process Database Events (passed as customEvents)
   const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
-  customEvents.forEach(evt => {
-    if (evt.date.startsWith(monthStr)) {
-       const [y, m, d] = evt.date.split('-').map(Number);
-       const date = new Date(y, m - 1, d);
-       addEvent(date, evt.title, evt.time);
-    }
-  });
+  
+  if (customEvents && customEvents.length > 0) {
+      customEvents.forEach(evt => {
+        // Ensure we only show events for the requested month to avoid border leakage
+        if (evt.date.startsWith(monthStr)) {
+           const [y, m, d] = evt.date.split('-').map(Number);
+           const date = new Date(y, m - 1, d);
+           addEvent(date, evt.title, evt.time);
+        }
+      });
+  }
 
   // Sort by ISO Date
   return events.sort((a, b) => a.iso.localeCompare(b.iso));
