@@ -20,24 +20,35 @@ Deno.serve(async (req: Request) => {
 
   try {
     // 2. Conecta ao Supabase usando a chave de serviço (Admin)
-    // O Deno.env.get pega essas variáveis automaticamente do ambiente do Supabase
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // 3. Recebe os dados enviados pelo seu App (Título, Mensagem, etc)
+    // 3. Recebe os dados enviados pelo seu App
     const { ministryId, title, message, type, actionLink } = await req.json()
 
-    // 4. CONFIGURAÇÃO VAPID (SUAS CHAVES REAIS)
+    // 4. CONFIGURAÇÃO VAPID (SEGURANÇA REFORÇADA)
+    // A chave pública pode ficar no código, mas a privada DEVE vir das variáveis de ambiente.
     const publicKey = 'BF16yQvZzPhqIFKl0CVYgNtjonnfgGI39QPOHXcmu0_kGL9V9llvULEMaQajIxT8nEW8rRQ_kWacpDc1zQi9EYs'
-    const privateKey = 'jPhKxqIlLZG3sAhavSwSHXKY6CnzygSCTR8iIn_edsTE' // Chave Privada (Não compartilhe)
+    
+    // IMPORTANTE: Configure 'VAPID_PRIVATE_KEY' no Dashboard do Supabase em Edge Functions > Secrets
+    const privateKey = Deno.env.get('VAPID_PRIVATE_KEY');
+
+    if (!privateKey) {
+        console.error('VAPID_PRIVATE_KEY não configurada nas variáveis de ambiente.');
+        return new Response(JSON.stringify({ error: 'Erro de configuração no servidor (Missing VAPID Key).' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 500,
+        })
+    }
+
     const subject = 'mailto:cassia.andinho@gmail.com'
 
     // Configura a biblioteca de Push
     webpush.setVapidDetails(subject, publicKey, privateKey)
 
-    // 5. Busca os celulares inscritos no banco de dados (Nova Tabela SQL)
+    // 5. Busca os celulares inscritos no banco de dados
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-')
 
     // Busca IDs de usuários que pertencem a este ministério
@@ -59,10 +70,9 @@ Deno.serve(async (req: Request) => {
     // Busca subscrições apenas desses usuários
     const { data: subscriptions, error: storageError } = await supabase
       .from('push_subscriptions')
-      .select('endpoint, p256dh, auth') // Select SQL columns
+      .select('endpoint, p256dh, auth')
       .in('user_id', userIds)
 
-    // Se não tiver ninguém inscrito, retorna sucesso mas avisa
     if (storageError || !subscriptions || subscriptions.length === 0) {
       console.log('Nenhum dispositivo encontrado para notificar.')
       return new Response(JSON.stringify({ message: 'Nenhum dispositivo inscrito.' }), {
@@ -84,13 +94,12 @@ Deno.serve(async (req: Request) => {
         },
       }
 
-      // O que vai aparecer no celular
       const payload = JSON.stringify({
         title: title || 'Novo Aviso da Escala',
         body: message,
-        icon: 'https://escala-midia-pro.vercel.app/icon.png', // Tenta mostrar o ícone do app
+        icon: 'https://escala-midia-pro.vercel.app/icon.png',
         data: {
-            url: actionLink ? `/?tab=${actionLink}` : '/', // Abre o app ao clicar (com tab se houver)
+            url: actionLink ? `/?tab=${actionLink}` : '/',
             type: type
         }
       })
@@ -100,21 +109,16 @@ Deno.serve(async (req: Request) => {
         results.push({ endpoint: record.endpoint, status: 'success' })
       } catch (err) {
         console.error('Falha ao enviar para um dispositivo:', err)
-        
-        // Se o erro for 410 (Gone), o usuário desinstalou ou limpou dados.
-        // Aqui poderíamos remover do banco, mas por segurança apenas logamos o erro.
         results.push({ endpoint: record.endpoint, status: 'failed', error: err })
       }
     }
 
-    // 7. Retorna o relatório final
     return new Response(JSON.stringify({ success: true, results }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })
 
   } catch (error: any) {
-    // Tratamento de erro geral
     console.error('Erro na função:', error)
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

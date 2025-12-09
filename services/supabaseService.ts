@@ -1,4 +1,5 @@
 
+
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
     SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, 
@@ -492,7 +493,6 @@ export const fetchMinistrySchedule = async (ministryId: string, monthIso: string
         const { data: events, error: eventError } = await supabase
             .from('events')
             .select('id, title, date_time')
-            .eq('ministry_id: cleanMid') // Incorrect syntax in previous code? Fixed below.
             .eq('ministry_id', cleanMid)
             .gte('date_time', startOfMonth)
             .lt('date_time', `${nextMonth}T00:00:00`)
