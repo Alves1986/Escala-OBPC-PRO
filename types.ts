@@ -145,6 +145,44 @@ export interface TeamMemberProfile {
     createdAt?: string;
 }
 
+// --- DATABASE ENTITIES (SQL MIGRATION) ---
+export interface DatabaseProfile {
+  id: string;
+  name: string;
+  role: string;
+  ministry_id: string;
+  whatsapp?: string;
+  email?: string;
+  avatar_url?: string;
+  birth_date?: string;
+  functions: string[];
+  allowed_ministries?: string[]; // Assuming stored as array or JSON
+}
+
+export interface DatabaseEvent {
+  id: string;
+  ministry_id: string;
+  title: string;
+  date_time: string; // timestamptz
+}
+
+export interface DatabaseAssignment {
+  id: string;
+  event_id: string;
+  role: string;
+  member_id: string;
+  // Joins
+  member_name?: string; // Virtual property from join
+}
+
+export interface DatabaseAvailability {
+  id: string;
+  member_id: string;
+  date: string;
+  status: string; // 'M', 'N', 'BOTH'
+}
+// -----------------------------------------
+
 export interface AppState {
   ministryId: string | null;
   currentUser: User | null;

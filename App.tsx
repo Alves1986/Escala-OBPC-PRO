@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ScheduleTable } from './components/ScheduleTable';
@@ -22,8 +21,16 @@ import { BirthdayCard } from './components/BirthdayCard';
 import { JoinMinistryModal } from './components/JoinMinistryModal';
 import { AnnouncementsScreen } from './components/AnnouncementsScreen';
 import { PublicLegalPage, LegalDocType } from './components/LegalDocuments';
+import { WeatherWidget } from './components/WeatherWidget';
 import { MemberMap, ScheduleMap, AttendanceMap, CustomEvent, AvailabilityMap, DEFAULT_ROLES, AuditLogEntry, ScheduleAnalysis, User, AppNotification, TeamMemberProfile, SwapRequest, RepertoireItem, Announcement, GlobalConflictMap } from './types';
-import { loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, createSwapRequest, performSwap, toggleAdmin, createAnnouncement, markAnnouncementRead, fetchGlobalSchedules, joinMinistry, saveSubscription, toggleAnnouncementLike } from './services/supabaseService';
+import { 
+    loadData, saveData, getSupabase, logout, updateUserProfile, deleteMember, sendNotification, 
+    createSwapRequest, performSwap, toggleAdmin, createAnnouncement, markAnnouncementRead, 
+    fetchGlobalSchedules, joinMinistry, saveSubscription, toggleAnnouncementLike,
+    fetchMinistryMembers, fetchMinistrySchedule, fetchMinistryAvailability, saveScheduleAssignment, saveMemberAvailability, updateMinistryEvent 
+} from './services/supabaseService';
+// Importação do Serviço de IA
+import { generateScheduleWithAI } from './services/aiService';
 import { generateMonthEvents, getMonthName, adjustMonth } from './utils/dateUtils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -156,6 +163,8 @@ const AppContent = () => {
   
   // UI State
   const [loading, setLoading] = useState(false);
+  // Estado para loading da IA
+  const [aiLoading, setAiLoading] = useState(false);
   const [memberSearch, setMemberSearch] = useState("");
   
   // Confirmation Modal State
@@ -347,58 +356,57 @@ const AppContent = () => {
     try {
       const cleanMid = mid.trim().toLowerCase().replace(/\s+/g, '-');
       
+      // Parallel Fetching with new SQL adapters
       const [
-        resMembers,
-        resSchedule,
-        resAvail,
-        resEvents,
-        resRoles,
+        resMemberData,      // New SQL fetch
+        resScheduleData,    // New SQL fetch
+        resAvailability,    // New SQL fetch
+        resGlobalConflicts, // New SQL fetch
+        resRoles,           // Legacy Key-Value (Config)
         resLogs,
         resIgnored,
         resAttend,
         resNotif,
-        resRegMembers,
         resSwaps,
         resRepertoire,
         resAdmins,
         resConfig,
         resAnnouncements,
-        resGlobalConflicts
       ] = await Promise.all([
-        loadData<MemberMap>(cleanMid, 'members_v7', {}),
-        loadData<ScheduleMap>(cleanMid, `schedule_${currentMonth}`, {}),
-        loadData<AvailabilityMap>(cleanMid, 'availability_v1', {}),
-        loadData<CustomEvent[]>(cleanMid, `events_${currentMonth}`, []),
+        fetchMinistryMembers(cleanMid),
+        fetchMinistrySchedule(cleanMid, currentMonth),
+        fetchMinistryAvailability(cleanMid),
+        fetchGlobalSchedules(currentMonth, cleanMid),
         loadData<string[]>(cleanMid, 'functions_config', DEFAULT_ROLES[cleanMid] || DEFAULT_ROLES['midia']),
         loadData<AuditLogEntry[]>(cleanMid, 'audit_logs', []),
         loadData<string[]>(cleanMid, `ignored_events_${currentMonth}`, []),
         loadData<AttendanceMap>(cleanMid, `attendance_${currentMonth}`, {}),
         loadData<AppNotification[]>(cleanMid, 'notifications_v1', []),
-        loadData<TeamMemberProfile[]>(cleanMid, 'public_members_list', []),
         loadData<SwapRequest[]>(cleanMid, 'swap_requests_v1', []),
         loadData<RepertoireItem[]>('shared', 'repertoire_v1', []),
         loadData<string[]>(cleanMid, 'admins_list', []),
         loadData<any>(cleanMid, 'ministry_config', { displayName: '' }),
         loadData<Announcement[]>(cleanMid, 'announcements_v1', []),
-        fetchGlobalSchedules(currentMonth, cleanMid)
       ]);
 
-      setMembers(resMembers);
-      setSchedule(resSchedule);
-      setAvailability(resAvail);
-      setCustomEvents(resEvents);
+      setMembers(resMemberData.memberMap);
+      setRegisteredMembers(resMemberData.publicList);
+      setSchedule(resScheduleData.schedule);
+      setCustomEvents(resScheduleData.events); // Use events from SQL
+      setAvailability(resAvailability);
+      setGlobalConflicts(resGlobalConflicts);
+      
+      // Legacy Data
       setRoles(resRoles);
       setAuditLog(resLogs);
       setIgnoredEvents(resIgnored);
       setAttendance(resAttend);
       setNotifications(resNotif);
-      setRegisteredMembers(resRegMembers);
       setSwapRequests(resSwaps);
       setRepertoire(resRepertoire);
       setAdminsList(resAdmins);
       if (resConfig?.displayName) setCustomTitle(resConfig.displayName);
       setAnnouncements(resAnnouncements);
-      setGlobalConflicts(resGlobalConflicts);
 
       if (currentUser && currentUser.email && resAdmins.includes(currentUser.email)) {
           if (currentUser.role !== 'admin') {
@@ -526,6 +534,63 @@ const AppContent = () => {
       }
   };
 
+  // --- AI GENERATION LOGIC ---
+  const handleAutoGenerateSchedule = async () => {
+    if (!ministryId) return;
+
+    // Check if there is existing schedule
+    const hasExistingSchedule = Object.keys(schedule).some(k => k.startsWith(currentMonth) && schedule[k]);
+    
+    if (hasExistingSchedule) {
+        if (!confirm("Já existe uma escala preenchida para este mês. Deseja sobrescrever os espaços vazios e ajustar conforme a IA?")) {
+            return;
+        }
+    }
+
+    setAiLoading(true);
+
+    try {
+        const eventsToFill = visibleEvents.map(e => ({ iso: e.iso, title: e.title }));
+        
+        // Chamada ao serviço de IA
+        const result = await generateScheduleWithAI({
+            events: eventsToFill,
+            members: registeredMembers, // Passa membros registrados com roles corretas
+            availability: availability,
+            roles: roles,
+            ministryId: ministryId
+        });
+
+        if (result) {
+            // Merge com schedule atual (IA sobrescreve ou preenche)
+            const newSchedule = { ...schedule, ...result };
+            
+            // Remove chaves vazias ou inválidas que a IA possa ter alucinado (opcional, mas seguro)
+            Object.keys(result).forEach(k => {
+                if (!newSchedule[k]) delete newSchedule[k];
+            });
+
+            // Atualiza UI
+            setSchedule(newSchedule);
+            
+            // Salva no SQL: Itera sobre as chaves geradas pela IA e salva uma por uma
+            // Nota: Em produção, o ideal seria um batchSave no supabaseService
+            for (const [key, value] of Object.entries(result)) {
+                await saveScheduleAssignment(ministryId, key, value);
+            }
+
+            addToast("Escala gerada com IA com sucesso!", "success");
+        } else {
+            addToast("Falha ao gerar escala. Verifique a configuração da API ou tente novamente.", "error");
+        }
+    } catch (e) {
+        console.error(e);
+        addToast("Erro interno ao gerar escala.", "error");
+    } finally {
+        setAiLoading(false);
+    }
+  };
+
   // Daily Reminder Effect
   useEffect(() => {
       if (!currentUser || !nextEvent || !schedule) return;
@@ -563,9 +628,16 @@ const AppContent = () => {
   const handleCellChange = async (key: string, value: string) => {
     if (!ministryId) return;
     const newSchedule = { ...schedule, [key]: value };
+    setSchedule(newSchedule); // Update UI optimistic
+    
+    // Save to SQL
+    const success = await saveScheduleAssignment(ministryId, key, value);
+    if (!success) {
+        addToast("Erro ao salvar no banco.", "error");
+        // Revert UI?
+    }
+
     const [date, role] = key.split('_');
-    setSchedule(newSchedule);
-    await saveData(ministryId, `schedule_${currentMonth}`, newSchedule);
     if (value) {
         logAction('Escala', `Adicionou ${value} para ${role} em ${date}`);
     } else {
@@ -660,17 +732,23 @@ const AppContent = () => {
           onSwitchMinistry={handleSwitchMinistry}
           onOpenJoinMinistry={() => setJoinMinistryModalOpen(true)}
         >
-          {/* DASHBOARD VIEW - REESTRUTURADO (Cards Only) */}
+          {/* DASHBOARD VIEW - REESTRUTURADO */}
           {currentTab === 'dashboard' && (
             <div className="space-y-8 pb-20 animate-fade-in max-w-5xl mx-auto">
               
-              <div>
-                  <h1 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                      Olá, {currentUser.name.split(' ')[0]} <span className="animate-wave text-3xl">👋</span>
-                  </h1>
-                  <p className="text-zinc-500 dark:text-zinc-400 mt-1">
-                      Bem-vindo ao painel de controle do {getMinistryTitle(ministryId)}.
-                  </p>
+              {/* Header do Dashboard com Clima */}
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div>
+                      <h1 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+                          Olá, {currentUser.name.split(' ')[0]} <span className="animate-wave text-3xl">👋</span>
+                      </h1>
+                      <p className="text-zinc-500 dark:text-zinc-400 mt-1">
+                          Bem-vindo ao painel de controle do {getMinistryTitle(ministryId)}.
+                      </p>
+                  </div>
+                  
+                  {/* Widget de Clima */}
+                  <WeatherWidget />
               </div>
 
               {/* CARD DE RESUMO DE AVISOS */}
@@ -801,9 +879,13 @@ const AppContent = () => {
                 currentUser={currentUser}
                 onSaveAvailability={async (member, dates) => {
                     if (!ministryId) return;
+                    // Salvar no SQL
+                    await saveMemberAvailability(currentUser?.id || 'manual', member, dates);
+                    
+                    // Atualizar UI Local
                     const newAvail = { ...availability, [member]: dates };
                     setAvailability(newAvail);
-                    await saveData(ministryId, 'availability_v1', newAvail);
+                    
                     const count = dates.filter(d => d.startsWith(currentMonth)).length;
                     await sendNotification(ministryId, {
                         type: 'info',
@@ -925,10 +1007,14 @@ const AppContent = () => {
                                                 if (k.startsWith(currentMonth)) delete newSchedule[k];
                                             });
                                             setSchedule(newSchedule);
-                                            if (ministryId) await saveData(ministryId, `schedule_${currentMonth}`, newSchedule);
+                                            // Limpar do SQL (Iterando ou implementando clear no service)
+                                            // Como fallback, salvar chaves vazias ou criar método específico
+                                            if (ministryId) await saveData(ministryId, `schedule_${currentMonth}`, newSchedule); // Fallback
                                             addToast("Mês limpo com sucesso.", "success");
                                         }
                                     }}
+                                    onGenerateAI={handleAutoGenerateSchedule}
+                                    isGeneratingAI={aiLoading}
                                     allMembers={allMembersList}
                                 />
                                 
@@ -974,6 +1060,7 @@ const AppContent = () => {
                                     if (ministryId) await saveData(ministryId, `ignored_events_${currentMonth}`, newIgnored);
                                 }
                             }}
+                            onEditEvent={(evt) => setSelectedEventDetails(evt)} // Open modal for editing
                             memberStats={memberStats}
                             ministryId={ministryId}
                             readOnly={false} 
@@ -1225,9 +1312,13 @@ const AppContent = () => {
             currentMonth={currentMonth}
             onUpdate={async (member, dates) => {
                 if (!ministryId) return;
+                
+                // Salvar SQL
+                await saveMemberAvailability(currentUser?.id || 'manual', member, dates);
+                
+                // Update Local UI
                 const newAvail = { ...availability, [member]: dates };
                 setAvailability(newAvail);
-                await saveData(ministryId, 'availability_v1', newAvail);
             }}
         />
 
@@ -1251,17 +1342,90 @@ const AppContent = () => {
             currentUser={currentUser}
             ministryId={ministryId}
             canEdit={currentUser?.role === 'admin'} 
-            onSave={async (iso, newTitle, newTime) => {
+            onSave={async (oldIso, newTitle, newTime, applyToAll) => {
                 if (!ministryId) return;
                 
-                const customEvt = customEvents.find(e => e.date === iso.split('T')[0] && e.time === iso.split('T')[1]);
-                if (customEvt) {
-                    const newEvts = customEvents.map(e => e.id === customEvt.id ? { ...e, title: newTitle, time: newTime } : e);
-                    setCustomEvents(newEvts);
-                    await saveData(ministryId, `events_${currentMonth}`, newEvts);
-                } 
+                const oldDate = oldIso.split('T')[0];
+                let newCustomEvents = [...customEvents];
+                let newIgnoredEvents = [...ignoredEvents];
+                let newSchedule = { ...schedule };
+
+                // Helper para processar a edição de UM evento
+                const processEvent = async (iso: string, currentTitle: string) => {
+                    const date = iso.split('T')[0];
+                    const time = iso.split('T')[1];
+                    const newIso = `${date}T${newTime}`;
+
+                    // 1. Atualizar no SQL (Cria se não existir, atualiza se existir)
+                    await updateMinistryEvent(ministryId, iso, newTitle, newIso);
+
+                    // 2. Atualizar Estado Local (UI)
+                    // Se era um evento padrão (não estava em customEvents), agora virou customizado
+                    // Se já era custom, apenas atualiza
+                    const customIndex = newCustomEvents.findIndex(e => e.date === date && e.time === time && e.title === currentTitle);
+                    
+                    if (customIndex >= 0) {
+                        newCustomEvents[customIndex] = { ...newCustomEvents[customIndex], title: newTitle, time: newTime };
+                    } else {
+                        // Era padrão -> Adiciona na lista de ignorados o antigo para não duplicar visualmente
+                        if (!newIgnoredEvents.includes(iso)) {
+                            newIgnoredEvents.push(iso);
+                        }
+                        // Cria novo custom
+                        newCustomEvents.push({
+                            id: Date.now().toString() + Math.random(),
+                            date: date,
+                            time: newTime,
+                            title: newTitle
+                        });
+                    }
+
+                    // 3. Migrar Escala Local (Mover membros da chave antiga para nova)
+                    // Chave formato: ISO_Role
+                    if (iso !== newIso) {
+                        const oldPrefix = `${iso}_`;
+                        const newPrefix = `${newIso}_`;
+                        
+                        Object.keys(newSchedule).forEach(key => {
+                            if (key.startsWith(oldPrefix)) {
+                                const roleSuffix = key.replace(oldPrefix, '');
+                                const member = newSchedule[key];
+                                const newKey = `${newPrefix}${roleSuffix}`;
+                                
+                                newSchedule[newKey] = member;
+                                delete newSchedule[key];
+                                
+                                // Salvar a nova atribuição no SQL (pois a chave mudou)
+                                saveScheduleAssignment(ministryId, newKey, member);
+                            }
+                        });
+                    }
+                };
+
+                if (applyToAll && selectedEventDetails) {
+                    const targetTitle = selectedEventDetails.title;
+                    const matchingEvents = visibleEvents.filter(e => e.title === targetTitle);
+                    
+                    // Executa para todos (sequencialmente para garantir integridade)
+                    for (const evt of matchingEvents) {
+                        await processEvent(evt.iso, evt.title);
+                    }
+                    addToast(`Atualizado ${matchingEvents.length} eventos em série.`, "success");
+                } else {
+                    await processEvent(oldIso, selectedEventDetails?.title || '');
+                    addToast("Evento atualizado.", "success");
+                }
+
+                setCustomEvents(newCustomEvents);
+                setIgnoredEvents(newIgnoredEvents);
+                setSchedule(newSchedule);
+                
+                // Persiste metadados de UI (eventos customizados e ignorados) no storage legado/híbrido
+                // para garantir que a lógica de "ignorar padrão" funcione na próxima carga
+                await saveData(ministryId, `events_${currentMonth}`, newCustomEvents);
+                await saveData(ministryId, `ignored_events_${currentMonth}`, newIgnoredEvents);
+                
                 setSelectedEventDetails(null);
-                addToast("Evento atualizado.", "success");
             }}
             onSwapRequest={async (role, iso, title) => {
                 if (!ministryId || !currentUser) return;
@@ -1295,6 +1459,7 @@ const AppContent = () => {
   );
 };
 
+// Export App as named export to match index.tsx import expectation and avoid default module issues
 const App = () => {
   return (
     <ToastProvider>
@@ -1303,4 +1468,4 @@ const App = () => {
   );
 };
 
-export default App;
+export { App };

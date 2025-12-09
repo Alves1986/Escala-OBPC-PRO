@@ -1,9 +1,9 @@
 
-
 import React, { useState } from 'react';
-import { Settings, Save, Moon, Sun, BellRing, RefreshCw, FileText, Shield, Megaphone } from 'lucide-react';
+import { Settings, Save, Moon, Sun, BellRing, RefreshCw, FileText, Shield, Megaphone, Database, CheckCircle2 } from 'lucide-react';
 import { useToast } from './Toast';
 import { LegalModal, LegalDocType } from './LegalDocuments';
+import { migrateLegacyData } from '../services/supabaseService';
 
 interface Props {
   initialTitle: string;
@@ -18,7 +18,25 @@ interface Props {
 export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, theme, onToggleTheme, onSaveTitle, onAnnounceUpdate, onEnableNotifications }) => {
   const [tempTitle, setTempTitle] = useState(initialTitle);
   const [legalDoc, setLegalDoc] = useState<LegalDocType>(null);
-  const { addToast } = useToast();
+  const [migrating, setMigrating] = useState(false);
+  const { addToast, confirmAction } = useToast();
+
+  const handleMigration = async () => {
+      if (!ministryId) return;
+      confirmAction(
+          "Migrar Dados Antigos?",
+          "Essa ação irá buscar membros e disponibilidades que estavam salvos no sistema antigo (V1) e movê-los para o novo banco de dados (V2). Use isso se seus membros sumiram após a atualização.",
+          async () => {
+              setMigrating(true);
+              const result = await migrateLegacyData(ministryId);
+              setMigrating(false);
+              addToast(result.message, result.success ? 'success' : 'error');
+              if (result.success) {
+                  setTimeout(() => window.location.reload(), 2000);
+              }
+          }
+      );
+  };
 
   return (
     <div className="space-y-6 animate-fade-in max-w-4xl mx-auto pb-10">
@@ -171,7 +189,24 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
                      </button>
                  </div>
 
-                 {/* Botão de Anunciar Atualização (Apenas se a prop for passada, indicando Admin) */}
+                 {/* Botão de Migração de Dados (V1 -> V2) */}
+                 <div className="md:col-span-2 mt-2 pt-4 border-t border-zinc-100 dark:border-zinc-700">
+                     <button 
+                         onClick={handleMigration}
+                         disabled={migrating}
+                         className="w-full flex items-center justify-center gap-2 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 transition-colors"
+                     >
+                         {migrating ? <RefreshCw size={18} className="animate-spin"/> : <Database size={18}/>}
+                         <span className="text-sm font-bold">
+                             {migrating ? "Migrando..." : "Migrar Dados Antigos (V1 -> V2)"}
+                         </span>
+                     </button>
+                     <p className="text-[10px] text-zinc-400 mt-2 text-center">
+                         Use se seus membros manuais ou disponibilidade sumiram após a atualização.
+                     </p>
+                 </div>
+
+                 {/* Botão de Anunciar Atualização (Apenas Admin) */}
                  {onAnnounceUpdate && (
                      <div className="md:col-span-2 mt-2">
                          <button 

@@ -1,6 +1,5 @@
-
 import React, { useState, useRef } from 'react';
-import { Share2, FileText, FileSpreadsheet, Trash, ChevronDown, Upload, FileDown } from 'lucide-react';
+import { Share2, FileText, FileSpreadsheet, Trash, ChevronDown, Upload, FileDown, Sparkles, Loader2 } from 'lucide-react';
 
 interface Props {
   onExportIndividual: (member: string) => void;
@@ -9,10 +8,22 @@ interface Props {
   onCSV: () => void;
   onImportCSV: (file: File) => void;
   onClearMonth: () => void;
+  onGenerateAI: () => void;
+  isGeneratingAI: boolean;
   allMembers: string[];
 }
 
-export const ToolsMenu: React.FC<Props> = ({ onExportIndividual, onExportFull, onWhatsApp, onCSV, onImportCSV, onClearMonth, allMembers }) => {
+export const ToolsMenu: React.FC<Props> = ({ 
+  onExportIndividual, 
+  onExportFull, 
+  onWhatsApp, 
+  onCSV, 
+  onImportCSV, 
+  onClearMonth, 
+  onGenerateAI,
+  isGeneratingAI,
+  allMembers 
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -39,7 +50,26 @@ export const ToolsMenu: React.FC<Props> = ({ onExportIndividual, onExportFull, o
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-zinc-800 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-700 z-50 overflow-hidden">
+        <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-zinc-800 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-700 z-50 overflow-hidden animate-fade-in">
+          
+          {/* AI Generator Button - DESTAQUE */}
+          <div className="p-2 border-b border-zinc-100 dark:border-zinc-700">
+             <button 
+                onClick={() => {
+                    if (!isGeneratingAI) {
+                        onGenerateAI();
+                        setIsOpen(false);
+                    }
+                }}
+                disabled={isGeneratingAI}
+                className="w-full text-left px-3 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 rounded-lg flex items-center gap-2 shadow-md transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+             >
+                {isGeneratingAI ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                {isGeneratingAI ? 'Gerando Escala...' : 'Gerar Escala com IA'}
+             </button>
+             <p className="text-[10px] text-zinc-400 mt-1 px-1 text-center">Preenche automaticamente baseado na disponibilidade.</p>
+          </div>
+
           <div className="p-2 border-b border-zinc-100 dark:border-zinc-700">
             <p className="text-xs font-bold text-zinc-500 uppercase px-2 mb-2">Exportar Individual</p>
             <div className="flex gap-2">

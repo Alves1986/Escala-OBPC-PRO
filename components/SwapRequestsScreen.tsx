@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { RefreshCcw, User, Calendar, ArrowRight, CheckCircle2, Clock, Info } from 'lucide-react';
 import { SwapRequest, User as UserType, ScheduleMap } from '../types';
+import { useToast } from './Toast';
 
 interface Props {
   schedule: ScheduleMap;
@@ -17,6 +18,7 @@ export const SwapRequestsScreen: React.FC<Props> = ({
     schedule, currentUser, requests, visibleEvents, onCreateRequest, onAcceptRequest, onCancelRequest 
 }) => {
   const [activeTab, setActiveTab] = useState<'mine' | 'wall'>('wall');
+  const { confirmAction } = useToast();
 
   // Filter pending requests for the wall
   const pendingRequests = requests.filter(r => r.status === 'pending');
@@ -186,7 +188,13 @@ export const SwapRequestsScreen: React.FC<Props> = ({
                                     </div>
 
                                     <button 
-                                        onClick={() => onAcceptRequest(req.id)}
+                                        onClick={() => {
+                                            confirmAction(
+                                                "Assumir Escala",
+                                                `Você deseja assumir a escala de ${req.requesterName} para o evento "${req.eventTitle}"?`,
+                                                () => onAcceptRequest(req.id)
+                                            );
+                                        }}
                                         disabled={!isMyRole}
                                         className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${
                                             isMyRole 

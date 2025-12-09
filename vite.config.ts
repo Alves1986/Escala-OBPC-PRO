@@ -7,5 +7,8 @@ export default defineConfig({
   build: {
     outDir: 'dist',
   },
-  publicDir: 'public', // Assets estáticos como sw.js e manifest devem ficar aqui ou na raiz dependendo da config
+  publicDir: 'public',
+  define: {
+    'process.env': {} // Polyfill process.env to avoid ReferenceError in browser
+  }
 });

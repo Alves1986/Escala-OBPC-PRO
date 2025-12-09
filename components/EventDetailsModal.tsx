@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Clock, Calendar, Save, User, Briefcase, RefreshCcw, Lock } from 'lucide-react';
+import { X, Clock, Calendar, Save, User, Briefcase, RefreshCcw, Lock, CheckSquare, Square } from 'lucide-react';
 import { Role, ScheduleMap, User as UserType } from '../types';
 
 interface Props {
@@ -9,7 +9,7 @@ interface Props {
   event: { iso: string; title: string; dateDisplay: string } | null;
   schedule: ScheduleMap;
   roles: Role[];
-  onSave: (oldIso: string, newTitle: string, newTime: string) => void;
+  onSave: (oldIso: string, newTitle: string, newTime: string, applyToAll: boolean) => void; // Updated signature
   onSwapRequest?: (role: string, eventIso: string, eventTitle: string) => void;
   currentUser?: UserType | null;
   ministryId: string | null;
@@ -19,11 +19,13 @@ interface Props {
 export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, schedule, roles, onSave, onSwapRequest, currentUser, ministryId, canEdit = false }) => {
   const [time, setTime] = useState("");
   const [title, setTitle] = useState("");
+  const [applyToAll, setApplyToAll] = useState(false);
 
   useEffect(() => {
     if (event) {
         setTime(event.iso.split('T')[1]);
         setTitle(event.title);
+        setApplyToAll(false); // Reset check
     }
   }, [event]);
 
@@ -106,6 +108,24 @@ export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, sch
                              </div>
                         </div>
                     </div>
+
+                    {/* Apply to All Checkbox (Only if editing name/time is allowed and something changed) */}
+                    {canEdit && (
+                        <div 
+                            onClick={() => setApplyToAll(!applyToAll)}
+                            className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-800/30 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/20 transition-colors"
+                        >
+                            <div className={`mt-0.5 ${applyToAll ? 'text-blue-600 dark:text-blue-400' : 'text-zinc-400'}`}>
+                                {applyToAll ? <CheckSquare size={18} /> : <Square size={18} />}
+                            </div>
+                            <div>
+                                <p className="text-sm font-bold text-zinc-800 dark:text-zinc-200">Aplicar a todos os eventos iguais</p>
+                                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                                    Atualiza o nome e horário de todos os eventos <strong>"{event.title}"</strong> neste mês.
+                                </p>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Team List Section */}
@@ -139,7 +159,7 @@ export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, sch
                 <div className="flex flex-col gap-3">
                     {canEdit && (
                         <button 
-                            onClick={() => onSave(event.iso, title, time)} 
+                            onClick={() => onSave(event.iso, title, time, applyToAll)} 
                             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 active:scale-95 transition-all"
                         >
                             <Save size={18} /> Salvar Alterações

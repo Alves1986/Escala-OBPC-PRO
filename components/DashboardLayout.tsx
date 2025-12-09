@@ -1,5 +1,4 @@
 
-
 import React, { ReactNode, useState } from 'react';
 import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle } from 'lucide-react';
 import { User, AppNotification } from '../types';
@@ -123,8 +122,6 @@ export const DashboardLayout: React.FC<Props> = ({
 
   // Verifica se o usuário tem múltiplos ministérios
   const hasMultipleMinistries = currentUser?.allowedMinistries && currentUser.allowedMinistries.length > 1;
-  // Always allow menu opening if user has multiple OR if we want to show the "Add" button (which we do now)
-  const canOpenMenu = true; 
 
   return (
     <div className={`flex h-screen overflow-hidden bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 transition-colors duration-300 font-sans`}>
@@ -287,7 +284,7 @@ export const DashboardLayout: React.FC<Props> = ({
                   <Menu size={24} />
               </button>
               <div className="flex flex-col leading-tight">
-                  <span className="font-bold text-zinc-800 dark:text-zinc-100 text-sm truncate max-w-[150px]">{title}</span>
+                  <span className="font-bold text-zinc-800 dark:text-zinc-100 text-sm truncate max-w-[200px]">{title}</span>
                   {hasMultipleMinistries && <span className="text-[10px] text-blue-500 font-medium">Trocar no Menu</span>}
               </div>
            </div>

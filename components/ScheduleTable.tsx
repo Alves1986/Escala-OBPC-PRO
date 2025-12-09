@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis, GlobalConflictMap } from '../types';
-import { CheckCircle2, AlertTriangle, Trash2, User } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Trash2, User, Edit, Clock } from 'lucide-react';
 
 interface Props {
   events: { iso: string; dateDisplay: string; title: string }[];
@@ -16,13 +16,14 @@ interface Props {
   onCellChange: (key: string, value: string) => void;
   onAttendanceToggle: (key: string) => void;
   onDeleteEvent: (iso: string, title: string) => void;
+  onEditEvent: (event: { iso: string; title: string; dateDisplay: string }) => void; // Novo prop
   memberStats: Record<string, number>;
   ministryId: string | null;
   readOnly?: boolean; 
 }
 
 export const ScheduleTable: React.FC<Props> = ({
-  events, roles, schedule, attendance, availability, members, scheduleIssues, globalConflicts, onCellChange, onAttendanceToggle, onDeleteEvent, memberStats, ministryId, readOnly = false
+  events, roles, schedule, attendance, availability, members, scheduleIssues, globalConflicts, onCellChange, onAttendanceToggle, onDeleteEvent, onEditEvent, memberStats, ministryId, readOnly = false
 }) => {
   
   // Calculate if member is unavailable for a specific date AND Time
@@ -81,7 +82,7 @@ export const ScheduleTable: React.FC<Props> = ({
         <table className="w-full text-sm text-left">
           <thead className="text-xs text-zinc-500 uppercase bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700">
             <tr>
-              <th className="px-6 py-4 font-bold sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10 w-48 shadow-[1px_0_0_0_rgba(0,0,0,0.05)] dark:shadow-[1px_0_0_0_rgba(255,255,255,0.05)]">Evento</th>
+              <th className="px-6 py-4 font-bold sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10 w-64 shadow-[1px_0_0_0_rgba(0,0,0,0.05)] dark:shadow-[1px_0_0_0_rgba(255,255,255,0.05)]">Evento</th>
               {columns.map(col => (
                 <th key={col.keySuffix} className="px-6 py-4 font-bold min-w-[180px]">{col.displayRole}</th>
               ))}
@@ -90,22 +91,36 @@ export const ScheduleTable: React.FC<Props> = ({
           <tbody>
             {events.length === 0 ? (
               <tr><td colSpan={columns.length + 1} className="p-8 text-center text-zinc-500">Nenhum evento para este mês.</td></tr>
-            ) : events.map((event) => (
+            ) : events.map((event) => {
+              const time = event.iso.split('T')[1];
+              return (
               <tr key={event.iso} className="border-b border-zinc-100 dark:border-zinc-700/50 hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors group">
                 <td className="px-6 py-4 sticky left-0 bg-white dark:bg-zinc-800 z-10 border-r border-zinc-100 dark:border-zinc-700 shadow-[1px_0_0_0_rgba(0,0,0,0.05)] dark:shadow-[1px_0_0_0_rgba(255,255,255,0.05)] group-hover:bg-zinc-50 dark:group-hover:bg-zinc-800/80 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-zinc-800 dark:text-zinc-100">{event.title}</span>
-                      <span className="text-xs text-zinc-500">{event.dateDisplay}</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-col min-w-0 gap-1">
+                      <span className="font-bold text-zinc-800 dark:text-zinc-100 truncate text-base" title={event.title}>{event.title}</span>
+                      <div className="flex items-center gap-2 text-xs text-zinc-500">
+                         <span className="font-medium bg-zinc-100 dark:bg-zinc-700/50 px-2 py-0.5 rounded text-zinc-600 dark:text-zinc-300">{event.dateDisplay}</span>
+                         <span className="flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded border border-blue-100 dark:border-blue-800/50"><Clock size={12}/> {time}</span>
+                      </div>
                     </div>
                     {!readOnly && (
-                        <button 
-                        onClick={() => onDeleteEvent(event.iso, event.title)}
-                        className="text-zinc-300 hover:text-red-500 p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
-                        title="Remover/Ocultar Evento"
-                        >
-                        <Trash2 size={16} />
-                        </button>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button 
+                                onClick={() => onEditEvent(event)}
+                                className="text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 p-2 rounded-lg transition-colors"
+                                title="Editar Nome/Horário"
+                            >
+                                <Edit size={16} />
+                            </button>
+                            <button 
+                                onClick={() => onDeleteEvent(event.iso, event.title)}
+                                className="text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 p-2 rounded-lg transition-colors"
+                                title="Remover/Ocultar Evento"
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                        </div>
                     )}
                   </div>
                 </td>
@@ -211,7 +226,7 @@ export const ScheduleTable: React.FC<Props> = ({
                   );
                 })}
               </tr>
-            ))}
+            )})}
           </tbody>
         </table>
       </div>
