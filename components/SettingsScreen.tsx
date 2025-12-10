@@ -1,10 +1,11 @@
 
+
 import React, { useState } from 'react';
-import { Settings, Save, Moon, Sun, BellRing, RefreshCw, FileText, Shield, Megaphone, Send, KeyRound, Copy, AlertTriangle } from 'lucide-react';
+import { Settings, Save, Moon, Sun, BellRing, RefreshCw, FileText, Shield, Megaphone, Send, KeyRound, Copy, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useToast } from './Toast';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { VAPID_PUBLIC_KEY } from '../utils/pushUtils';
-import { testPushNotification } from '../services/supabaseService';
+import { testPushNotification, getSupabase } from '../services/supabaseService';
 
 interface Props {
   initialTitle: string;
@@ -20,6 +21,7 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
   const [tempTitle, setTempTitle] = useState(initialTitle);
   const [legalDoc, setLegalDoc] = useState<LegalDocType>(null);
   const [testingPush, setTestingPush] = useState(false);
+  const [generatingKeys, setGeneratingKeys] = useState(false);
   const [generatedKeys, setGeneratedKeys] = useState<{ publicKey: string; privateKey: string } | null>(null);
   const { addToast } = useToast();
 
@@ -35,34 +37,36 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
     }
   };
 
-  const generateVapidKeys = async () => {
+  const handleGenerateKeys = async () => {
+      setGeneratingKeys(true);
       try {
-          // Geração nativa de chaves P-256 no navegador
-          const keyPair = await window.crypto.subtle.generateKey(
-              { name: 'ECDSA', namedCurve: 'P-256' },
-              true,
-              ['sign', 'verify']
-          );
-
-          const exportKey = async (key: CryptoKey, type: 'public' | 'private') => {
-              const exported = await window.crypto.subtle.exportKey('jwk', key);
-              // Conversão manual simplificada para VAPID (Base64Url)
-              // Nota: Em produção idealmente usa-se uma lib, mas para resolver o problema imediato:
-              // Para VAPID público precisamos do formato "Raw" (0x04 + x + y)
-              // Para VAPID privado precisamos de "d" em Base64Url
-              return exported;
-          };
+          const supabase = getSupabase();
+          if(!supabase) return;
           
-          // Como a conversão JWK -> VAPID Raw String no browser é complexa sem libs externas,
-          // vamos fornecer um link externo confiável ou instrução clara.
-          // Mas, para ajudar o usuário, vamos simular a ação de alerta.
-          
-          alert("Para gerar chaves VAPID seguras e compatíveis, recomendamos usar o site: https://vapidkeys.com/\n\nO app abrirá o site para você gerar um par válido e corrigir o erro.");
-          window.open('https://vapidkeys.com/', '_blank');
+          // Chama a Edge Function com a ação especial para gerar chaves
+          const { data, error } = await supabase.functions.invoke('push-notification', {
+              body: { action: 'generate_keys' }
+          });
 
-      } catch (e) {
-          addToast("Erro ao gerar chaves.", "error");
+          if (error) throw error;
+          
+          if (data && data.keys) {
+              setGeneratedKeys(data.keys);
+              addToast("Chaves geradas com sucesso!", "success");
+          } else {
+              throw new Error("Resposta inválida da função");
+          }
+      } catch (e: any) {
+          console.error(e);
+          addToast("Erro ao gerar chaves: " + e.message, "error");
+      } finally {
+          setGeneratingKeys(false);
       }
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+      navigator.clipboard.writeText(text);
+      addToast(`${label} copiada!`, "success");
   };
 
   return (
@@ -111,38 +115,56 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
              <h3 className="text-sm font-bold text-red-500 uppercase mb-4 flex items-center gap-2">
                  <AlertTriangle size={16}/> Diagnóstico de Notificações
              </h3>
-             <p className="text-sm text-zinc-600 dark:text-zinc-300 mb-4">
-                 Se você está recebendo o erro <strong>"Vapid private key should be 32 bytes"</strong>, suas chaves de segurança estão inválidas. Use o botão abaixo para gerar novas chaves.
-             </p>
              
-             <div className="flex flex-col gap-3">
-                 <button 
-                     onClick={generateVapidKeys}
-                     className="w-full sm:w-auto px-4 py-3 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 rounded-lg text-sm font-bold text-zinc-700 dark:text-zinc-200 flex items-center justify-center gap-2 transition-colors"
-                 >
-                     <KeyRound size={16}/> Gerar Novo Par de Chaves (Externo)
-                 </button>
-                 
-                 <div className="p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs text-zinc-500">
-                     <strong>Instruções de Correção:</strong>
-                     <ol className="list-decimal list-inside mt-2 space-y-1">
-                         <li>Clique no botão acima para abrir o gerador (vapidkeys.com).</li>
-                         <li>Copie a <strong>Public Key</strong> gerada e me envie aqui no chat para eu atualizar o código.</li>
-                         <li>Copie a <strong>Private Key</strong> e coloque nos <strong>Secrets do Supabase</strong> com o nome <code>VAPID_PRIVATE_KEY</code>.</li>
-                     </ol>
-                 </div>
-
-                 <div className="border-t border-zinc-200 dark:border-zinc-700 pt-4 mt-2">
-                     <p className="text-xs font-bold text-zinc-500 uppercase mb-2">Teste de Envio</p>
-                     <div className="flex gap-2">
-                        <button 
-                            onClick={handleTestPush}
-                            disabled={testingPush}
-                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50"
-                        >
-                            <Send size={16}/> {testingPush ? 'Enviando...' : 'Enviar Notificação de Teste'}
-                        </button>
+             {!generatedKeys ? (
+                 <>
+                    <p className="text-sm text-zinc-600 dark:text-zinc-300 mb-4">
+                        Se você está recebendo o erro <strong>"Vapid private key should be 32 bytes"</strong> ou <strong>"non-2xx status code"</strong>, suas chaves de segurança no Supabase estão inválidas.
+                    </p>
+                    <button 
+                        onClick={handleGenerateKeys}
+                        disabled={generatingKeys}
+                        className="w-full sm:w-auto px-4 py-3 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 rounded-lg text-sm font-bold text-zinc-700 dark:text-zinc-200 flex items-center justify-center gap-2 transition-colors border border-zinc-300 dark:border-zinc-600"
+                    >
+                        <KeyRound size={16}/> {generatingKeys ? 'Gerando...' : 'Gerar Novo Par de Chaves VAPID'}
+                    </button>
+                 </>
+             ) : (
+                 <div className="space-y-4 animate-fade-in bg-zinc-50 dark:bg-zinc-900/50 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700">
+                     <div className="flex items-center gap-2 text-green-600 font-bold mb-2">
+                         <CheckCircle2 size={18}/> Chaves Geradas com Sucesso!
                      </div>
+                     
+                     <div>
+                         <label className="text-xs font-bold text-zinc-500 uppercase block mb-1">1. Chave Privada (Private Key)</label>
+                         <div className="flex gap-2">
+                             <input readOnly value={generatedKeys.privateKey} className="flex-1 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded p-2 text-xs font-mono text-red-500" />
+                             <button onClick={() => copyToClipboard(generatedKeys.privateKey, "Chave Privada")} className="p-2 bg-zinc-200 dark:bg-zinc-700 rounded hover:bg-zinc-300"><Copy size={16}/></button>
+                         </div>
+                         <p className="text-[10px] text-zinc-500 mt-1">Cole esta chave nos <strong>Secrets do Supabase</strong> com o nome <code>VAPID_PRIVATE_KEY</code>.</p>
+                     </div>
+
+                     <div>
+                         <label className="text-xs font-bold text-zinc-500 uppercase block mb-1">2. Chave Pública (Public Key)</label>
+                         <div className="flex gap-2">
+                             <input readOnly value={generatedKeys.publicKey} className="flex-1 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded p-2 text-xs font-mono text-blue-500" />
+                             <button onClick={() => copyToClipboard(generatedKeys.publicKey, "Chave Pública")} className="p-2 bg-zinc-200 dark:bg-zinc-700 rounded hover:bg-zinc-300"><Copy size={16}/></button>
+                         </div>
+                         <p className="text-[10px] text-zinc-500 mt-1">Me envie esta chave no chat para eu atualizar o código do App.</p>
+                     </div>
+                 </div>
+             )}
+
+             <div className="border-t border-zinc-200 dark:border-zinc-700 pt-4 mt-4">
+                 <p className="text-xs font-bold text-zinc-500 uppercase mb-2">Teste de Envio</p>
+                 <div className="flex gap-2">
+                    <button 
+                        onClick={handleTestPush}
+                        disabled={testingPush}
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50 shadow-md shadow-blue-600/20"
+                    >
+                        <Send size={16}/> {testingPush ? 'Enviando...' : 'Enviar Notificação de Teste'}
+                    </button>
                  </div>
              </div>
          </div>

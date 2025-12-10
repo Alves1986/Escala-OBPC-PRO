@@ -1,7 +1,7 @@
 
 
 // Chave Pública gerada pelo usuário para Push Notifications
-export const VAPID_PUBLIC_KEY = "BObJkDWME42FE1qS75tls7RnVakwqIjYufuqnwVKjLS-wrYlxmUSlcYdunkckUxpyME03GgrPAzShWruRnZnu3o";
+export const VAPID_PUBLIC_KEY = "BDug4Y7xlqoJF0ihCLqHDsJtzYqZhLnKlWr0y-ynKLscqQH8nWqJo6LpLy65tx1VWwD5FRD8gfI4NxisdJ7dWUc";
 
 export function urlBase64ToUint8Array(base64String: string) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);

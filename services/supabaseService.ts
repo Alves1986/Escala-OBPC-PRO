@@ -1,5 +1,6 @@
 
 
+
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
     SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, 
@@ -280,17 +281,18 @@ export const testPushNotification = async (ministryId: string) => {
 
         if (error) throw error;
 
-        // Se a função retornou 200, mas com success: false (nossa lógica customizada)
+        // Verifica a flag de sucesso do backend, pois agora ele sempre retorna 200
         if (data && data.success === false) {
-            return { success: false, message: data.message || "Erro desconhecido na Edge Function." };
+            return { success: false, message: `Erro no servidor: ${data.message}` };
         }
 
         return { success: true, message: data?.message || "Notificação enviada! Verifique seu celular." };
     } catch (e: any) {
         console.error(e);
-        let msg = e.message || "Erro ao chamar Edge Function";
+        let msg = e.message || "Erro desconhecido";
+        // Melhor tratamento para erros de invoke
         if (msg.includes("non-2xx")) {
-             msg = "Erro Crítico no Servidor (500). Verifique se configurou a VAPID_PRIVATE_KEY.";
+             msg = "Erro Crítico na Edge Function. Verifique os logs no painel do Supabase.";
         }
         return { success: false, message: msg };
     }
