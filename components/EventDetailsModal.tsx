@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Clock, Calendar, Save, User, Briefcase, RefreshCcw, Lock, CheckSquare, Square } from 'lucide-react';
-import { Role, ScheduleMap, User as UserType } from '../types';
+import { X, Clock, Calendar, Save, User, RefreshCcw, Lock, CheckSquare, Square, UserPlus } from 'lucide-react';
+import { Role, ScheduleMap, User as UserType, TeamMemberProfile } from '../types';
 
 interface Props {
   isOpen: boolean;
@@ -9,14 +8,18 @@ interface Props {
   event: { iso: string; title: string; dateDisplay: string } | null;
   schedule: ScheduleMap;
   roles: Role[];
-  onSave: (oldIso: string, newTitle: string, newTime: string, applyToAll: boolean) => void; // Updated signature
+  allMembers?: TeamMemberProfile[]; // Added to lookup avatars
+  onSave: (oldIso: string, newTitle: string, newTime: string, applyToAll: boolean) => void; 
   onSwapRequest?: (role: string, eventIso: string, eventTitle: string) => void;
   currentUser?: UserType | null;
   ministryId: string | null;
-  canEdit?: boolean; // Controls whether the user can edit the event
+  canEdit?: boolean; 
 }
 
-export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, schedule, roles, onSave, onSwapRequest, currentUser, ministryId, canEdit = false }) => {
+export const EventDetailsModal: React.FC<Props> = ({ 
+    isOpen, onClose, event, schedule, roles, allMembers = [], 
+    onSave, onSwapRequest, currentUser, ministryId, canEdit = false 
+}) => {
   const [time, setTime] = useState("");
   const [title, setTitle] = useState("");
   const [applyToAll, setApplyToAll] = useState(false);
@@ -25,7 +28,7 @@ export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, sch
     if (event) {
         setTime(event.iso.split('T')[1]);
         setTitle(event.title);
-        setApplyToAll(false); // Reset check
+        setApplyToAll(false); 
     }
   }, [event]);
 
@@ -48,7 +51,7 @@ export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, sch
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-        <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-2xl w-full max-w-md border border-zinc-200 dark:border-zinc-700 flex flex-col overflow-hidden transform transition-all scale-100">
+        <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-2xl w-full max-w-md border border-zinc-200 dark:border-zinc-700 flex flex-col overflow-hidden transform transition-all scale-100 max-h-[90vh]">
             {/* Header */}
             <div className="bg-zinc-50 dark:bg-zinc-900 p-5 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-start">
                 <div>
@@ -62,7 +65,7 @@ export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, sch
                 </button>
             </div>
             
-            <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh] custom-scrollbar">
+            <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar">
                 {/* Form Section */}
                 <div className="space-y-4">
                     <div className="space-y-1.5">
@@ -109,7 +112,7 @@ export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, sch
                         </div>
                     </div>
 
-                    {/* Apply to All Checkbox (Only if editing name/time is allowed and something changed) */}
+                    {/* Apply to All Checkbox */}
                     {canEdit && (
                         <div 
                             onClick={() => setApplyToAll(!applyToAll)}
@@ -135,17 +138,29 @@ export const EventDetailsModal: React.FC<Props> = ({ isOpen, onClose, event, sch
                     </h3>
                     <div className="space-y-3">
                         {expandedRoles.map(roleObj => {
-                            const member = schedule[`${event.iso}_${roleObj.keySuffix}`];
+                            const memberName = schedule[`${event.iso}_${roleObj.keySuffix}`];
+                            const memberProfile = allMembers.find(m => m.name === memberName);
+
                             return (
-                                <div key={roleObj.keySuffix} className="flex items-center justify-between group">
+                                <div key={roleObj.keySuffix} className="flex items-center justify-between group p-2 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors border border-transparent hover:border-zinc-100 dark:hover:border-zinc-700/50">
                                     <div className="flex items-center gap-3">
-                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${member ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-zinc-100 text-zinc-400 dark:bg-zinc-800'}`}>
-                                            <Briefcase size={14} />
+                                        {/* Avatar / Placeholder */}
+                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center overflow-hidden border shrink-0 ${memberName ? 'border-zinc-200 dark:border-zinc-700' : 'border-dashed border-zinc-300 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-800'}`}>
+                                            {memberProfile?.avatar_url ? (
+                                                <img src={memberProfile.avatar_url} alt={memberName} className="w-full h-full object-cover" />
+                                            ) : memberName ? (
+                                                <div className="w-full h-full bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold">
+                                                    {memberName.charAt(0).toUpperCase()}
+                                                </div>
+                                            ) : (
+                                                <UserPlus size={16} className="text-zinc-300 dark:text-zinc-600" />
+                                            )}
                                         </div>
+
                                         <div className="flex flex-col">
                                             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide">{roleObj.display}</span>
-                                            <span className={`text-sm font-medium ${member ? 'text-zinc-800 dark:text-zinc-200' : 'text-zinc-400 italic'}`}>
-                                                {member || 'Vago'}
+                                            <span className={`text-sm font-medium ${memberName ? 'text-zinc-800 dark:text-zinc-200' : 'text-zinc-400 italic'}`}>
+                                                {memberName || 'Vago'}
                                             </span>
                                         </div>
                                     </div>

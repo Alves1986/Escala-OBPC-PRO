@@ -79,7 +79,12 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
 
   // Checks if the event is today
   const isToday = () => {
-     const today = new Date().toISOString().split('T')[0];
+     const now = new Date();
+     const year = now.getFullYear();
+     const month = String(now.getMonth() + 1).padStart(2, '0');
+     const day = String(now.getDate()).padStart(2, '0');
+     const today = `${year}-${month}-${day}`;
+     
      const eventDate = event.iso.split('T')[0];
      return today === eventDate;
   };

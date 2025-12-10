@@ -1,6 +1,3 @@
-
-
-
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
     SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, 
@@ -608,13 +605,19 @@ export const fetchMinistrySchedule = async (ministryId: string, monthIso: string
             }
         });
 
-        const uiEvents = events.map(e => ({
-            id: e.id,
-            title: e.title,
-            date: e.date_time.split('T')[0],
-            time: e.date_time.split('T')[1].slice(0, 5),
-            iso: e.date_time.slice(0, 16)
-        }));
+        const uiEvents = events.map(e => {
+            const [date, timeFull] = e.date_time.split('T');
+            const [yyyy, mm, dd] = date.split('-');
+            
+            return {
+                id: e.id,
+                title: e.title,
+                date: date,
+                time: timeFull.slice(0, 5),
+                iso: e.date_time.slice(0, 16),
+                dateDisplay: `${dd}/${mm}`
+            };
+        });
 
         return { schedule, events: uiEvents, attendance };
 

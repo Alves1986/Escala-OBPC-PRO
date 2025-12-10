@@ -1,6 +1,7 @@
-import React, { useMemo, useCallback } from 'react';
-import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis, GlobalConflictMap } from '../types';
-import { CheckCircle2, AlertTriangle, Trash2, Edit, Clock } from 'lucide-react';
+import React, { useMemo, useCallback, useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis, GlobalConflictMap, TeamMemberProfile } from '../types';
+import { CheckCircle2, AlertTriangle, Trash2, Edit, Clock, User, ChevronDown } from 'lucide-react';
 
 interface Props {
   events: { iso: string; dateDisplay: string; title: string }[];
@@ -10,6 +11,7 @@ interface Props {
   availability: AvailabilityMap;
   members: Record<string, string[]>;
   allMembers: string[]; 
+  memberProfiles?: TeamMemberProfile[];
   scheduleIssues: ScheduleAnalysis;
   globalConflicts: GlobalConflictMap; 
   onCellChange: (key: string, value: string) => void;
@@ -21,11 +23,203 @@ interface Props {
   readOnly?: boolean; 
 }
 
-// ----------------------------------------------------------------------
-// SUB-COMPONENT: ROW (Memoized for Performance)
-// ----------------------------------------------------------------------
+const MemberSelector = ({ 
+    value, 
+    onChange, 
+    options, 
+    memberProfiles = [], 
+    memberStats,
+    hasError,
+    hasWarning,
+    eventIso,
+    availability
+}: { 
+    value: string; 
+    onChange: (val: string) => void; 
+    options: string[]; 
+    memberProfiles?: TeamMemberProfile[]; 
+    memberStats: Record<string, number>;
+    hasError: boolean;
+    hasWarning: boolean;
+    eventIso: string;
+    availability: AvailabilityMap;
+}) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [search, setSearch] = useState("");
+    const triggerRef = useRef<HTMLDivElement>(null);
+    const [position, setPosition] = useState({ top: 0, left: 0, width: 200 });
+
+    const selectedProfile = memberProfiles.find(p => p.name === value);
+
+    useEffect(() => {
+        if (isOpen && triggerRef.current) {
+            const rect = triggerRef.current.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const openUp = spaceBelow < 300; 
+            
+            setPosition({
+                top: openUp ? rect.top - 300 : rect.bottom + 5,
+                left: rect.left,
+                width: rect.width
+            });
+        }
+    }, [isOpen]);
+
+    useEffect(() => {
+        const handleClick = (e: MouseEvent) => {
+            if (triggerRef.current && !triggerRef.current.contains(e.target as Node)) {
+                const dropdown = document.getElementById('member-selector-portal');
+                if (dropdown && !dropdown.contains(e.target as Node)) {
+                    setIsOpen(false);
+                }
+            }
+        };
+        if (isOpen) window.addEventListener('mousedown', handleClick);
+        return () => window.removeEventListener('mousedown', handleClick);
+    }, [isOpen]);
+
+    const getInitials = (name: string) => name ? name.charAt(0).toUpperCase() : '?';
+
+    const checkAvailability = (member: string) => {
+        const [datePart, timePart] = eventIso.split('T');
+        const availableDates = availability[member];
+        
+        if (!availableDates || availableDates.length === 0) return false;
+        if (availableDates.includes(datePart)) return true;
+
+        const hasMorning = availableDates.includes(`${datePart}_M`);
+        const hasNight = availableDates.includes(`${datePart}_N`);
+        const eventHour = parseInt(timePart.split(':')[0], 10);
+        const isMorningEvent = eventHour < 13;
+
+        if (isMorningEvent && hasMorning) return true;
+        if (!isMorningEvent && hasNight) return true;
+
+        return false;
+    };
+
+    const filteredOptions = options.filter(opt => opt.toLowerCase().includes(search.toLowerCase())).sort((a, b) => {
+        const availA = checkAvailability(a);
+        const availB = checkAvailability(b);
+        if (availA && !availB) return -1;
+        if (!availA && availB) return 1;
+        return 0;
+    });
+
+    return (
+        <div className="relative w-full" ref={triggerRef}>
+            <div 
+                onClick={() => !isOpen && setIsOpen(true)}
+                className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-all bg-white dark:bg-zinc-900 ${
+                    hasError 
+                    ? 'border-red-500 bg-red-50 dark:bg-red-900/10' 
+                    : hasWarning
+                    ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/10'
+                    : 'border-zinc-200 dark:border-zinc-700 hover:border-blue-400 dark:hover:border-blue-500'
+                }`}
+            >
+                {value ? (
+                    <div className="flex items-center gap-2 min-w-0">
+                        {selectedProfile?.avatar_url ? (
+                            <img src={selectedProfile.avatar_url} alt="" className="w-5 h-5 rounded-full object-cover shrink-0" />
+                        ) : (
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0 ${hasError ? 'bg-red-500' : 'bg-blue-600'}`}>
+                                {getInitials(value)}
+                            </div>
+                        )}
+                        <span className={`text-xs font-medium truncate ${hasError ? 'text-red-700 dark:text-red-400' : 'text-zinc-800 dark:text-zinc-200'}`}>
+                            {value}
+                        </span>
+                    </div>
+                ) : (
+                    <span className="text-xs text-zinc-400 italic">Selecionar...</span>
+                )}
+                <ChevronDown size={14} className="text-zinc-400 shrink-0 ml-1" />
+            </div>
+
+            {isOpen && createPortal(
+                <div 
+                    id="member-selector-portal"
+                    className="fixed z-[9999] bg-white dark:bg-zinc-800 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-700 flex flex-col overflow-hidden animate-fade-in"
+                    style={{ 
+                        top: position.top, 
+                        left: position.left, 
+                        width: Math.max(position.width, 240),
+                        maxHeight: '300px' 
+                    }}
+                >
+                    <div className="p-2 border-b border-zinc-100 dark:border-zinc-700 sticky top-0 bg-white dark:bg-zinc-800 z-10">
+                        <input 
+                            autoFocus
+                            placeholder="Buscar membro..." 
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            className="w-full text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded p-1.5 focus:ring-1 focus:ring-blue-500 outline-none"
+                        />
+                    </div>
+                    <div className="overflow-y-auto custom-scrollbar p-1">
+                        <button 
+                            onClick={() => { onChange(""); setIsOpen(false); }}
+                            className="w-full text-left px-2 py-2 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded flex items-center gap-2 mb-1"
+                        >
+                            <Trash2 size={12} /> Remover Seleção
+                        </button>
+                        
+                        {filteredOptions.length === 0 && (
+                            <div className="p-3 text-center text-xs text-zinc-400">Nenhum membro encontrado.</div>
+                        )}
+
+                        {filteredOptions.map(opt => {
+                            const profile = memberProfiles?.find(p => p.name === opt);
+                            const count = memberStats[opt] || 0;
+                            const isAvailable = checkAvailability(opt);
+                            
+                            return (
+                                <button
+                                    key={opt}
+                                    onClick={() => { onChange(opt); setIsOpen(false); }}
+                                    className={`w-full text-left px-2 py-2 text-xs rounded flex items-center justify-between group transition-colors mb-0.5 ${
+                                        value === opt 
+                                        ? 'bg-blue-50 dark:bg-blue-900/20' 
+                                        : isAvailable 
+                                            ? 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50' 
+                                            : 'opacity-50 hover:opacity-100 hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-2 overflow-hidden">
+                                        {profile?.avatar_url ? (
+                                            <img src={profile.avatar_url} alt="" className={`w-6 h-6 rounded-full object-cover border ${isAvailable ? 'border-green-400' : 'border-zinc-200 dark:border-zinc-600 grayscale'}`} />
+                                        ) : (
+                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] ${isAvailable ? 'bg-indigo-100 text-indigo-600' : 'bg-zinc-200 text-zinc-500'}`}>
+                                                {getInitials(opt)}
+                                            </div>
+                                        )}
+                                        <div className="flex flex-col truncate text-left">
+                                            <span className={`font-medium truncate ${isAvailable ? 'text-zinc-700 dark:text-zinc-200' : 'text-zinc-400 dark:text-zinc-500'}`}>{opt}</span>
+                                            {isAvailable && <span className="text-[9px] text-green-500 font-bold">Disponível</span>}
+                                        </div>
+                                    </div>
+                                    
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ml-2 ${
+                                        count === 0 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                        count > 4 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                                        'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'
+                                    }`}>
+                                        {count}x
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>,
+                document.body
+            )}
+        </div>
+    );
+};
+
 const ScheduleRow = React.memo(({ 
-    event, columns, schedule, attendance, availability, members, scheduleIssues, globalConflicts, 
+    event, columns, schedule, attendance, availability, members, memberProfiles, scheduleIssues, globalConflicts, 
     onCellChange, onAttendanceToggle, onDeleteEvent, onEditEvent, memberStats, readOnly 
 }: any) => {
 
@@ -33,7 +227,7 @@ const ScheduleRow = React.memo(({
         const [datePart, timePart] = isoDateStr.split('T');
         const availableDates = availability[member];
         
-        if (!availableDates || availableDates.length === 0) return false;
+        if (!availableDates || availableDates.length === 0) return true; // Inverse logic: checkAvailability returns true if avail. This returns true if UNavailable.
 
         if (availableDates.includes(datePart)) return false; 
 
@@ -48,18 +242,6 @@ const ScheduleRow = React.memo(({
 
         return true; 
     }, [availability]);
-
-    const sortMembers = useCallback((list: string[], isoDate: string) => {
-        return list.sort((a, b) => {
-            const unavailA = isUnavailable(a, isoDate);
-            const unavailB = isUnavailable(b, isoDate);
-            if (unavailA && !unavailB) return 1;
-            if (!unavailA && unavailB) return -1;
-            const statsDiff = (memberStats[a] || 0) - (memberStats[b] || 0);
-            if (statsDiff !== 0) return statsDiff;
-            return a.localeCompare(b);
-        });
-    }, [isUnavailable, memberStats]);
 
     const time = event.iso.split('T')[1];
 
@@ -99,11 +281,8 @@ const ScheduleRow = React.memo(({
                 const currentValue = schedule[key] || "";
                 
                 const roleMembers = members[col.realRole] || [];
-                // Only resort if members list changes (rare) or stats change (handled by parent prop change)
-                const sortedRoleMembers = sortMembers([...roleMembers], event.iso);
 
                 const isConfirmed = attendance[key];
-                const issue = scheduleIssues[key];
                 const hasLocalConflict = currentValue && isUnavailable(currentValue, event.iso);
                 
                 let globalConflictMsg = "";
@@ -122,7 +301,7 @@ const ScheduleRow = React.memo(({
                 }
 
                 return (
-                    <td key={key} className="px-6 py-4">
+                    <td key={key} className="px-4 py-3 min-w-[220px]">
                         <div className="flex items-center gap-2">
                             {readOnly ? (
                                 <div className="flex-1 flex items-center gap-2">
@@ -131,53 +310,28 @@ const ScheduleRow = React.memo(({
                                     </span>
                                 </div>
                             ) : (
-                                <div className="relative w-full group/cell">
-                                    <select
+                                <div className="flex-1">
+                                    <MemberSelector 
                                         value={currentValue}
-                                        onChange={(e) => onCellChange(key, e.target.value)}
-                                        className={`w-full bg-zinc-100 dark:bg-zinc-900/50 border-0 rounded-md py-1.5 pl-3 pr-8 text-xs ring-1 ring-inset focus:ring-2 sm:text-sm sm:leading-6 cursor-pointer transition-all appearance-none
-                                        ${hasLocalConflict 
-                                            ? 'text-red-700 dark:text-red-400 ring-red-300 dark:ring-red-900 focus:ring-red-500 bg-red-50 dark:bg-red-900/20 font-medium' 
-                                            : hasGlobalConflict
-                                            ? 'text-orange-700 dark:text-orange-400 ring-orange-300 dark:ring-orange-900 focus:ring-orange-500 bg-orange-50 dark:bg-orange-900/20 font-medium'
-                                            : issue?.type === 'warning'
-                                                ? 'text-amber-700 dark:text-amber-400 ring-amber-300 dark:ring-amber-900 focus:ring-amber-500 bg-amber-50 dark:bg-amber-900/20'
-                                                : currentValue 
-                                                ? 'text-zinc-900 dark:text-zinc-100 ring-zinc-300 dark:ring-zinc-600 focus:ring-brand-500' 
-                                                : 'text-zinc-400 ring-zinc-200 dark:ring-zinc-700 focus:ring-brand-500'}
-                                        `}
-                                    >
-                                        <option value="">-- Selecionar --</option>
-                                        
-                                        {currentValue && (
-                                            <option value="" className="text-red-500 font-bold bg-red-50 dark:bg-red-900/20">-- Remover / Limpar --</option>
-                                        )}
-                                        
-                                        {sortedRoleMembers.map((m: string) => {
-                                            const unavail = isUnavailable(m, event.iso);
-                                            return (
-                                                <option key={m} value={m} className={unavail ? 'text-red-400 bg-red-50 dark:bg-zinc-800' : ''}>
-                                                {m} ({memberStats[m] || 0}) {unavail ? '[Indisp.]' : ''}
-                                                </option>
-                                            );
-                                        })}
-                                        
-                                        {currentValue && !roleMembers.includes(currentValue) && (
-                                            <option value={currentValue} className="text-amber-500 bg-amber-50 dark:bg-zinc-800 italic">
-                                                {currentValue} (Fora da Função)
-                                            </option>
-                                        )}
-                                    </select>
+                                        onChange={(val) => onCellChange(key, val)}
+                                        options={roleMembers}
+                                        memberProfiles={memberProfiles}
+                                        memberStats={memberStats}
+                                        hasError={hasLocalConflict}
+                                        hasWarning={hasGlobalConflict}
+                                        eventIso={event.iso}
+                                        availability={availability}
+                                    />
                                     
                                     {hasLocalConflict && (
-                                        <div className="absolute right-8 top-1/2 -translate-y-1/2 text-red-500 animate-pulse" title="CONFLITO: Membro indisponível neste horário!">
-                                            <AlertTriangle size={16} />
+                                        <div className="text-[10px] text-red-500 mt-1 flex items-center gap-1 font-medium animate-pulse">
+                                            <AlertTriangle size={10} /> Indisponível nesta data
                                         </div>
                                     )}
 
                                     {hasGlobalConflict && (
-                                        <div className="absolute right-8 top-1/2 -translate-y-1/2 text-orange-500" title={globalConflictMsg}>
-                                            <AlertTriangle size={16} />
+                                        <div className="text-[10px] text-orange-500 mt-1 flex items-center gap-1 font-medium" title={globalConflictMsg}>
+                                            <AlertTriangle size={10} /> Conflito Global
                                         </div>
                                     )}
                                 </div>
@@ -186,10 +340,10 @@ const ScheduleRow = React.memo(({
                             {currentValue && (
                                 <button
                                     onClick={() => onAttendanceToggle(key)}
-                                    className={`p-1 rounded-full transition-colors flex-shrink-0 ${
+                                    className={`p-1.5 rounded-full transition-colors flex-shrink-0 ${
                                         isConfirmed 
                                         ? 'text-green-600 bg-green-100 dark:bg-green-900/30' 
-                                        : 'text-zinc-300 hover:text-zinc-400'
+                                        : 'text-zinc-300 hover:text-zinc-400 bg-zinc-50 dark:bg-zinc-800'
                                     }`}
                                     title={isConfirmed ? "Presença Confirmada" : "Confirmar Presença"}
                                 >
@@ -203,18 +357,11 @@ const ScheduleRow = React.memo(({
         </tr>
     );
 }, (prevProps, nextProps) => {
-    // Custom comparison for Memo
-    // Only re-render if:
-    // 1. The event itself changed (unlikely unless filtering)
-    // 2. Schedule changed FOR THIS ROW (check keys)
-    // 3. Attendance changed FOR THIS ROW
-    // 4. Global props like ReadOnly or MemberStats changed
-    
     if (prevProps.readOnly !== nextProps.readOnly) return false;
-    if (prevProps.memberStats !== nextProps.memberStats) return false; // This is acceptable to trigger re-sort
+    if (prevProps.memberStats !== nextProps.memberStats) return false;
     if (prevProps.event.iso !== nextProps.event.iso) return false;
+    if (prevProps.memberProfiles !== nextProps.memberProfiles) return false;
     
-    // Deep check schedule for this row only
     const keys = nextProps.columns.map((c: any) => `${nextProps.event.iso}_${c.keySuffix}`);
     const scheduleChanged = keys.some((k: string) => prevProps.schedule[k] !== nextProps.schedule[k]);
     const attendanceChanged = keys.some((k: string) => prevProps.attendance[k] !== nextProps.attendance[k]);
@@ -222,12 +369,8 @@ const ScheduleRow = React.memo(({
     return !scheduleChanged && !attendanceChanged; 
 });
 
-
-// ----------------------------------------------------------------------
-// MAIN TABLE COMPONENT
-// ----------------------------------------------------------------------
 export const ScheduleTable: React.FC<Props> = React.memo(({
-  events, roles, schedule, attendance, availability, members, scheduleIssues, globalConflicts, 
+  events, roles, schedule, attendance, availability, members, allMembers, memberProfiles, scheduleIssues, globalConflicts, 
   onCellChange, onAttendanceToggle, onDeleteEvent, onEditEvent, memberStats, ministryId, readOnly = false
 }) => {
   
@@ -250,13 +393,13 @@ export const ScheduleTable: React.FC<Props> = React.memo(({
 
   return (
     <div className={`bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden transition-opacity duration-200 ${readOnly ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto custom-scrollbar pb-32 md:pb-0"> 
         <table className="w-full text-sm text-left">
           <thead className="text-xs text-zinc-500 uppercase bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700">
             <tr>
               <th className="px-6 py-4 font-bold sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10 w-64 shadow-[1px_0_0_0_rgba(0,0,0,0.05)] dark:shadow-[1px_0_0_0_rgba(255,255,255,0.05)]">Evento</th>
               {columns.map(col => (
-                <th key={col.keySuffix} className="px-6 py-4 font-bold min-w-[180px]">{col.displayRole}</th>
+                <th key={col.keySuffix} className="px-6 py-4 font-bold min-w-[200px]">{col.displayRole}</th>
               ))}
             </tr>
           </thead>
@@ -272,6 +415,7 @@ export const ScheduleTable: React.FC<Props> = React.memo(({
                   attendance={attendance}
                   availability={availability}
                   members={members}
+                  memberProfiles={memberProfiles}
                   scheduleIssues={scheduleIssues}
                   globalConflicts={globalConflicts}
                   onCellChange={onCellChange}
