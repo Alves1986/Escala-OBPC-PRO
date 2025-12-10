@@ -163,7 +163,9 @@ const InnerApp = () => {
         return;
     }
 
-    const handleUserSession = async (user: any) => {
+    const handleUserSession = async (session: any) => {
+        const user = session?.user;
+
         if (!user) {
             setCurrentUser(null);
             setLoadingAuth(false);
@@ -171,7 +173,37 @@ const InnerApp = () => {
         }
 
         try {
-            const { data: profile } = await sb.from('profiles').select('*').eq('id', user.id).single();
+            // Tenta buscar o perfil
+            let { data: profile } = await sb.from('profiles').select('*').eq('id', user.id).single();
+            
+            // FIX CRÍTICO: Se o perfil não existir (ex: primeiro login Google), cria um na hora.
+            // Isso impede que o usuário fique num "limbo" logado mas sem acesso.
+            if (!profile) {
+                console.log("Perfil não encontrado, criando novo para:", user.email);
+                
+                const defaultMinistry = 'midia';
+                const newProfile = {
+                    id: user.id,
+                    email: user.email,
+                    name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Novo Membro',
+                    avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture,
+                    ministry_id: defaultMinistry,
+                    allowed_ministries: [defaultMinistry],
+                    role: 'member',
+                    created_at: new Date().toISOString()
+                };
+
+                const { error: insertError } = await sb.from('profiles').insert(newProfile);
+                
+                if (!insertError) {
+                    profile = newProfile;
+                } else {
+                    console.error("Falha ao criar perfil automático:", insertError);
+                    // Fallback visual para não bloquear o acesso
+                    profile = newProfile;
+                }
+            }
+
             if (profile) {
                 const userMinistry = profile.ministry_id || 'midia';
                 
@@ -204,12 +236,16 @@ const InnerApp = () => {
         }
     };
 
-    sb.auth.getUser().then(({ data: { user } }) => handleUserSession(user));
+    // 1. Check Session directly (Faster & Handles Redirect URL hash)
+    sb.auth.getSession().then(({ data: { session } }) => {
+        handleUserSession(session);
+    });
 
+    // 2. Listen for changes
     const { data: { subscription } } = sb.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_IN' && session?.user) {
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
             setLoadingAuth(true); 
-            handleUserSession(session.user);
+            handleUserSession(session);
         } else if (event === 'SIGNED_OUT') {
             setCurrentUser(null);
             setLoadingAuth(false);
