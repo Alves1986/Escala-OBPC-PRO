@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Cloud, Sun, CloudRain, CloudLightning, CloudSnow, MapPin, Loader2, Thermometer } from 'lucide-react';
+import { Cloud, Sun, CloudRain, CloudLightning, CloudSnow, MapPin, Loader2 } from 'lucide-react';
 
 interface WeatherData {
   temperature: number;
@@ -18,42 +18,60 @@ export const WeatherWidget: React.FC = () => {
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
+    const fetchWeather = async (latitude: number, longitude: number) => {
         try {
-          const { latitude, longitude } = position.coords;
+            // 1. Buscar Clima (Open-Meteo - API Gratuita e Confiável)
+            const weatherRes = await fetch(
+              `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`
+            );
+            
+            if (!weatherRes.ok) throw new Error("Falha na API de Clima");
+            
+            const weatherData = await weatherRes.json();
 
-          // 1. Buscar Clima (Open-Meteo - Free API)
-          const weatherRes = await fetch(
-            `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`
-          );
-          const weatherData = await weatherRes.json();
+            // 2. Buscar Nome da Cidade (Nominatim - Fail safe)
+            // Envolvemos em um try/catch interno para que se falhar (CORS/Rate Limit), o widget ainda mostre a temperatura
+            let city = "Localização Atual";
+            try {
+              const cityRes = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=pt`
+              );
+              
+              if (cityRes.ok) {
+                  const cityData = await cityRes.json();
+                  city = cityData.address?.city || cityData.address?.town || cityData.address?.village || cityData.address?.municipality || "Localização Atual";
+                  
+                  // Limpeza do nome da cidade
+                  city = city.replace("Município de ", "").trim();
+              }
+            } catch (cityErr) {
+              console.warn("Não foi possível obter o nome da cidade (usando padrão).");
+            }
 
-          // 2. Buscar Nome da Cidade (Nominatim OpenStreetMap - Free API)
-          const cityRes = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
-          );
-          const cityData = await cityRes.json();
-          
-          // Tenta pegar a cidade, vila ou município
-          const city = cityData.address.city || cityData.address.town || cityData.address.village || cityData.address.municipality || "Localização Atual";
+            setWeather({
+              temperature: weatherData.current_weather.temperature,
+              weatherCode: weatherData.current_weather.weathercode,
+              city: city
+            });
+            setError(false);
 
-          setWeather({
-            temperature: weatherData.current_weather.temperature,
-            weatherCode: weatherData.current_weather.weathercode,
-            city: city
-          });
         } catch (e) {
-          console.error("Erro ao carregar clima:", e);
-          setError(true);
+            console.error("Erro ao carregar widget de clima:", e);
+            setError(true);
         } finally {
-          setLoading(false);
+            setLoading(false);
         }
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        fetchWeather(position.coords.latitude, position.coords.longitude);
       },
       (err) => {
-        console.warn("Permissão de localização negada.", err);
+        console.warn("Permissão de localização negada ou indisponível.", err);
         setLoading(false);
-      }
+      },
+      { timeout: 10000, maximumAge: 300000 } // Timeout de 10s, Cache de 5min
     );
   }, []);
 
@@ -81,13 +99,13 @@ export const WeatherWidget: React.FC = () => {
     return (
       <div className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-zinc-800 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-pulse">
         <Loader2 size={16} className="animate-spin text-zinc-400" />
-        <span className="text-xs text-zinc-400">Carregando clima...</span>
+        <span className="text-xs text-zinc-400">...</span>
       </div>
     );
   }
 
   if (error || !weather) {
-    return null; // Não mostra nada se não tiver permissão ou erro
+    return null; // Falha silenciosa para não poluir a UI
   }
 
   return (
@@ -105,8 +123,8 @@ export const WeatherWidget: React.FC = () => {
       <div className="h-8 w-px bg-zinc-200 dark:bg-zinc-700 mx-1"></div>
 
       <div className="flex flex-col justify-center">
-        <div className="flex items-center gap-1 text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wide">
-           <MapPin size={12} className="text-red-500" /> {weather.city}
+        <div className="flex items-center gap-1 text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wide truncate max-w-[180px]">
+           <MapPin size={12} className="text-red-500 shrink-0" /> <span className="truncate">{weather.city}</span>
         </div>
         <span className="text-[10px] text-zinc-400">Tempo Real</span>
       </div>

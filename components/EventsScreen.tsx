@@ -1,6 +1,5 @@
-
-import React, { useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Plus, Trash2, CalendarDays, Clock } from 'lucide-react';
 import { CustomEvent } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
 
@@ -35,26 +34,49 @@ export const EventsScreen: React.FC<Props> = ({ customEvents, onCreateEvent, onD
     }
   };
 
-  const handleDelete = async (iso: string) => {
-      // In strict SQL mode we often delete by ID, but customEvents from fetchMinistrySchedule might map ISO.
-      // If parent passes generic delete handler, assume it handles logic.
+  const handleDelete = async (identifier: string) => {
       if (confirm("Deseja realmente excluir este evento?")) {
           setLoading(true);
-          // Passing ISO as ID for now since that's often how it's keyed in the list view
-          await onDeleteEvent(iso); 
+          await onDeleteEvent(identifier); 
           setLoading(false);
       }
   };
 
+  // Filtragem e Ordenação Local para garantir consistência visual
+  const displayedEvents = useMemo(() => {
+      if (!customEvents || !Array.isArray(customEvents)) return [];
+      
+      // Confiamos que o componente pai (App.tsx) já filtra os eventos pelo mês corrente
+      // via chamada de API. Apenas ordenamos aqui.
+      return [...customEvents].sort((a, b) => {
+            const dateA = a.iso || `${a.date}T${a.time}`;
+            const dateB = b.iso || `${b.date}T${b.time}`;
+            return dateA.localeCompare(dateB);
+      });
+  }, [customEvents]);
+
+  const formatDateDisplay = (dateStr: string) => {
+      if (!dateStr) return '--/--';
+      try {
+          return dateStr.split('-').reverse().join('/');
+      } catch (e) {
+          return dateStr;
+      }
+  };
+
   return (
-    <div className="space-y-6 animate-fade-in max-w-4xl mx-auto">
-      <div className="flex justify-between items-center border-b border-zinc-200 dark:border-zinc-700 pb-4">
+    <div className="space-y-6 animate-fade-in max-w-4xl mx-auto pb-10">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-zinc-800 dark:text-white">Gerenciar Eventos</h2>
-          <p className="text-zinc-500 text-sm">Adicione cultos extras ou eventos especiais.</p>
+          <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+            <CalendarDays className="text-blue-500"/> Gerenciar Eventos
+          </h2>
+          <p className="text-zinc-500 text-sm mt-1">
+             Adicione cultos extras ou remova eventos existentes da escala.
+          </p>
         </div>
         
-        <div className="flex items-center gap-4 bg-white dark:bg-zinc-800 p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm">
+        <div className="flex items-center gap-4 bg-white dark:bg-zinc-800 p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm self-end md:self-auto">
             <button onClick={handlePrevMonth} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md">←</button>
             <div className="text-center min-w-[120px]">
                 <span className="block text-xs font-medium text-zinc-500 uppercase">Referência</span>
@@ -65,55 +87,90 @@ export const EventsScreen: React.FC<Props> = ({ customEvents, onCreateEvent, onD
       </div>
 
       <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
-        <h3 className="text-xs font-bold text-zinc-500 uppercase mb-4">Adicionar Novo</h3>
+        <h3 className="text-xs font-bold text-zinc-500 uppercase mb-4">Adicionar Novo Evento</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <input 
-            type="date" 
-            value={newDate} 
-            onChange={e => setNewDate(e.target.value)} 
-            className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-zinc-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-blue-500" 
-          />
-          <input 
-            type="time" 
-            value={newTime} 
-            onChange={e => setNewTime(e.target.value)} 
-            className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-zinc-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-blue-500" 
-          />
-          <input 
-            type="text" 
-            placeholder="Nome do Evento" 
-            value={newTitle} 
-            onChange={e => setNewTitle(e.target.value)} 
-            className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-zinc-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-blue-500" 
-          />
+          <div>
+            <label className="text-[10px] font-bold text-zinc-400 uppercase mb-1 block">Data</label>
+            <input 
+                type="date" 
+                value={newDate} 
+                onChange={e => setNewDate(e.target.value)} 
+                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-zinc-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-blue-500 text-sm" 
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-zinc-400 uppercase mb-1 block">Horário</label>
+            <input 
+                type="time" 
+                value={newTime} 
+                onChange={e => setNewTime(e.target.value)} 
+                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-zinc-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-blue-500 text-sm" 
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-zinc-400 uppercase mb-1 block">Título</label>
+            <input 
+                type="text" 
+                placeholder="Ex: Culto Especial" 
+                value={newTitle} 
+                onChange={e => setNewTitle(e.target.value)} 
+                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-zinc-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-blue-500 text-sm" 
+            />
+          </div>
         </div>
         <button 
           onClick={handleAdd}
           disabled={!newDate || !newTitle || loading}
-          className="mt-4 w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
+          className="mt-4 w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors shadow-lg shadow-green-600/20"
         >
           <Plus size={18}/> {loading ? 'Salvando...' : 'Adicionar Evento'}
         </button>
       </div>
 
-      <div className="space-y-2">
-        <h3 className="text-xs font-bold text-zinc-500 uppercase mt-8 mb-2">Eventos Criados</h3>
-        {customEvents.length === 0 && <p className="text-zinc-400 italic">Nenhum evento extra adicionado.</p>}
-        {customEvents.map(evt => (
-          <div key={evt.id} className="flex justify-between items-center bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-fade-in">
-            <div>
-              <h4 className="font-bold text-zinc-800 dark:text-zinc-100">{evt.title}</h4>
-              <p className="text-sm text-zinc-500">{evt.date.split('-').reverse().join('/')} às {evt.time}</p>
-            </div>
-            <button 
-                onClick={() => handleDelete(evt.date ? `${evt.date}T${evt.time}` : evt.id)} 
-                disabled={loading}
-                className="text-red-500 bg-red-50 dark:bg-red-900/20 p-2 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
-            >
-                <Trash2 size={18}/>
-            </button>
-          </div>
-        ))}
+      <div className="space-y-3">
+        <h3 className="text-xs font-bold text-zinc-500 uppercase mt-6 mb-2 flex items-center gap-2">
+            Eventos Agendados ({displayedEvents.length})
+        </h3>
+        
+        {displayedEvents.length === 0 ? (
+           <div className="text-center py-12 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
+                <CalendarDays className="mx-auto mb-3 opacity-20" size={48}/>
+                <p className="text-zinc-500 text-sm">Nenhum evento encontrado para {getMonthName(currentMonth)}.</p>
+           </div>
+        ) : (
+           <div className="grid grid-cols-1 gap-3">
+               {displayedEvents.map(evt => {
+                  const eventDateStr = evt.date || (evt.iso ? evt.iso.split('T')[0] : '');
+                  return (
+                    <div key={evt.id || evt.iso} className="flex justify-between items-center bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md transition-shadow group animate-slide-up">
+                        <div className="flex items-center gap-4">
+                            <div className="flex flex-col items-center justify-center w-14 h-14 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800/30 text-blue-600 dark:text-blue-400">
+                                <span className="text-xs font-bold uppercase">{eventDateStr ? new Date(eventDateStr + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '') : 'Dia'}</span>
+                                <span className="text-xl font-bold leading-none">{eventDateStr ? eventDateStr.split('-')[2] : '--'}</span>
+                            </div>
+                            <div>
+                            <h4 className="font-bold text-zinc-800 dark:text-zinc-100 text-lg">{evt.title}</h4>
+                            <div className="flex items-center gap-2 text-sm text-zinc-500">
+                                <span className="flex items-center gap-1"><Clock size={14}/> {evt.time}</span>
+                                <span className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-600"></span>
+                                <span>{formatDateDisplay(eventDateStr)}</span>
+                            </div>
+                            </div>
+                        </div>
+                        
+                        <button 
+                            onClick={() => handleDelete(evt.iso ? evt.iso : evt.id)} 
+                            disabled={loading}
+                            className="p-3 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors disabled:opacity-50"
+                            title="Excluir Evento"
+                        >
+                            <Trash2 size={20}/>
+                        </button>
+                    </div>
+                  );
+               })}
+           </div>
+        )}
       </div>
     </div>
   );

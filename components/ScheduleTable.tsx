@@ -1,7 +1,8 @@
+
 import React, { useMemo, useCallback, useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis, GlobalConflictMap, TeamMemberProfile } from '../types';
-import { CheckCircle2, AlertTriangle, Trash2, Edit, Clock, User, ChevronDown } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Trash2, Edit, Clock, User, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface Props {
   events: { iso: string; dateDisplay: string; title: string }[];
@@ -32,7 +33,8 @@ const MemberSelector = ({
     hasError,
     hasWarning,
     eventIso,
-    availability
+    availability,
+    warningMsg
 }: { 
     value: string; 
     onChange: (val: string) => void; 
@@ -43,6 +45,7 @@ const MemberSelector = ({
     hasWarning: boolean;
     eventIso: string;
     availability: AvailabilityMap;
+    warningMsg?: string;
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState("");
@@ -114,7 +117,7 @@ const MemberSelector = ({
                     hasError 
                     ? 'border-red-500 bg-red-50 dark:bg-red-900/10' 
                     : hasWarning
-                    ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/10'
+                    ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20 shadow-[0_0_0_1px_rgba(249,115,22,0.5)]'
                     : 'border-zinc-200 dark:border-zinc-700 hover:border-blue-400 dark:hover:border-blue-500'
                 }`}
             >
@@ -123,11 +126,11 @@ const MemberSelector = ({
                         {selectedProfile?.avatar_url ? (
                             <img src={selectedProfile.avatar_url} alt="" className="w-5 h-5 rounded-full object-cover shrink-0" />
                         ) : (
-                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0 ${hasError ? 'bg-red-500' : 'bg-blue-600'}`}>
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0 ${hasError ? 'bg-red-500' : hasWarning ? 'bg-orange-500' : 'bg-blue-600'}`}>
                                 {getInitials(value)}
                             </div>
                         )}
-                        <span className={`text-xs font-medium truncate ${hasError ? 'text-red-700 dark:text-red-400' : 'text-zinc-800 dark:text-zinc-200'}`}>
+                        <span className={`text-xs font-medium truncate ${hasError ? 'text-red-700 dark:text-red-400' : hasWarning ? 'text-orange-700 dark:text-orange-400' : 'text-zinc-800 dark:text-zinc-200'}`}>
                             {value}
                         </span>
                     </div>
@@ -136,6 +139,14 @@ const MemberSelector = ({
                 )}
                 <ChevronDown size={14} className="text-zinc-400 shrink-0 ml-1" />
             </div>
+
+            {hasWarning && (
+                <div className="absolute -top-2 -right-2 z-10">
+                    <div className="bg-orange-500 text-white p-0.5 rounded-full shadow-sm" title={warningMsg}>
+                        <AlertTriangle size={10} />
+                    </div>
+                </div>
+            )}
 
             {isOpen && createPortal(
                 <div 
@@ -227,7 +238,7 @@ const ScheduleRow = React.memo(({
         const [datePart, timePart] = isoDateStr.split('T');
         const availableDates = availability[member];
         
-        if (!availableDates || availableDates.length === 0) return true; // Inverse logic: checkAvailability returns true if avail. This returns true if UNavailable.
+        if (!availableDates || availableDates.length === 0) return true;
 
         if (availableDates.includes(datePart)) return false; 
 
@@ -295,7 +306,7 @@ const ScheduleRow = React.memo(({
                         const conflict = conflicts.find((c: any) => c.eventIso === event.iso);
                         if (conflict) {
                             hasGlobalConflict = true;
-                            globalConflictMsg = `Conflito: Já escalado em ${conflict.ministryId.toUpperCase()} (${conflict.role})`;
+                            globalConflictMsg = `Conflito Global: ${currentValue} já está em ${conflict.ministryId.toUpperCase()} como ${conflict.role}`;
                         }
                     }
                 }
@@ -319,6 +330,7 @@ const ScheduleRow = React.memo(({
                                         memberStats={memberStats}
                                         hasError={hasLocalConflict}
                                         hasWarning={hasGlobalConflict}
+                                        warningMsg={globalConflictMsg}
                                         eventIso={event.iso}
                                         availability={availability}
                                     />
@@ -361,6 +373,7 @@ const ScheduleRow = React.memo(({
     if (prevProps.memberStats !== nextProps.memberStats) return false;
     if (prevProps.event.iso !== nextProps.event.iso) return false;
     if (prevProps.memberProfiles !== nextProps.memberProfiles) return false;
+    if (prevProps.globalConflicts !== nextProps.globalConflicts) return false;
     
     const keys = nextProps.columns.map((c: any) => `${nextProps.event.iso}_${c.keySuffix}`);
     const scheduleChanged = keys.some((k: string) => prevProps.schedule[k] !== nextProps.schedule[k]);
@@ -374,6 +387,10 @@ export const ScheduleTable: React.FC<Props> = React.memo(({
   onCellChange, onAttendanceToggle, onDeleteEvent, onEditEvent, memberStats, ministryId, readOnly = false
 }) => {
   
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(false);
+
   const columns = useMemo(() => {
       return roles.flatMap(role => {
           if (ministryId === 'louvor' && role === 'Vocal') {
@@ -391,9 +408,63 @@ export const ScheduleTable: React.FC<Props> = React.memo(({
       });
   }, [roles, ministryId]);
 
+  const checkScroll = useCallback(() => {
+    if (scrollContainerRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current;
+      setShowLeftArrow(scrollLeft > 10); 
+      setShowRightArrow(Math.ceil(scrollLeft + clientWidth) < scrollWidth - 10);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(checkScroll, 100);
+    window.addEventListener('resize', checkScroll);
+    return () => {
+        clearTimeout(timer);
+        window.removeEventListener('resize', checkScroll);
+    };
+  }, [checkScroll, columns, events]);
+
+  const scroll = (direction: 'left' | 'right') => {
+    if (scrollContainerRef.current) {
+        const { clientWidth } = scrollContainerRef.current;
+        const scrollAmount = clientWidth * 0.6;
+        scrollContainerRef.current.scrollBy({
+            left: direction === 'left' ? -scrollAmount : scrollAmount,
+            behavior: 'smooth'
+        });
+    }
+  };
+
   return (
-    <div className={`bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden transition-opacity duration-200 ${readOnly ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
-      <div className="overflow-x-auto custom-scrollbar pb-32 md:pb-0"> 
+    <div className={`relative group bg-white dark:bg-zinc-800 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-700 transition-opacity duration-200 ${readOnly ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+      
+      {/* Botões de Navegação Lateral (Desktop) */}
+      {showLeftArrow && (
+        <button 
+            onClick={() => scroll('left')}
+            className="absolute left-2 top-1/2 -translate-y-1/2 z-20 bg-white/90 dark:bg-zinc-800/90 shadow-xl border border-zinc-200 dark:border-zinc-700 p-2.5 rounded-full text-zinc-600 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700 hover:scale-110 transition-all hidden md:flex backdrop-blur-sm"
+            title="Rolar para esquerda"
+        >
+            <ChevronLeft size={20} />
+        </button>
+      )}
+
+      {showRightArrow && (
+        <button 
+            onClick={() => scroll('right')}
+            className="absolute right-2 top-1/2 -translate-y-1/2 z-20 bg-white/90 dark:bg-zinc-800/90 shadow-xl border border-zinc-200 dark:border-zinc-700 p-2.5 rounded-full text-zinc-600 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700 hover:scale-110 transition-all hidden md:flex backdrop-blur-sm"
+            title="Rolar para direita"
+        >
+            <ChevronRight size={20} />
+        </button>
+      )}
+
+      <div 
+        ref={scrollContainerRef}
+        onScroll={checkScroll}
+        className="overflow-x-auto custom-scrollbar pb-32 md:pb-0 scroll-smooth rounded-xl"
+      > 
         <table className="w-full text-sm text-left">
           <thead className="text-xs text-zinc-500 uppercase bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700">
             <tr>
