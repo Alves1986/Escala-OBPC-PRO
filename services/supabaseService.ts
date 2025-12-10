@@ -1302,7 +1302,7 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
             whatsapp,
             avatar_url,
             functions,
-            birth_date: birthDate
+            birth_date: birthDate || null
         };
         
         await supabase.auth.updateUser({
