@@ -157,62 +157,122 @@ export const fetchSwapRequests = async (ministryId: string): Promise<SwapRequest
 export const createSwapRequestSQL = async (ministryId: string, req: SwapRequest) => {
     if (!supabase) return false;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+    
+    // Garante formato ISO correto para o banco
+    const eventIsoString = req.eventIso.length === 16 ? req.eventIso + ":00" : req.eventIso;
+
     const { error } = await supabase.from('swap_requests').insert({
         ministry_id: cleanMid,
         requester_id: req.requesterId,
         requester_name: req.requesterName,
         role: req.role,
-        event_iso: req.eventIso + ":00", 
+        event_iso: eventIsoString, 
         event_title: req.eventTitle,
         status: 'pending'
     });
+
+    if (!error) {
+        // Notificar toda a equipe sobre a solicitação
+        // Idealmente, filtraríamos por role no backend, mas aqui notificamos o grupo
+        await sendNotificationSQL(cleanMid, {
+            title: `Troca: ${req.role}`,
+            message: `${req.requesterName} precisa de substituto para ${req.role} dia ${new Date(eventIsoString).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'})}.`,
+            type: "warning",
+            actionLink: "swaps"
+        });
+    } else {
+        console.error("Erro ao criar troca:", error);
+    }
+
     return !error;
 };
 
 export const performSwapSQL = async (ministryId: string, requestId: string, takerName: string, takerId: string) => {
-    if (!supabase) return { success: false, message: "Erro conexão" };
+    if (!supabase) return { success: false, message: "Erro de conexão" };
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     
-    // 1. Get Request
-    const { data: req } = await supabase.from('swap_requests').select('*').eq('id', requestId).single();
-    if (!req || req.status !== 'pending') return { success: false, message: "Solicitação inválida ou já aceita." };
+    try {
+        // 1. Buscar a Solicitação
+        const { data: req, error: reqError } = await supabase
+            .from('swap_requests')
+            .select('*')
+            .eq('id', requestId)
+            .single();
 
-    // 2. Update Request Status
-    await supabase.from('swap_requests').update({
-        status: 'completed',
-        taken_by_id: takerId,
-        taken_by_name: takerName
-    }).eq('id', requestId);
+        if (reqError || !req) return { success: false, message: "Solicitação não encontrada." };
+        if (req.status !== 'pending') return { success: false, message: "Esta troca já foi realizada ou cancelada." };
 
-    // 3. Update Schedule
-    const isoString = new Date(req.event_iso).toISOString().slice(0, 16) + ":00";
+        // 2. Encontrar o Evento no Banco
+        // Usamos ilike com % para ignorar segundos e garantir match da data/hora
+        const searchIso = req.event_iso.slice(0, 16); // YYYY-MM-DDTHH:mm
 
-    const { data: event } = await supabase
-        .from('events')
-        .select('id')
-        .eq('ministry_id', cleanMid)
-        .eq('date_time', isoString)
-        .limit(1)
-        .single();
+        const { data: events } = await supabase
+            .from('events')
+            .select('id, title')
+            .eq('ministry_id', cleanMid)
+            .ilike('date_time', `${searchIso}%`)
+            .limit(1);
 
-    if (event) {
-        // Remove old assignment
-        await supabase.from('schedule_assignments').delete().match({ event_id: event.id, role: req.role });
-        // Add new assignment
-        await supabase.from('schedule_assignments').insert({
-            event_id: event.id,
-            role: req.role,
-            member_id: takerId
+        const event = events && events.length > 0 ? events[0] : null;
+
+        if (!event) {
+            return { success: false, message: "Erro: Evento não encontrado no calendário." };
+        }
+
+        // 3. Remover o solicitante da escala (Delete Seguro)
+        // Deletamos onde event_id bate E member_id bate com o solicitante.
+        // Isso previne deletar a pessoa errada se houver duplicidade de role.
+        const { error: deleteError } = await supabase
+            .from('schedule_assignments')
+            .delete()
+            .eq('event_id', event.id)
+            .eq('member_id', req.requester_id);
+
+        if (deleteError) {
+            console.error("Erro ao remover membro antigo:", deleteError);
+            // Continuamos mesmo assim, pois pode ser que o membro já tenha sido removido manualmente
+        }
+
+        // 4. Inserir o novo membro na escala
+        const { error: insertError } = await supabase
+            .from('schedule_assignments')
+            .insert({
+                event_id: event.id,
+                role: req.role,
+                member_id: takerId,
+                confirmed: true // O novo membro já entra confirmado pois aceitou a troca
+            });
+
+        if (insertError) {
+            console.error("Erro ao inserir novo membro:", insertError);
+            return { success: false, message: "Erro ao atualizar a escala. Tente novamente." };
+        }
+
+        // 5. Atualizar o status da solicitação para completed
+        const { error: updateError } = await supabase.from('swap_requests').update({
+            status: 'completed',
+            taken_by_id: takerId,
+            taken_by_name: takerName
+        }).eq('id', requestId);
+
+        if (updateError) {
+            console.error("Erro ao finalizar request:", updateError);
+        }
+
+        // 6. Notificar sucesso
+        await sendNotificationSQL(cleanMid, {
+            type: 'success',
+            title: 'Troca Realizada',
+            message: `${takerName} assumiu a escala de ${req.requester_name} em ${event.title}.`,
+            actionLink: "calendar"
         });
+
+        return { success: true, message: "Troca realizada com sucesso!" };
+
+    } catch (e: any) {
+        console.error("Erro fatal no performSwap:", e);
+        return { success: false, message: "Erro interno ao processar troca." };
     }
-
-    await sendNotificationSQL(cleanMid, {
-        type: 'success',
-        title: 'Troca Realizada',
-        message: `${takerName} assumiu a escala de ${req.requester_name} em ${req.event_title}.`
-    });
-
-    return { success: true, message: "Troca realizada!" };
 };
 
 // --- NOTIFICATIONS ---
@@ -1065,7 +1125,7 @@ export const saveMemberAvailability = async (userId: string, memberName: string,
     try {
         const { data: member } = await supabase
             .from('profiles')
-            .select('id')
+            .select('id, ministry_id')
             .ilike('name', memberName)
             .single();
 
@@ -1084,6 +1144,16 @@ export const saveMemberAvailability = async (userId: string, memberName: string,
         
         if (rows.length > 0) {
             await supabase.from('availability').insert(rows);
+        }
+
+        // Notificar apenas se houver alterações e se o ministério for identificado
+        if (member.ministry_id) {
+            await sendNotificationSQL(member.ministry_id, {
+                title: "Atualização de Disponibilidade",
+                message: `${memberName} atualizou seus dias disponíveis.`,
+                type: "info",
+                actionLink: "report"
+            });
         }
 
         return true;
@@ -1332,7 +1402,7 @@ export const joinMinistry = async (newMinistryId: string, roles: string[]): Prom
         
         const { data: profile } = await supabase
             .from('profiles')
-            .select('allowed_ministries, functions')
+            .select('name, allowed_ministries, functions')
             .eq('id', user.id)
             .single();
             
@@ -1358,6 +1428,14 @@ export const joinMinistry = async (newMinistryId: string, roles: string[]): Prom
             
         await supabase.auth.updateUser({
             data: { allowedMinistries: newAllowed, functions: newFunctions }
+        });
+
+        // Notificar o novo ministério da entrada
+        await sendNotificationSQL(cleanMid, {
+            title: "Novo Integrante",
+            message: `${profile.name || 'Um novo membro'} entrou para a equipe via link/código.`,
+            type: "info",
+            actionLink: "members"
         });
 
         return { success: true, message: "Bem-vindo ao novo ministério!" };
