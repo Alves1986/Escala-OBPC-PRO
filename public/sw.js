@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'escala-midia-pwa-v18';
+const CACHE_NAME = 'escala-midia-pwa-v20';
 
 // Arquivos estáticos fundamentais
 // Usando caminhos absolutos para garantir a integridade do cache
@@ -110,12 +110,24 @@ self.addEventListener('notificationclick', function(event) {
 // Evento de Recebimento de Push (Mobile/Background)
 self.addEventListener('push', function(event) {
   if (event.data) {
-    const data = event.data.json();
+    let data;
+    try {
+        data = event.data.json();
+    } catch (e) {
+        data = { title: 'Nova Notificação', body: event.data.text() };
+    }
+
     const options = {
       body: data.body,
       icon: data.icon || '/icon.png',
-      badge: '/icon.png',
-      data: data.data || { url: '/' }
+      badge: '/icon.png', // Ícone pequeno na barra de status (Android)
+      vibrate: [200, 100, 200], // Vibração para chamar atenção
+      requireInteraction: true, // Mantém a notificação até o usuário interagir (Desktop/Alguns Androids)
+      tag: 'escala-app', // Substitui notificações antigas para não empilhar muitas
+      data: data.data || { url: '/' },
+      actions: [
+        { action: 'open', title: 'Ver Detalhes' }
+      ]
     };
 
     event.waitUntil(
