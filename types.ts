@@ -1,6 +1,8 @@
 
 export type Role = string;
 
+export type ThemeMode = 'light' | 'dark' | 'system';
+
 export interface MemberMap {
   [role: string]: string[];
 }

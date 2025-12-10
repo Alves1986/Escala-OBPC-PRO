@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   LayoutDashboard, Calendar, CalendarCheck, RefreshCcw, Music, 
@@ -37,12 +36,10 @@ import {
   User, ScheduleMap, AttendanceMap, AvailabilityMap, 
   AppNotification, Announcement, SwapRequest, RepertoireItem, 
   TeamMemberProfile, MemberMap, Role,
-  GlobalConflictMap
+  GlobalConflictMap, ThemeMode
 } from './types';
 import { adjustMonth, getMonthName } from './utils/dateUtils';
 import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from './utils/pushUtils';
-
-export type ThemeMode = 'light' | 'dark' | 'system';
 
 const InnerApp = () => {
   // --- AUTH & USER STATE ---
@@ -56,8 +53,13 @@ const InnerApp = () => {
   
   // --- THEME STATE ---
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
-      const saved = localStorage.getItem('themeMode');
-      return (saved as ThemeMode) || 'system';
+      try {
+          const saved = localStorage.getItem('themeMode');
+          return (saved as ThemeMode) || 'system';
+      } catch (e) {
+          console.warn("LocalStorage access denied for themeMode");
+          return 'system';
+      }
   });
   const [visualTheme, setVisualTheme] = useState<'light' | 'dark'>('light');
   
@@ -118,9 +120,6 @@ const InnerApp = () => {
         } else {
             document.documentElement.classList.remove('dark');
         }
-        
-        // Removido salvamento automático para evitar sobrescrita acidental
-        // localStorage.setItem('themeMode', themeMode);
     };
 
     applyTheme();
@@ -140,8 +139,12 @@ const InnerApp = () => {
   };
 
   const handleSaveTheme = () => {
-      localStorage.setItem('themeMode', themeMode);
-      addToast("Preferência de tema salva com sucesso!", "success");
+      try {
+          localStorage.setItem('themeMode', themeMode);
+          addToast("Preferência de tema salva com sucesso!", "success");
+      } catch (e) {
+          addToast("Erro ao salvar preferência (storage bloqueado).", "warning");
+      }
   };
 
   const toggleVisualTheme = () => {
@@ -150,8 +153,6 @@ const InnerApp = () => {
       } else {
           setThemeMode(themeMode === 'light' ? 'dark' : 'light');
       }
-      // O toggle simples não salva automaticamente no localStorage, 
-      // o usuário deve usar o botão de salvar nas configurações se quiser persistir
   };
 
   // --- INITIALIZATION ---
@@ -274,27 +275,31 @@ const InnerApp = () => {
         setGlobalConflicts(conflicts);
 
         // 2. Salvar no Cache Local (Sucesso)
-        localStorage.setItem(CACHE_KEY, JSON.stringify({
-            timestamp: Date.now(),
-            settings,
-            schedData,
-            membersData,
-            availData,
-            notifs,
-            ann,
-            swaps,
-            rep,
-            conflicts
-        }));
+        try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify({
+                timestamp: Date.now(),
+                settings,
+                schedData,
+                membersData,
+                availData,
+                notifs,
+                ann,
+                swaps,
+                rep,
+                conflicts
+            }));
+        } catch (e) {
+            console.warn("Não foi possível salvar cache offline.");
+        }
 
     } catch (error) {
         console.error("Erro ao carregar dados online:", error);
 
         // 3. Fallback: Tentar carregar do Cache
-        const cachedRaw = localStorage.getItem(CACHE_KEY);
-        
-        if (cachedRaw) {
-            try {
+        try {
+            const cachedRaw = localStorage.getItem(CACHE_KEY);
+            
+            if (cachedRaw) {
                 const cached = JSON.parse(cachedRaw);
                 
                 setMinistryTitle(cached.settings.displayName || ministryId.charAt(0).toUpperCase() + ministryId.slice(1));
@@ -319,9 +324,9 @@ const InnerApp = () => {
 
                 addToast("Modo Offline: Exibindo dados salvos localmente.", "warning");
                 return; 
-            } catch (e) {
-                console.error("Cache corrompido:", e);
             }
+        } catch (e) {
+            console.error("Erro ao acessar cache:", e);
         }
 
         addToast("Erro de conexão e sem dados locais.", "error");
@@ -501,7 +506,7 @@ const InnerApp = () => {
                           })()}, {currentUser.name.split(' ')[0]} <span className="animate-wave text-3xl">👋</span>
                       </h1>
                       <p className="text-zinc-500 dark:text-zinc-400 mt-1">
-                          Bem-vindo ao painel de controle do {ministryTitle}.
+                          Bem-vindo a {ministryTitle}.
                       </p>
                   </div>
                   <WeatherWidget />
@@ -946,18 +951,28 @@ const InnerApp = () => {
                 }}
                 onEnableNotifications={async () => {
                     // Logic to request Push Permission
-                    if ('serviceWorker' in navigator && 'PushManager' in window) {
+                    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+                        addToast("Seu navegador não suporta notificações Push.", "error");
+                        throw new Error("Push API not supported");
+                    }
+
+                    if (Notification.permission === 'denied') {
+                        addToast("Permissão negada. Ative nas configurações do navegador.", "error");
+                        return; // Return early, don't throw to avoid crash
+                    }
+
+                    try {
                         const registration = await navigator.serviceWorker.ready;
-                        try {
-                            const sub = await registration.pushManager.subscribe({
-                                userVisibleOnly: true,
-                                applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-                            });
-                            await Supabase.saveSubscriptionSQL(ministryId, sub);
-                        } catch(e) {
-                            console.error(e);
-                            addToast("Erro ao ativar notificações. Verifique permissões.", "error");
-                        }
+                        const sub = await registration.pushManager.subscribe({
+                            userVisibleOnly: true,
+                            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+                        });
+                        await Supabase.saveSubscriptionSQL(ministryId, sub);
+                        addToast("Dispositivo Sincronizado!", "success");
+                    } catch(e: any) {
+                        console.error(e);
+                        addToast("Erro ao ativar: " + e.message, "error");
+                        throw e; // Repassa erro para botão parar loading
                     }
                 }}
                 isAdmin={isAdmin}

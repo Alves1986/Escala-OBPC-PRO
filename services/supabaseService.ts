@@ -1156,16 +1156,18 @@ export const loginWithEmail = async (email: string, pass: string) => {
 export const loginWithGoogle = async () => {
     if (!supabase) return { success: false, message: "Erro conexão" };
     
-    // Fix: Force redirect to canonical production URL to avoid Vercel preview URLs
-    let redirectUrl = window.location.origin;
-    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-        redirectUrl = "https://escalaobpcpro.vercel.app";
-    }
+    // Simplifica a lógica de redirecionamento para usar sempre a origem atual.
+    // Isso corrige problemas em ambientes de Preview, Localhost e Produção sem precisar hardcode.
+    const redirectUrl = window.location.origin;
     
     const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-            redirectTo: redirectUrl
+            redirectTo: redirectUrl,
+            queryParams: {
+                access_type: 'offline',
+                prompt: 'consent',
+            },
         }
     });
     return { success: !error, message: error?.message || "" };
@@ -1249,6 +1251,13 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
             allowedMinistries: ministries,
             whatsapp,
             functions: roles
+        });
+
+        // Enviar notificação de novo membro
+        await sendNotificationSQL(ministries[0] || 'midia', {
+            title: "Novo Membro",
+            message: `${name} acabou de se cadastrar no ministério!`,
+            type: "info"
         });
     }
 

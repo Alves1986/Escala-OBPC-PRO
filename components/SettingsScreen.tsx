@@ -1,9 +1,8 @@
-
 import React, { useState } from 'react';
-import { Settings, Save, Moon, Sun, BellRing, Megaphone, Laptop, Monitor } from 'lucide-react';
+import { Settings, Save, Moon, Sun, BellRing, Megaphone, Monitor, Loader2 } from 'lucide-react';
 import { useToast } from './Toast';
 import { LegalModal, LegalDocType } from './LegalDocuments';
-import { ThemeMode } from '../App';
+import { ThemeMode } from '../types';
 
 interface Props {
   initialTitle: string;
@@ -20,6 +19,7 @@ interface Props {
 export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, themeMode, onSetThemeMode, onSaveTheme, onSaveTitle, onAnnounceUpdate, onEnableNotifications, isAdmin = false }) => {
   const [tempTitle, setTempTitle] = useState(initialTitle);
   const [legalDoc, setLegalDoc] = useState<LegalDocType>(null);
+  const [isNotifLoading, setIsNotifLoading] = useState(false);
   const { addToast } = useToast();
 
   return (
@@ -125,14 +125,23 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
                      </div>
                      
                      <button 
-                        onClick={() => {
+                        disabled={isNotifLoading || !onEnableNotifications}
+                        onClick={async () => {
                             if (onEnableNotifications) {
-                                onEnableNotifications().then(() => addToast("Dispositivo Sincronizado!", "success"));
+                                setIsNotifLoading(true);
+                                try {
+                                    await onEnableNotifications();
+                                } catch (e) {
+                                    console.error(e);
+                                } finally {
+                                    setIsNotifLoading(false);
+                                }
                             }
                         }}
-                        className="text-xs font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-4 py-2 rounded-lg hover:opacity-80 transition-opacity"
+                        className="text-xs font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-4 py-2 rounded-lg hover:opacity-80 transition-opacity flex items-center gap-2 disabled:opacity-50"
                      >
-                        Ativar
+                        {isNotifLoading && <Loader2 size={12} className="animate-spin" />}
+                        {isNotifLoading ? 'Ativando...' : 'Ativar'}
                      </button>
                  </div>
              </div>
