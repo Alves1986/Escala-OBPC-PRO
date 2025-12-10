@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ScheduleTable } from './components/ScheduleTable';
@@ -178,7 +179,26 @@ const AppContent = () => {
 
       try {
           const registration = await navigator.serviceWorker.ready;
-          const subscription = await registration.pushManager.getSubscription();
+          let subscription = await registration.pushManager.getSubscription();
+
+          // LÓGICA DE ROTAÇÃO DE CHAVES
+          // Verifica se a chave pública armazenada localmente é diferente da chave atual
+          const storedKey = localStorage.getItem('vapid_public_key');
+          
+          if (subscription && storedKey !== VAPID_PUBLIC_KEY) {
+              console.log("Rotação de chaves VAPID detectada. Renovando inscrição...");
+              await subscription.unsubscribe();
+              subscription = null;
+          }
+
+          if (!subscription) {
+              subscription = await registration.pushManager.subscribe({
+                  userVisibleOnly: true,
+                  applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+              });
+              // Atualiza o registro local da chave usada
+              localStorage.setItem('vapid_public_key', VAPID_PUBLIC_KEY);
+          }
 
           // Fallback para o ministério atual se a lista estiver vazia
           const ministriesToSync = (currentUser.allowedMinistries && currentUser.allowedMinistries.length > 0) 
@@ -1158,6 +1178,28 @@ const AppContent = () => {
                             </div>
                         </div>
 
+                        {/* Quick Action Buttons */}
+                        <div className="flex flex-wrap gap-2 mb-6">
+                            <button 
+                                onClick={() => setEventsModalOpen(true)}
+                                className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg text-sm font-medium transition-colors border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200"
+                            >
+                                <Clock size={16} /> Gerenciar Eventos
+                            </button>
+                            <button 
+                                onClick={() => setAvailModalOpen(true)}
+                                className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg text-sm font-medium transition-colors border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200"
+                            >
+                                <Shield size={16} /> Gerenciar Indisponibilidade
+                            </button>
+                            <button 
+                                onClick={() => setRolesModalOpen(true)}
+                                className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg text-sm font-medium transition-colors border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200"
+                            >
+                                <Settings size={16} /> Configurar Funções
+                            </button>
+                        </div>
+
                         <div className="overflow-x-auto relative">
                             {/* Overlay de Loading da Tabela */}
                             {loading && (
@@ -1481,6 +1523,66 @@ const AppContent = () => {
             onClose={() => setJoinMinistryModalOpen(false)}
             onJoin={handleJoinMinistry}
             alreadyJoined={currentUser?.allowedMinistries || []}
+        />
+
+        {/* Management Modals (Added back) */}
+        <EventsModal 
+            isOpen={eventsModalOpen} 
+            onClose={() => setEventsModalOpen(false)} 
+            events={customEvents} 
+            onAdd={async (evt) => {
+                if (!ministryId) return;
+                await createMinistryEvent(ministryId, { title: evt.title, date: evt.date, time: evt.time });
+                const cacheKey = `${ministryId}_${currentMonth}`;
+                delete monthCacheRef.current[cacheKey];
+                await loadAll(ministryId);
+                addToast("Evento adicionado.", "success");
+            }} 
+            onRemove={async (id) => {
+                if (!ministryId) return;
+                const evt = customEvents.find(e => e.id === id);
+                if (evt) {
+                    // Assuming deleteMinistryEvent handles ISO or ID depending on backend logic,
+                    // but usually ISO is safer for timestamp based deletion if ID is not unique per slot (which it is in SQL).
+                    // The SQL implementation deletes by ID if passed correctly, but current service expects ISO to find ID.
+                    // Let's rely on ISO for consistency with previous logic or try to find ID.
+                    // Actually deleteMinistryEvent in service takes ISO.
+                    await deleteMinistryEvent(ministryId, evt.iso);
+                    const cacheKey = `${ministryId}_${currentMonth}`;
+                    delete monthCacheRef.current[cacheKey];
+                    await loadAll(ministryId);
+                    addToast("Evento removido.", "success");
+                }
+            }} 
+        />
+
+        <AvailabilityModal 
+            isOpen={availModalOpen} 
+            onClose={() => setAvailModalOpen(false)} 
+            members={allMembersList} 
+            availability={availability} 
+            onUpdate={async (member, dates) => {
+                if (!ministryId) return;
+                await saveMemberAvailability('admin_override', member, dates);
+                const cacheKey = `${ministryId}_${currentMonth}`;
+                // Manually update local state to reflect immediately without full reload if possible, 
+                // but loadAll is safer.
+                await loadAll(ministryId);
+                addToast("Disponibilidade atualizada.", "success");
+            }} 
+            currentMonth={currentMonth} 
+        />
+
+        <RolesModal 
+            isOpen={rolesModalOpen} 
+            onClose={() => setRolesModalOpen(false)} 
+            roles={roles} 
+            onUpdate={async (newRoles) => {
+                if (!ministryId) return;
+                await saveMinistrySettings(ministryId, undefined, newRoles);
+                setRoles(newRoles);
+                addToast("Funções atualizadas.", "success");
+            }} 
         />
         
     </div>

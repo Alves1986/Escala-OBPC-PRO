@@ -1,31 +1,20 @@
 
-const CACHE_NAME = 'escala-midia-pwa-v6';
+const CACHE_NAME = 'escala-midia-pwa-v20';
 
-// Lista de arquivos vitais para o funcionamento offline
-// Inclui as bibliotecas do CDN definidas no importmap do index.html
-// Usando caminhos relativos (./) para evitar erros de origem em ambientes de preview
+// Arquivos estáticos fundamentais
+// Usando caminhos absolutos para garantir a integridade do cache
 const PRECACHE_URLS = [
-  './',
-  './index.html',
-  './manifest.json',
-  './app-icon.png',
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/icon.png',
   'https://cdn.tailwindcss.com',
-  'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap',
-  // Dependências críticas do CDN
-  'https://aistudiocdn.com/lucide-react@^0.555.0',
-  'https://aistudiocdn.com/react-dom@^19.2.0/',
-  'https://aistudiocdn.com/recharts@^3.5.1',
-  'https://aistudiocdn.com/react@^19.2.0/',
-  'https://aistudiocdn.com/react@^19.2.0',
-  'https://aistudiocdn.com/@google/genai@^1.30.0',
-  'https://aistudiocdn.com/@supabase/supabase-js@^2.86.0',
-  'https://aistudiocdn.com/jspdf@^3.0.4',
-  'https://aistudiocdn.com/jspdf-autotable@^5.0.2'
+  'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'
 ];
 
-// Instalação: Cacheia arquivos estáticos
+// Instalação
 self.addEventListener('install', event => {
-  self.skipWaiting(); // Força o SW a ativar imediatamente
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
       return cache.addAll(PRECACHE_URLS);
@@ -33,7 +22,7 @@ self.addEventListener('install', event => {
   );
 });
 
-// Ativação: Limpa caches antigos
+// Ativação e Limpeza
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(cacheNames => {
@@ -49,49 +38,100 @@ self.addEventListener('activate', event => {
   return self.clients.claim();
 });
 
-// Interceptação de Requisições
+// Interceptação de Rede
 self.addEventListener('fetch', event => {
-  const url = new URL(event.request.url);
+  // 1. Navegação (HTML): Force a raiz / ou index.html
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .catch(() => {
+          // Se estiver offline, retorna a raiz cacheada
+          return caches.match('/')
+            .then(response => response || caches.match('/index.html'));
+        })
+    );
+    return;
+  }
 
-  // Estratégia: Stale-While-Revalidate para scripts e estilos
-  if (event.request.destination === 'script' || event.request.destination === 'style' || event.request.destination === 'image') {
+  // 2. Assets Estáticos (JS, CSS, Imagens): Stale-While-Revalidate
+  if (event.request.destination === 'script' || 
+      event.request.destination === 'style' || 
+      event.request.destination === 'image' ||
+      event.request.destination === 'font' ||
+      event.request.destination === 'manifest') {
+    
     event.respondWith(
       caches.match(event.request).then(cachedResponse => {
         const fetchPromise = fetch(event.request).then(networkResponse => {
           if (networkResponse && networkResponse.status === 200) {
-             const responseClone = networkResponse.clone();
-             caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
           }
           return networkResponse;
-        }).catch(() => {/* offline sem cache, fazer nada */});
-        
+        }).catch(() => {
+            // Falha silenciosa se offline
+        });
         return cachedResponse || fetchPromise;
       })
     );
     return;
   }
 
-  // Estratégia: Network First para navegação (garante dados frescos)
+  // 3. Outras requisições: Network First
   event.respondWith(
-    fetch(event.request)
-      .then(response => {
-        // Cacheia navegação bem sucedida para permitir reload offline
-        if (event.request.mode === 'navigate') {
-            const responseClone = response.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
-        }
-        return response;
-      })
-      .catch(() => {
-        return caches.match(event.request).then(response => {
-           if (response) return response;
-           // Fallback para index.html se for navegação
-           if (event.request.mode === 'navigate') {
-               // Tenta pegar do cache relativo ./index.html ou /index.html como fallback
-               return caches.match('./index.html').then(match => match || caches.match('/index.html'));
-           }
-           return null;
-        });
-      })
+    fetch(event.request).catch(() => caches.match(event.request))
   );
+});
+
+// Evento de Clique na Notificação
+self.addEventListener('notificationclick', function(event) {
+  event.notification.close();
+
+  // URL para abrir (pode vir no data da notificação ou usar a raiz)
+  const urlToOpen = event.notification.data?.url || '/';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
+      // Tenta focar em uma janela já aberta
+      for (var i = 0; i < clientList.length; i++) {
+        var client = clientList[i];
+        if (client.url && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      // Se não tiver janela aberta, abre uma nova
+      if (clients.openWindow) {
+        return clients.openWindow(urlToOpen);
+      }
+    })
+  );
+});
+
+// Evento de Recebimento de Push (Mobile/Background)
+self.addEventListener('push', function(event) {
+  if (event.data) {
+    let data;
+    try {
+        data = event.data.json();
+    } catch (e) {
+        data = { title: 'Nova Notificação', body: event.data.text() };
+    }
+
+    const options = {
+      body: data.body,
+      icon: data.icon || '/icon.png',
+      badge: '/icon.png', // Ícone pequeno na barra de status (Android)
+      vibrate: [200, 100, 200], // Vibração para chamar atenção
+      requireInteraction: true, // Mantém a notificação até o usuário interagir (Desktop/Alguns Androids)
+      tag: 'escala-app', // Substitui notificações antigas para não empilhar muitas
+      data: data.data || { url: '/' },
+      actions: [
+        { action: 'open', title: 'Ver Detalhes' }
+      ]
+    };
+
+    event.waitUntil(
+      self.registration.showNotification(data.title, options)
+    );
+  }
 });

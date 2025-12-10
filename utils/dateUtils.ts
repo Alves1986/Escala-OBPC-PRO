@@ -4,15 +4,16 @@ import { CustomEvent } from '../types';
 export const getMonthName = (monthIso: string) => {
   if (!monthIso) return "";
   const [y, m] = monthIso.split("-").map(Number);
-  const date = new Date(y, m - 1, 1);
+  // Usa o dia 15 para evitar que fusos horários voltem o mês para o anterior no dia 1
+  const date = new Date(y, m - 1, 15);
   const name = date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
   return name.charAt(0).toUpperCase() + name.slice(1);
 };
 
 export const adjustMonth = (currentMonth: string, delta: number): string => {
   const [y, m] = currentMonth.split('-').map(Number);
-  // Safely calculate new month by setting day to 1
-  const date = new Date(y, m - 1 + delta, 1);
+  // Usa o dia 15 para evitar problemas de virada de mês/fuso
+  const date = new Date(y, m - 1 + delta, 15);
   const newY = date.getFullYear();
   const newM = String(date.getMonth() + 1).padStart(2, '0');
   return `${newY}-${newM}`;
@@ -21,19 +22,21 @@ export const adjustMonth = (currentMonth: string, delta: number): string => {
 export const generateMonthEvents = (year: number, month: number, customEvents: CustomEvent[]) => {
   const events: { iso: string; dateDisplay: string; title: string }[] = [];
   
-  // Format target month string YYYY-MM to filter events
+  // Formata o mês alvo YYYY-MM para filtrar eventos
   const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
   
   if (customEvents && customEvents.length > 0) {
       customEvents.forEach(evt => {
-        // Ensure we only show events for the requested month
-        if (evt.date.startsWith(monthStr)) {
-           // Direct string manipulation to avoid Timezone bugs with new Date()
-           // evt.date format is YYYY-MM-DD
+        // Garante que a data existe e pertence ao mês atual
+        // Comparação estrita de string para evitar conversão de data
+        if (evt.date && evt.date.startsWith(monthStr)) {
            const parts = evt.date.split('-');
+           // parts[0] = Year, parts[1] = Month, parts[2] = Day
            if (parts.length === 3) {
-               const [y, m, d] = parts;
-               const dateDisplay = `${d}/${m}`;
+               const day = parts[2];
+               const monthPart = parts[1];
+               // Monta DD/MM diretamente da string do banco, ignorando timezone
+               const dateDisplay = `${day}/${monthPart}`;
                const iso = `${evt.date}T${evt.time}`;
                events.push({ iso, dateDisplay, title: evt.title });
            }
@@ -41,6 +44,6 @@ export const generateMonthEvents = (year: number, month: number, customEvents: C
       });
   }
 
-  // Sort by ISO Date String directly
+  // Ordena por string ISO, que funciona cronologicamente
   return events.sort((a, b) => a.iso.localeCompare(b.iso));
 };

@@ -1,57 +1,89 @@
 
+
 // Copie TODO este código e cole no Editor da Edge Function 'push-notification' no painel do Supabase.
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import webpush from 'https://esm.sh/web-push@3.6.0'
-
-// Fix for "Cannot find name 'Deno'" in environments without Deno types
-declare const Deno: any;
+import { createClient } from 'npm:@supabase/supabase-js@2'
+import webpush from 'npm:web-push@3.6.7'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Fix for "Cannot find name 'Deno'"
+declare const Deno: any;
+
 Deno.serve(async (req: Request) => {
-  // 1. Trata requisições OPTIONS (CORS) - Necessário para o navegador aceitar a resposta
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    // 2. Conecta ao Supabase usando a chave de serviço (Admin)
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // 3. Recebe os dados enviados pelo seu App
-    const { ministryId, title, message, type, actionLink } = await req.json()
-
-    // 4. CONFIGURAÇÃO VAPID (SEGURANÇA REFORÇADA)
-    // A chave pública pode ficar no código, mas a privada DEVE vir das variáveis de ambiente.
-    const publicKey = 'BF16yQvZzPhqIFKl0CVYgNtjonnfgGI39QPOHXcmu0_kGL9V9llvULEMaQajIxT8nEW8rRQ_kWacpDc1zQi9EYs'
-    
-    // IMPORTANTE: Configure 'VAPID_PRIVATE_KEY' no Dashboard do Supabase em Edge Functions > Secrets
-    const privateKey = Deno.env.get('VAPID_PRIVATE_KEY');
-
-    if (!privateKey) {
-        console.error('VAPID_PRIVATE_KEY não configurada nas variáveis de ambiente.');
-        return new Response(JSON.stringify({ error: 'Erro de configuração no servidor (Missing VAPID Key).' }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 500,
-        })
+    let requestData: any = {};
+    try {
+        const text = await req.text();
+        if (text) requestData = JSON.parse(text);
+    } catch (e) {
+        // Body vazio ou inválido
     }
 
-    const subject = 'mailto:cassia.andinho@gmail.com'
+    const { ministryId, title, message, type, actionLink } = requestData;
 
-    // Configura a biblioteca de Push
-    webpush.setVapidDetails(subject, publicKey, privateKey)
+    // --- VALIDAÇÃO DAS CHAVES VAPID ---
+    // A chave pública deve bater com a que está no frontend (utils/pushUtils.ts)
+    const publicKey = 'BObJkDWME42FE1qS75tls7RnVakwqIjYufuqnwVKjLS-wrYlxmUSlcYdunkckUxpyME03GgrPAzShWruRnZnu3o'
+    
+    // A chave privada vem dos Secrets do Supabase
+    let privateKey = Deno.env.get('VAPID_PRIVATE_KEY');
 
-    // 5. Busca os celulares inscritos no banco de dados
+    if (!privateKey) {
+        // Fallback apenas para teste se o usuário esqueceu de configurar (NÃO RECOMENDADO EM PROD)
+        console.error("VAPID_PRIVATE_KEY não encontrada nos Secrets.");
+        return new Response(JSON.stringify({ 
+            success: false, 
+            message: 'CONFIGURAÇÃO PENDENTE: Adicione VAPID_PRIVATE_KEY nos Secrets do Supabase.' 
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 })
+    }
+
+    // Limpeza da chave (remove espaços e quebras de linha que causam o erro de 32 bytes)
+    privateKey = privateKey.trim();
+
+    try {
+        // Email de contato para o serviço de Push
+        const subject = 'mailto:cassia.andinho@gmail.com'
+        webpush.setVapidDetails(subject, publicKey, privateKey)
+    } catch (err: any) {
+        console.error("Erro na configuração VAPID:", err.message);
+        
+        // Tratamento específico para o erro de tamanho da chave
+        let userMsg = "Erro na configuração de chaves.";
+        if (err.message && err.message.includes('32 bytes long')) {
+            userMsg = "A Chave Privada (VAPID) está inválida (tamanho incorreto). Gere um novo par em Configurações.";
+        }
+
+        return new Response(JSON.stringify({ 
+            success: false, 
+            message: userMsg,
+            details: err.message
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 })
+    }
+
+    // Se chegou aqui, as chaves estão válidas. Prossegue com o envio.
+    
+    if (!ministryId) {
+         return new Response(JSON.stringify({ success: false, message: 'Ministry ID required.' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
+         })
+    }
+
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-')
 
-    // Busca IDs de usuários que pertencem a este ministério
+    // Busca usuários do ministério
     const { data: profiles } = await supabase
         .from('profiles')
         .select('id')
@@ -60,69 +92,64 @@ Deno.serve(async (req: Request) => {
     const userIds = profiles?.map((p: any) => p.id) || []
     
     if (userIds.length === 0) {
-      console.log('Nenhum usuário encontrado neste ministério.')
-      return new Response(JSON.stringify({ message: 'Nenhum usuário no ministério.' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
+      return new Response(JSON.stringify({ success: true, message: 'Nenhum usuário para notificar.' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
       })
     }
 
-    // Busca subscrições apenas desses usuários
-    const { data: subscriptions, error: storageError } = await supabase
+    // Busca subscrições
+    const { data: subscriptions } = await supabase
       .from('push_subscriptions')
       .select('endpoint, p256dh, auth')
       .in('user_id', userIds)
 
-    if (storageError || !subscriptions || subscriptions.length === 0) {
-      console.log('Nenhum dispositivo encontrado para notificar.')
-      return new Response(JSON.stringify({ message: 'Nenhum dispositivo inscrito.' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
+    if (!subscriptions || subscriptions.length === 0) {
+      return new Response(JSON.stringify({ success: true, message: 'Ninguém ativou notificações ainda.' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
       })
     }
 
     const results = []
-    console.log(`Enviando notificação para ${subscriptions.length} dispositivos...`)
-
-    // 6. Loop para enviar a notificação para cada celular
+    
     for (const record of subscriptions) {
+      if (!record.p256dh || !record.auth || !record.endpoint) continue;
+
       const pushSubscription = {
         endpoint: record.endpoint,
-        keys: {
-            p256dh: record.p256dh,
-            auth: record.auth
-        },
+        keys: { p256dh: record.p256dh, auth: record.auth },
       }
 
       const payload = JSON.stringify({
-        title: title || 'Novo Aviso da Escala',
-        body: message,
+        title: title || 'Aviso',
+        body: message || 'Nova notificação.',
         icon: 'https://escala-midia-pro.vercel.app/icon.png',
-        data: {
-            url: actionLink ? `/?tab=${actionLink}` : '/',
-            type: type
-        }
+        data: { url: actionLink ? `/?tab=${actionLink}` : '/', type }
       })
 
       try {
         await webpush.sendNotification(pushSubscription, payload)
         results.push({ endpoint: record.endpoint, status: 'success' })
-      } catch (err) {
-        console.error('Falha ao enviar para um dispositivo:', err)
-        results.push({ endpoint: record.endpoint, status: 'failed', error: err })
+      } catch (err: any) {
+        console.error('Falha envio individual:', err.statusCode)
+        if (err.statusCode === 410 || err.statusCode === 404) {
+            await supabase.from('push_subscriptions').delete().eq('endpoint', record.endpoint);
+        }
+        results.push({ endpoint: record.endpoint, status: 'failed' })
       }
     }
 
-    return new Response(JSON.stringify({ success: true, results }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200,
-    })
+    const successCount = results.filter(r => r.status === 'success').length;
+
+    return new Response(JSON.stringify({ 
+        success: true, 
+        message: successCount > 0 ? `Enviado para ${successCount} aparelhos.` : 'Falha no envio.',
+        results 
+    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 })
 
   } catch (error: any) {
-    console.error('Erro na função:', error)
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
+    console.error('Erro Fatal:', error)
+    return new Response(JSON.stringify({ success: false, message: 'Erro interno no servidor.', details: error.message }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
     })
   }
 })

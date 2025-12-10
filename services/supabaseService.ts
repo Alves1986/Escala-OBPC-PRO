@@ -1,3 +1,5 @@
+
+
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
     SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, 
@@ -260,6 +262,38 @@ export const sendNotificationSQL = async (ministryId: string, payload: { title: 
             body: { ministryId: cleanMid, ...payload }
         });
     } catch (e) { /* ignore */ }
+};
+
+export const testPushNotification = async (ministryId: string) => {
+    if (!supabase) return { success: false, message: "Sem conexão" };
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+    
+    try {
+        const { data, error } = await supabase.functions.invoke('push-notification', {
+            body: { 
+                ministryId: cleanMid, 
+                title: "Teste de Notificação", 
+                message: "Se você viu isso, o sistema de Push está funcionando no seu dispositivo!",
+                type: "success"
+            }
+        });
+
+        if (error) throw error;
+
+        // Se a função retornou 200, mas com success: false (nossa lógica customizada)
+        if (data && data.success === false) {
+            return { success: false, message: data.message || "Erro desconhecido na Edge Function." };
+        }
+
+        return { success: true, message: data?.message || "Notificação enviada! Verifique seu celular." };
+    } catch (e: any) {
+        console.error(e);
+        let msg = e.message || "Erro ao chamar Edge Function";
+        if (msg.includes("non-2xx")) {
+             msg = "Erro Crítico no Servidor (500). Verifique se configurou a VAPID_PRIVATE_KEY.";
+        }
+        return { success: false, message: msg };
+    }
 };
 
 export const markNotificationsReadSQL = async (ids: string[], userId: string) => {
