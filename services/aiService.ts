@@ -2,8 +2,16 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AvailabilityMap, ScheduleMap, TeamMemberProfile } from "../types";
 
-// Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Initialize Gemini Client Lazily
+// Isso previne que o app quebre (Tela Branca) se a chave não estiver configurada no carregamento
+const getAiClient = () => {
+  const key = process.env.API_KEY;
+  if (!key) {
+    console.warn("API Key do Gemini não encontrada. Verifique VITE_GEMINI_API_KEY.");
+    throw new Error("Chave de API não configurada.");
+  }
+  return new GoogleGenAI({ apiKey: key });
+};
 
 interface AIContext {
   events: { iso: string; title: string }[];
@@ -54,6 +62,7 @@ const prepareMinifiedContext = (context: AIContext) => {
 
 export const generateScheduleWithAI = async (context: AIContext): Promise<ScheduleMap> => {
     try {
+      const ai = getAiClient();
       const { roles, ministryId } = context;
       const inputData = prepareMinifiedContext(context);
 
@@ -101,12 +110,13 @@ export const generateScheduleWithAI = async (context: AIContext): Promise<Schedu
 
     } catch (error: any) {
       console.error("AI Schedule Error:", error);
-      throw new Error("Falha na geração inteligente. Verifique se há membros disponíveis.");
+      throw new Error(error.message || "Falha na geração inteligente.");
     }
 };
 
 export const suggestRepertoireAI = async (theme: string, style: string = "Contemporary"): Promise<{title: string, artist: string, reason: string}[]> => {
     try {
+        const ai = getAiClient();
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: `Suggest 5 christian worship songs for the theme: "${theme}". Style: ${style}. Return JSON.`,
@@ -136,6 +146,7 @@ export const suggestRepertoireAI = async (theme: string, style: string = "Contem
 
 export const polishAnnouncementAI = async (text: string, tone: 'professional' | 'exciting' | 'urgent'): Promise<string> => {
     try {
+        const ai = getAiClient();
         const tonePrompt = {
             professional: "formal, claro e educado",
             exciting: "animado, usando emojis e engajador",
