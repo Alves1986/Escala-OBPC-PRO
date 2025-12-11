@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   LayoutDashboard, Calendar, CalendarCheck, RefreshCcw, Music, 
@@ -49,7 +48,16 @@ const InnerApp = () => {
   
   // --- APP STATE ---
   const [ministryId, setMinistryId] = useState<string>('midia');
-  const [currentTab, setCurrentTab] = useState('dashboard');
+  
+  // Inicializa a aba baseada na URL ou padrão 'dashboard'
+  const [currentTab, setCurrentTab] = useState(() => {
+      if (typeof window !== 'undefined') {
+          const params = new URLSearchParams(window.location.search);
+          return params.get('tab') || 'dashboard';
+      }
+      return 'dashboard';
+  });
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
   // --- THEME STATE ---
@@ -96,6 +104,20 @@ const InnerApp = () => {
   const [isRolesModalOpen, setRolesModalOpen] = useState(false);
 
   const { addToast } = useToast();
+
+  // --- SYNC TAB WITH URL ---
+  useEffect(() => {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get('tab') !== currentTab) {
+          url.searchParams.set('tab', currentTab);
+          // FIX: Wrap in try-catch to avoid Uncaught errors in restricted environments
+          try {
+            window.history.replaceState({}, '', url.toString());
+          } catch (e) {
+            // Ignore history update errors
+          }
+      }
+  }, [currentTab]);
 
   // --- THEME LOGIC ---
   useEffect(() => {
@@ -1147,7 +1169,7 @@ const InnerApp = () => {
           isVisible={showInstallBanner} 
           onInstall={handleInstallApp} 
           onDismiss={() => setShowInstallBanner(false)}
-          appName={ministryTitle || "Escala Pro"}
+          appName={ministryTitle || "Gestão Escala"}
         />
 
         <InstallModal 

@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'escala-midia-pwa-v18';
+const CACHE_NAME = 'gestao-escala-pwa-v23';
 
 // Arquivos estáticos fundamentais
 // Usando caminhos absolutos para garantir a integridade do cache
@@ -17,7 +17,11 @@ self.addEventListener('install', event => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(PRECACHE_URLS);
+      // IMPORTANTE: Adicionado .catch() para que falhas no download de assets (ex: cdn fora do ar)
+      // NÃO impeçam a instalação do Service Worker. Prioridade é a funcionalidade de Push.
+      return cache.addAll(PRECACHE_URLS).catch(err => {
+        console.warn('Falha no precache de alguns arquivos, mas continuando instalação do SW:', err);
+      });
     })
   );
 });
@@ -95,13 +99,13 @@ self.addEventListener('notificationclick', function(event) {
       // Tenta focar em uma janela já aberta
       for (var i = 0; i < clientList.length; i++) {
         var client = clientList[i];
-        if (client.url && 'focus' in client) {
+        if ((client.url === urlToOpen || client.url.endsWith(urlToOpen)) && 'focus' in client) {
           return client.focus();
         }
       }
       // Se não tiver janela aberta, abre uma nova
       if (clients.openWindow) {
-        return clients.openWindow(urlToOpen);
+        return clients.openWindow(urlToOpen).catch(err => console.warn('Falha ao abrir janela', err));
       }
     })
   );
@@ -110,12 +114,24 @@ self.addEventListener('notificationclick', function(event) {
 // Evento de Recebimento de Push (Mobile/Background)
 self.addEventListener('push', function(event) {
   if (event.data) {
-    const data = event.data.json();
+    let data;
+    try {
+        data = event.data.json();
+    } catch (e) {
+        data = { title: 'Nova Notificação', body: event.data.text() };
+    }
+
     const options = {
       body: data.body,
       icon: data.icon || '/icon.png',
-      badge: '/icon.png',
-      data: data.data || { url: '/' }
+      badge: '/icon.png', // Ícone pequeno na barra de status (Android)
+      vibrate: [200, 100, 200], // Vibração para chamar atenção
+      requireInteraction: true, // Mantém a notificação até o usuário interagir (Desktop/Alguns Androids)
+      tag: 'escala-app', // Substitui notificações antigas para não empilhar muitas
+      data: data.data || { url: '/' },
+      actions: [
+        { action: 'open', title: 'Ver Detalhes' }
+      ]
     };
 
     event.waitUntil(

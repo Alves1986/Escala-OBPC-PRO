@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'escala-midia-pwa-v21';
+const CACHE_NAME = 'gestao-escala-pwa-v23';
 
 // Arquivos estáticos fundamentais
 // Usando caminhos absolutos para garantir a integridade do cache
@@ -105,7 +105,7 @@ self.addEventListener('notificationclick', function(event) {
       }
       // Se não tiver janela aberta, abre uma nova
       if (clients.openWindow) {
-        return clients.openWindow(urlToOpen);
+        return clients.openWindow(urlToOpen).catch(err => console.warn('Falha ao abrir janela', err));
       }
     })
   );
