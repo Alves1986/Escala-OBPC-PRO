@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Save, Database, Key, AlertCircle, RefreshCw, Power } from 'lucide-react';
+import { Save, Database, Key, AlertCircle, RefreshCw, Power, Eye, Layout } from 'lucide-react';
 
 export const SetupScreen = () => {
   const [url, setUrl] = useState(localStorage.getItem('VITE_SUPABASE_URL') || '');
@@ -21,6 +21,13 @@ export const SetupScreen = () => {
     localStorage.setItem('VITE_SUPABASE_URL', url.trim());
     localStorage.setItem('VITE_SUPABASE_KEY', key.trim());
     handleReload();
+  };
+
+  const handlePreviewMode = () => {
+      // Define credenciais especiais que ativam o mock no service
+      localStorage.setItem('VITE_SUPABASE_URL', 'https://preview.mode');
+      localStorage.setItem('VITE_SUPABASE_KEY', 'demo-mode-key-1234567890');
+      handleReload();
   };
 
   const handleReload = () => {
@@ -111,6 +118,18 @@ export const SetupScreen = () => {
           >
             <Save size={18}/> Salvar e Conectar
           </button>
+
+          <div className="pt-2 border-t border-zinc-800 mt-2">
+             <button 
+                onClick={handlePreviewMode}
+                className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 text-xs border border-zinc-700"
+             >
+                <Eye size={16}/> Entrar em Modo Visualização (Demo)
+             </button>
+             <p className="text-[10px] text-zinc-600 text-center mt-2">
+                 Permite testar a interface com dados fictícios sem conexão com banco.
+             </p>
+          </div>
         </div>
       </div>
     </div>

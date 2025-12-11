@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Clock, Calendar, Save, User, RefreshCcw, Lock, CheckSquare, Square, UserPlus } from 'lucide-react';
+import { X, Clock, Calendar, Save, User, RefreshCcw, Lock, CheckSquare, Square, UserPlus, CalendarPlus } from 'lucide-react';
 import { Role, ScheduleMap, User as UserType, TeamMemberProfile } from '../types';
+import { createGoogleCalendarLink } from '../utils/calendarUtils';
 
 interface Props {
   isOpen: boolean;
@@ -48,6 +50,8 @@ export const EventDetailsModal: React.FC<Props> = ({
 
   // Determine if user is scheduled for this event
   const userAssignment = currentUser ? expandedRoles.find(r => schedule[`${event.iso}_${r.keySuffix}`] === currentUser.name) : null;
+
+  const calendarLink = createGoogleCalendarLink(event, `Escala Ministério: ${event.title}`);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -189,6 +193,16 @@ export const EventDetailsModal: React.FC<Props> = ({
                             <RefreshCcw size={18} /> Solicitar Troca / Indisponibilidade
                         </button>
                     )}
+
+                    {/* Google Calendar Link */}
+                    <a 
+                        href={calendarLink} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="w-full bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-200 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 text-sm"
+                    >
+                        <CalendarPlus size={18} /> Adicionar à Agenda Google
+                    </a>
 
                     {!canEdit && !userAssignment && (
                         <div className="text-center text-xs text-zinc-400 flex items-center justify-center gap-1 mt-2">

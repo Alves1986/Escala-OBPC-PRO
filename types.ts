@@ -177,51 +177,27 @@ const getLocal = (key: string) => {
   return null;
 };
 
-// Robust Environment Variable Access
-// This prevents crashes if import.meta.env is undefined while allowing Vite replacement.
-const getSafeEnv = (key: string, viteReplacement?: string) => {
-    // 1. If Vite replaced the variable statically, use it.
-    if (viteReplacement && typeof viteReplacement === 'string') {
-        return viteReplacement;
-    }
-    
-    // 2. Try to access via import.meta.env safely at runtime
-    try {
-        const env = (import.meta as any).env || {};
-        return env[key] || '';
-    } catch (e) {
-        return '';
-    }
-};
+// Safe Environment Variable Access
+// This logic prevents the "Cannot read properties of undefined (reading 'VITE_SUPABASE_URL')" error
+let env_url = '';
+let env_key = '';
 
-// Safe access variables - These try-catches prevent crash if import.meta.env is undefined
-// but still allows Vite's string replacement to work inside the try block.
-let safeViteUrl = '';
-try { safeViteUrl = import.meta.env.VITE_SUPABASE_URL; } catch(e) {}
+try {
+  // @ts-ignore
+  const meta = import.meta;
+  // Ensure meta.env exists before accessing properties on it
+  if (meta && meta.env) {
+    env_url = meta.env.VITE_SUPABASE_URL;
+    env_key = meta.env.VITE_SUPABASE_KEY;
+  }
+} catch (e) {
+  // Silent catch for environments where import.meta is not available or restricted
+}
 
-let safeNextUrl = '';
-try { safeNextUrl = import.meta.env.NEXT_PUBLIC_SUPABASE_URL; } catch(e) {}
+export const SUPABASE_URL = getLocal('VITE_SUPABASE_URL') || env_url || "";
+export const SUPABASE_KEY = getLocal('VITE_SUPABASE_KEY') || env_key || "";
 
-let safeViteKey = '';
-try { safeViteKey = import.meta.env.VITE_SUPABASE_KEY; } catch(e) {}
-
-let safeNextKey = '';
-try { safeNextKey = import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; } catch(e) {}
-
-
-export const SUPABASE_URL = 
-  getSafeEnv('VITE_SUPABASE_URL', safeViteUrl) || 
-  getSafeEnv('NEXT_PUBLIC_SUPABASE_URL', safeNextUrl) || 
-  getLocal('VITE_SUPABASE_URL') ||
-  ""; 
-
-export const SUPABASE_KEY = 
-  getSafeEnv('VITE_SUPABASE_KEY', safeViteKey) || 
-  getSafeEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', safeNextKey) || 
-  getLocal('VITE_SUPABASE_KEY') ||
-  "";
-
-// Log discreto para debug profissional apenas se falhar
+// Debug Log (Opcional - pode remover em produção)
 if ((!SUPABASE_URL || !SUPABASE_KEY) && typeof window !== 'undefined' && window.location.pathname !== '/setup') {
   console.warn("⚠️ Sistema aguardando credenciais. Verifique o arquivo .env na raiz.");
 }

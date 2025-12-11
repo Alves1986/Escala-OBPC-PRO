@@ -7,9 +7,12 @@ import {
     GlobalConflict, DEFAULT_ROLES, AttendanceMap, AuditLogEntry 
 } from '../types';
 
+// Detecta modo de preview
+const isPreviewMode = SUPABASE_URL === 'https://preview.mode';
+
 let supabase: SupabaseClient | null = null;
 
-if (SUPABASE_URL && SUPABASE_KEY) {
+if (SUPABASE_URL && SUPABASE_KEY && !isPreviewMode) {
   supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 }
 
@@ -21,6 +24,7 @@ export const getSupabase = () => supabase;
 
 // --- AUDIT LOGS ---
 export const fetchAuditLogs = async (ministryId: string): Promise<AuditLogEntry[]> => {
+    if (isPreviewMode) return [{ id: '1', date: new Date().toLocaleString(), action: 'Login', details: 'Acesso Demo' }];
     if (!supabase || !ministryId) return [];
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     try {
@@ -43,6 +47,7 @@ export const fetchAuditLogs = async (ministryId: string): Promise<AuditLogEntry[
 };
 
 export const logActionSQL = async (ministryId: string, action: string, details: string) => {
+    if (isPreviewMode) return;
     if (!supabase || !ministryId) return;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     await supabase.from('audit_logs').insert({
@@ -54,6 +59,7 @@ export const logActionSQL = async (ministryId: string, action: string, details: 
 
 // --- SETTINGS (Roles & Title) ---
 export const fetchMinistrySettings = async (ministryId: string): Promise<{ displayName: string, roles: string[] }> => {
+    if (isPreviewMode) return { displayName: 'Ministério Demo', roles: DEFAULT_ROLES['midia'] || [] };
     if (!supabase || !ministryId) return { displayName: '', roles: [] };
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
 
@@ -74,6 +80,7 @@ export const fetchMinistrySettings = async (ministryId: string): Promise<{ displ
 };
 
 export const saveMinistrySettings = async (ministryId: string, displayName?: string, roles?: string[]) => {
+    if (isPreviewMode) return;
     if (!supabase || !ministryId) return;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
 
@@ -87,6 +94,9 @@ export const saveMinistrySettings = async (ministryId: string, displayName?: str
 
 // --- REPERTOIRE ---
 export const fetchRepertoire = async (ministryId: string): Promise<RepertoireItem[]> => {
+    if (isPreviewMode) return [
+        { id: '1', title: 'Música Exemplo 1', link: 'https://youtube.com', date: new Date().toISOString().split('T')[0], addedBy: 'Demo', createdAt: '' }
+    ];
     if (!supabase) return [];
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     
@@ -111,6 +121,7 @@ export const fetchRepertoire = async (ministryId: string): Promise<RepertoireIte
 };
 
 export const addToRepertoire = async (ministryId: string, item: Omit<RepertoireItem, 'id' | 'createdAt'>) => {
+    if (isPreviewMode) return;
     if (!supabase) return;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     await supabase.from('repertoire').insert({
@@ -123,12 +134,14 @@ export const addToRepertoire = async (ministryId: string, item: Omit<RepertoireI
 };
 
 export const deleteFromRepertoire = async (id: string) => {
+    if (isPreviewMode) return;
     if (!supabase) return;
     await supabase.from('repertoire').delete().eq('id', id);
 };
 
 // --- SWAP REQUESTS ---
 export const fetchSwapRequests = async (ministryId: string): Promise<SwapRequest[]> => {
+    if (isPreviewMode) return [];
     if (!supabase || !ministryId) return [];
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     try {
@@ -156,6 +169,7 @@ export const fetchSwapRequests = async (ministryId: string): Promise<SwapRequest
 };
 
 export const createSwapRequestSQL = async (ministryId: string, req: SwapRequest) => {
+    if (isPreviewMode) return true;
     if (!supabase) return false;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     
@@ -173,27 +187,23 @@ export const createSwapRequestSQL = async (ministryId: string, req: SwapRequest)
     });
 
     if (!error) {
-        // Notificar toda a equipe sobre a solicitação
-        // Idealmente, filtraríamos por role no backend, mas aqui notificamos o grupo
         await sendNotificationSQL(cleanMid, {
             title: `Troca: ${req.role}`,
             message: `${req.requesterName} precisa de substituto para ${req.role} dia ${new Date(eventIsoString).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'})}.`,
             type: "warning",
             actionLink: "swaps"
         });
-    } else {
-        console.error("Erro ao criar troca:", error);
     }
 
     return !error;
 };
 
 export const performSwapSQL = async (ministryId: string, requestId: string, takerName: string, takerId: string) => {
+    if (isPreviewMode) return { success: true, message: "Troca simulada (Demo)" };
     if (!supabase) return { success: false, message: "Erro de conexão" };
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     
     try {
-        // 1. Buscar a Solicitação
         const { data: req, error: reqError } = await supabase
             .from('swap_requests')
             .select('*')
@@ -203,8 +213,6 @@ export const performSwapSQL = async (ministryId: string, requestId: string, take
         if (reqError || !req) return { success: false, message: "Solicitação não encontrada." };
         if (req.status !== 'pending') return { success: false, message: "Esta troca já foi realizada ou cancelada." };
 
-        // 2. Encontrar o Evento no Banco
-        // Usamos ilike com % para ignorar segundos e garantir match da data/hora
         const searchIso = req.event_iso.slice(0, 16); // YYYY-MM-DDTHH:mm
 
         const { data: events } = await supabase
@@ -220,47 +228,29 @@ export const performSwapSQL = async (ministryId: string, requestId: string, take
             return { success: false, message: "Erro: Evento não encontrado no calendário." };
         }
 
-        // 3. Remover o solicitante da escala (Delete Seguro)
-        // Deletamos onde event_id bate E member_id bate com o solicitante.
-        // Isso previne deletar a pessoa errada se houver duplicidade de role.
         const { error: deleteError } = await supabase
             .from('schedule_assignments')
             .delete()
             .eq('event_id', event.id)
             .eq('member_id', req.requester_id);
 
-        if (deleteError) {
-            console.error("Erro ao remover membro antigo:", deleteError);
-            // Continuamos mesmo assim, pois pode ser que o membro já tenha sido removido manualmente
-        }
-
-        // 4. Inserir o novo membro na escala
         const { error: insertError } = await supabase
             .from('schedule_assignments')
             .insert({
                 event_id: event.id,
                 role: req.role,
                 member_id: takerId,
-                confirmed: true // O novo membro já entra confirmado pois aceitou a troca
+                confirmed: true
             });
 
-        if (insertError) {
-            console.error("Erro ao inserir novo membro:", insertError);
-            return { success: false, message: "Erro ao atualizar a escala. Tente novamente." };
-        }
+        if (insertError) return { success: false, message: "Erro ao atualizar a escala." };
 
-        // 5. Atualizar o status da solicitação para completed
-        const { error: updateError } = await supabase.from('swap_requests').update({
+        await supabase.from('swap_requests').update({
             status: 'completed',
             taken_by_id: takerId,
             taken_by_name: takerName
         }).eq('id', requestId);
 
-        if (updateError) {
-            console.error("Erro ao finalizar request:", updateError);
-        }
-
-        // 6. Notificar sucesso
         await sendNotificationSQL(cleanMid, {
             type: 'success',
             title: 'Troca Realizada',
@@ -271,13 +261,15 @@ export const performSwapSQL = async (ministryId: string, requestId: string, take
         return { success: true, message: "Troca realizada com sucesso!" };
 
     } catch (e: any) {
-        console.error("Erro fatal no performSwap:", e);
         return { success: false, message: "Erro interno ao processar troca." };
     }
 };
 
 // --- NOTIFICATIONS ---
 export const fetchNotificationsSQL = async (ministryId: string, userId: string): Promise<AppNotification[]> => {
+    if (isPreviewMode) return [{
+        id: '1', type: 'info', title: 'Bem-vindo', message: 'Este é um ambiente de demonstração.', timestamp: new Date().toISOString(), read: false
+    }];
     if (!supabase) return [];
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     try {
@@ -303,10 +295,10 @@ export const fetchNotificationsSQL = async (ministryId: string, userId: string):
 };
 
 export const sendNotificationSQL = async (ministryId: string, payload: { title: string; message: string; type?: string; actionLink?: string }) => {
+    if (isPreviewMode) return;
     if (!supabase) return;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     
-    // 1. Insert into SQL
     await supabase.from('notifications').insert({
         ministry_id: cleanMid,
         title: payload.title,
@@ -315,7 +307,6 @@ export const sendNotificationSQL = async (ministryId: string, payload: { title: 
         action_link: payload.actionLink
     });
 
-    // 2. Call Edge Function for Push
     try {
         await supabase.functions.invoke('push-notification', {
             body: { ministryId: cleanMid, ...payload }
@@ -324,6 +315,7 @@ export const sendNotificationSQL = async (ministryId: string, payload: { title: 
 };
 
 export const testPushNotification = async (ministryId: string) => {
+    if (isPreviewMode) return { success: true, message: "Push simulado" };
     if (!supabase) return { success: false, message: "Sem conexão" };
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     
@@ -339,24 +331,22 @@ export const testPushNotification = async (ministryId: string) => {
 
         if (error) throw error;
 
-        // Verifica a flag de sucesso do backend, pois agora ele sempre retorna 200
         if (data && data.success === false) {
             return { success: false, message: `Erro no servidor: ${data.message}` };
         }
 
         return { success: true, message: data?.message || "Notificação enviada! Verifique seu celular." };
     } catch (e: any) {
-        console.error(e);
         let msg = e.message || "Erro desconhecido";
-        // Melhor tratamento para erros de invoke
         if (msg.includes("non-2xx")) {
-             msg = "Erro Crítico na Edge Function. Verifique os logs no painel do Supabase.";
+             msg = "Erro Crítico na Edge Function.";
         }
         return { success: false, message: msg };
     }
 };
 
 export const markNotificationsReadSQL = async (ids: string[], userId: string) => {
+    if (isPreviewMode) return;
     if (!supabase) return;
     
     for (const id of ids) {
@@ -371,6 +361,7 @@ export const markNotificationsReadSQL = async (ids: string[], userId: string) =>
 };
 
 export const clearAllNotificationsSQL = async (ministryId: string) => {
+    if (isPreviewMode) return;
     if (!supabase || !ministryId) return;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     await supabase.from('notifications').delete().eq('ministry_id', cleanMid);
@@ -378,6 +369,7 @@ export const clearAllNotificationsSQL = async (ministryId: string) => {
 
 // --- ANNOUNCEMENTS ---
 export const fetchAnnouncementsSQL = async (ministryId: string): Promise<Announcement[]> => {
+    if (isPreviewMode) return [{ id: '1', title: 'Aviso Demo', message: 'Sistema em visualização', type: 'info', timestamp: new Date().toISOString(), author: 'Admin', readBy: [], likedBy: [] }];
     if (!supabase) return [];
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     try {
@@ -412,6 +404,7 @@ export const fetchAnnouncementsSQL = async (ministryId: string): Promise<Announc
 };
 
 export const createAnnouncementSQL = async (ministryId: string, data: any, authorName: string) => {
+    if (isPreviewMode) return true;
     if (!supabase) return false;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     const { error } = await supabase.from('announcements').insert({
@@ -426,6 +419,7 @@ export const createAnnouncementSQL = async (ministryId: string, data: any, autho
 };
 
 export const interactAnnouncementSQL = async (announcementId: string, userId: string, userName: string, type: 'read' | 'like') => {
+    if (isPreviewMode) return;
     if (!supabase) return;
     
     if (type === 'read') {
@@ -458,14 +452,11 @@ export const interactAnnouncementSQL = async (announcementId: string, userId: st
 
 // --- ADMIN MANAGEMENT (SQL) ---
 export const toggleAdminSQL = async (email: string, setAdmin: boolean) => {
+    if (isPreviewMode) return;
     if (!supabase) return;
 
-    // SECURITY CHECK: Verify if current user is admin before executing update
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-        console.error("No active session.");
-        return;
-    }
+    if (!user) return;
 
     const { data: requesterProfile } = await supabase
         .from('profiles')
@@ -473,16 +464,13 @@ export const toggleAdminSQL = async (email: string, setAdmin: boolean) => {
         .eq('id', user.id)
         .single();
 
-    if (!requesterProfile?.is_admin) {
-        console.error("Unauthorized: Only admins can perform this action.");
-        return;
-    }
+    if (!requesterProfile?.is_admin) return;
 
-    // Perform Update
     await supabase.from('profiles').update({ is_admin: setAdmin }).eq('email', email);
 };
 
 export const fetchAdminsSQL = async (ministryId: string): Promise<string[]> => {
+    if (isPreviewMode) return [];
     if (!supabase) return [];
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     const { data } = await supabase
@@ -496,22 +484,20 @@ export const fetchAdminsSQL = async (ministryId: string): Promise<string[]> => {
 
 // --- PUSH SUBSCRIPTIONS SQL ---
 export const saveSubscriptionSQL = async (ministryId: string, sub: PushSubscription) => {
+    if (isPreviewMode) return;
     if (!supabase) return;
     const { data: { user } } = await supabase.auth.getUser();
     if(!user) return;
 
-    // Gerar ou recuperar Device ID único com fallback
     let deviceId = localStorage.getItem('device_id');
     if (!deviceId) {
         try {
-            // Check if crypto.randomUUID is available
             if (typeof crypto !== 'undefined' && crypto.randomUUID) {
                 deviceId = crypto.randomUUID();
             } else {
                 throw new Error("crypto.randomUUID not available");
             }
         } catch (e) {
-            // Fallback para ambientes não-seguros ou browsers antigos
             deviceId = 'dev-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
         }
         localStorage.setItem('device_id', deviceId);
@@ -520,7 +506,6 @@ export const saveSubscriptionSQL = async (ministryId: string, sub: PushSubscript
     const subJSON = sub.toJSON();
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     
-    // Salva ou atualiza a subscrição usando o endpoint como chave única
     const { error } = await supabase.from('push_subscriptions').upsert({
         endpoint: sub.endpoint,
         user_id: user.id,
@@ -539,6 +524,7 @@ export const saveSubscriptionSQL = async (ministryId: string, sub: PushSubscript
 // ============================================================================
 
 export const createMinistryEvent = async (ministryId: string, event: { title: string, date: string, time: string }): Promise<boolean> => {
+    if (isPreviewMode) return true;
     if (!supabase || !ministryId) return false;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     const dateTime = `${event.date}T${event.time}:00`;
@@ -559,6 +545,15 @@ export const fetchMinistryMembers = async (ministryId: string): Promise<{
     memberMap: MemberMap,
     publicList: TeamMemberProfile[]
 }> => {
+    if (isPreviewMode) {
+        const demoMembers = [
+            { id: '1', name: 'Usuário Demo', roles: ['Projeção', 'Membro'], avatar_url: '', isAdmin: true },
+            { id: '2', name: 'Membro Teste', roles: ['Vocal', 'Membro'], avatar_url: '', isAdmin: false },
+        ];
+        const mmap: MemberMap = { 'Projeção': ['Usuário Demo'], 'Vocal': ['Membro Teste'], 'Membro': ['Usuário Demo', 'Membro Teste'] };
+        return { memberMap: mmap, publicList: demoMembers };
+    }
+
     if (!supabase || !ministryId) return { memberMap: {}, publicList: [] };
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
 
@@ -574,18 +569,16 @@ export const fetchMinistryMembers = async (ministryId: string): Promise<{
         if (error) throw error;
 
         const publicList: TeamMemberProfile[] = (ministryProfiles || []).map((p: any) => {
-            // Filter roles to only show those belonging to the current ministry settings
             const userRoles = (p.functions || []).filter((r: string) => validRoles.includes(r));
-            
             return {
                 id: p.id,
                 name: p.name || 'Membro sem nome', 
                 email: p.email || undefined,
                 whatsapp: p.whatsapp,
                 avatar_url: p.avatar_url,
-                birthDate: p.birth_date, // Mapeia corretamente a data de nascimento
+                birthDate: p.birth_date,
                 roles: userRoles,
-                createdAt: p.created_at, // FIX: Removido fallback para Date.now() para evitar que todos pareçam novos
+                createdAt: p.created_at,
                 isAdmin: p.is_admin
             };
         }).sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
@@ -612,6 +605,21 @@ export const fetchMinistryMembers = async (ministryId: string): Promise<{
 };
 
 export const fetchMinistrySchedule = async (ministryId: string, monthIso: string): Promise<{ schedule: ScheduleMap, events: any[], attendance: AttendanceMap }> => {
+    if (isPreviewMode) {
+        // Generate Fake Events for current month
+        const [y, m] = monthIso.split('-').map(Number);
+        const demoEvents = [
+            { id: '1', title: 'Culto Demo 1', date_time: `${monthIso}-05T19:30:00` },
+            { id: '2', title: 'Culto Demo 2', date_time: `${monthIso}-12T09:00:00` },
+        ];
+        const uiEvents = demoEvents.map(e => {
+            const [date, timeFull] = e.date_time.split('T');
+            const [yyyy, mm, dd] = date.split('-');
+            return { id: e.id, title: e.title, date: date, time: timeFull.slice(0, 5), iso: e.date_time.slice(0, 16), dateDisplay: `${dd}/${mm}` };
+        });
+        return { schedule: { [`${monthIso}-05T19:30_Projeção`]: 'Usuário Demo' }, events: uiEvents, attendance: {} };
+    }
+
     if (!supabase || !ministryId) return { schedule: {}, events: [], attendance: {} };
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
 
@@ -621,7 +629,6 @@ export const fetchMinistrySchedule = async (ministryId: string, monthIso: string
         const nextMonthDate = new Date(y, m, 1);
         const nextMonth = nextMonthDate.toISOString().split('T')[0];
 
-        // 1. Tenta buscar eventos existentes
         let { data: events, error: eventError } = await supabase
             .from('events')
             .select('id, title, date_time')
@@ -632,7 +639,6 @@ export const fetchMinistrySchedule = async (ministryId: string, monthIso: string
 
         if (eventError) throw eventError;
 
-        // 2. AUTO-GERAÇÃO (INFINITE SCROLL): Se não houver eventos, cria os padrões
         if (!events || events.length === 0) {
             const daysInMonth = new Date(y, m, 0).getDate();
             const eventsToCreate = [];
@@ -643,22 +649,10 @@ export const fetchMinistrySchedule = async (ministryId: string, monthIso: string
                 const dateStr = date.toISOString().split('T')[0];
 
                 if (dayOfWeek === 3) {
-                    eventsToCreate.push({
-                        ministry_id: cleanMid,
-                        title: "Culto (Quarta)",
-                        date_time: `${dateStr}T19:30:00`
-                    });
+                    eventsToCreate.push({ ministry_id: cleanMid, title: "Culto (Quarta)", date_time: `${dateStr}T19:30:00` });
                 } else if (dayOfWeek === 0) {
-                    eventsToCreate.push({
-                        ministry_id: cleanMid,
-                        title: "Culto (Domingo - Manhã)",
-                        date_time: `${dateStr}T09:00:00`
-                    });
-                    eventsToCreate.push({
-                        ministry_id: cleanMid,
-                        title: "Culto (Domingo - Noite)",
-                        date_time: `${dateStr}T18:00:00`
-                    });
+                    eventsToCreate.push({ ministry_id: cleanMid, title: "Culto (Domingo - Manhã)", date_time: `${dateStr}T09:00:00` });
+                    eventsToCreate.push({ ministry_id: cleanMid, title: "Culto (Domingo - Noite)", date_time: `${dateStr}T18:00:00` });
                 }
             }
 
@@ -668,7 +662,6 @@ export const fetchMinistrySchedule = async (ministryId: string, monthIso: string
                     .insert(eventsToCreate)
                     .select('id, title, date_time')
                     .order('date_time', { ascending: true });
-                
                 if (!createError && newEvents) {
                     events = newEvents;
                 }
@@ -681,12 +674,7 @@ export const fetchMinistrySchedule = async (ministryId: string, monthIso: string
 
         const { data: assignments, error: assignError } = await supabase
             .from('schedule_assignments')
-            .select(`
-                event_id,
-                role,
-                confirmed,
-                profiles ( name )
-            `)
+            .select(`event_id, role, confirmed, profiles ( name )`)
             .in('event_id', eventIds);
 
         if (assignError) throw assignError;
@@ -709,14 +697,8 @@ export const fetchMinistrySchedule = async (ministryId: string, monthIso: string
         const uiEvents = events.map(e => {
             const [date, timeFull] = e.date_time.split('T');
             const [yyyy, mm, dd] = date.split('-');
-            
             return {
-                id: e.id,
-                title: e.title,
-                date: date,
-                time: timeFull.slice(0, 5),
-                iso: e.date_time.slice(0, 16),
-                dateDisplay: `${dd}/${mm}`
+                id: e.id, title: e.title, date: date, time: timeFull.slice(0, 5), iso: e.date_time.slice(0, 16), dateDisplay: `${dd}/${mm}`
             };
         });
 
@@ -728,123 +710,69 @@ export const fetchMinistrySchedule = async (ministryId: string, monthIso: string
 };
 
 export const clearScheduleForMonth = async (ministryId: string, monthIso: string): Promise<boolean> => {
+    if (isPreviewMode) return true;
     if (!supabase || !ministryId) return false;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-    
     try {
         const start = `${monthIso}-01T00:00:00`;
         const [y, m] = monthIso.split('-').map(Number);
         const nextMonth = new Date(y, m, 1).toISOString().split('T')[0] + 'T00:00:00';
 
-        const { data: events } = await supabase
-            .from('events')
-            .select('id')
-            .eq('ministry_id', cleanMid)
-            .gte('date_time', start)
-            .lt('date_time', nextMonth);
-
+        const { data: events } = await supabase.from('events').select('id').eq('ministry_id', cleanMid).gte('date_time', start).lt('date_time', nextMonth);
         if (!events || events.length === 0) return true;
-
         const ids = events.map(e => e.id);
-
-        const { error } = await supabase
-            .from('schedule_assignments')
-            .delete()
-            .in('event_id', ids);
-
+        const { error } = await supabase.from('schedule_assignments').delete().in('event_id', ids);
         return !error;
-    } catch (e) {
-        return false;
-    }
+    } catch (e) { return false; }
 };
 
 export const resetToDefaultEvents = async (ministryId: string, monthIso: string): Promise<boolean> => {
+    if (isPreviewMode) return true;
     if (!supabase || !ministryId) return false;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-    
     try {
         const [y, m] = monthIso.split('-').map(Number);
         const startDate = `${monthIso}-01T00:00:00`;
         const nextMonthDate = new Date(y, m, 1);
         const nextMonth = nextMonthDate.toISOString().split('T')[0] + 'T00:00:00';
 
-        const { data: eventsToDelete } = await supabase
-            .from('events')
-            .select('id')
-            .eq('ministry_id', cleanMid)
-            .gte('date_time', startDate)
-            .lt('date_time', nextMonth);
-            
+        const { data: eventsToDelete } = await supabase.from('events').select('id').eq('ministry_id', cleanMid).gte('date_time', startDate).lt('date_time', nextMonth);
         if (eventsToDelete && eventsToDelete.length > 0) {
             const ids = eventsToDelete.map(e => e.id);
             await supabase.from('schedule_assignments').delete().in('event_id', ids);
             await supabase.from('events').delete().in('id', ids);
         }
-
+        
         const daysInMonth = new Date(y, m, 0).getDate();
         const eventsToCreate = [];
-
         for (let d = 1; d <= daysInMonth; d++) {
             const date = new Date(y, m - 1, d);
-            const dayOfWeek = date.getDay(); // 0 = Sun, 3 = Wed
+            const dayOfWeek = date.getDay(); 
             const dateStr = date.toISOString().split('T')[0];
-
-            if (dayOfWeek === 3) {
-                eventsToCreate.push({
-                    ministry_id: cleanMid,
-                    title: "Culto (Quarta)",
-                    date_time: `${dateStr}T19:30:00`
-                });
-            } else if (dayOfWeek === 0) {
-                eventsToCreate.push({
-                    ministry_id: cleanMid,
-                    title: "Culto (Domingo - Manhã)",
-                    date_time: `${dateStr}T09:00:00`
-                });
-                eventsToCreate.push({
-                    ministry_id: cleanMid,
-                    title: "Culto (Domingo - Noite)",
-                    date_time: `${dateStr}T18:00:00`
-                });
+            if (dayOfWeek === 3) eventsToCreate.push({ ministry_id: cleanMid, title: "Culto (Quarta)", date_time: `${dateStr}T19:30:00` });
+            else if (dayOfWeek === 0) {
+                eventsToCreate.push({ ministry_id: cleanMid, title: "Culto (Domingo - Manhã)", date_time: `${dateStr}T09:00:00` });
+                eventsToCreate.push({ ministry_id: cleanMid, title: "Culto (Domingo - Noite)", date_time: `${dateStr}T18:00:00` });
             }
         }
-
-        if (eventsToCreate.length > 0) {
-            await supabase.from('events').insert(eventsToCreate);
-        }
-
+        if (eventsToCreate.length > 0) await supabase.from('events').insert(eventsToCreate);
         return true;
-    } catch (e) {
-        return false;
-    }
+    } catch (e) { return false; }
 };
 
 export const updateMinistryEvent = async (ministryId: string, oldIso: string, newTitle: string, newIso: string, applyToAll: boolean = false): Promise<boolean> => {
+    if (isPreviewMode) return true;
     if (!supabase || !ministryId) return false;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     const formatTimestamp = (iso: string) => `${iso}:00`; 
 
     try {
         const targetIso = formatTimestamp(oldIso);
-
-        // 1. Encontrar o evento original para pegar o título atual e ID
-        const { data: originalEvents } = await supabase
-            .from('events')
-            .select('id, title, date_time')
-            .eq('ministry_id', cleanMid)
-            .eq('date_time', targetIso)
-            .limit(1);
+        const { data: originalEvents } = await supabase.from('events').select('id, title, date_time').eq('ministry_id', cleanMid).eq('date_time', targetIso).limit(1);
 
         if (!originalEvents || originalEvents.length === 0) {
-            // Se não existe, cria um novo (apenas se não for replicação em massa, que não faria sentido)
             if (!applyToAll) {
-                const { error } = await supabase
-                    .from('events')
-                    .insert({
-                        ministry_id: cleanMid,
-                        title: newTitle,
-                        date_time: formatTimestamp(newIso)
-                    });
+                const { error } = await supabase.from('events').insert({ ministry_id: cleanMid, title: newTitle, date_time: formatTimestamp(newIso) });
                 return !error;
             }
             return false;
@@ -853,90 +781,47 @@ export const updateMinistryEvent = async (ministryId: string, oldIso: string, ne
         const originalEvent = originalEvents[0];
 
         if (applyToAll) {
-            // --- LÓGICA DE REPLICAÇÃO EM MASSA ---
-            
-            // Define o intervalo do mês baseando-se no evento original
             const dateObj = new Date(originalEvent.date_time);
             const year = dateObj.getFullYear();
             const month = dateObj.getMonth();
-            const startOfMonth = new Date(year, month, 1).toISOString(); // 1º dia
-            const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59).toISOString(); // Último dia
+            const startOfMonth = new Date(year, month, 1).toISOString();
+            const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
 
-            // Busca todos os eventos do mês com o MESMO título original
-            const { data: similarEvents } = await supabase
-                .from('events')
-                .select('id, date_time')
-                .eq('ministry_id', cleanMid)
-                .eq('title', originalEvent.title) // Importante: usar o título original do banco
-                .gte('date_time', startOfMonth)
-                .lte('date_time', endOfMonth);
-
+            const { data: similarEvents } = await supabase.from('events').select('id, date_time').eq('ministry_id', cleanMid).eq('title', originalEvent.title).gte('date_time', startOfMonth).lte('date_time', endOfMonth);
             if (!similarEvents || similarEvents.length === 0) return true;
 
-            // Extrai a nova hora do newIso (formato esperado: YYYY-MM-DDTHH:mm)
             const newTimePart = newIso.split('T')[1];
-
-            // Cria promessas de atualização para cada evento encontrado
             const updatePromises = similarEvents.map(evt => {
-                // Mantém a data original do evento, muda apenas a hora
                 const originalDatePart = evt.date_time.split('T')[0];
                 const newDateTime = `${originalDatePart}T${newTimePart}:00`;
-
-                return supabase
-                    .from('events')
-                    .update({ 
-                        title: newTitle, // Atualiza para o novo título
-                        date_time: newDateTime // Atualiza para a nova hora
-                    })
-                    .eq('id', evt.id);
+                return supabase.from('events').update({ title: newTitle, date_time: newDateTime }).eq('id', evt.id);
             });
-
             await Promise.all(updatePromises);
             return true;
-
         } else {
-            // --- ATUALIZAÇÃO ÚNICA (Padrão) ---
-            const { error } = await supabase
-                .from('events')
-                .update({ 
-                    title: newTitle,
-                    date_time: formatTimestamp(newIso)
-                })
-                .eq('id', originalEvent.id);
+            const { error } = await supabase.from('events').update({ title: newTitle, date_time: formatTimestamp(newIso) }).eq('id', originalEvent.id);
             return !error;
         }
-    } catch (e) {
-        console.error("Erro ao atualizar evento:", e);
-        return false;
-    }
+    } catch (e) { return false; }
 };
 
 export const deleteMinistryEvent = async (ministryId: string, iso: string): Promise<boolean> => {
+    if (isPreviewMode) return true;
     if (!supabase || !ministryId) return false;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     const dateTime = `${iso}:00`; 
-
     try {
-        const { data: events } = await supabase
-            .from('events')
-            .select('id')
-            .eq('ministry_id', cleanMid)
-            .eq('date_time', dateTime);
-
+        const { data: events } = await supabase.from('events').select('id').eq('ministry_id', cleanMid).eq('date_time', dateTime);
         if (!events || events.length === 0) return true; 
-
         const ids = events.map(e => e.id);
-
         await supabase.from('schedule_assignments').delete().in('event_id', ids);
         const { error } = await supabase.from('events').delete().in('id', ids);
-
         return !error;
-    } catch (e) {
-        return false;
-    }
+    } catch (e) { return false; }
 };
 
 export const saveScheduleAssignment = async (ministryId: string, key: string, memberName: string): Promise<boolean> => {
+    if (isPreviewMode) return true;
     if (!supabase || !ministryId) return false;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
 
@@ -947,102 +832,50 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
         const dateTime = `${isoDate}:00`; 
 
         let eventId = null;
-        const { data: eventData } = await supabase
-            .from('events')
-            .select('id')
-            .eq('ministry_id', cleanMid)
-            .eq('date_time', dateTime)
-            .limit(1); 
+        const { data: eventData } = await supabase.from('events').select('id').eq('ministry_id', cleanMid).eq('date_time', dateTime).limit(1); 
 
         if (eventData && eventData.length > 0) {
             eventId = eventData[0].id;
         } else {
             if (!memberName) return true;
-
             const dateObj = new Date(isoDate);
             const dayOfWeek = dateObj.getDay(); 
             const hour = dateObj.getHours();
-            
             let title = "Evento Extra";
             if (dayOfWeek === 3) title = "Culto (Quarta)";
             else if (dayOfWeek === 0) {
                 if (hour < 13) title = "Culto (Domingo - Manhã)";
                 else title = "Culto (Domingo - Noite)";
             }
-
-            const { data: newEvent, error: createError } = await supabase
-                .from('events')
-                .insert({
-                    ministry_id: cleanMid,
-                    title: title,
-                    date_time: dateTime
-                })
-                .select()
-                .single();
-            
+            const { data: newEvent, error: createError } = await supabase.from('events').insert({ ministry_id: cleanMid, title: title, date_time: dateTime }).select().single();
             if (createError) throw createError;
             eventId = newEvent.id;
         }
 
         if (!memberName) {
-            if (eventId) {
-                await supabase
-                    .from('schedule_assignments')
-                    .delete()
-                    .eq('event_id', eventId)
-                    .eq('role', role);
-            }
+            if (eventId) await supabase.from('schedule_assignments').delete().eq('event_id', eventId).eq('role', role);
             return true;
         }
 
-        const { data: memberData } = await supabase
-            .from('profiles')
-            .select('id')
-            .ilike('name', memberName)
-            .limit(1)
-            .single();
-
+        const { data: memberData } = await supabase.from('profiles').select('id').ilike('name', memberName).limit(1).single();
         if (!memberData) return false; 
 
-        await supabase
-            .from('schedule_assignments')
-            .delete()
-            .eq('event_id', eventId)
-            .eq('role', role);
-
-        const { error: insertError } = await supabase
-            .from('schedule_assignments')
-            .insert({
-                event_id: eventId,
-                role: role,
-                member_id: memberData.id
-            });
-
+        await supabase.from('schedule_assignments').delete().eq('event_id', eventId).eq('role', role);
+        const { error: insertError } = await supabase.from('schedule_assignments').insert({ event_id: eventId, role: role, member_id: memberData.id });
         return !insertError;
-
-    } catch (e) {
-        return false;
-    }
+    } catch (e) { return false; }
 };
 
 export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap): Promise<boolean> => {
+    if (isPreviewMode) return true;
     if (!supabase || !ministryId) return false;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-    
     if (Object.keys(schedule).length === 0) return true;
 
     try {
-        const { data: allMembers } = await supabase
-            .from('profiles')
-            .select('id, name')
-            .or(`ministry_id.eq.${cleanMid},allowed_ministries.cs.{${cleanMid}}`);
-            
+        const { data: allMembers } = await supabase.from('profiles').select('id, name').or(`ministry_id.eq.${cleanMid},allowed_ministries.cs.{${cleanMid}}`);
         const memberMap = new Map<string, string>(); 
-        if (allMembers) {
-            allMembers.forEach(m => {
-                if (m.name) memberMap.set(m.name.toLowerCase().trim(), m.id);
-            });
-        }
+        if (allMembers) allMembers.forEach(m => { if (m.name) memberMap.set(m.name.toLowerCase().trim(), m.id); });
 
         const neededTimestamps = new Set<string>();
         Object.keys(schedule).forEach(key => {
@@ -1051,16 +884,9 @@ export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap
             neededTimestamps.add(`${isoDate}:00`); 
         });
 
-        const { data: existingEvents } = await supabase
-            .from('events')
-            .select('id, date_time')
-            .eq('ministry_id', cleanMid)
-            .in('date_time', Array.from(neededTimestamps));
-
+        const { data: existingEvents } = await supabase.from('events').select('id, date_time').eq('ministry_id', cleanMid).in('date_time', Array.from(neededTimestamps));
         const eventIdMap = new Map<string, string>();
-        if (existingEvents) {
-            existingEvents.forEach(e => eventIdMap.set(e.date_time, e.id));
-        }
+        if (existingEvents) existingEvents.forEach(e => eventIdMap.set(e.date_time, e.id));
 
         const eventsToCreate = [];
         for (const ts of neededTimestamps) {
@@ -1068,181 +894,102 @@ export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap
                 const dateObj = new Date(ts);
                 const dayOfWeek = dateObj.getDay();
                 const hour = dateObj.getHours();
-                
                 let title = "Evento Extra";
                 if (dayOfWeek === 3) title = "Culto (Quarta)";
                 else if (dayOfWeek === 0) {
                     if (hour < 13) title = "Culto (Domingo - Manhã)";
                     else title = "Culto (Domingo - Noite)";
                 }
-
-                eventsToCreate.push({
-                    ministry_id: cleanMid,
-                    title: title,
-                    date_time: ts
-                });
+                eventsToCreate.push({ ministry_id: cleanMid, title: title, date_time: ts });
             }
         }
 
         if (eventsToCreate.length > 0) {
-            const { data: newEvents, error: createError } = await supabase
-                .from('events')
-                .insert(eventsToCreate)
-                .select('id, date_time');
-            
+            const { data: newEvents, error: createError } = await supabase.from('events').insert(eventsToCreate).select('id, date_time');
             if (createError) throw createError;
-            
             newEvents?.forEach(e => eventIdMap.set(e.date_time, e.id));
         }
 
         const assignmentsToUpsert = [];
-        
         for (const [key, memberName] of Object.entries(schedule)) {
             if (!memberName) continue;
-            
             const lastUnderscore = key.lastIndexOf('_');
             const isoDate = key.substring(0, lastUnderscore);
             const role = key.substring(lastUnderscore + 1);
             const ts = `${isoDate}:00`;
-            
             const eventId = eventIdMap.get(ts);
             const memberId = memberMap.get(memberName.toLowerCase().trim());
-            
-            if (eventId && memberId) {
-                assignmentsToUpsert.push({
-                    event_id: eventId,
-                    role: role,
-                    member_id: memberId
-                });
-            }
+            if (eventId && memberId) assignmentsToUpsert.push({ event_id: eventId, role: role, member_id: memberId });
         }
 
         if (assignmentsToUpsert.length > 0) {
-            const { error: upsertError } = await supabase
-                .from('schedule_assignments')
-                .upsert(assignmentsToUpsert, { onConflict: 'event_id,role' }); 
-            
+            const { error: upsertError } = await supabase.from('schedule_assignments').upsert(assignmentsToUpsert, { onConflict: 'event_id,role' }); 
             if (upsertError) {
-                for (const item of assignmentsToUpsert) {
-                     await supabase.from('schedule_assignments').delete().match({ event_id: item.event_id, role: item.role });
-                }
+                for (const item of assignmentsToUpsert) { await supabase.from('schedule_assignments').delete().match({ event_id: item.event_id, role: item.role }); }
                 await supabase.from('schedule_assignments').insert(assignmentsToUpsert);
             }
         }
         return true;
-    } catch (e) {
-        return false;
-    }
+    } catch (e) { return false; }
 }
 
 export const toggleAssignmentConfirmation = async (ministryId: string, key: string): Promise<boolean> => {
+    if (isPreviewMode) return true;
     if (!supabase || !ministryId) return false;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-
     try {
         const lastUnderscore = key.lastIndexOf('_');
         const isoDate = key.substring(0, lastUnderscore); 
         const role = key.substring(lastUnderscore + 1);
         const dateTime = `${isoDate}:00`;
-
-        const { data: eventData } = await supabase
-            .from('events')
-            .select('id')
-            .eq('ministry_id', cleanMid)
-            .eq('date_time', dateTime)
-            .limit(1);
-
+        const { data: eventData } = await supabase.from('events').select('id').eq('ministry_id', cleanMid).eq('date_time', dateTime).limit(1);
         if (!eventData || eventData.length === 0) return false;
         const eventId = eventData[0].id;
-
-        const { data: assignment } = await supabase
-            .from('schedule_assignments')
-            .select('id, confirmed')
-            .eq('event_id', eventId)
-            .eq('role', role)
-            .single();
-
+        const { data: assignment } = await supabase.from('schedule_assignments').select('id, confirmed').eq('event_id', eventId).eq('role', role).single();
         if (!assignment) return false;
-
-        const { error } = await supabase
-            .from('schedule_assignments')
-            .update({ confirmed: !assignment.confirmed })
-            .eq('id', assignment.id);
-
+        const { error } = await supabase.from('schedule_assignments').update({ confirmed: !assignment.confirmed }).eq('id', assignment.id);
         return !error;
-
-    } catch (e) {
-        return false;
-    }
+    } catch (e) { return false; }
 };
 
 export const fetchMinistryAvailability = async (ministryId: string): Promise<AvailabilityMap> => {
+    if (isPreviewMode) return {};
     if (!supabase || !ministryId) return {};
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-
     try {
-        const { data: availData, error } = await supabase
-            .from('availability')
-            .select(`
-                date,
-                status,
-                member_id,
-                profiles!inner ( id, name, ministry_id, allowed_ministries )
-            `);
-
+        const { data: availData, error } = await supabase.from('availability').select(`date, status, member_id, profiles!inner ( id, name, ministry_id, allowed_ministries )`);
         const relevantData = availData?.filter((row: any) => {
             const p = row.profiles;
             return p.ministry_id === cleanMid || (p.allowed_ministries && p.allowed_ministries.includes(cleanMid));
         });
-
         const availability: AvailabilityMap = {};
-
         relevantData?.forEach((row: any) => {
             const name = row.profiles.name || 'Membro sem nome';
             if (!availability[name]) availability[name] = [];
-            
             let dateStr = row.date;
             if (row.status === 'M') dateStr += '_M';
             else if (row.status === 'N') dateStr += '_N';
-            
             availability[name].push(dateStr);
         });
-
         return availability;
-
-    } catch (e) {
-        return {};
-    }
+    } catch (e) { return {}; }
 };
 
 export const saveMemberAvailability = async (userId: string, memberName: string, dates: string[]) => {
+    if (isPreviewMode) return true;
     if (!supabase) return false;
-
     try {
-        const { data: member } = await supabase
-            .from('profiles')
-            .select('id, ministry_id')
-            .ilike('name', memberName)
-            .single();
-
+        const { data: member } = await supabase.from('profiles').select('id, ministry_id').ilike('name', memberName).single();
         if (!member) return false;
-
         const rows = dates.map(d => {
             let date = d;
             let status = 'BOTH';
             if (d.endsWith('_M')) { date = d.replace('_M', ''); status = 'M'; }
             else if (d.endsWith('_N')) { date = d.replace('_N', ''); status = 'N'; }
-            
             return { member_id: member.id, date, status };
         });
-
         await supabase.from('availability').delete().eq('member_id', member.id);
-        
-        if (rows.length > 0) {
-            await supabase.from('availability').insert(rows);
-        }
-
-        // Notificar apenas se houver alterações e se o ministério for identificado
+        if (rows.length > 0) await supabase.from('availability').insert(rows);
         if (member.ministry_id) {
             await sendNotificationSQL(member.ministry_id, {
                 title: "Atualização de Disponibilidade",
@@ -1251,304 +998,156 @@ export const saveMemberAvailability = async (userId: string, memberName: string,
                 actionLink: "report"
             });
         }
-
         return true;
-    } catch (e) {
-        return false;
-    }
+    } catch (e) { return false; }
 };
 
 export const fetchGlobalSchedules = async (currentMonth: string, currentMinistryId: string): Promise<GlobalConflictMap> => {
+    if (isPreviewMode) return {};
     if (!supabase) return {};
-    
     const start = `${currentMonth}-01T00:00:00`;
     const [y, m] = currentMonth.split('-').map(Number);
     const nextMonth = new Date(y, m, 1).toISOString().split('T')[0] + 'T00:00:00';
-
     try {
         const { data, error } = await supabase
             .from('schedule_assignments')
-            .select(`
-                role,
-                events!inner (
-                    date_time,
-                    ministry_id
-                ),
-                profiles!inner (
-                    name
-                )
-            `)
-            .gte('events.date_time', start)
-            .lt('events.date_time', nextMonth)
-            .neq('events.ministry_id', currentMinistryId); 
-
+            .select(`role, events!inner ( date_time, ministry_id ), profiles!inner ( name )`)
+            .gte('events.date_time', start).lt('events.date_time', nextMonth).neq('events.ministry_id', currentMinistryId); 
         if (error) throw error;
-
         const conflicts: GlobalConflictMap = {};
-
         data?.forEach((row: any) => {
             const name = row.profiles.name;
             if (!name) return;
-            
             const normalized = name.trim().toLowerCase();
             if (!conflicts[normalized]) conflicts[normalized] = [];
-            
-            const conflict: GlobalConflict = {
-                ministryId: row.events.ministry_id,
-                eventIso: row.events.date_time.slice(0, 16),
-                role: row.role
-            };
-            
+            const conflict: GlobalConflict = { ministryId: row.events.ministry_id, eventIso: row.events.date_time.slice(0, 16), role: row.role };
             conflicts[normalized].push(conflict);
         });
-
         return conflicts;
-
-    } catch (e) {
-        return {};
-    }
+    } catch (e) { return {}; }
 };
 
 export const logout = async () => {
+    if (isPreviewMode) {
+        localStorage.removeItem('VITE_SUPABASE_URL');
+        localStorage.removeItem('VITE_SUPABASE_KEY');
+        window.location.reload();
+        return;
+    }
     if (supabase) await supabase.auth.signOut();
 };
 
 export const loginWithEmail = async (email: string, pass: string) => {
+    if (isPreviewMode) return { success: true, message: "Login Demo Sucesso" };
     if (!supabase) return { success: false, message: "Erro conexão" };
     const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
     return { success: !error, message: error?.message || "" };
 };
 
 export const loginWithGoogle = async () => {
+    if (isPreviewMode) return { success: true, message: "Login Demo" };
     if (!supabase) return { success: false, message: "Erro conexão" };
-    
-    // Simplifica a lógica de redirecionamento para usar sempre a origem atual.
-    // Isso corrige problemas em ambientes de Preview, Localhost e Produção sem precisar hardcode.
     const redirectUrl = window.location.origin;
-    
     const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: {
-            redirectTo: redirectUrl,
-            queryParams: {
-                access_type: 'offline',
-                prompt: 'consent',
-            },
-        }
+        options: { redirectTo: redirectUrl, queryParams: { access_type: 'offline', prompt: 'consent' } }
     });
     return { success: !error, message: error?.message || "" };
 };
 
 export const syncMemberProfile = async (ministryId: string, user: User) => {
+    if (isPreviewMode) return;
     if (!supabase || !user.id) return;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-
     try {
-        const { data: existing, error } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', user.id)
-            .single();
-
+        const { data: existing, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
         const allowed = user.allowedMinistries || [cleanMid];
         if (!allowed.includes(cleanMid)) allowed.push(cleanMid);
-        
         let newAllowed = [...allowed];
         let newFunctions = user.functions || [];
-
         if (existing) {
             const existingAllowed = existing.allowed_ministries || [];
             const existingFunctions = existing.functions || [];
-            
             newAllowed = [...new Set([...existingAllowed, ...allowed])];
             newFunctions = [...new Set([...existingFunctions, ...newFunctions])];
-            
             await supabase.from('profiles').update({
-                allowed_ministries: newAllowed,
-                functions: newFunctions,
-                avatar_url: user.avatar_url || existing.avatar_url,
-                whatsapp: existing.whatsapp || user.whatsapp,
-                birth_date: existing.birth_date || user.birthDate
+                allowed_ministries: newAllowed, functions: newFunctions, avatar_url: user.avatar_url || existing.avatar_url, whatsapp: existing.whatsapp || user.whatsapp, birth_date: existing.birth_date || user.birthDate
             }).eq('id', user.id);
         } else {
             await supabase.from('profiles').insert({
-                id: user.id,
-                name: user.name || 'Novo Usuário',
-                email: user.email,
-                ministry_id: cleanMid,
-                allowed_ministries: newAllowed,
-                functions: newFunctions,
-                role: 'member',
-                avatar_url: user.avatar_url,
-                whatsapp: user.whatsapp
+                id: user.id, name: user.name || 'Novo Usuário', email: user.email, ministry_id: cleanMid, allowed_ministries: newAllowed, functions: newFunctions, role: 'member', avatar_url: user.avatar_url, whatsapp: user.whatsapp
             });
         }
-    } catch (e) {
-        console.error("Sync profile error:", e);
-    }
+    } catch (e) { console.error("Sync profile error:", e); }
 };
 
 export const registerWithEmail = async (email: string, pass: string, name: string, ministries: string[], whatsapp?: string, roles?: string[]) => {
+    if (isPreviewMode) return { success: true, message: "Conta criada (Demo)" };
     if (!supabase) return { success: false, message: "Erro conexão" };
-    
     const { data, error } = await supabase.auth.signUp({
-        email,
-        password: pass,
-        options: {
-            data: {
-                name,
-                ministryId: ministries[0] || 'midia',
-                allowedMinistries: ministries,
-                whatsapp,
-                functions: roles
-            }
-        }
+        email, password: pass,
+        options: { data: { name, ministryId: ministries[0] || 'midia', allowedMinistries: ministries, whatsapp, functions: roles } }
     });
-
     if (error) return { success: false, message: error.message };
-
     if (data.user) {
-        await syncMemberProfile(ministries[0] || 'midia', {
-            id: data.user.id,
-            email,
-            name,
-            role: 'member',
-            ministryId: ministries[0],
-            allowedMinistries: ministries,
-            whatsapp,
-            functions: roles
-        });
-
-        // Enviar notificação de novo membro
-        await sendNotificationSQL(ministries[0] || 'midia', {
-            title: "Novo Membro",
-            message: `${name} acabou de se cadastrar no ministério!`,
-            type: "info"
-        });
+        await syncMemberProfile(ministries[0] || 'midia', { id: data.user.id, email, name, role: 'member', ministryId: ministries[0], allowedMinistries: ministries, whatsapp, functions: roles });
+        await sendNotificationSQL(ministries[0] || 'midia', { title: "Novo Membro", message: `${name} acabou de se cadastrar no ministério!`, type: "info" });
     }
-
     return { success: true, message: "Conta criada com sucesso!" };
 };
 
 export const sendPasswordResetEmail = async (email: string) => {
+    if (isPreviewMode) return { success: true, message: "Email enviado (Demo)" };
     if (!supabase) return { success: false, message: "Erro conexão" };
-    
     let redirectUrl = window.location.origin;
-    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-        redirectUrl = "https://escalaobpcpro.vercel.app";
-    }
-
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: redirectUrl + '?reset=true',
-    });
+    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') redirectUrl = "https://escalaobpcpro.vercel.app";
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: redirectUrl + '?reset=true' });
     if (error) return { success: false, message: error.message };
     return { success: true, message: "Link de recuperação enviado para o e-mail." };
 };
 
 export const updateUserProfile = async (name: string, whatsapp: string, avatar_url?: string, functions?: string[], birthDate?: string, ministryId?: string) => {
+    if (isPreviewMode) return { success: true, message: "Perfil atualizado (Demo)" };
     if (!supabase) return { success: false, message: "Erro conexão" };
-    
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, message: "Usuário não logado" };
-
     try {
-        // Auth Metadata (CamelCase for App Consistency)
-        const authUpdates = {
-            name,
-            whatsapp,
-            avatar_url,
-            functions,
-            birthDate,
-            ministryId // Ensure this is kept
-        };
-        
-        // Database Profile (SnakeCase for SQL)
-        const dbUpdates = {
-            name,
-            whatsapp,
-            avatar_url,
-            functions,
-            birth_date: birthDate || null
-        };
-        
-        await supabase.auth.updateUser({
-            data: authUpdates
-        });
-
-        const { error } = await supabase
-            .from('profiles')
-            .update(dbUpdates)
-            .eq('id', user.id);
-
+        const authUpdates = { name, whatsapp, avatar_url, functions, birthDate, ministryId };
+        const dbUpdates = { name, whatsapp, avatar_url, functions, birth_date: birthDate || null };
+        await supabase.auth.updateUser({ data: authUpdates });
+        const { error } = await supabase.from('profiles').update(dbUpdates).eq('id', user.id);
         if (error) throw error;
-        
         return { success: true, message: "Perfil atualizado!" };
-    } catch (e: any) {
-        return { success: false, message: e.message };
-    }
+    } catch (e: any) { return { success: false, message: e.message }; }
 };
 
 export const joinMinistry = async (newMinistryId: string, roles: string[]): Promise<{ success: boolean; message: string }> => {
+    if (isPreviewMode) return { success: true, message: "Entrou no ministério (Demo)" };
     if (!supabase) return { success: false, message: "Erro de conexão." };
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, message: "Usuário não logado." };
-
     try {
         const cleanMid = newMinistryId.trim().toLowerCase().replace(/\s+/g, '-');
-        
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('name, allowed_ministries, functions')
-            .eq('id', user.id)
-            .single();
-            
+        const { data: profile } = await supabase.from('profiles').select('name, allowed_ministries, functions').eq('id', user.id).single();
         if (!profile) return { success: false, message: "Perfil não encontrado." };
-
         const currentAllowed = profile.allowed_ministries || [];
         const currentFunctions = profile.functions || [];
-
-        if (currentAllowed.includes(cleanMid)) {
-             return { success: false, message: "Você já faz parte deste ministério." };
-        }
-
+        if (currentAllowed.includes(cleanMid)) return { success: false, message: "Você já faz parte deste ministério." };
         const newAllowed = [...currentAllowed, cleanMid];
         const newFunctions = [...new Set([...currentFunctions, ...roles])];
-
-        await supabase
-            .from('profiles')
-            .update({ 
-                allowed_ministries: newAllowed,
-                functions: newFunctions
-            })
-            .eq('id', user.id);
-            
-        await supabase.auth.updateUser({
-            data: { allowedMinistries: newAllowed, functions: newFunctions }
-        });
-
-        // Notificar o novo ministério da entrada
-        await sendNotificationSQL(cleanMid, {
-            title: "Novo Integrante",
-            message: `${profile.name || 'Um novo membro'} entrou para a equipe via link/código.`,
-            type: "info",
-            actionLink: "members"
-        });
-
+        await supabase.from('profiles').update({ allowed_ministries: newAllowed, functions: newFunctions }).eq('id', user.id);
+        await supabase.auth.updateUser({ data: { allowedMinistries: newAllowed, functions: newFunctions } });
+        await sendNotificationSQL(cleanMid, { title: "Novo Integrante", message: `${profile.name || 'Um novo membro'} entrou para a equipe via link/código.`, type: "info", actionLink: "members" });
         return { success: true, message: "Bem-vindo ao novo ministério!" };
-
-    } catch (e: any) {
-        console.error(e);
-        return { success: false, message: "Erro ao entrar no ministério." };
-    }
+    } catch (e: any) { console.error(e); return { success: false, message: "Erro ao entrar no ministério." }; }
 };
 
 export const deleteMember = async (ministryId: string, memberId: string, memberName: string) => {
+    if (isPreviewMode) return;
     if (!supabase) return;
     try {
         await supabase.from('availability').delete().eq('member_id', memberId);
         await supabase.from('schedule_assignments').delete().eq('member_id', memberId);
         await supabase.from('profiles').delete().eq('id', memberId);
-    } catch (e) {
-        console.error("Erro ao deletar membro:", e);
-    }
+    } catch (e) { console.error("Erro ao deletar membro:", e); }
 };

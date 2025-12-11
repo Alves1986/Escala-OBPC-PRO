@@ -1,9 +1,16 @@
 
-// Access VAPID Key from Environment Variables
-// Ensure VITE_VAPID_PUBLIC_KEY is set in your .env or Vercel Settings
-const env = (import.meta as any).env || {};
+// Safe Access VAPID Key from Environment Variables
+let vapidKey = "";
 
-export const VAPID_PUBLIC_KEY = env.VITE_VAPID_PUBLIC_KEY || "";
+try {
+  // @ts-ignore
+  const meta = import.meta;
+  if (meta && meta.env) {
+    vapidKey = meta.env.VITE_VAPID_PUBLIC_KEY;
+  }
+} catch (e) {}
+
+export const VAPID_PUBLIC_KEY = vapidKey || "";
 
 if (!VAPID_PUBLIC_KEY) {
   console.warn("⚠️ VITE_VAPID_PUBLIC_KEY is missing. Push notifications will not work.");

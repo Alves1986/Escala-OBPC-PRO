@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'gestao-escala-pwa-v23';
+const CACHE_NAME = 'gestao-escala-pwa-v24';
 
 // Arquivos estáticos fundamentais
 // Usando caminhos absolutos para garantir a integridade do cache
@@ -44,6 +44,11 @@ self.addEventListener('activate', event => {
 
 // Interceptação de Rede
 self.addEventListener('fetch', event => {
+  // Ignora requisições de esquemas não suportados (ex: chrome-extension://)
+  if (!event.request.url.startsWith('http')) {
+    return;
+  }
+
   // 1. Navegação (HTML): Force a raiz / ou index.html
   if (event.request.mode === 'navigate') {
     event.respondWith(

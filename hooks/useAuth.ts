@@ -2,12 +2,30 @@
 import { useState, useEffect } from 'react';
 import { User } from '../types';
 import * as Supabase from '../services/supabaseService';
+import { SUPABASE_URL } from '../types';
 
 export function useAuth() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
 
   useEffect(() => {
+    // Modo Preview: Loga automaticamente com usuário fictício
+    if (SUPABASE_URL === 'https://preview.mode') {
+        setCurrentUser({
+            id: 'demo-user-123',
+            name: 'Usuário Demo',
+            email: 'demo@teste.com',
+            role: 'admin',
+            ministryId: 'midia',
+            allowedMinistries: ['midia'],
+            avatar_url: '',
+            whatsapp: '11999999999',
+            functions: ['Projeção']
+        });
+        setLoadingAuth(false);
+        return;
+    }
+
     const sb = Supabase.getSupabase();
     if (!sb) {
         setLoadingAuth(false);
