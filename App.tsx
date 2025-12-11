@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   LayoutDashboard, Calendar, CalendarCheck, RefreshCcw, Music, 
@@ -103,7 +104,7 @@ const InnerApp = () => {
   const [isAvailModalOpen, setAvailModalOpen] = useState(false);
   const [isRolesModalOpen, setRolesModalOpen] = useState(false);
 
-  const { addToast } = useToast();
+  const { addToast, confirmAction } = useToast();
 
   // --- SYNC TAB WITH URL ---
   useEffect(() => {
@@ -397,10 +398,18 @@ const InnerApp = () => {
      loadData();
   }, [loadData]);
 
-  const handleLogout = async () => {
-    await Supabase.logout();
-    setCurrentUser(null);
-    window.location.reload();
+  const handleLogout = () => {
+    confirmAction(
+      "Sair",
+      "Deseja realmente sair do sistema?",
+      async () => {
+        await Supabase.logout();
+        setCurrentUser(null);
+        try {
+            window.history.replaceState(null, '', '/');
+        } catch(e) {}
+      }
+    );
   };
 
   const handleSwitchMinistry = (id: string) => {
