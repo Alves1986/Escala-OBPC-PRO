@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'escala-midia-pwa-v20';
+const CACHE_NAME = 'escala-midia-pwa-v21';
 
 // Arquivos estáticos fundamentais
 // Usando caminhos absolutos para garantir a integridade do cache
@@ -17,7 +17,11 @@ self.addEventListener('install', event => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(PRECACHE_URLS);
+      // IMPORTANTE: Adicionado .catch() para que falhas no download de assets (ex: cdn fora do ar)
+      // NÃO impeçam a instalação do Service Worker. Prioridade é a funcionalidade de Push.
+      return cache.addAll(PRECACHE_URLS).catch(err => {
+        console.warn('Falha no precache de alguns arquivos, mas continuando instalação do SW:', err);
+      });
     })
   );
 });
@@ -95,7 +99,7 @@ self.addEventListener('notificationclick', function(event) {
       // Tenta focar em uma janela já aberta
       for (var i = 0; i < clientList.length; i++) {
         var client = clientList[i];
-        if (client.url === urlToOpen && 'focus' in client) {
+        if ((client.url === urlToOpen || client.url.endsWith(urlToOpen)) && 'focus' in client) {
           return client.focus();
         }
       }
