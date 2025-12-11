@@ -1,9 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { CalendarClock, User, CheckCircle2, Clock, MapPin, AlertCircle, ShieldCheck, CalendarPlus } from 'lucide-react';
+import { CalendarClock, User, CheckCircle2, Clock, MapPin, AlertCircle, ShieldCheck } from 'lucide-react';
 import { Role, AttendanceMap, User as UserType } from '../types';
 import { getLocalDateISOString } from '../utils/dateUtils';
-import { createGoogleCalendarLink } from '../utils/calendarUtils';
 
 interface Props {
   event: { iso: string; dateDisplay: string; title: string } | undefined;
@@ -131,8 +130,6 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
       }
   };
 
-  const calendarLink = createGoogleCalendarLink(event, `Escala Ministério: ${event.title}. Verifique sua função no app.`);
-
   return (
     <div className={`mb-8 rounded-2xl overflow-hidden shadow-lg border transition-all duration-500 animate-slide-up ${eventIsToday ? 'border-orange-500 ring-2 ring-orange-200 dark:ring-orange-900' : 'border-zinc-200 dark:border-zinc-700'} bg-white dark:bg-zinc-800`}>
       <div className="bg-gradient-to-r from-teal-600 to-emerald-600 p-6 text-white relative overflow-hidden">
@@ -162,20 +159,9 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
       <div className="p-6">
         <div className="flex justify-between items-end mb-4">
           <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Escala do Dia</h3>
-          <div className="flex items-center gap-3">
-             {timeStatus === 'open' && eventIsToday && (
-                <span className="text-[10px] text-green-600 font-bold animate-pulse">● Check-in Disponível</span>
-             )}
-             <a 
-                href={calendarLink} 
-                target="_blank" 
-                rel="noreferrer"
-                className="text-[10px] bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 px-2 py-1 rounded-lg font-bold flex items-center gap-1 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
-                title="Adicionar ao Google Calendar"
-             >
-                <CalendarPlus size={12}/> Agenda
-             </a>
-          </div>
+          {timeStatus === 'open' && eventIsToday && (
+             <span className="text-[10px] text-green-600 font-bold animate-pulse">● Check-in Disponível</span>
+          )}
         </div>
         
         {team.length === 0 ? (
