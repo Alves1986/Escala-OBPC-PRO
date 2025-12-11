@@ -1,4 +1,3 @@
-
 import React, { ReactNode, useState } from 'react';
 import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle } from 'lucide-react';
 import { User, AppNotification } from '../types';
@@ -85,7 +84,7 @@ export const DashboardLayout: React.FC<Props> = ({
         onClick={() => { onTabChange(item.id); setSidebarOpen(false); }}
         className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 group ${
           isActive 
-            ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' 
+            ? 'bg-teal-600 text-white shadow-lg shadow-teal-900/20' 
             : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white'
         }`}
       >
@@ -105,7 +104,7 @@ export const DashboardLayout: React.FC<Props> = ({
       );
     }
     return (
-      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
+      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-teal-500 to-emerald-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
          {currentUser?.name.charAt(0).toUpperCase()}
       </div>
     );
@@ -118,7 +117,7 @@ export const DashboardLayout: React.FC<Props> = ({
         );
       }
       return (
-        <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold">
+        <div className="w-8 h-8 rounded-full bg-teal-600 flex items-center justify-center text-white text-xs font-bold">
            {currentUser?.name.charAt(0)}
         </div>
       );
@@ -141,7 +140,7 @@ export const DashboardLayout: React.FC<Props> = ({
         <div className="relative px-6 py-6 border-b border-zinc-200 dark:border-zinc-800/50 shrink-0">
            <div className="flex items-center gap-3">
                {imgError ? (
-                 <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-900/20"><Layout size={20} /></div>
+                 <div className="w-10 h-10 rounded-xl bg-teal-600 flex items-center justify-center text-white shadow-lg shadow-teal-900/20"><Layout size={20} /></div>
                ) : (
                  <img src="/icon.png?v=2" alt="Logo" className="w-10 h-10 rounded-xl shadow-lg" onError={() => setImgError(true)} />
                )}
@@ -176,7 +175,7 @@ export const DashboardLayout: React.FC<Props> = ({
                                        if (onSwitchMinistry) onSwitchMinistry(mid);
                                        setMinistryMenuOpen(false);
                                    }}
-                                   className={`w-full text-left px-4 py-3 text-sm flex items-center justify-between hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-colors ${isCurrent ? 'bg-blue-50 dark:bg-blue-900/10 text-blue-600 dark:text-blue-400 font-bold' : 'text-zinc-700 dark:text-zinc-300'}`}
+                                   className={`w-full text-left px-4 py-3 text-sm flex items-center justify-between hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-colors ${isCurrent ? 'bg-teal-50 dark:bg-teal-900/10 text-teal-600 dark:text-teal-400 font-bold' : 'text-zinc-700 dark:text-zinc-300'}`}
                                >
                                    {getMinistryLabel(mid)}
                                    {isCurrent && <Check size={16} />}
@@ -191,7 +190,7 @@ export const DashboardLayout: React.FC<Props> = ({
                                    setMinistryMenuOpen(false);
                                    onOpenJoinMinistry();
                                }}
-                               className="w-full text-left px-4 py-3 text-sm flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 border-t border-zinc-100 dark:border-zinc-700 font-bold transition-colors"
+                               className="w-full text-left px-4 py-3 text-sm flex items-center gap-2 text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20 border-t border-zinc-100 dark:border-zinc-700 font-bold transition-colors"
                            >
                                <PlusCircle size={16} /> Entrar em outro Ministério
                            </button>
@@ -239,7 +238,7 @@ export const DashboardLayout: React.FC<Props> = ({
                onClick={() => { onTabChange('profile'); setSidebarOpen(false); }}
                className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${
                  currentTab === 'profile' 
-                   ? 'bg-white dark:bg-zinc-800 border-blue-500/50 shadow-md' 
+                   ? 'bg-white dark:bg-zinc-800 border-teal-500/50 shadow-md' 
                    : 'bg-zinc-100 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700/50 hover:bg-zinc-200 dark:hover:bg-zinc-700'
                }`}
              >
@@ -271,7 +270,7 @@ export const DashboardLayout: React.FC<Props> = ({
                  {isConnected ? 'Online' : 'Offline'}
               </div>
               
-              <button onClick={handleHardReload} className="flex items-center gap-1 text-[10px] text-zinc-500 hover:text-blue-500 transition-colors">
+              <button onClick={handleHardReload} className="flex items-center gap-1 text-[10px] text-zinc-500 hover:text-teal-500 transition-colors">
                   <RefreshCw size={10} className={isUpdating ? 'animate-spin' : ''} />
                   {isUpdating ? 'v2.1' : 'v2.1'}
               </button>
@@ -289,14 +288,14 @@ export const DashboardLayout: React.FC<Props> = ({
               </button>
               <div className="flex flex-col leading-tight">
                   <span className="font-bold text-zinc-800 dark:text-zinc-100 text-sm truncate max-w-[200px]">{title}</span>
-                  {hasMultipleMinistries && <span className="text-[10px] text-blue-500 font-medium">Trocar no Menu</span>}
+                  {hasMultipleMinistries && <span className="text-[10px] text-teal-500 font-medium">Trocar no Menu</span>}
               </div>
            </div>
            
            <div className="flex items-center gap-2">
                {/* Install Button Mobile Header */}
                {!isStandalone && onInstall && (
-                 <button onClick={onInstall} className="p-2 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg mr-1 animate-pulse" title="Instalar App">
+                 <button onClick={onInstall} className="p-2 text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/20 rounded-lg mr-1 animate-pulse" title="Instalar App">
                     <Download size={20} />
                  </button>
                )}

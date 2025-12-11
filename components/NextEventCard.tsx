@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { CalendarClock, User, CheckCircle2, Clock, MapPin, AlertCircle, ShieldCheck } from 'lucide-react';
 import { Role, AttendanceMap, User as UserType } from '../types';
@@ -125,7 +124,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
               return (
                   <button 
                       onClick={() => onConfirm(memberKey)}
-                      className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-xs font-bold shadow-lg shadow-green-600/20 animate-pulse w-full justify-center active:scale-95 transition-transform"
+                      className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-bold shadow-lg shadow-teal-600/20 animate-pulse w-full justify-center active:scale-95 transition-transform"
                   >
                       <MapPin size={14} /> 
                       ESTOU PRESENTE
@@ -136,7 +135,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
 
   return (
     <div className={`mb-8 rounded-2xl overflow-hidden shadow-lg border transition-all duration-500 animate-slide-up ${eventIsToday ? 'border-orange-500 ring-2 ring-orange-200 dark:ring-orange-900' : 'border-zinc-200 dark:border-zinc-700'} bg-white dark:bg-zinc-800`}>
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white relative overflow-hidden">
+      <div className="bg-gradient-to-r from-teal-600 to-emerald-600 p-6 text-white relative overflow-hidden">
         {eventIsToday && (
           <div className="absolute top-4 right-4 bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full animate-pulse shadow-lg flex items-center gap-1">
             <Clock size={12} /> É HOJE
@@ -150,7 +149,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
               <span className="text-sm font-semibold uppercase tracking-wider">Próximo Evento</span>
             </div>
             <h2 className="text-2xl font-bold leading-tight">{event.title}</h2>
-            <p className="text-blue-100 mt-1 font-medium flex items-center gap-2">
+            <p className="text-teal-50 mt-1 font-medium flex items-center gap-2">
                 {event.dateDisplay} às {eventTime}
                 {timeStatus === 'open' && eventIsToday && (
                     <span className="text-[10px] bg-green-500/20 px-2 py-0.5 rounded border border-green-400/50 text-green-100">Check-in Aberto</span>
@@ -180,7 +179,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
               
               // Se sou eu, mostro o card em destaque
               const cardClass = isMe 
-                ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800 ring-1 ring-blue-100 dark:ring-blue-900' 
+                ? 'bg-teal-50 dark:bg-teal-900/10 border-teal-200 dark:border-teal-800 ring-1 ring-teal-100 dark:ring-teal-900' 
                 : isConfirmed 
                     ? 'bg-green-50 dark:bg-green-900/5 border-green-100 dark:border-green-900/20 opacity-70' 
                     : 'bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-700/50 opacity-70';

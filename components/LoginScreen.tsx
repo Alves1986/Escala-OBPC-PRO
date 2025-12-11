@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, UserPlus, ArrowLeft, Check, ChevronDown, KeyRound, Layers } from 'lucide-react';
 import { loginWithEmail, loginWithGoogle, registerWithEmail, fetchMinistrySettings, sendPasswordResetEmail } from '../services/supabaseService';
@@ -216,7 +215,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                                     value={email} 
                                     onChange={e => setEmail(e.target.value)}
                                     placeholder="seu@email.com" 
-                                    className="w-full bg-zinc-950 border border-zinc-800 focus:border-blue-600 text-white rounded-xl py-2.5 pl-9 pr-3 outline-none transition-colors text-sm"
+                                    className="w-full bg-zinc-950 border border-zinc-800 focus:border-teal-600 text-white rounded-xl py-2.5 pl-9 pr-3 outline-none transition-colors text-sm"
                                 />
                             </div>
                         </div>
@@ -227,7 +226,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                                 <button 
                                     type="button" 
                                     onClick={() => setView('forgot')}
-                                    className="text-[10px] text-blue-500 hover:text-blue-400 font-bold"
+                                    className="text-[10px] text-teal-500 hover:text-teal-400 font-bold"
                                 >
                                     Esqueceu?
                                 </button>
@@ -239,7 +238,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                                     value={password} 
                                     onChange={e => setPassword(e.target.value)}
                                     placeholder="••••••••" 
-                                    className="w-full bg-zinc-950 border border-zinc-800 focus:border-blue-600 text-white rounded-xl py-2.5 pl-9 pr-10 outline-none transition-colors text-sm"
+                                    className="w-full bg-zinc-950 border border-zinc-800 focus:border-teal-600 text-white rounded-xl py-2.5 pl-9 pr-10 outline-none transition-colors text-sm"
                                 />
                                 <button 
                                     type="button"
@@ -257,7 +256,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                         <button 
                             type="submit"
                             disabled={localLoading || isLoading}
-                            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 mt-2"
+                            className="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-teal-600/20 flex items-center justify-center gap-2 mt-2"
                         >
                             {localLoading ? <Loader2 className="animate-spin" size={18} /> : <>Entrar <ArrowRight size={18} /></>}
                         </button>
@@ -329,7 +328,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                                 value={email} 
                                 onChange={e => setEmail(e.target.value)}
                                 placeholder="seu@email.com" 
-                                className="w-full bg-zinc-950 border border-zinc-800 focus:border-blue-600 text-white rounded-xl py-2.5 pl-9 pr-3 outline-none transition-colors text-sm"
+                                className="w-full bg-zinc-950 border border-zinc-800 focus:border-teal-600 text-white rounded-xl py-2.5 pl-9 pr-3 outline-none transition-colors text-sm"
                             />
                         </div>
                     </div>
@@ -340,7 +339,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                     <button 
                         type="submit"
                         disabled={localLoading}
-                        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 mt-2"
+                        className="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-teal-600/20 flex items-center justify-center gap-2 mt-2"
                     >
                         {localLoading ? <Loader2 className="animate-spin" size={18} /> : <>Enviar Link <KeyRound size={18} /></>}
                     </button>
@@ -358,8 +357,8 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
             {/* REGISTER VIEW */}
             {view === 'register' && (
                 <form key="register-form" onSubmit={handleRegisterSubmit} className="space-y-3 animate-slide-up">
-                    <div className="bg-blue-900/10 p-3 rounded-lg border border-blue-900/30 mb-2">
-                        <p className="text-[10px] text-blue-300 leading-tight text-center">
+                    <div className="bg-teal-900/10 p-3 rounded-lg border border-teal-900/30 mb-2">
+                        <p className="text-[10px] text-teal-300 leading-tight text-center">
                             Você pode participar de vários ministérios com a mesma conta.
                         </p>
                     </div>
@@ -370,7 +369,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                             value={regName} 
                             onChange={e => setRegName(e.target.value)}
                             placeholder="Ex: João Silva" 
-                            className="w-full bg-zinc-950 border border-zinc-800 focus:border-blue-600 text-white rounded-lg py-2 px-3 text-sm"
+                            className="w-full bg-zinc-950 border border-zinc-800 focus:border-teal-600 text-white rounded-lg py-2 px-3 text-sm"
                         />
                     </div>
 
@@ -381,7 +380,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                             value={regEmail} 
                             onChange={e => setRegEmail(e.target.value)}
                             placeholder="Ex: joao@gmail.com" 
-                            className="w-full bg-zinc-950 border border-zinc-800 focus:border-blue-600 text-white rounded-lg py-2 px-3 text-sm"
+                            className="w-full bg-zinc-950 border border-zinc-800 focus:border-teal-600 text-white rounded-lg py-2 px-3 text-sm"
                         />
                     </div>
 
@@ -399,12 +398,12 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                                         onClick={() => toggleMinistry(m.id)}
                                         className={`flex items-center justify-between p-2 rounded-md border text-sm transition-all ${
                                             isSelected 
-                                            ? 'bg-blue-900/20 border-blue-500 text-blue-100' 
+                                            ? 'bg-teal-900/20 border-teal-500 text-teal-100' 
                                             : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800'
                                         }`}
                                     >
                                         <span>{m.label}</span>
-                                        {isSelected && <Check size={14} className="text-blue-500"/>}
+                                        {isSelected && <Check size={14} className="text-teal-500"/>}
                                     </button>
                                 );
                             })}
@@ -416,7 +415,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                         <div className="space-y-1 animate-fade-in">
                             <label className="text-[10px] uppercase text-zinc-500 font-bold flex justify-between">
                                 Suas Funções (Principal)
-                                {loadingRoles && <Loader2 size={12} className="animate-spin text-blue-500"/>}
+                                {loadingRoles && <Loader2 size={12} className="animate-spin text-teal-500"/>}
                             </label>
                             
                             {availableRoles.length > 0 ? (
@@ -430,7 +429,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                                                 onClick={() => toggleRole(role)}
                                                 className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 ${
                                                     isSelected 
-                                                    ? 'bg-blue-600 text-white border-blue-500 shadow-md shadow-blue-900/20' 
+                                                    ? 'bg-teal-600 text-white border-teal-500 shadow-md shadow-teal-900/20' 
                                                     : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:border-zinc-700'
                                                 }`}
                                             >
@@ -453,7 +452,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                             value={regPassword} 
                             onChange={e => setRegPassword(e.target.value)}
                             placeholder="Crie uma senha forte" 
-                            className="w-full bg-zinc-950 border border-zinc-800 focus:border-blue-600 text-white rounded-lg py-2 px-3 text-sm"
+                            className="w-full bg-zinc-950 border border-zinc-800 focus:border-teal-600 text-white rounded-lg py-2 px-3 text-sm"
                         />
                     </div>
 
@@ -469,9 +468,9 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                     <div className="text-center mt-3">
                         <p className="text-[10px] text-zinc-500">
                             Ao se cadastrar, você concorda com nossos <br/>
-                            <button type="button" onClick={() => setLegalDoc('terms')} className="text-blue-500 hover:underline">Termos de Uso</button>
+                            <button type="button" onClick={() => setLegalDoc('terms')} className="text-teal-500 hover:underline">Termos de Uso</button>
                             {' e '}
-                            <button type="button" onClick={() => setLegalDoc('privacy')} className="text-blue-500 hover:underline">Política de Privacidade</button>.
+                            <button type="button" onClick={() => setLegalDoc('privacy')} className="text-teal-500 hover:underline">Política de Privacidade</button>.
                         </p>
                     </div>
                 </form>

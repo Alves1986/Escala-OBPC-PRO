@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { User } from '../types';
 import { User as UserIcon, Mail, Hash, Briefcase, Save, Key, Camera, Image as ImageIcon, Check, Calendar, Shield, Sparkles } from 'lucide-react';
@@ -114,7 +112,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
       {/* Profile Header Card */}
       <div className="relative bg-white dark:bg-zinc-800 rounded-3xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden mb-6">
           {/* Cover Background */}
-          <div className="h-32 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 relative">
+          <div className="h-32 bg-gradient-to-r from-teal-600 via-emerald-600 to-teal-800 relative">
               <div className="absolute inset-0 bg-black/10"></div>
               <div className="absolute bottom-0 left-0 w-full h-16 bg-gradient-to-t from-black/20 to-transparent"></div>
           </div>
@@ -137,7 +135,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                         <Camera className="text-white drop-shadow-md" size={28} />
                       </div>
 
-                      <div className="absolute bottom-1 right-1 z-30 bg-blue-600 text-white p-2 rounded-full shadow-lg border-2 border-white dark:border-zinc-800 pointer-events-none">
+                      <div className="absolute bottom-1 right-1 z-30 bg-teal-600 text-white p-2 rounded-full shadow-lg border-2 border-white dark:border-zinc-800 pointer-events-none">
                         <Camera size={14} />
                       </div>
                   </div>
@@ -147,7 +145,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                   <div className="flex-1 text-center md:text-left mb-2">
                       <h1 className="text-2xl font-bold text-zinc-900 dark:text-white flex items-center justify-center md:justify-start gap-2">
                           {user.name} 
-                          {user.role === 'admin' && <Shield size={18} className="text-blue-500 fill-blue-500/20"/>}
+                          {user.role === 'admin' && <Shield size={18} className="text-teal-500 fill-teal-500/20"/>}
                       </h1>
                       <p className="text-zinc-500 dark:text-zinc-400 text-sm font-medium">
                           {user.role === 'admin' ? 'Administrador do Sistema' : 'Membro da Equipe'}
@@ -170,12 +168,12 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                       <div className="space-y-1.5">
                           <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 ml-1">Nome Completo</label>
                           <div className="relative group">
-                              <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-blue-500 transition-colors" size={18} />
+                              <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-teal-500 transition-colors" size={18} />
                               <input 
                                   type="text" 
                                   value={name} 
                                   onChange={e => setName(e.target.value)}
-                                  className="w-full pl-10 pr-4 py-3 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700/50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all text-zinc-800 dark:text-zinc-100 text-sm font-medium placeholder:text-zinc-400"
+                                  className="w-full pl-10 pr-4 py-3 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700/50 rounded-xl focus:ring-2 focus:ring-teal-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all text-zinc-800 dark:text-zinc-100 text-sm font-medium placeholder:text-zinc-400"
                                   placeholder="Como gostaria de ser chamado?"
                               />
                           </div>
@@ -227,7 +225,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
               <button 
                   type="submit" 
                   disabled={loading}
-                  className="hidden lg:flex w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-600/20 items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="hidden lg:flex w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-teal-600/20 items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
               >
                   {loading ? 'Salvando Alterações...' : <><Save size={20}/> Salvar Perfil</>}
               </button>
@@ -258,12 +256,12 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                                       onClick={() => toggleFunction(role)}
                                       className={`group relative px-4 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-2 ${
                                           isSelected 
-                                          ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 shadow-sm ring-1 ring-blue-500/20' 
+                                          ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-300 shadow-sm ring-1 ring-teal-500/20' 
                                           : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800'
                                       }`}
                                   >
                                       {role}
-                                      {isSelected && <Check size={14} className="text-blue-500" />}
+                                      {isSelected && <Check size={14} className="text-teal-500" />}
                                   </button>
                               );
                           })}
@@ -282,7 +280,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
               <button 
                   type="submit" 
                   disabled={loading}
-                  className="lg:hidden w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="lg:hidden w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-teal-600/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
               >
                   {loading ? 'Salvando...' : <><Save size={20}/> Salvar Perfil</>}
               </button>
