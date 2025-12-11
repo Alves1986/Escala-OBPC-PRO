@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { CalendarClock, User, CheckCircle2, Clock, MapPin, AlertCircle, ShieldCheck } from 'lucide-react';
 import { Role, AttendanceMap, User as UserType } from '../types';
+import { getLocalDateISOString } from '../utils/dateUtils';
 
 interface Props {
   event: { iso: string; dateDisplay: string; title: string } | undefined;
@@ -76,14 +78,9 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
 
   const team = getAssignedMembers();
 
-  // Checks if the event is today
+  // Checks if the event is today using Local Time String
   const isToday = () => {
-     const now = new Date();
-     const year = now.getFullYear();
-     const month = String(now.getMonth() + 1).padStart(2, '0');
-     const day = String(now.getDate()).padStart(2, '0');
-     const today = `${year}-${month}-${day}`;
-     
+     const today = getLocalDateISOString();
      const eventDate = event.iso.split('T')[0];
      return today === eventDate;
   };

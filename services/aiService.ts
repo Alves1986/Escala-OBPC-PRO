@@ -10,91 +10,115 @@ interface AIContext {
   ministryId: string;
 }
 
+// Helper para converter data ISO e status em formato curto: "05", "05(M)", "05(N)"
+const minifyAvailability = (isoDateString: string, contextMonthPrefix: string): string | null => {
+  if (!isoDateString.startsWith(contextMonthPrefix)) return null;
+  
+  const [datePart, suffix] = isoDateString.split('_'); // '2023-10-05', 'M'
+  const day = parseInt(datePart.split('-')[2], 10); // 5
+  
+  if (!suffix) return `${day}`;
+  return `${day}(${suffix})`; // 5(M) ou 5(N)
+};
+
+const prepareMinifiedContext = (context: AIContext) => {
+  // Assume que todos os eventos são do mesmo mês para otimização (padrão do app)
+  const firstEvent = context.events[0];
+  if (!firstEvent) return { events: [], members: [] };
+
+  const monthPrefix = firstEvent.iso.slice(0, 7); // "YYYY-MM"
+
+  // 1. Minificar Eventos: Envia apenas Dia, Hora e ID (ISO)
+  const minifiedEvents = context.events.map(e => ({
+    id: e.iso, // Chave necessária para resposta
+    d: parseInt(e.iso.split('T')[0].split('-')[2], 10), // Dia
+    h: parseInt(e.iso.split('T')[1].split(':')[0], 10)  // Hora (inteiro) para lógica M/N
+  }));
+
+  // 2. Minificar Membros
+  const minifiedMembers = context.members
+    // Filtro 1: Remove quem não tem nenhuma das roles solicitadas (economia de tokens)
+    .filter(m => m.roles && m.roles.some(r => context.roles.includes(r)))
+    .map(m => {
+      // Simplifica Disponibilidade
+      const rawAvail = context.availability[m.name] || [];
+      const days = rawAvail
+        .map(dateStr => minifyAvailability(dateStr, monthPrefix))
+        .filter((d): d is string => d !== null);
+
+      return {
+        nome: m.name,
+        funcoes: m.roles?.filter(r => context.roles.includes(r)) || [], // Apenas roles relevantes
+        dias: days // Ex: ["1", "5(M)", "12", "20(N)"]
+      };
+    });
+
+  return { 
+    month: monthPrefix,
+    e: minifiedEvents, 
+    m: minifiedMembers 
+  };
+};
+
 export const generateScheduleWithAI = async (context: AIContext): Promise<ScheduleMap | null> => {
-    // Acesso direto para garantir que o Vite faça a substituição estática corretamente
-    // @ts-ignore (Ignora erro de tipagem caso o ambiente não tenha types do vite configurados)
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY;
-    
-    if (!apiKey) {
-      throw new Error("Chave de API (VITE_GEMINI_API_KEY) não encontrada. Verifique suas variáveis de ambiente.");
-    }
-
+    // Guidelines: The API key must be obtained exclusively from the environment variable process.env.API_KEY.
+    // Assume this variable is pre-configured, valid, and accessible.
     try {
-      const ai = new GoogleGenAI({ apiKey: apiKey });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const { roles, ministryId } = context;
 
-      const { events, members, availability, roles, ministryId } = context;
+      // Prepara dados comprimidos
+      const inputData = prepareMinifiedContext(context);
 
-      // Prepara os dados de forma concisa para economizar tokens
-      const simplifiedMembers = members.map(m => ({
-        name: m.name,
-        roles: m.roles || [],
-        // Envia apenas as datas relevantes para o contexto atual para reduzir tamanho do prompt
-        availability: availability[m.name] || [] 
-      }));
+      if (inputData.e.length === 0 || inputData.m.length === 0) {
+          throw new Error("Dados insuficientes para gerar escala (sem eventos ou membros qualificados).");
+      }
 
+      // Instrução de Sistema Otimizada (Token Efficient)
       const systemInstruction = `
-        Você é um assistente especialista em gestão de escalas de voluntários para igrejas.
-        Sua tarefa é preencher uma escala (ScheduleMap) cruzando eventos, membros qualificados e disponibilidade.
-
-        REGRAS RÍGIDAS DE DISPONIBILIDADE:
-        1. O formato da disponibilidade é: "YYYY-MM-DD" (Dia todo), "YYYY-MM-DD_M" (Apenas Manhã), "YYYY-MM-DD_N" (Apenas Noite).
-        2. Analise a hora do evento (ISO String):
-           - Evento < 13:00 (Manhã): O membro PRECISA ter "YYYY-MM-DD" OU "YYYY-MM-DD_M". Se tiver "YYYY-MM-DD_N", é INDISPONÍVEL.
-           - Evento >= 13:00 (Noite): O membro PRECISA ter "YYYY-MM-DD" OU "YYYY-MM-DD_N". Se tiver "YYYY-MM-DD_M", é INDISPONÍVEL.
-        3. Se o membro não tiver a data na lista, é INDISPONÍVEL.
-        4. JAMAIS escale alguém indisponível.
-
-        REGRAS DE PREENCHIMENTO:
-        1. Balanceamento de Carga: Distribua a escala igualmente. Evite escalar a mesma pessoa repetidamente se houver opções. Líderes e Admins também entram na escala.
-        2. Respeito à Função: Só escale um membro se a função (role) estiver na lista dele.
-        3. Vagas Vazias: Tente preencher todos os espaços vazios possíveis com quem estiver disponível.
-
-        REGRA ESPECIAL DE 'VOCAL' (Apenas se ministério for 'louvor'):
-        - Se a função solicitada for 'Vocal', você deve preencher múltiplas vagas.
-        - Chaves esperadas: "_Vocal_1", "_Vocal_2", "_Vocal_3", "_Vocal_4", "_Vocal_5".
-        - Tente preencher pelo menos 3 vocais se houver disponibilidade.
-        - Para outros ministérios, use a role exata (ex: "_Câmera").
-
-        FORMATO DE SAÍDA (JSON PURO):
-        Retorne APENAS um objeto JSON válido.
-        Chave: "YYYY-MM-DDTHH:mm_Role" (Ex: "2023-10-01T19:30_Bateria" ou "2023-10-01T19:30_Vocal_1")
-        Valor: "Nome do Membro"
+        Role: Scheduler. Task: Assign members to events.
+        Ministry: ${ministryId}. Required Roles: ${JSON.stringify(roles)}.
+        
+        RULES:
+        1. Availability Format: "D" (All Day), "D(M)" (Morning only <13h), "D(N)" (Night only >=13h).
+        2. Logic: 
+           - Event Hour < 13: Accept "D" or "D(M)". Reject "D(N)".
+           - Event Hour >= 13: Accept "D" or "D(N)". Reject "D(M)".
+           - If day not listed, member is UNAVAILABLE.
+        3. Constraints:
+           - Member must have the specific role.
+           - Balance distribution.
+           - For 'louvor' & role 'Vocal', fill keys: "_Vocal_1", "_Vocal_2", etc. (min 3).
+           - For others, use exact role key (e.g., "_Bateria").
+        
+        OUTPUT: JSON Object only.
+        Key: "EventISO_Role" (Use original Event ISO from input).
+        Value: "MemberName".
       `;
-
-      const prompt = JSON.stringify({
-        ministryContext: ministryId,
-        eventsToFill: events,
-        requiredRoles: roles,
-        teamMembers: simplifiedMembers
-      });
 
       const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash',
-          contents: prompt,
+          contents: JSON.stringify(inputData), // Envia JSON minificado
           config: {
               systemInstruction: systemInstruction,
-              responseMimeType: "application/json"
+              responseMimeType: "application/json",
+              temperature: 0.2 // Baixa temperatura para seguir regras estritas
           }
       });
 
       const responseText = response.text;
       
       if (!responseText) {
-          throw new Error("A IA retornou uma resposta vazia.");
+          throw new Error("Resposta vazia da IA.");
       }
 
       const scheduleMap: ScheduleMap = JSON.parse(responseText);
       return scheduleMap;
 
     } catch (error: any) {
-      console.error("Erro detalhado ao gerar escala com IA:", error);
-      let msg = error.message || "Erro desconhecido na geração da escala.";
-      
-      if (msg.includes("Failed to fetch")) {
-          msg = "Erro de conexão (Failed to fetch). Verifique sua internet, se a API Key é válida ou se há bloqueadores de anúncio interferindo.";
-      }
-      
-      // Propaga o erro original para ser exibido no Toast
+      console.error("AI Service Error:", error);
+      let msg = error.message || "Erro na geração inteligente.";
+      if (msg.includes("400") || msg.includes("API key")) msg = "Erro de autenticação com a IA.";
       throw new Error(msg);
     }
 };

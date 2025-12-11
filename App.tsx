@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Calendar, CalendarCheck, RefreshCcw, Music, 
   Megaphone, Settings, FileBarChart, CalendarDays,
@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { ToastProvider, useToast } from './components/Toast';
 import { LoginScreen } from './components/LoginScreen';
+import { SetupScreen } from './components/SetupScreen';
 import { DashboardLayout } from './components/DashboardLayout';
 import { NextEventCard } from './components/NextEventCard';
 import { BirthdayCard } from './components/BirthdayCard';
@@ -33,24 +34,30 @@ import { ConfirmationModal } from './components/ConfirmationModal';
 import { EventsModal, AvailabilityModal, RolesModal } from './components/ManagementModals';
 
 import * as Supabase from './services/supabaseService';
-import { 
-  User, ScheduleMap, AttendanceMap, AvailabilityMap, 
-  AppNotification, Announcement, SwapRequest, RepertoireItem, 
-  TeamMemberProfile, MemberMap, Role,
-  GlobalConflictMap, ThemeMode
-} from './types';
-import { adjustMonth, getMonthName } from './utils/dateUtils';
+import { ThemeMode, SUPABASE_URL, SUPABASE_KEY } from './types';
+import { adjustMonth, getMonthName, getLocalDateISOString } from './utils/dateUtils';
 import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from './utils/pushUtils';
 
+// Novos Hooks
+import { useAuth } from './hooks/useAuth';
+import { useMinistryData } from './hooks/useMinistryData';
+
 const InnerApp = () => {
-  // --- AUTH & USER STATE ---
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [loadingAuth, setLoadingAuth] = useState(true);
+  // --- CONFIG CHECK ---
+  // Se não houver credenciais, exibe a tela de configuração
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+      return <SetupScreen />;
+  }
+
+  // --- CUSTOM HOOKS ---
+  const { currentUser, setCurrentUser, loadingAuth } = useAuth();
   
-  // --- APP STATE ---
+  // Local State for App Layout & UI
   const [ministryId, setMinistryId] = useState<string>('midia');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   
-  // Inicializa a aba baseada na URL ou padrão 'dashboard'
+  // Data State Initializers
+  const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
   const [currentTab, setCurrentTab] = useState(() => {
       if (typeof window !== 'undefined') {
           const params = new URLSearchParams(window.location.search);
@@ -59,38 +66,24 @@ const InnerApp = () => {
       return 'dashboard';
   });
 
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  
-  // --- THEME STATE ---
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
-      try {
-          const saved = localStorage.getItem('themeMode');
-          return (saved as ThemeMode) || 'system';
-      } catch (e) {
-          console.warn("LocalStorage access denied for themeMode");
-          return 'system';
-      }
-  });
-  const [visualTheme, setVisualTheme] = useState<'light' | 'dark'>('light');
-  
-  // --- DATA STATE ---
-  const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().slice(0, 7));
-  const [events, setEvents] = useState<any[]>([]);
-  const [schedule, setSchedule] = useState<ScheduleMap>({});
-  const [attendance, setAttendance] = useState<AttendanceMap>({});
-  const [membersMap, setMembersMap] = useState<MemberMap>({});
-  const [publicMembers, setPublicMembers] = useState<TeamMemberProfile[]>([]);
-  const [availability, setAvailability] = useState<AvailabilityMap>({});
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  const [repertoire, setRepertoire] = useState<RepertoireItem[]>([]);
-  const [swapRequests, setSwapRequests] = useState<SwapRequest[]>([]);
-  const [globalConflicts, setGlobalConflicts] = useState<GlobalConflictMap>({});
-  
-  // --- SETTINGS STATE ---
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [ministryTitle, setMinistryTitle] = useState("");
-  
+  // Load Main Data via Hook
+  const { 
+    events, setEvents,
+    schedule, setSchedule,
+    attendance, setAttendance,
+    membersMap, 
+    publicMembers, 
+    availability, setAvailability,
+    notifications, setNotifications,
+    announcements, 
+    repertoire, setRepertoire,
+    swapRequests, 
+    globalConflicts,
+    roles, 
+    ministryTitle, setMinistryTitle,
+    refreshData: loadData
+  } = useMinistryData(ministryId, currentMonth, currentUser);
+
   // --- UI MODALS STATE ---
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [showInstallModal, setShowInstallModal] = useState(false);
@@ -106,62 +99,66 @@ const InnerApp = () => {
 
   const { addToast, confirmAction } = useToast();
 
-  // --- SYNC TAB WITH URL ---
+  // --- THEME STATE ---
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
+      try {
+          const saved = localStorage.getItem('themeMode');
+          return (saved as ThemeMode) || 'system';
+      } catch (e) {
+          console.warn("LocalStorage access denied for themeMode");
+          return 'system';
+      }
+  });
+  const [visualTheme, setVisualTheme] = useState<'light' | 'dark'>('light');
+
+  // --- EFFECT: SYNC MINISTRY ID ---
+  useEffect(() => {
+      if (currentUser?.ministryId) {
+          setMinistryId(currentUser.ministryId);
+      }
+  }, [currentUser]);
+
+  // --- EFFECT: SYNC TAB WITH URL ---
   useEffect(() => {
       const url = new URL(window.location.href);
       if (url.searchParams.get('tab') !== currentTab) {
           url.searchParams.set('tab', currentTab);
-          // FIX: Wrap in try-catch to avoid Uncaught errors in restricted environments
           try {
             window.history.replaceState({}, '', url.toString());
-          } catch (e) {
-            // Ignore history update errors
-          }
+          } catch (e) {}
       }
   }, [currentTab]);
 
-  // --- THEME LOGIC ---
+  // --- EFFECT: PWA INSTALL ---
+  useEffect(() => {
+      const handlePwaReady = () => setShowInstallBanner(true);
+      window.addEventListener('pwa-ready', handlePwaReady);
+      return () => window.removeEventListener('pwa-ready', handlePwaReady);
+  }, []);
+
+  // --- EFFECT: THEME LOGIC ---
   useEffect(() => {
     const applyTheme = () => {
         let targetTheme: 'light' | 'dark' = 'light';
-
         if (themeMode === 'system') {
             const hour = new Date().getHours();
-            // Regra: Até as 18h (e após as 6h) é light, caso contrário dark
-            if (hour >= 6 && hour < 18) {
-                targetTheme = 'light';
-            } else {
-                targetTheme = 'dark';
-            }
+            if (hour >= 6 && hour < 18) targetTheme = 'light';
+            else targetTheme = 'dark';
         } else {
             targetTheme = themeMode;
         }
-
         setVisualTheme(targetTheme);
-        
-        if (targetTheme === 'dark') {
-            document.documentElement.classList.add('dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-        }
+        if (targetTheme === 'dark') document.documentElement.classList.add('dark');
+        else document.documentElement.classList.remove('dark');
     };
-
     applyTheme();
-
     let interval: any;
-    if (themeMode === 'system') {
-        interval = setInterval(applyTheme, 60000);
-    }
-
-    return () => {
-        if (interval) clearInterval(interval);
-    };
+    if (themeMode === 'system') interval = setInterval(applyTheme, 60000);
+    return () => { if (interval) clearInterval(interval); };
   }, [themeMode]);
 
-  const handleSetThemeMode = (mode: ThemeMode) => {
-      setThemeMode(mode);
-  };
-
+  const handleSetThemeMode = (mode: ThemeMode) => setThemeMode(mode);
+  
   const handleSaveTheme = () => {
       try {
           localStorage.setItem('themeMode', themeMode);
@@ -172,231 +169,11 @@ const InnerApp = () => {
   };
 
   const toggleVisualTheme = () => {
-      if (themeMode === 'system') {
-          setThemeMode(visualTheme === 'light' ? 'dark' : 'light');
-      } else {
-          setThemeMode(themeMode === 'light' ? 'dark' : 'light');
-      }
+      if (themeMode === 'system') setThemeMode(visualTheme === 'light' ? 'dark' : 'light');
+      else setThemeMode(themeMode === 'light' ? 'dark' : 'light');
   };
 
-  // --- INITIALIZATION ---
-  useEffect(() => {
-    const sb = Supabase.getSupabase();
-    if (!sb) {
-        setLoadingAuth(false);
-        return;
-    }
-
-    const handleUserSession = async (session: any) => {
-        const user = session?.user;
-
-        if (!user) {
-            setCurrentUser(null);
-            setLoadingAuth(false);
-            return;
-        }
-
-        try {
-            // Tenta buscar o perfil
-            let { data: profile } = await sb.from('profiles').select('*').eq('id', user.id).single();
-            
-            // FIX CRÍTICO: Se o perfil não existir (ex: primeiro login Google), cria um na hora.
-            // Isso impede que o usuário fique num "limbo" logado mas sem acesso.
-            if (!profile) {
-                console.log("Perfil não encontrado, criando novo para:", user.email);
-                
-                const defaultMinistry = 'midia';
-                const newProfile = {
-                    id: user.id,
-                    email: user.email,
-                    name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Novo Membro',
-                    avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture,
-                    ministry_id: defaultMinistry,
-                    allowed_ministries: [defaultMinistry],
-                    role: 'member',
-                    created_at: new Date().toISOString()
-                };
-
-                const { error: insertError } = await sb.from('profiles').insert(newProfile);
-                
-                if (!insertError) {
-                    profile = newProfile;
-                } else {
-                    console.error("Falha ao criar perfil automático:", insertError);
-                    // Fallback visual para não bloquear o acesso
-                    profile = newProfile;
-                }
-            }
-
-            if (profile) {
-                const userMinistry = profile.ministry_id || 'midia';
-                
-                let isUserAdmin = profile.is_admin;
-                if (user.email === 'cassia.andinho@gmail.com') {
-                    isUserAdmin = true;
-                    if (!profile.is_admin) {
-                         Supabase.toggleAdminSQL(user.email, true).catch(console.error);
-                    }
-                }
-
-                setMinistryId(userMinistry);
-                setCurrentUser({
-                    id: profile.id,
-                    name: profile.name,
-                    email: profile.email,
-                    role: isUserAdmin ? 'admin' : 'member',
-                    ministryId: userMinistry,
-                    allowedMinistries: profile.allowed_ministries || [userMinistry],
-                    avatar_url: profile.avatar_url,
-                    whatsapp: profile.whatsapp,
-                    birthDate: profile.birth_date,
-                    functions: profile.functions || []
-                });
-            }
-        } catch (e) {
-            console.error("Erro ao carregar perfil:", e);
-        } finally {
-            setLoadingAuth(false);
-        }
-    };
-
-    // 1. Check Session directly (Faster & Handles Redirect URL hash)
-    sb.auth.getSession().then(({ data: { session } }) => {
-        handleUserSession(session);
-    });
-
-    // 2. Listen for changes
-    const { data: { subscription } } = sb.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-            setLoadingAuth(true); 
-            handleUserSession(session);
-        } else if (event === 'SIGNED_OUT') {
-            setCurrentUser(null);
-            setLoadingAuth(false);
-        }
-    });
-      
-    window.addEventListener('pwa-ready', () => setShowInstallBanner(true));
-
-    return () => {
-        subscription.unsubscribe();
-    };
-  }, []);
-
-  const loadData = useCallback(async () => {
-    if (!currentUser || !ministryId) return;
-
-    // Chave única para o cache baseada no ministério e mês atual
-    const CACHE_KEY = `offline_data_${ministryId}_${currentMonth}`;
-
-    try {
-        // Carregamento paralelo de dados otimizado com Promise.all
-        const [
-            settings,
-            schedData,
-            membersData,
-            availData,
-            notifs,
-            ann,
-            swaps,
-            rep,
-            conflicts
-        ] = await Promise.all([
-            Supabase.fetchMinistrySettings(ministryId),
-            Supabase.fetchMinistrySchedule(ministryId, currentMonth),
-            Supabase.fetchMinistryMembers(ministryId),
-            Supabase.fetchMinistryAvailability(ministryId),
-            Supabase.fetchNotificationsSQL(ministryId, currentUser.id!),
-            Supabase.fetchAnnouncementsSQL(ministryId),
-            Supabase.fetchSwapRequests(ministryId),
-            Supabase.fetchRepertoire(ministryId),
-            Supabase.fetchGlobalSchedules(currentMonth, ministryId)
-        ]);
-
-        // 1. Atualização de estado em lote (Dados da Nuvem)
-        setMinistryTitle(settings.displayName || ministryId.charAt(0).toUpperCase() + ministryId.slice(1));
-        setRoles(settings.roles);
-
-        setEvents(schedData.events);
-        setSchedule(schedData.schedule);
-        setAttendance(schedData.attendance);
-
-        setMembersMap(membersData.memberMap);
-        setPublicMembers(membersData.publicList);
-
-        setAvailability(availData);
-
-        setNotifications(notifs);
-        setAnnouncements(ann);
-
-        setSwapRequests(swaps);
-        setRepertoire(rep);
-        
-        setGlobalConflicts(conflicts);
-
-        // 2. Salvar no Cache Local (Sucesso)
-        try {
-            localStorage.setItem(CACHE_KEY, JSON.stringify({
-                timestamp: Date.now(),
-                settings,
-                schedData,
-                membersData,
-                availData,
-                notifs,
-                ann,
-                swaps,
-                rep,
-                conflicts
-            }));
-        } catch (e) {
-            console.warn("Não foi possível salvar cache offline.");
-        }
-
-    } catch (error) {
-        console.error("Erro ao carregar dados online:", error);
-
-        // 3. Fallback: Tentar carregar do Cache
-        try {
-            const cachedRaw = localStorage.getItem(CACHE_KEY);
-            
-            if (cachedRaw) {
-                const cached = JSON.parse(cachedRaw);
-                
-                setMinistryTitle(cached.settings.displayName || ministryId.charAt(0).toUpperCase() + ministryId.slice(1));
-                setRoles(cached.settings.roles);
-
-                setEvents(cached.schedData.events);
-                setSchedule(cached.schedData.schedule);
-                setAttendance(cached.schedData.attendance);
-
-                setMembersMap(cached.membersData.memberMap);
-                setPublicMembers(cached.membersData.publicList);
-
-                setAvailability(cached.availData);
-
-                setNotifications(cached.notifs);
-                setAnnouncements(cached.ann);
-
-                setSwapRequests(cached.swaps);
-                setRepertoire(cached.rep);
-                
-                setGlobalConflicts(cached.conflicts);
-
-                addToast("Modo Offline: Exibindo dados salvos localmente.", "warning");
-                return; 
-            }
-        } catch (e) {
-            console.error("Erro ao acessar cache:", e);
-        }
-
-        addToast("Erro de conexão e sem dados locais.", "error");
-    }
-
-  }, [currentUser, ministryId, currentMonth, addToast]);
-
-  useEffect(() => {
-     loadData();
-  }, [loadData]);
+  // --- ACTION HANDLERS ---
 
   const handleLogout = () => {
     confirmAction(
@@ -405,9 +182,7 @@ const InnerApp = () => {
       async () => {
         await Supabase.logout();
         setCurrentUser(null);
-        try {
-            window.history.replaceState(null, '', '/');
-        } catch(e) {}
+        try { window.history.replaceState(null, '', '/'); } catch(e) {}
       }
     );
   };
@@ -435,9 +210,7 @@ const InnerApp = () => {
       if (promptEvent) {
           promptEvent.prompt();
           promptEvent.userChoice.then((choiceResult: any) => {
-              if (choiceResult.outcome === 'accepted') {
-                  console.log('User accepted PWA install');
-              }
+              if (choiceResult.outcome === 'accepted') console.log('User accepted PWA install');
               setShowInstallBanner(false);
           });
       } else {
@@ -447,48 +220,27 @@ const InnerApp = () => {
 
   const handleCellChange = async (key: string, value: string) => {
       let keyToRemove: string | null = null;
-      
-      // Lógica de Deslocamento: Se membro já está em outra função neste evento, removemos da anterior
       if (value) {
-          // Extrai o ISO do evento (YYYY-MM-DDTHH:mm sempre tem 16 caracteres)
           const eventIso = key.substring(0, 16);
-
-          // Procura se esse membro já está escalado em OUTRA função neste MESMO evento
           Object.entries(schedule).forEach(([k, val]) => {
               if (k.startsWith(eventIso) && k !== key) {
-                  if (val === value) {
-                      keyToRemove = k; // Encontrou duplicidade no mesmo evento
-                  }
+                  if (val === value) keyToRemove = k; 
               }
           });
       }
 
-      // Atualização Otimista da UI
       setSchedule(prev => {
           const next = { ...prev };
-          
-          if (keyToRemove) {
-              delete next[keyToRemove];
-          }
-
-          if (value) {
-              next[key] = value;
-          } else {
-              delete next[key];
-          }
+          if (keyToRemove) delete next[keyToRemove];
+          if (value) next[key] = value; else delete next[key];
           return next;
       });
 
-      // Executa remoção no banco se houver deslocamento
-      if (keyToRemove) {
-          await Supabase.saveScheduleAssignment(ministryId, keyToRemove, "");
-      }
-
-      // Salva a nova atribuição
+      if (keyToRemove) await Supabase.saveScheduleAssignment(ministryId, keyToRemove, "");
       const success = await Supabase.saveScheduleAssignment(ministryId, key, value);
       if (!success) {
           addToast("Erro ao salvar escala.", "error");
-          loadData(); // Reverte em caso de falha
+          loadData();
       }
   };
 
@@ -505,52 +257,25 @@ const InnerApp = () => {
   };
 
   const handleEnableNotifications = async () => {
-      // 1. Verificação básica de suporte
-      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-          throw new Error("Seu navegador não suporta notificações Push.");
-      }
-
-      // 2. Verificação de Permissão Bloqueada (Falha rápida com instrução clara)
-      if (Notification.permission === 'denied') {
-          throw new Error("Permissão bloqueada. 1. Clique no cadeado na URL. 2. Permita Notificações. 3. RECARREGUE a página.");
-      }
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error("Seu navegador não suporta notificações Push.");
+      if (Notification.permission === 'denied') throw new Error("Permissão bloqueada. Clique no cadeado na URL e permita notificações.");
 
       try {
-          // 3. Garantir que o Service Worker está registrado e ATIVO
-          // Se já existir, pegamos. Se não, registramos.
           let registration = await navigator.serviceWorker.getRegistration();
-          if (!registration) {
-             registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-          }
+          if (!registration) registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
 
-          // 4. Aguardar o SW estar PRONTO (Ativo)
-          // navigator.serviceWorker.ready resolve quando há um SW ativo para a página.
-          // Usamos um timeout de segurança para não travar a UI se o browser encrencar.
           const timeoutPromise = new Promise((_, reject) => 
-              setTimeout(() => reject(new Error("Service Worker demorou para responder. Verifique sua conexão.")), 10000)
+              setTimeout(() => reject(new Error("Service Worker demorou para responder.")), 10000)
           );
 
-          const readyRegistration = await Promise.race([
-              navigator.serviceWorker.ready,
-              timeoutPromise
-          ]) as ServiceWorkerRegistration;
+          const readyRegistration = await Promise.race([navigator.serviceWorker.ready, timeoutPromise]) as ServiceWorkerRegistration;
 
-          // 5. Solicitar Permissão ao Usuário (se ainda não concedida)
           if (Notification.permission === 'default') {
               const permission = await Notification.requestPermission();
-              if (permission !== 'granted') {
-                  throw new Error("Permissão negada pelo usuário.");
-              }
+              if (permission !== 'granted') throw new Error("Permissão negada pelo usuário.");
           }
 
-          // Verificação dupla
-          if (Notification.permission !== 'granted') {
-              throw new Error("Permissão não concedida.");
-          }
-
-          // 6. Criar ou Recuperar Inscrição (Subscription)
           let subscription = await readyRegistration.pushManager.getSubscription();
-          
           if (!subscription) {
               subscription = await readyRegistration.pushManager.subscribe({
                   userVisibleOnly: true,
@@ -558,29 +283,19 @@ const InnerApp = () => {
               });
           }
 
-          // 7. Salvar no Banco de Dados
           if (subscription) {
               await Supabase.saveSubscriptionSQL(ministryId, subscription);
-              
-              // Tenta enviar notificação de teste imediatamente
               try {
-                  const testRes = await Supabase.testPushNotification(ministryId);
-                  if (testRes.success) {
-                      addToast("Notificações ativadas com sucesso!", "success");
-                  } else {
-                      addToast("Ativado, mas o teste falhou: " + testRes.message, "warning");
-                  }
+                  await Supabase.testPushNotification(ministryId);
+                  addToast("Notificações ativadas!", "success");
               } catch (e) {
                   addToast("Notificações ativadas! (Teste ignorado)", "success");
               }
           }
-
       } catch(e: any) {
           console.error("Push Error:", e);
-          let msg = e.message || "Erro desconhecido ao ativar notificações.";
-          if (msg.includes("no active Service Worker")) msg = "Erro interno no navegador. Tente recarregar a página.";
-          addToast(msg, "error");
-          throw e; // Lança o erro para parar o spinner no componente SettingsScreen
+          addToast(e.message || "Erro ao ativar notificações.", "error");
+          throw e; 
       }
   };
 
@@ -1144,7 +859,6 @@ const InnerApp = () => {
               loadData();
           }}
           onRemove={async (id) => {
-             // Implementation depends on how we track ID in EventsModal, assume we reload
              loadData();
           }}
         />

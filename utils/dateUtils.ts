@@ -1,6 +1,16 @@
 
 import { CustomEvent } from '../types';
 
+// Retorna a data atual no formato YYYY-MM-DD respeitando o fuso horário local do navegador.
+// Corrige o bug onde new Date().toISOString() retornava o dia seguinte após as 21h (UTC-3).
+export const getLocalDateISOString = (): string => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export const getMonthName = (monthIso: string) => {
   if (!monthIso) return "";
   const [y, m] = monthIso.split("-").map(Number);

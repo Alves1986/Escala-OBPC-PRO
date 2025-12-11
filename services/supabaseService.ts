@@ -459,6 +459,26 @@ export const interactAnnouncementSQL = async (announcementId: string, userId: st
 // --- ADMIN MANAGEMENT (SQL) ---
 export const toggleAdminSQL = async (email: string, setAdmin: boolean) => {
     if (!supabase) return;
+
+    // SECURITY CHECK: Verify if current user is admin before executing update
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+        console.error("No active session.");
+        return;
+    }
+
+    const { data: requesterProfile } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', user.id)
+        .single();
+
+    if (!requesterProfile?.is_admin) {
+        console.error("Unauthorized: Only admins can perform this action.");
+        return;
+    }
+
+    // Perform Update
     await supabase.from('profiles').update({ is_admin: setAdmin }).eq('email', email);
 };
 

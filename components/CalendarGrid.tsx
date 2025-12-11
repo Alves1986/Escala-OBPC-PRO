@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { ScheduleMap, Role } from '../types';
+import { getLocalDateISOString } from '../utils/dateUtils';
 
 interface Props {
   currentMonth: string;
@@ -37,7 +38,9 @@ export const CalendarGrid: React.FC<Props> = ({ currentMonth, events, schedule, 
         {days.map(day => {
           const dayEvents = getEventsForDay(day);
           const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
-          const isToday = new Date().toISOString().split('T')[0] === dateStr;
+          
+          // Use getLocalDateISOString for correct "Today" comparison respecting timezone
+          const isToday = getLocalDateISOString() === dateStr;
           
           return (
              <div key={day} className={`min-h-[100px] bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-zinc-100 dark:border-zinc-800 p-2 flex flex-col transition-all hover:border-zinc-300 dark:hover:border-zinc-600 ${isToday ? 'ring-2 ring-blue-500 bg-blue-50/10' : ''}`}>
