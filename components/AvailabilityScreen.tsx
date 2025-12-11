@@ -212,34 +212,53 @@ export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailabil
 
         {selectedMember ? (
           <div className="animate-slide-up pb-20">
-            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 sm:gap-3">
+            {/* Cabeçalho dos dias da semana (Visível apenas em telas maiores que mobile) */}
+            <div className="hidden sm:grid sm:grid-cols-7 gap-3 mb-2">
                 {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => (
                     <div key={i} className="text-center text-xs font-bold text-zinc-400 uppercase py-2">{d}</div>
                 ))}
-                {Array.from({ length: new Date(year, month - 1, 1).getDay() }).map((_, i) => <div key={`empty-${i}`} />)}
+            </div>
+
+            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 sm:gap-3">
+                {/* Espaços em branco para alinhar o primeiro dia (Apenas Desktop) */}
+                {Array.from({ length: new Date(year, month - 1, 1).getDay() }).map((_, i) => (
+                    <div key={`empty-${i}`} className="hidden sm:block" />
+                ))}
                 
                 {days.map(day => {
-                const status = getDayStatus(day);
-                const isSelectedAvailable = status !== null;
+                    const status = getDayStatus(day);
+                    const isSelectedAvailable = status !== null;
+                    const dateObj = new Date(year, month - 1, day);
+                    const weekDayShort = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' }).substring(0, 3).toUpperCase();
 
-                // Estilos baseados no tipo de disponibilidade
-                let bgClass = 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700';
-                if (status === 'BOTH') bgClass = 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-green-500/30 ring-2 ring-green-400 dark:ring-green-600';
-                if (status === 'M') bgClass = 'bg-gradient-to-br from-orange-400 to-amber-500 text-white shadow-orange-500/30 ring-2 ring-orange-400';
-                if (status === 'N') bgClass = 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-indigo-500/30 ring-2 ring-indigo-400';
+                    // Estilos baseados no tipo de disponibilidade
+                    let bgClass = 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700';
+                    if (status === 'BOTH') bgClass = 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-green-500/30 ring-2 ring-green-400 dark:ring-green-600';
+                    if (status === 'M') bgClass = 'bg-gradient-to-br from-orange-400 to-amber-500 text-white shadow-orange-500/30 ring-2 ring-orange-400';
+                    if (status === 'N') bgClass = 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-indigo-500/30 ring-2 ring-indigo-400';
 
-                return (
-                    <button
-                    key={day}
-                    onClick={() => handleToggleDate(day)}
-                    className={`aspect-square flex flex-col items-center justify-center rounded-xl text-lg font-bold transition-all shadow-sm relative overflow-hidden group ${bgClass} ${isSelectedAvailable ? 'scale-100 z-10' : ''}`}
-                    >
-                    <span className="relative z-10">{day}</span>
-                    {status === 'BOTH' && <CheckCircle2 size={16} className="absolute top-1 right-1 opacity-50" />}
-                    {status === 'M' && <Sun size={16} className="absolute top-1 right-1 opacity-70" />}
-                    {status === 'N' && <Moon size={16} className="absolute top-1 right-1 opacity-70" />}
-                    </button>
-                )
+                    return (
+                        <button
+                            key={day}
+                            onClick={() => handleToggleDate(day)}
+                            className={`aspect-square flex flex-col items-center justify-center rounded-xl transition-all shadow-sm relative overflow-hidden group ${bgClass} ${isSelectedAvailable ? 'scale-100 z-10' : ''}`}
+                        >
+                            {/* Mostra dia da semana apenas no mobile (quando grid não é de 7 colunas) */}
+                            <span className="text-[10px] font-bold uppercase opacity-60 sm:hidden mb-0.5">{weekDayShort}</span>
+                            <span className="text-lg sm:text-lg font-bold relative z-10 leading-none">{day}</span>
+                            
+                            {status === 'BOTH' && <CheckCircle2 size={16} className="absolute top-1 right-1 opacity-50 hidden sm:block" />}
+                            {status === 'M' && <Sun size={16} className="absolute top-1 right-1 opacity-70 hidden sm:block" />}
+                            {status === 'N' && <Moon size={16} className="absolute top-1 right-1 opacity-70 hidden sm:block" />}
+                            
+                            {/* Ícones Mobile (Centralizados abaixo do número) */}
+                            <div className="sm:hidden mt-1">
+                                {status === 'BOTH' && <CheckCircle2 size={12} className="opacity-80" />}
+                                {status === 'M' && <Sun size={12} className="opacity-80" />}
+                                {status === 'N' && <Moon size={12} className="opacity-80" />}
+                            </div>
+                        </button>
+                    )
                 })}
             </div>
             
