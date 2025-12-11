@@ -13,13 +13,14 @@ export default defineConfig(({ mode }) => {
     // Importante: Permite que o Vite leia variáveis de ambiente iniciadas com NEXT_PUBLIC_
     envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
     define: {
-      // Define explicitamente as variáveis críticas para garantir que existam no runtime
-      // mesmo se o import.meta.env falhar devido a polyfills
-      'process.env.API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY || env.API_KEY || ''),
-      'process.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL || ''),
-      'process.env.VITE_SUPABASE_KEY': JSON.stringify(env.VITE_SUPABASE_KEY || ''),
+      // Defines globais para injetar valores de ambiente de forma segura
+      '__SUPABASE_URL__': JSON.stringify(env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || ''),
+      '__SUPABASE_KEY__': JSON.stringify(env.VITE_SUPABASE_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''),
       
-      // Polyfill básico para 'process' para evitar erros de bibliotecas
+      // Define process.env.API_KEY para o SDK do Google GenAI
+      'process.env.API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY || env.API_KEY || ''),
+      
+      // Polyfill básico para 'process' para evitar erros de bibliotecas que acessam process.env
       'process.env': {},
     },
     build: {

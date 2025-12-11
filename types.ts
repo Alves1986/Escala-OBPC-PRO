@@ -170,6 +170,10 @@ export const DEFAULT_ROLES: Record<string, string[]> = {
 // SECURITY CONFIGURATION
 // ============================================================================
 
+// Globals injected by Vite
+declare const __SUPABASE_URL__: string;
+declare const __SUPABASE_KEY__: string;
+
 const getLocal = (key: string) => {
   if (typeof localStorage !== 'undefined') {
     return localStorage.getItem(key);
@@ -177,38 +181,35 @@ const getLocal = (key: string) => {
   return null;
 };
 
-// Safe Environment Variable Access
-let env_url = '';
-let env_key = '';
+// 1. Try Injected Globals (Build-time env vars)
+let injectedUrl = '';
+let injectedKey = '';
+try {
+    if (typeof __SUPABASE_URL__ !== 'undefined') injectedUrl = __SUPABASE_URL__;
+    if (typeof __SUPABASE_KEY__ !== 'undefined') injectedKey = __SUPABASE_KEY__;
+} catch(e) {}
 
-// Tenta pegar via import.meta.env (Padrão Vite)
+// 2. Try import.meta.env (Vite Standard)
+let metaUrl = '';
+let metaKey = '';
 try {
   // @ts-ignore
   const meta = import.meta;
   if (meta && meta.env) {
-    env_url = meta.env.VITE_SUPABASE_URL;
-    env_key = meta.env.VITE_SUPABASE_KEY;
+    metaUrl = meta.env.VITE_SUPABASE_URL;
+    metaKey = meta.env.VITE_SUPABASE_KEY;
   }
 } catch (e) {}
 
-// Tenta pegar via process.env (Injetado via Vite Config como Fallback)
-let process_url = '';
-let process_key = '';
-try {
-    // @ts-ignore
-    if (typeof process !== 'undefined' && process.env) {
-        // @ts-ignore
-        process_url = process.env.VITE_SUPABASE_URL;
-        // @ts-ignore
-        process_key = process.env.VITE_SUPABASE_KEY;
-    }
-} catch(e) {}
+// 3. Try LocalStorage (User entered)
+const localUrl = getLocal('VITE_SUPABASE_URL');
+const localKey = getLocal('VITE_SUPABASE_KEY');
 
-// Prioridade: LocalStorage > Vite Env > Process Env > Vazio
-export const SUPABASE_URL = getLocal('VITE_SUPABASE_URL') || env_url || process_url || "";
-export const SUPABASE_KEY = getLocal('VITE_SUPABASE_KEY') || env_key || process_key || "";
+// Priority: LocalStorage (Manual Override) > Injected Globals > Import Meta
+export const SUPABASE_URL = localUrl || injectedUrl || metaUrl || "";
+export const SUPABASE_KEY = localKey || injectedKey || metaKey || "";
 
 // Debug Log (Opcional - pode remover em produção)
 if ((!SUPABASE_URL || !SUPABASE_KEY) && typeof window !== 'undefined' && window.location.pathname !== '/setup') {
-  console.warn("⚠️ Sistema aguardando credenciais. Verifique o arquivo .env na raiz.");
+  console.warn("⚠️ Sistema aguardando credenciais. Verifique o arquivo .env na raiz ou configure manualmente.");
 }
