@@ -178,24 +178,35 @@ const getLocal = (key: string) => {
 };
 
 // Safe Environment Variable Access
-// This logic prevents the "Cannot read properties of undefined (reading 'VITE_SUPABASE_URL')" error
 let env_url = '';
 let env_key = '';
 
+// Tenta pegar via import.meta.env (Padrão Vite)
 try {
   // @ts-ignore
   const meta = import.meta;
-  // Ensure meta.env exists before accessing properties on it
   if (meta && meta.env) {
     env_url = meta.env.VITE_SUPABASE_URL;
     env_key = meta.env.VITE_SUPABASE_KEY;
   }
-} catch (e) {
-  // Silent catch for environments where import.meta is not available or restricted
-}
+} catch (e) {}
 
-export const SUPABASE_URL = getLocal('VITE_SUPABASE_URL') || env_url || "";
-export const SUPABASE_KEY = getLocal('VITE_SUPABASE_KEY') || env_key || "";
+// Tenta pegar via process.env (Injetado via Vite Config como Fallback)
+let process_url = '';
+let process_key = '';
+try {
+    // @ts-ignore
+    if (typeof process !== 'undefined' && process.env) {
+        // @ts-ignore
+        process_url = process.env.VITE_SUPABASE_URL;
+        // @ts-ignore
+        process_key = process.env.VITE_SUPABASE_KEY;
+    }
+} catch(e) {}
+
+// Prioridade: LocalStorage > Vite Env > Process Env > Vazio
+export const SUPABASE_URL = getLocal('VITE_SUPABASE_URL') || env_url || process_url || "";
+export const SUPABASE_KEY = getLocal('VITE_SUPABASE_KEY') || env_key || process_key || "";
 
 // Debug Log (Opcional - pode remover em produção)
 if ((!SUPABASE_URL || !SUPABASE_KEY) && typeof window !== 'undefined' && window.location.pathname !== '/setup') {
