@@ -472,6 +472,63 @@ const InnerApp = () => {
       }
   };
 
+  const handleEnableNotifications = async () => {
+      // 1. Verifica Suporte do Navegador
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+          addToast("Seu navegador não suporta notificações Push.", "error");
+          return;
+      }
+
+      // 2. Verifica Estado da Permissão
+      // Se estiver 'denied', o navegador bloqueia qualquer tentativa programática.
+      // A única solução é o usuário alterar manualmente nas configurações.
+      if (Notification.permission === 'denied') {
+          addToast("Permissão bloqueada pelo navegador. Redefina as permissões do site (ícone de cadeado) e recarregue a página.", "error");
+          return;
+      }
+
+      try {
+          // 3. Solicita Permissão se necessário
+          if (Notification.permission === 'default') {
+              const permission = await Notification.requestPermission();
+              if (permission !== 'granted') {
+                  addToast("Permissão negada. Ative para receber avisos.", "warning");
+                  return;
+              }
+          }
+
+          // 4. Garante que o Service Worker está registrado e ATIVO
+          // Registra explicitamente para garantir o escopo correto
+          const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+          await navigator.serviceWorker.ready;
+
+          // 5. Gerencia a Subscrição
+          let subscription = await registration.pushManager.getSubscription();
+
+          // Se não existir, cria uma nova
+          if (!subscription) {
+              subscription = await registration.pushManager.subscribe({
+                  userVisibleOnly: true,
+                  applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+              });
+          }
+
+          // 6. Sincroniza com o Banco de Dados
+          if (subscription) {
+              await Supabase.saveSubscriptionSQL(ministryId, subscription);
+              addToast("Notificações ativadas com sucesso!", "success");
+          }
+
+      } catch(e: any) {
+          console.error("Erro Push:", e);
+          let msg = "Erro ao ativar notificações.";
+          if (e.message && e.message.includes("no active Service Worker")) {
+             msg = "Erro no Service Worker. Tente recarregar a página.";
+          }
+          addToast(msg, "error");
+      }
+  };
+
   if (loadingAuth) {
       return (
           <div className="flex h-screen w-full items-center justify-center bg-zinc-950 text-white">
@@ -985,32 +1042,7 @@ const InnerApp = () => {
                     });
                     addToast("Notificação de atualização enviada.", "success");
                 }}
-                onEnableNotifications={async () => {
-                    // Logic to request Push Permission
-                    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-                        addToast("Seu navegador não suporta notificações Push.", "error");
-                        throw new Error("Push API not supported");
-                    }
-
-                    if (Notification.permission === 'denied') {
-                        addToast("Permissão negada. Ative nas configurações do navegador.", "error");
-                        return; // Return early, don't throw to avoid crash
-                    }
-
-                    try {
-                        const registration = await navigator.serviceWorker.ready;
-                        const sub = await registration.pushManager.subscribe({
-                            userVisibleOnly: true,
-                            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-                        });
-                        await Supabase.saveSubscriptionSQL(ministryId, sub);
-                        addToast("Dispositivo Sincronizado!", "success");
-                    } catch(e: any) {
-                        console.error(e);
-                        addToast("Erro ao ativar: " + e.message, "error");
-                        throw e; // Repassa erro para botão parar loading
-                    }
-                }}
+                onEnableNotifications={handleEnableNotifications}
                 isAdmin={isAdmin}
             />
         )}
@@ -1116,7 +1148,7 @@ const InnerApp = () => {
                 allMembers={publicMembers}
                 onSave={async (oldIso, newTitle, newTime, applyToAll) => {
                     const newIso = oldIso.split('T')[0] + 'T' + newTime;
-                    await Supabase.updateMinistryEvent(ministryId, oldIso, newTitle, newIso);
+                    await Supabase.updateMinistryEvent(ministryId, oldIso, newTitle, newIso, applyToAll);
                     loadData();
                     setEventDetailsModal({ isOpen: false, event: null });
                     addToast("Evento atualizado.", "success");

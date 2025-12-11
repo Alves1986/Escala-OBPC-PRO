@@ -95,7 +95,7 @@ self.addEventListener('notificationclick', function(event) {
       // Tenta focar em uma janela já aberta
       for (var i = 0; i < clientList.length; i++) {
         var client = clientList[i];
-        if (client.url && 'focus' in client) {
+        if (client.url === urlToOpen && 'focus' in client) {
           return client.focus();
         }
       }

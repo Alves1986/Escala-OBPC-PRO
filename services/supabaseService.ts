@@ -479,18 +479,33 @@ export const saveSubscriptionSQL = async (ministryId: string, sub: PushSubscript
     const { data: { user } } = await supabase.auth.getUser();
     if(!user) return;
 
+    // Gerar ou recuperar Device ID único com fallback
+    let deviceId = localStorage.getItem('device_id');
+    if (!deviceId) {
+        try {
+            deviceId = crypto.randomUUID();
+        } catch (e) {
+            // Fallback para ambientes não-seguros ou browsers antigos
+            deviceId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+        }
+        localStorage.setItem('device_id', deviceId);
+    }
+
     const subJSON = sub.toJSON();
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     
-    await supabase.from('push_subscriptions').upsert({
+    // Salva ou atualiza a subscrição usando o endpoint como chave única
+    const { error } = await supabase.from('push_subscriptions').upsert({
         endpoint: sub.endpoint,
         user_id: user.id,
         ministry_id: cleanMid,
         p256dh: subJSON.keys?.p256dh || '',
         auth: subJSON.keys?.auth || '',
-        device_id: localStorage.getItem('device_id') || 'unknown',
+        device_id: deviceId,
         updated_at: new Date().toISOString()
     }, { onConflict: 'endpoint' });
+
+    if (error) console.error("Erro ao salvar push:", error);
 };
 
 // ============================================================================
@@ -778,39 +793,94 @@ export const resetToDefaultEvents = async (ministryId: string, monthIso: string)
     }
 };
 
-export const updateMinistryEvent = async (ministryId: string, oldIso: string, newTitle: string, newIso: string): Promise<boolean> => {
+export const updateMinistryEvent = async (ministryId: string, oldIso: string, newTitle: string, newIso: string, applyToAll: boolean = false): Promise<boolean> => {
     if (!supabase || !ministryId) return false;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     const formatTimestamp = (iso: string) => `${iso}:00`; 
 
     try {
-        const { data: existingEvents } = await supabase
-            .from('events')
-            .select('id')
-            .eq('ministry_id', cleanMid)
-            .eq('date_time', formatTimestamp(oldIso))
-            .limit(1); 
+        const targetIso = formatTimestamp(oldIso);
 
-        if (existingEvents && existingEvents.length > 0) {
+        // 1. Encontrar o evento original para pegar o título atual e ID
+        const { data: originalEvents } = await supabase
+            .from('events')
+            .select('id, title, date_time')
+            .eq('ministry_id', cleanMid)
+            .eq('date_time', targetIso)
+            .limit(1);
+
+        if (!originalEvents || originalEvents.length === 0) {
+            // Se não existe, cria um novo (apenas se não for replicação em massa, que não faria sentido)
+            if (!applyToAll) {
+                const { error } = await supabase
+                    .from('events')
+                    .insert({
+                        ministry_id: cleanMid,
+                        title: newTitle,
+                        date_time: formatTimestamp(newIso)
+                    });
+                return !error;
+            }
+            return false;
+        }
+
+        const originalEvent = originalEvents[0];
+
+        if (applyToAll) {
+            // --- LÓGICA DE REPLICAÇÃO EM MASSA ---
+            
+            // Define o intervalo do mês baseando-se no evento original
+            const dateObj = new Date(originalEvent.date_time);
+            const year = dateObj.getFullYear();
+            const month = dateObj.getMonth();
+            const startOfMonth = new Date(year, month, 1).toISOString(); // 1º dia
+            const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59).toISOString(); // Último dia
+
+            // Busca todos os eventos do mês com o MESMO título original
+            const { data: similarEvents } = await supabase
+                .from('events')
+                .select('id, date_time')
+                .eq('ministry_id', cleanMid)
+                .eq('title', originalEvent.title) // Importante: usar o título original do banco
+                .gte('date_time', startOfMonth)
+                .lte('date_time', endOfMonth);
+
+            if (!similarEvents || similarEvents.length === 0) return true;
+
+            // Extrai a nova hora do newIso (formato esperado: YYYY-MM-DDTHH:mm)
+            const newTimePart = newIso.split('T')[1];
+
+            // Cria promessas de atualização para cada evento encontrado
+            const updatePromises = similarEvents.map(evt => {
+                // Mantém a data original do evento, muda apenas a hora
+                const originalDatePart = evt.date_time.split('T')[0];
+                const newDateTime = `${originalDatePart}T${newTimePart}:00`;
+
+                return supabase
+                    .from('events')
+                    .update({ 
+                        title: newTitle, // Atualiza para o novo título
+                        date_time: newDateTime // Atualiza para a nova hora
+                    })
+                    .eq('id', evt.id);
+            });
+
+            await Promise.all(updatePromises);
+            return true;
+
+        } else {
+            // --- ATUALIZAÇÃO ÚNICA (Padrão) ---
             const { error } = await supabase
                 .from('events')
                 .update({ 
                     title: newTitle,
                     date_time: formatTimestamp(newIso)
                 })
-                .eq('id', existingEvents[0].id);
-            return !error;
-        } else {
-            const { error } = await supabase
-                .from('events')
-                .insert({
-                    ministry_id: cleanMid,
-                    title: newTitle,
-                    date_time: formatTimestamp(newIso)
-                });
+                .eq('id', originalEvent.id);
             return !error;
         }
     } catch (e) {
+        console.error("Erro ao atualizar evento:", e);
         return false;
     }
 };
