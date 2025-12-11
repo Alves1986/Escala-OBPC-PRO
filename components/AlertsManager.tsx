@@ -1,9 +1,9 @@
 
-
 import React, { useState } from 'react';
-import { Megaphone, Send, Info, CheckCircle, AlertTriangle, AlertOctagon, CalendarClock } from 'lucide-react';
+import { Megaphone, Send, Info, CheckCircle, AlertTriangle, AlertOctagon, CalendarClock, Sparkles, Loader2 } from 'lucide-react';
 import { AppNotification } from '../types';
 import { useToast } from './Toast';
+import { polishAnnouncementAI } from '../services/aiService';
 
 interface Props {
   onSend: (title: string, message: string, type: 'info' | 'success' | 'warning' | 'alert', expirationDate: string) => Promise<void>;
@@ -15,6 +15,8 @@ export const AlertsManager: React.FC<Props> = ({ onSend }) => {
   const [type, setType] = useState<'info' | 'success' | 'warning' | 'alert'>('info');
   const [durationDays, setDurationDays] = useState(7); // Default 7 days
   const [isSending, setIsSending] = useState(false);
+  const [isPolishing, setIsPolishing] = useState(false);
+  
   const { addToast } = useToast();
 
   const handleSend = async (e: React.FormEvent) => {
@@ -37,6 +39,15 @@ export const AlertsManager: React.FC<Props> = ({ onSend }) => {
     setType('info');
     setIsSending(false);
     addToast("Aviso enviado para toda a equipe!", "success");
+  };
+
+  const handlePolish = async (tone: 'professional' | 'exciting' | 'urgent') => {
+      if(!message.trim()) return;
+      setIsPolishing(true);
+      const refined = await polishAnnouncementAI(message, tone);
+      setMessage(refined);
+      setIsPolishing(false);
+      addToast("Texto melhorado com IA!", "success");
   };
 
   const getIcon = (t: string) => {
@@ -129,14 +140,33 @@ export const AlertsManager: React.FC<Props> = ({ onSend }) => {
                 </div>
 
                 <div>
-                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-1">Mensagem</label>
-                    <textarea 
-                        value={message}
-                        onChange={e => setMessage(e.target.value)}
-                        placeholder="Digite a mensagem completa aqui..."
-                        rows={4}
-                        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-orange-500 resize-none"
-                    />
+                    <div className="flex justify-between items-center mb-1">
+                        <label className="text-xs font-bold text-zinc-500 uppercase">Mensagem</label>
+                        <div className="flex gap-1">
+                            <button type="button" onClick={() => handlePolish('professional')} disabled={isPolishing} className="text-[10px] text-blue-500 hover:bg-blue-50 px-2 rounded disabled:opacity-50">Formal</button>
+                            <button type="button" onClick={() => handlePolish('exciting')} disabled={isPolishing} className="text-[10px] text-purple-500 hover:bg-purple-50 px-2 rounded disabled:opacity-50">Animado</button>
+                            <button type="button" onClick={() => handlePolish('urgent')} disabled={isPolishing} className="text-[10px] text-red-500 hover:bg-red-50 px-2 rounded disabled:opacity-50">Urgente</button>
+                        </div>
+                    </div>
+                    <div className="relative">
+                        <textarea 
+                            value={message}
+                            onChange={e => setMessage(e.target.value)}
+                            placeholder="Digite o rascunho aqui e use a IA para melhorar..."
+                            rows={4}
+                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-orange-500 resize-none pr-8"
+                        />
+                        {isPolishing && (
+                            <div className="absolute right-3 bottom-3">
+                                <Loader2 className="animate-spin text-orange-500" size={16} />
+                            </div>
+                        )}
+                        {!isPolishing && message.length > 5 && (
+                            <div className="absolute right-2 bottom-2 group">
+                                <Sparkles className="text-zinc-300 group-hover:text-orange-500 transition-colors" size={16}/>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 <button 
@@ -161,7 +191,7 @@ export const AlertsManager: React.FC<Props> = ({ onSend }) => {
                                 <h4 className="font-bold text-zinc-800 dark:text-zinc-100 text-sm">
                                     {title || "Título do Aviso"}
                                 </h4>
-                                <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1 leading-relaxed">
+                                <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1 leading-relaxed whitespace-pre-wrap">
                                     {message || "O conteúdo da mensagem aparecerá aqui."}
                                 </p>
                                 <span className="text-[10px] text-zinc-400 mt-2 block">

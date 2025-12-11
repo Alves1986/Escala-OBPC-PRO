@@ -1,9 +1,10 @@
 
 import React, { useState } from 'react';
-import { Music, Plus, Trash2, ExternalLink, PlayCircle, Calendar, Settings, ListMusic } from 'lucide-react';
+import { Music, Plus, Trash2, ExternalLink, PlayCircle, Calendar, Settings, ListMusic, Sparkles, Loader2, Search } from 'lucide-react';
 import { RepertoireItem, User } from '../types';
 import { useToast } from './Toast';
 import { addToRepertoire, deleteFromRepertoire } from '../services/supabaseService';
+import { suggestRepertoireAI } from '../services/aiService';
 
 interface Props {
   repertoire: RepertoireItem[];
@@ -21,6 +22,12 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   const [link, setLink] = useState("");
   const [date, setDate] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // AI State
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [aiTheme, setAiTheme] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<{title: string, artist: string, reason: string}[]>([]);
 
   // Extrai ID de vídeo único
   const getYouTubeId = (url: string) => {
@@ -46,17 +53,12 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     return `linear-gradient(135deg, hsl(${c1}, 70%, 60%), hsl(${c2}, 70%, 40%))`;
   };
 
-  const handleAdd = async () => {
-    if (!title || !link || !date) {
-        addToast("Preencha todos os campos.", "error");
-        return;
-    }
+  const handleAdd = async (overrideTitle?: string, overrideLink?: string) => {
+    const finalTitle = overrideTitle || title;
+    const finalLink = overrideLink || link;
 
-    const videoId = getYouTubeId(link);
-    const playlistId = getPlaylistId(link);
-
-    if (!videoId && !playlistId) {
-        addToast("Link inválido. Insira um link do YouTube (Vídeo ou Playlist).", "error");
+    if (!finalTitle || !date) {
+        addToast("Preencha título e data.", "error");
         return;
     }
 
@@ -69,26 +71,30 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     
     // Add via SQL Service
     await addToRepertoire(currentUser.ministryId, {
-        title,
-        link,
+        title: finalTitle,
+        link: finalLink,
         date,
         addedBy: currentUser.name
     });
 
-    // Notify Parent to Reload (Optimistic update or full reload trigger via callback)
-    if (onItemAdd) {
-        onItemAdd(title);
-    }
+    if (onItemAdd) onItemAdd(finalTitle);
     
-    // Trigger generic reload via setRepertoire (which calls loadAll in parent)
-    // We pass empty array just to trigger the effect in parent if configured, 
-    // but really the parent should reload from DB.
     await setRepertoire([]); 
     
-    setTitle("");
-    setLink("");
+    if (!overrideTitle) {
+        setTitle("");
+        setLink("");
+    }
     setIsSubmitting(false);
-    addToast(playlistId ? "Playlist adicionada!" : "Música adicionada!", "success");
+    addToast("Música adicionada!", "success");
+  };
+
+  const handleAiSuggest = async () => {
+      if (!aiTheme) return;
+      setAiLoading(true);
+      const results = await suggestRepertoireAI(aiTheme);
+      setAiSuggestions(results);
+      setAiLoading(false);
   };
 
   const handleDelete = (id: string) => {
@@ -126,9 +132,63 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
 
       {mode === 'manage' && (
           <div className="bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-fade-in">
-              <h3 className="text-xs font-bold text-zinc-500 uppercase mb-4 flex items-center gap-2">
-                  <Plus size={14}/> Adicionar Novo Item
-              </h3>
+              <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-2">
+                      <Plus size={14}/> Adicionar Novo Item
+                  </h3>
+                  <button 
+                    onClick={() => setShowAiModal(!showAiModal)}
+                    className="text-xs font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-purple-100 transition-colors"
+                  >
+                      <Sparkles size={14} /> Sugestão IA
+                  </button>
+              </div>
+
+              {/* AI Suggestions Panel */}
+              {showAiModal && (
+                  <div className="mb-6 p-4 bg-purple-50 dark:bg-zinc-900/50 rounded-xl border border-purple-100 dark:border-zinc-700">
+                      <div className="flex gap-2 mb-4">
+                          <input 
+                             placeholder="Ex: Páscoa, Gratidão, Culto Jovem..." 
+                             value={aiTheme}
+                             onChange={e => setAiTheme(e.target.value)}
+                             className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                          />
+                          <button 
+                             onClick={handleAiSuggest}
+                             disabled={aiLoading || !aiTheme}
+                             className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 disabled:opacity-50"
+                          >
+                              {aiLoading ? <Loader2 size={14} className="animate-spin"/> : <Search size={14}/>}
+                              Buscar
+                          </button>
+                      </div>
+                      
+                      {aiSuggestions.length > 0 && (
+                          <div className="space-y-2">
+                              {aiSuggestions.map((sug, idx) => (
+                                  <div key={idx} className="flex justify-between items-center bg-white dark:bg-zinc-800 p-3 rounded-lg border border-purple-100 dark:border-zinc-700">
+                                      <div>
+                                          <p className="font-bold text-zinc-800 dark:text-zinc-100 text-sm">{sug.title} <span className="font-normal text-zinc-500">- {sug.artist}</span></p>
+                                          <p className="text-xs text-purple-500 italic">{sug.reason}</p>
+                                      </div>
+                                      <button 
+                                        onClick={() => {
+                                            setTitle(`${sug.title} - ${sug.artist}`);
+                                            // Auto-fill title but user needs to set date/link or we can allow direct add if we want
+                                            addToast("Título preenchido! Selecione a data e adicione o link.", "info");
+                                        }}
+                                        className="text-xs bg-zinc-100 dark:bg-zinc-700 hover:bg-purple-100 dark:hover:bg-purple-900/30 text-zinc-600 dark:text-zinc-300 px-3 py-1.5 rounded transition-colors"
+                                      >
+                                          Usar
+                                      </button>
+                                  </div>
+                              ))}
+                          </div>
+                      )}
+                  </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
                       <label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Data do Culto</label>
@@ -161,7 +221,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                   </div>
                   <div className="flex items-end">
                       <button 
-                          onClick={handleAdd}
+                          onClick={() => handleAdd()}
                           disabled={isSubmitting}
                           className="w-full bg-pink-600 hover:bg-pink-700 text-white font-bold py-2.5 rounded-lg transition-all active:scale-95 flex items-center justify-center gap-2"
                       >

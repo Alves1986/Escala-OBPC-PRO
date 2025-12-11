@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { Share2, FileText, FileSpreadsheet, Trash, ChevronDown, Upload, FileDown, RotateCcw } from 'lucide-react';
+import { Share2, FileText, FileSpreadsheet, Trash, ChevronDown, Upload, FileDown, RotateCcw, Sparkles } from 'lucide-react';
 
 interface Props {
   onExportIndividual: (member: string) => void;
@@ -10,6 +10,7 @@ interface Props {
   onImportCSV: (file: File) => void;
   onClearMonth: () => void;
   onResetEvents: () => void;
+  onAiAutoFill?: () => void; // New prop
   allMembers: string[];
 }
 
@@ -21,6 +22,7 @@ export const ToolsMenu: React.FC<Props> = ({
   onImportCSV, 
   onClearMonth,
   onResetEvents,
+  onAiAutoFill,
   allMembers 
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -69,6 +71,16 @@ export const ToolsMenu: React.FC<Props> = ({
           </div>
 
           <div className="p-2 space-y-1">
+            {/* AI Option */}
+            {onAiAutoFill && (
+              <button 
+                onClick={() => { setIsOpen(false); onAiAutoFill(); }} 
+                className="w-full text-left px-3 py-2 text-sm text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded flex items-center gap-2 font-bold mb-1"
+              >
+                <Sparkles size={16} /> Auto-Escala com IA
+              </button>
+            )}
+
             <button onClick={() => fileInputRef.current?.click()} className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-zinc-50 dark:hover:bg-zinc-700 rounded flex items-center gap-2">
               <Upload size={16} /> Importar CSV (Membros)
             </button>
@@ -94,7 +106,6 @@ export const ToolsMenu: React.FC<Props> = ({
             
             <div className="border-t border-zinc-100 dark:border-zinc-700 my-1"></div>
             
-            {/* Botão Restaurar Padrão */}
             <button onClick={() => { setIsOpen(false); onResetEvents(); }} className="w-full text-left px-3 py-2 text-sm text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded flex items-center gap-2">
               <RotateCcw size={16} /> Restaurar Eventos Padrão
             </button>
