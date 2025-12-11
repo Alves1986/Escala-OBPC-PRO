@@ -1,3 +1,4 @@
+
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
     SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, 
@@ -483,10 +484,15 @@ export const saveSubscriptionSQL = async (ministryId: string, sub: PushSubscript
     let deviceId = localStorage.getItem('device_id');
     if (!deviceId) {
         try {
-            deviceId = crypto.randomUUID();
+            // Check if crypto.randomUUID is available
+            if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+                deviceId = crypto.randomUUID();
+            } else {
+                throw new Error("crypto.randomUUID not available");
+            }
         } catch (e) {
             // Fallback para ambientes não-seguros ou browsers antigos
-            deviceId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+            deviceId = 'dev-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
         }
         localStorage.setItem('device_id', deviceId);
     }

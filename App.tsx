@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   LayoutDashboard, Calendar, CalendarCheck, RefreshCcw, Music, 
@@ -473,59 +474,115 @@ const InnerApp = () => {
   };
 
   const handleEnableNotifications = async () => {
-      // 1. Verifica Suporte do Navegador
+      // 1. Basic Support Check
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-          addToast("Seu navegador não suporta notificações Push.", "error");
-          return;
+          throw new Error("Seu navegador não suporta notificações Push.");
       }
 
-      // 2. Verifica Estado da Permissão
-      // Se estiver 'denied', o navegador bloqueia qualquer tentativa programática.
-      // A única solução é o usuário alterar manualmente nas configurações.
+      // 2. Permission Check (Fail Fast)
       if (Notification.permission === 'denied') {
-          addToast("Permissão bloqueada pelo navegador. Redefina as permissões do site (ícone de cadeado) e recarregue a página.", "error");
-          return;
+          throw new Error("Permissão bloqueada. 1. Clique no cadeado na URL. 2. Permita Notificações. 3. RECARREGUE a página.");
+      }
+
+      // Helper for Timeout - use Function to avoid JSX generic conflict
+      function withTimeout<T>(promise: Promise<T>, ms: number, errorMsg: string): Promise<T> {
+          return new Promise((resolve, reject) => {
+              const timer = setTimeout(() => reject(new Error(errorMsg)), ms);
+              promise.then(res => {
+                  clearTimeout(timer);
+                  resolve(res);
+              }).catch(err => {
+                  clearTimeout(timer);
+                  reject(err);
+              });
+          });
       }
 
       try {
-          // 3. Solicita Permissão se necessário
+          // 3. Register Service Worker (or get existing)
+          // Using withTimeout to prevent hanging
+          let registration = await withTimeout(
+              navigator.serviceWorker.getRegistration(),
+              3000, 
+              "Timeout verificando SW."
+          );
+
+          if (!registration) {
+              registration = await withTimeout(
+                  navigator.serviceWorker.register('/sw.js', { scope: '/' }),
+                  5000, 
+                  "O navegador demorou para registrar o Service Worker."
+              );
+          }
+
+          if (!registration) throw new Error("Falha ao registrar Service Worker.");
+
+          // Ensure Active
+          if (!registration.active) {
+              await withTimeout(
+                  new Promise<void>((resolve) => {
+                      if (registration?.active) resolve();
+                      const check = setInterval(() => {
+                          if (registration?.active) {
+                              clearInterval(check);
+                              resolve();
+                          }
+                      }, 100);
+                  }),
+                  5000,
+                  "Service Worker não ativou a tempo."
+              );
+          }
+
+          // 4. Request Permission
           if (Notification.permission === 'default') {
-              const permission = await Notification.requestPermission();
+              const permission = await withTimeout(
+                  Notification.requestPermission(),
+                  20000, // User needs time to click
+                  "Você demorou para responder à solicitação de permissão."
+              );
+              
               if (permission !== 'granted') {
-                  addToast("Permissão negada. Ative para receber avisos.", "warning");
-                  return;
+                  throw new Error("Permissão negada pelo usuário.");
               }
           }
 
-          // 4. Garante que o Service Worker está registrado e ATIVO
-          // Registra explicitamente para garantir o escopo correto
-          const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-          await navigator.serviceWorker.ready;
-
-          // 5. Gerencia a Subscrição
-          let subscription = await registration.pushManager.getSubscription();
-
-          // Se não existir, cria uma nova
-          if (!subscription) {
-              subscription = await registration.pushManager.subscribe({
-                  userVisibleOnly: true,
-                  applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-              });
+          // Double check (Edge case where user clicks 'block')
+          if (Notification.permission !== 'granted') {
+              throw new Error("Permissão não concedida.");
           }
 
-          // 6. Sincroniza com o Banco de Dados
+          // 5. Get Subscription
+          let subscription = await withTimeout(
+              registration.pushManager.getSubscription(),
+              5000,
+              "Erro ao verificar inscrição."
+          );
+
+          // 6. Subscribe if missing
+          if (!subscription) {
+              subscription = await withTimeout(
+                  registration.pushManager.subscribe({
+                      userVisibleOnly: true,
+                      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+                  }),
+                  10000,
+                  "Erro ao conectar com servidor de notificações (Push)."
+              );
+          }
+
+          // 7. Save to Database
           if (subscription) {
               await Supabase.saveSubscriptionSQL(ministryId, subscription);
-              addToast("Notificações ativadas com sucesso!", "success");
+              addToast("Notificações ativadas! Teste enviado.", "success");
           }
 
       } catch(e: any) {
-          console.error("Erro Push:", e);
-          let msg = "Erro ao ativar notificações.";
-          if (e.message && e.message.includes("no active Service Worker")) {
-             msg = "Erro no Service Worker. Tente recarregar a página.";
-          }
+          console.error("Push Error:", e);
+          let msg = e.message || "Erro desconhecido ao ativar notificações.";
+          if (msg.includes("no active Service Worker")) msg = "Erro interno no navegador. Tente recarregar a página.";
           addToast(msg, "error");
+          throw e; // Throw to stop spinner in SettingsScreen
       }
   };
 

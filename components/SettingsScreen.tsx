@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Settings, Save, Moon, Sun, BellRing, Megaphone, Monitor, Loader2 } from 'lucide-react';
 import { useToast } from './Toast';
@@ -132,6 +133,7 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
                                 try {
                                     await onEnableNotifications();
                                 } catch (e) {
+                                    // A UI de toast já lida com a mensagem de erro vinda do App.tsx
                                     console.error(e);
                                 } finally {
                                     setIsNotifLoading(false);
