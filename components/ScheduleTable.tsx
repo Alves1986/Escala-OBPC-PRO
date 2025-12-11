@@ -357,7 +357,8 @@ const ScheduleRow = React.memo(({
                 const roleMembers = members[col.realRole] || [];
 
                 const isConfirmed = attendance[key];
-                const hasLocalConflict = currentValue && isUnavailable(currentValue, event.iso);
+                // CORREÇÃO: Converter explicitamente para booleano
+                const hasLocalConflict = !!(currentValue && isUnavailable(currentValue, event.iso));
                 
                 let globalConflictMsg = "";
                 let hasGlobalConflict = false;
@@ -619,7 +620,8 @@ export const ScheduleTable: React.FC<Props> = React.memo(({
                           const currentValue = schedule[key] || "";
                           const roleMembers = members[col.realRole] || [];
                           const isConfirmed = attendance[key];
-                          const hasLocalConflict = currentValue && isUnavailable(currentValue, event.iso);
+                          // CORREÇÃO: Converter explicitamente para booleano
+                          const hasLocalConflict = !!(currentValue && isUnavailable(currentValue, event.iso));
                           
                           let globalConflictMsg = "";
                           let hasGlobalConflict = false;

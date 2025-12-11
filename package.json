@@ -18,7 +18,10 @@
     "lucide-react": "^0.300.0",
     "recharts": "^2.10.0",
     "jspdf": "^2.5.1",
-    "jspdf-autotable": "^3.8.1"
+    "jspdf-autotable": "^3.8.1",
+    "@tanstack/react-query": "^5.28.0",
+    "@tanstack/react-query-persist-client": "^5.28.0",
+    "@tanstack/query-sync-storage-persister": "^5.28.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",

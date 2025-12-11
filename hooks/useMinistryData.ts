@@ -113,7 +113,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     // Invalida todas as queries relacionadas ao ministério atual
     // Isso forçará um refetch em background e atualizará os estados via useEffects acima
     await queryClient.invalidateQueries({ 
-        predicate: (query) => {
+        predicate: (query: any) => {
             const key = query.queryKey[0] as string;
             // Invalida chaves que começam com estes prefixos e contêm o ministryId
             return [

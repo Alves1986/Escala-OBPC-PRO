@@ -24,7 +24,8 @@ const minifyAvailability = (isoDateString: string, contextMonthPrefix: string): 
 const prepareMinifiedContext = (context: AIContext) => {
   // Assume que todos os eventos são do mesmo mês para otimização (padrão do app)
   const firstEvent = context.events[0];
-  if (!firstEvent) return { events: [], members: [] };
+  // CORREÇÃO: Retorna estrutura compatível com o esperado pelo código abaixo (e, m)
+  if (!firstEvent) return { month: "", e: [], m: [] };
 
   const monthPrefix = firstEvent.iso.slice(0, 7); // "YYYY-MM"
 
