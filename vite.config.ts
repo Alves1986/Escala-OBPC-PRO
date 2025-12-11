@@ -12,7 +12,5 @@ export default defineConfig({
     outDir: 'dist',
   },
   publicDir: 'public',
-  define: {
-    'process.env': {} // Polyfill process.env to avoid ReferenceError in browser
-  }
+  // Removed define: { 'process.env': {} } to avoid blocking environment variable injection
 });

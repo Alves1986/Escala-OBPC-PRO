@@ -177,18 +177,51 @@ const getLocal = (key: string) => {
   return null;
 };
 
-// Use type assertion for import.meta to avoid TS errors in environments without vite types
-const env = (import.meta as any).env || {};
+// Robust Environment Variable Access
+// This prevents crashes if import.meta.env is undefined while allowing Vite replacement.
+const getSafeEnv = (key: string, viteReplacement?: string) => {
+    // 1. If Vite replaced the variable statically, use it.
+    if (viteReplacement && typeof viteReplacement === 'string') {
+        return viteReplacement;
+    }
+    
+    // 2. Try to access via import.meta.env safely at runtime
+    try {
+        const env = (import.meta as any).env || {};
+        return env[key] || '';
+    } catch (e) {
+        return '';
+    }
+};
 
-// Prioridade: VITE Env -> NEXT Public Env -> LocalStorage -> Default/Hardcoded
+// Safe access variables - These try-catches prevent crash if import.meta.env is undefined
+// but still allows Vite's string replacement to work inside the try block.
+let safeViteUrl = '';
+try { safeViteUrl = import.meta.env.VITE_SUPABASE_URL; } catch(e) {}
+
+let safeNextUrl = '';
+try { safeNextUrl = import.meta.env.NEXT_PUBLIC_SUPABASE_URL; } catch(e) {}
+
+let safeViteKey = '';
+try { safeViteKey = import.meta.env.VITE_SUPABASE_KEY; } catch(e) {}
+
+let safeNextKey = '';
+try { safeNextKey = import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; } catch(e) {}
+
+
 export const SUPABASE_URL = 
-  env.VITE_SUPABASE_URL || 
-  env.NEXT_PUBLIC_SUPABASE_URL || 
+  getSafeEnv('VITE_SUPABASE_URL', safeViteUrl) || 
+  getSafeEnv('NEXT_PUBLIC_SUPABASE_URL', safeNextUrl) || 
   getLocal('VITE_SUPABASE_URL') ||
-  "https://phlfpaojiiplnzihsgee.supabase.co"; 
+  ""; 
 
 export const SUPABASE_KEY = 
-  env.VITE_SUPABASE_KEY || 
-  env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
+  getSafeEnv('VITE_SUPABASE_KEY', safeViteKey) || 
+  getSafeEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', safeNextKey) || 
   getLocal('VITE_SUPABASE_KEY') ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBobGZwYW9qaWlwbG56aWhzZ2VlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ1MTkxNDEsImV4cCI6MjA4MDA5NTE0MX0.-72lH-LHmobWqqSzBuIKusGTDao_iaiu9q8lJnClUBk";
+  "";
+
+// Log discreto para debug profissional apenas se falhar
+if ((!SUPABASE_URL || !SUPABASE_KEY) && typeof window !== 'undefined' && window.location.pathname !== '/setup') {
+  console.warn("⚠️ Sistema aguardando credenciais. Verifique o arquivo .env na raiz.");
+}

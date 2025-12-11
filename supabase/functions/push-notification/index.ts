@@ -31,11 +31,10 @@ Deno.serve(async (req: Request) => {
     const { ministryId, title, message, type, actionLink, action, name } = requestData;
 
     // 3. DETECÇÃO DE TESTE DO DASHBOARD (Supabase "Test Function" button)
-    // Se for apenas um teste de conexão, retornamos sucesso antes de tentar validar chaves complexas
     if (name === "Functions" || (!ministryId && !action)) {
          return new Response(JSON.stringify({ 
              success: true, 
-             message: 'Edge Function está ONLINE! Para testar envio real, use o botão nas Configurações do App.' 
+             message: 'Edge Function está ONLINE! Configure os Segredos (Secrets) no Dashboard para envio real.' 
          }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
          })
@@ -50,52 +49,43 @@ Deno.serve(async (req: Request) => {
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
     }
 
-    // 5. Configuração do Supabase Client
+    // 5. Configuração do Supabase Client via Env Vars
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
     if (!supabaseUrl || !supabaseServiceKey) {
-        throw new Error("Variáveis de ambiente do Supabase (URL/KEY) não configuradas.");
+        throw new Error("Variáveis de ambiente do Supabase (URL/KEY) não configuradas no Dashboard.");
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 6. Configuração VAPID (Push Notifications)
-    const publicKey = 'BDug4Y7xlqoJF0ihCLqHDsJtzYqZhLnKlWr0y-ynKLscqQH8nWqJo6LpLy65tx1VWwD5FRD8gfI4NxisdJ7dWUc';
+    // 6. Configuração VAPID (Push Notifications) via Env Vars
+    const publicKey = Deno.env.get('VAPID_PUBLIC_KEY');
     let privateKey = Deno.env.get('VAPID_PRIVATE_KEY');
 
-    if (!privateKey) {
+    if (!publicKey || !privateKey) {
         return new Response(JSON.stringify({ 
             success: false, 
-            message: 'ERRO CRÍTICO: Secret VAPID_PRIVATE_KEY não encontrado no Supabase.' 
+            message: 'ERRO CRÍTICO: Chaves VAPID não configuradas nos Secrets do Supabase.' 
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 })
     }
 
     // --- LIMPEZA ROBUSTA DA CHAVE PRIVADA ---
-    // Remove espaços e quebras de linha
     privateKey = privateKey.trim().replace(/[\r\n\s]/g, '');
-    // Remove aspas acidentais (comuns ao copiar/colar de JSON ou editores de texto)
     if ((privateKey.startsWith('"') && privateKey.endsWith('"')) || 
         (privateKey.startsWith("'") && privateKey.endsWith("'"))) {
         privateKey = privateKey.slice(1, -1);
     }
 
     try {
-        const subject = 'mailto:cassia.andinho@gmail.com';
+        // Configure um email válido para contato em caso de problemas com o serviço de push
+        const subject = 'mailto:admin@example.com'; 
         webpush.setVapidDetails(subject, publicKey, privateKey);
     } catch (err: any) {
         console.error("Erro Fatal VAPID:", err.message);
-        
-        let userMsg = "Erro na validação das chaves de segurança.";
-        if (err.message && err.message.includes('32 bytes')) {
-            userMsg = "A Chave Privada (VAPID_PRIVATE_KEY) no Supabase está incorreta ou corrompida. Gere um novo par nas configurações.";
-        } else if (err.message && err.message.includes('match')) {
-            userMsg = "A Chave Privada não corresponde à Chave Pública do app.";
-        }
-
         return new Response(JSON.stringify({ 
             success: false, 
-            message: userMsg,
+            message: "Erro na validação das chaves VAPID.",
             details: err.message
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 })
     }
