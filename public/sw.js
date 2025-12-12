@@ -1,8 +1,7 @@
 
-const CACHE_NAME = 'gestao-escala-pwa-v23';
+const CACHE_NAME = 'gestao-escala-pwa-v25'; // Versão incrementada para forçar atualização
 
 // Arquivos estáticos fundamentais
-// Usando caminhos absolutos para garantir a integridade do cache
 const PRECACHE_URLS = [
   '/',
   '/index.html',
@@ -14,50 +13,64 @@ const PRECACHE_URLS = [
 
 // Instalação
 self.addEventListener('install', event => {
-  self.skipWaiting();
+  self.skipWaiting(); // Força a ativação imediata do novo SW
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      // IMPORTANTE: Adicionado .catch() para que falhas no download de assets (ex: cdn fora do ar)
-      // NÃO impeçam a instalação do Service Worker. Prioridade é a funcionalidade de Push.
+      // Tenta fazer o cache, mas não falha a instalação se um recurso externo falhar
       return cache.addAll(PRECACHE_URLS).catch(err => {
-        console.warn('Falha no precache de alguns arquivos, mas continuando instalação do SW:', err);
+        console.warn('Falha no precache de alguns arquivos (continuando):', err);
       });
     })
   );
 });
 
-// Ativação e Limpeza
+// Ativação e Limpeza de Caches Antigos
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.map(cacheName => {
           if (cacheName !== CACHE_NAME) {
+            console.log('Removendo cache antigo:', cacheName);
             return caches.delete(cacheName);
           }
         })
       );
+    }).then(() => {
+        return self.clients.claim(); // Assume o controle das páginas imediatamente
     })
   );
-  return self.clients.claim();
 });
 
 // Interceptação de Rede
 self.addEventListener('fetch', event => {
-  // 1. Navegação (HTML): Force a raiz / ou index.html
+  // Ignora requisições não-HTTP
+  if (!event.request.url.startsWith('http')) return;
+
+  // 1. ESTRATÉGIA NETWORK-FIRST PARA NAVEGAÇÃO (HTML)
+  // Isso previne o "travamento" ao garantir que o index.html (que aponta para os JS novos)
+  // seja baixado da rede primeiro. Se estiver offline, usa o cache.
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
+        .then(networkResponse => {
+            // Se sucesso, atualiza o cache e retorna
+            return caches.open(CACHE_NAME).then(cache => {
+                cache.put(event.request, networkResponse.clone());
+                return networkResponse;
+            });
+        })
         .catch(() => {
-          // Se estiver offline, retorna a raiz cacheada
-          return caches.match('/')
-            .then(response => response || caches.match('/index.html'));
+            // Se offline ou falha na rede, retorna o index.html do cache
+            return caches.match('/')
+                .then(response => response || caches.match('/index.html'));
         })
     );
     return;
   }
 
-  // 2. Assets Estáticos (JS, CSS, Imagens): Stale-While-Revalidate
+  // 2. Assets Estáticos (JS, CSS, Imagens, Fontes): Stale-While-Revalidate
+  // Performance rápida servindo do cache, mas atualizando em segundo plano
   if (event.request.destination === 'script' || 
       event.request.destination === 'style' || 
       event.request.destination === 'image' ||
@@ -73,7 +86,7 @@ self.addEventListener('fetch', event => {
           }
           return networkResponse;
         }).catch(() => {
-            // Falha silenciosa se offline
+            // Falha silenciosa se offline (o cachedResponse será usado)
         });
         return cachedResponse || fetchPromise;
       })
@@ -81,7 +94,7 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // 3. Outras requisições: Network First
+  // 3. Outras requisições (API, etc): Network First com Fallback para Cache (se houver)
   event.respondWith(
     fetch(event.request).catch(() => caches.match(event.request))
   );
@@ -90,20 +103,16 @@ self.addEventListener('fetch', event => {
 // Evento de Clique na Notificação
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
-
-  // URL para abrir (pode vir no data da notificação ou usar a raiz)
   const urlToOpen = event.notification.data?.url || '/';
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
-      // Tenta focar em uma janela já aberta
       for (var i = 0; i < clientList.length; i++) {
         var client = clientList[i];
         if ((client.url === urlToOpen || client.url.endsWith(urlToOpen)) && 'focus' in client) {
           return client.focus();
         }
       }
-      // Se não tiver janela aberta, abre uma nova
       if (clients.openWindow) {
         return clients.openWindow(urlToOpen).catch(err => console.warn('Falha ao abrir janela', err));
       }
@@ -111,7 +120,7 @@ self.addEventListener('notificationclick', function(event) {
   );
 });
 
-// Evento de Recebimento de Push (Mobile/Background)
+// Evento de Recebimento de Push
 self.addEventListener('push', function(event) {
   if (event.data) {
     let data;
@@ -124,18 +133,14 @@ self.addEventListener('push', function(event) {
     const options = {
       body: data.body,
       icon: data.icon || '/icon.png',
-      badge: '/icon.png', // Ícone pequeno na barra de status (Android)
-      vibrate: [200, 100, 200], // Vibração para chamar atenção
-      requireInteraction: true, // Mantém a notificação até o usuário interagir (Desktop/Alguns Androids)
-      tag: 'escala-app', // Substitui notificações antigas para não empilhar muitas
+      badge: '/icon.png',
+      vibrate: [200, 100, 200],
+      requireInteraction: true,
+      tag: 'escala-app',
       data: data.data || { url: '/' },
-      actions: [
-        { action: 'open', title: 'Ver Detalhes' }
-      ]
+      actions: [{ action: 'open', title: 'Ver Detalhes' }]
     };
 
-    event.waitUntil(
-      self.registration.showNotification(data.title, options)
-    );
+    event.waitUntil(self.registration.showNotification(data.title, options));
   }
 });
