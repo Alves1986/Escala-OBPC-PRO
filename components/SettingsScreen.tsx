@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, Moon, Sun, BellRing, Megaphone, Monitor, Loader2, CalendarClock, Lock, Unlock, BellOff, Check, Music, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Settings, Save, Moon, Sun, BellRing, Megaphone, Monitor, Loader2, CalendarClock, Lock, Unlock, BellOff, Check, Music, ShieldCheck, AlertCircle, Youtube, Link } from 'lucide-react';
 import { useToast } from './Toast';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { ThemeMode } from '../types';
@@ -34,10 +34,19 @@ export const SettingsScreen: React.FC<Props> = ({
   const { addToast } = useToast();
 
   // Verifica se as variáveis de ambiente estão presentes de forma segura
-  const hasEnvVars = (() => {
+  const hasSpotifyVars = (() => {
       try {
           // @ts-ignore
           return !!(import.meta.env && import.meta.env.VITE_SPOTIFY_CLIENT_ID);
+      } catch (e) {
+          return false;
+      }
+  })();
+
+  const hasYoutubeKey = (() => {
+      try {
+          // @ts-ignore
+          return !!(import.meta.env && import.meta.env.VITE_YOUTUBE_API_KEY);
       } catch (e) {
           return false;
       }
@@ -159,25 +168,47 @@ export const SettingsScreen: React.FC<Props> = ({
 
                     <div className="pt-4 border-t border-zinc-100 dark:border-zinc-700">
                         <div className="flex items-center gap-2 mb-3">
-                            <Music size={18} className="text-green-500"/>
-                            <h4 className="text-sm font-bold text-zinc-700 dark:text-zinc-200 uppercase">Integração Spotify</h4>
+                            <Link size={18} className="text-blue-500"/>
+                            <h4 className="text-sm font-bold text-zinc-700 dark:text-zinc-200 uppercase">Integrações de Mídia</h4>
                         </div>
                         
-                        <div className={`flex items-center gap-3 p-4 rounded-xl border transition-colors ${hasEnvVars ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-900/30' : 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-900/30'}`}>
-                            <div className={`p-2 rounded-full ${hasEnvVars ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'}`}>
-                                {hasEnvVars ? <ShieldCheck size={20} /> : <AlertCircle size={20} />}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Spotify Status */}
+                            <div className={`flex items-center gap-3 p-4 rounded-xl border transition-colors ${hasSpotifyVars ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-900/30' : 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-900/30'}`}>
+                                <div className={`p-2 rounded-full ${hasSpotifyVars ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'}`}>
+                                    {hasSpotifyVars ? <Music size={20} /> : <AlertCircle size={20} />}
+                                </div>
+                                <div>
+                                    <p className={`text-sm font-bold ${hasSpotifyVars ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300'}`}>
+                                        Spotify
+                                    </p>
+                                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                                        {hasSpotifyVars ? 'Conectado (Client ID)' : 'Não configurado (.env)'}
+                                    </p>
+                                </div>
+                                {hasSpotifyVars && <ShieldCheck size={16} className="ml-auto text-green-500" />}
                             </div>
-                            <div>
-                                <p className={`text-sm font-bold ${hasEnvVars ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300'}`}>
-                                    {hasEnvVars ? 'Conectado via Client ID (Ambiente)' : 'Credenciais Ausentes'}
-                                </p>
-                                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                                    {hasEnvVars 
-                                        ? 'O sistema detectou suas chaves de API seguras.' 
-                                        : 'Configure VITE_SPOTIFY_CLIENT_ID nas variáveis de ambiente.'}
-                                </p>
+
+                            {/* YouTube Status */}
+                            <div className={`flex items-center gap-3 p-4 rounded-xl border transition-colors ${hasYoutubeKey ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-900/30' : 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-900/30'}`}>
+                                <div className={`p-2 rounded-full ${hasYoutubeKey ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'}`}>
+                                    {hasYoutubeKey ? <Youtube size={20} /> : <AlertCircle size={20} />}
+                                </div>
+                                <div>
+                                    <p className={`text-sm font-bold ${hasYoutubeKey ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300'}`}>
+                                        YouTube
+                                    </p>
+                                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                                        {hasYoutubeKey ? 'Conectado (API Key)' : 'Não configurado (.env)'}
+                                    </p>
+                                </div>
+                                {hasYoutubeKey && <ShieldCheck size={16} className="ml-auto text-green-500" />}
                             </div>
                         </div>
+                        
+                        <p className="text-[10px] text-zinc-400 mt-2 text-center">
+                            Configure VITE_SPOTIFY_CLIENT_ID e VITE_YOUTUBE_API_KEY no arquivo .env para ativar.
+                        </p>
                     </div>
                  </div>
              </div>
