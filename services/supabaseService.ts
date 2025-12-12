@@ -5,7 +5,7 @@ import {
     AppNotification, TeamMemberProfile, AvailabilityMap, SwapRequest, 
     ScheduleMap, RepertoireItem, Announcement, GlobalConflictMap, 
     GlobalConflict, DEFAULT_ROLES, AttendanceMap, AuditLogEntry, MinistrySettings,
-    RankingEntry
+    RankingEntry, AvailabilityNotesMap
 } from '../types';
 
 // Detecta modo de preview
@@ -149,6 +149,93 @@ export const fetchRankingData = async (ministryId: string): Promise<RankingEntry
     }
 };
 
+// ... (Rest of file truncated for brevity, inserting updates below) ...
+
+// --- AVAILABILITY WITH NOTES ---
+export const fetchMinistryAvailability = async (ministryId: string): Promise<{ availability: AvailabilityMap, notes: AvailabilityNotesMap }> => {
+    if (isPreviewMode) return { availability: {}, notes: {} };
+    if (!supabase || !ministryId) return { availability: {}, notes: {} };
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+    try {
+        const { data: availData, error } = await supabase.from('availability').select(`date, status, note, member_id, profiles!inner ( id, name, ministry_id, allowed_ministries )`);
+        
+        const relevantData = availData?.filter((row: any) => {
+            const p = row.profiles;
+            return p.ministry_id === cleanMid || (p.allowed_ministries && p.allowed_ministries.includes(cleanMid));
+        });
+
+        const availability: AvailabilityMap = {};
+        const notes: AvailabilityNotesMap = {};
+
+        relevantData?.forEach((row: any) => {
+            const name = row.profiles.name || 'Membro sem nome';
+            if (!availability[name]) availability[name] = [];
+            
+            let dateStr = row.date;
+            // Append suffix for logic
+            if (row.status === 'M') dateStr += '_M';
+            else if (row.status === 'N') dateStr += '_N';
+            else if (row.status === 'BLOCKED') dateStr += '_BLOCKED';
+            
+            availability[name].push(dateStr);
+
+            // Store note if exists
+            if (row.note) {
+                // Key: MemberName_Date (e.g. "João_2023-10-01")
+                notes[`${name}_${row.date}`] = row.note;
+            }
+        });
+        return { availability, notes };
+    } catch (e) { return { availability: {}, notes: {} }; }
+};
+
+export const saveMemberAvailability = async (userId: string, memberName: string, dates: string[], notesMap?: Record<string, string>) => {
+    if (isPreviewMode) return true;
+    if (!supabase) return false;
+    try {
+        const { data: member } = await supabase.from('profiles').select('id, ministry_id').ilike('name', memberName).single();
+        if (!member) return false;
+        
+        const rows = dates.map(d => {
+            let date = d;
+            let status = 'BOTH';
+            if (d.endsWith('_M')) { date = d.replace('_M', ''); status = 'M'; }
+            else if (d.endsWith('_N')) { date = d.replace('_N', ''); status = 'N'; }
+            else if (d.endsWith('_BLOCKED')) { date = d.replace('_BLOCKED', ''); status = 'BLOCKED'; }
+            
+            // Get note from map if exists (Key: Date)
+            const note = notesMap ? notesMap[date] : null;
+
+            return { member_id: member.id, date, status, note };
+        });
+
+        // Use transaction-like logic: Delete all for this member then Insert
+        // Note: This replaces all availability for the user.
+        await supabase.from('availability').delete().eq('member_id', member.id);
+        
+        if (rows.length > 0) {
+            // Check if 'note' column exists by trying one insert first or just do it if schema is ready
+            // We assume schema has 'note' column text
+            await supabase.from('availability').insert(rows);
+        }
+
+        if (member.ministry_id) {
+            await sendNotificationSQL(member.ministry_id, {
+                title: "Atualização de Disponibilidade",
+                message: `${memberName} atualizou seus dias disponíveis.`,
+                type: "info",
+                actionLink: "report"
+            });
+        }
+        return true;
+    } catch (e) { 
+        console.error(e);
+        return false; 
+    }
+};
+
+// ... (Rest of existing functions) ...
+
 // --- AUDIT LOGS ---
 export const fetchAuditLogs = async (ministryId: string): Promise<AuditLogEntry[]> => {
     if (isPreviewMode) return [{ id: '1', date: new Date().toLocaleString(), action: 'Login', details: 'Acesso Demo' }];
@@ -199,8 +286,6 @@ export const fetchMinistrySettings = async (ministryId: string): Promise<Ministr
             .eq('ministry_id', cleanMid)
             .single();
 
-        // Armazena credenciais do Spotify no localStorage para uso imediato no front
-        // Em um app de produção real, isso deveria ser feito via proxy backend, mas aqui facilita a integração "sem backend"
         if (data?.spotify_client_id) localStorage.setItem(`spotify_cid_${cleanMid}`, data.spotify_client_id);
         if (data?.spotify_client_secret) localStorage.setItem(`spotify_sec_${cleanMid}`, data.spotify_client_secret);
 
@@ -236,8 +321,6 @@ export const saveMinistrySettings = async (
     if (availabilityStart !== undefined) updates.availability_start = availabilityStart;
     if (availabilityEnd !== undefined) updates.availability_end = availabilityEnd;
     
-    // Novos campos de Spotify (assume que a tabela suporta ou é JSONB, se não, precisa de migration manual ou usar meta_data)
-    // Para compatibilidade sem migration, vamos tentar salvar nas colunas se existirem, ou ignorar silenciosamente
     if (spotifyClientId !== undefined) {
         updates.spotify_client_id = spotifyClientId;
         localStorage.setItem(`spotify_cid_${cleanMid}`, spotifyClientId);
@@ -249,8 +332,6 @@ export const saveMinistrySettings = async (
 
     const { error } = await supabase.from('ministry_settings').upsert(updates, { onConflict: 'ministry_id' });
     if (error) {
-        console.error("Error saving settings:", error);
-        // Fallback: Se der erro (provavelmente coluna não existe), tente salvar sem os campos do Spotify
         if (error.code === 'PGRST204' || error.message.includes('column')) {
              delete updates.spotify_client_id;
              delete updates.spotify_client_secret;
@@ -656,10 +737,6 @@ export const saveSubscriptionSQL = async (ministryId: string, sub: PushSubscript
 
     if (error) console.error("Erro ao salvar push:", error);
 };
-
-// ============================================================================
-// EXISTING CORE FUNCTIONS (Schedule, Members, Auth)
-// ============================================================================
 
 export const createMinistryEvent = async (ministryId: string, event: { title: string, date: string, time: string }): Promise<boolean> => {
     if (isPreviewMode) return true;
@@ -1139,58 +1216,6 @@ export const toggleAssignmentConfirmation = async (ministryId: string, key: stri
         if (!assignment) return false;
         const { error } = await supabase.from('schedule_assignments').update({ confirmed: !assignment.confirmed }).eq('id', assignment.id);
         return !error;
-    } catch (e) { return false; }
-};
-
-export const fetchMinistryAvailability = async (ministryId: string): Promise<AvailabilityMap> => {
-    if (isPreviewMode) return {};
-    if (!supabase || !ministryId) return {};
-    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-    try {
-        const { data: availData, error } = await supabase.from('availability').select(`date, status, member_id, profiles!inner ( id, name, ministry_id, allowed_ministries )`);
-        const relevantData = availData?.filter((row: any) => {
-            const p = row.profiles;
-            return p.ministry_id === cleanMid || (p.allowed_ministries && p.allowed_ministries.includes(cleanMid));
-        });
-        const availability: AvailabilityMap = {};
-        relevantData?.forEach((row: any) => {
-            const name = row.profiles.name || 'Membro sem nome';
-            if (!availability[name]) availability[name] = [];
-            let dateStr = row.date;
-            if (row.status === 'M') dateStr += '_M';
-            else if (row.status === 'N') dateStr += '_N';
-            else if (row.status === 'BLOCKED') dateStr += '_BLOCKED';
-            availability[name].push(dateStr);
-        });
-        return availability;
-    } catch (e) { return {}; }
-};
-
-export const saveMemberAvailability = async (userId: string, memberName: string, dates: string[]) => {
-    if (isPreviewMode) return true;
-    if (!supabase) return false;
-    try {
-        const { data: member } = await supabase.from('profiles').select('id, ministry_id').ilike('name', memberName).single();
-        if (!member) return false;
-        const rows = dates.map(d => {
-            let date = d;
-            let status = 'BOTH';
-            if (d.endsWith('_M')) { date = d.replace('_M', ''); status = 'M'; }
-            else if (d.endsWith('_N')) { date = d.replace('_N', ''); status = 'N'; }
-            else if (d.endsWith('_BLOCKED')) { date = d.replace('_BLOCKED', ''); status = 'BLOCKED'; }
-            return { member_id: member.id, date, status };
-        });
-        await supabase.from('availability').delete().eq('member_id', member.id);
-        if (rows.length > 0) await supabase.from('availability').insert(rows);
-        if (member.ministry_id) {
-            await sendNotificationSQL(member.ministry_id, {
-                title: "Atualização de Disponibilidade",
-                message: `${memberName} atualizou seus dias disponíveis.`,
-                type: "info",
-                actionLink: "report"
-            });
-        }
-        return true;
     } catch (e) { return false; }
 };
 

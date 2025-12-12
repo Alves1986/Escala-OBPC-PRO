@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Share2, FileText, Trash, ChevronDown, FileDown, RotateCcw, Sparkles, X } from 'lucide-react';
+import { Share2, FileText, Trash, ChevronDown, FileDown, RotateCcw, Sparkles, X, Calendar } from 'lucide-react';
 
 interface Props {
   onExportIndividual: (member: string) => void;
@@ -9,6 +9,7 @@ interface Props {
   onClearMonth: () => void;
   onResetEvents: () => void;
   onAiAutoFill?: () => void;
+  onSyncCalendar?: () => void; // New Prop
   allMembers: string[];
 }
 
@@ -19,6 +20,7 @@ export const ToolsMenu: React.FC<Props> = ({
   onClearMonth,
   onResetEvents,
   onAiAutoFill,
+  onSyncCalendar,
   allMembers 
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -91,6 +93,16 @@ export const ToolsMenu: React.FC<Props> = ({
                     className="w-full text-left px-3 py-3 text-sm text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg flex items-center gap-3 font-bold transition-colors"
                   >
                     <Sparkles size={18} /> Auto-Escala com IA
+                  </button>
+                )}
+
+                {/* Google Calendar Sync */}
+                {onSyncCalendar && (
+                  <button 
+                    onClick={() => { setIsOpen(false); onSyncCalendar(); }}
+                    className="w-full text-left px-3 py-3 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg flex items-center gap-3 transition-colors font-medium"
+                  >
+                    <Calendar size={18} /> Sincronizar Google Agenda
                   </button>
                 )}
 

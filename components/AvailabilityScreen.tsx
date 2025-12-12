@@ -1,45 +1,76 @@
 
 import React, { useState, useEffect } from 'react';
-import { AvailabilityMap, User } from '../types';
+import { AvailabilityMap, AvailabilityNotesMap, User } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
-import { User as UserIcon, CalendarCheck, ChevronDown, Save, CheckCircle2, Sun, Moon, X, Ban, Lock, Clock } from 'lucide-react';
+import { User as UserIcon, CalendarCheck, ChevronDown, Save, CheckCircle2, Sun, Moon, X, Ban, Lock, Clock, MessageSquare } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface Props {
   availability: AvailabilityMap;
+  availabilityNotes?: AvailabilityNotesMap; // New Prop
   setAvailability: (av: AvailabilityMap) => void;
   allMembersList: string[];
   currentMonth: string;
   onMonthChange: (newMonth: string) => void;
   onNotify?: (message: string) => void;
   currentUser: User | null;
-  onSaveAvailability: (member: string, dates: string[]) => Promise<void>;
+  onSaveAvailability: (member: string, dates: string[], notes: Record<string, string>) => Promise<void>;
   availabilityWindow?: { start?: string, end?: string };
 }
 
-// Modal Interno para Seleção de Período
-const SundaySelectionModal = ({ isOpen, onClose, onSelect, currentDateDisplay }: { isOpen: boolean, onClose: () => void, onSelect: (type: 'M' | 'N' | 'BOTH') => void, currentDateDisplay: string }) => {
+// Modal Interno Unificado para Seleção de Data e Notas
+const DateDetailsModal = ({ isOpen, onClose, onSave, onDelete, currentDateDisplay, initialType, initialNote }: { 
+    isOpen: boolean, 
+    onClose: () => void, 
+    onSave: (type: 'M' | 'N' | 'BOTH', note: string) => void, 
+    onDelete: () => void,
+    currentDateDisplay: string,
+    initialType?: string,
+    initialNote?: string
+}) => {
+    const [type, setType] = useState<'M' | 'N' | 'BOTH'>((initialType as any) || 'BOTH');
+    const [note, setNote] = useState(initialNote || "");
+
     if (!isOpen) return null;
+
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-            <div className="bg-white dark:bg-zinc-800 rounded-xl shadow-2xl w-full max-w-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+            <div className="bg-white dark:bg-zinc-800 rounded-xl shadow-2xl w-full max-w-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden flex flex-col max-h-[90vh]">
                 <div className="p-4 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900">
-                    <h3 className="font-bold text-zinc-800 dark:text-white">Disponibilidade no Domingo</h3>
+                    <h3 className="font-bold text-zinc-800 dark:text-white">Detalhes do Dia {currentDateDisplay}</h3>
                     <button onClick={onClose}><X size={20} className="text-zinc-500"/></button>
                 </div>
-                <div className="p-6 space-y-3">
-                    <p className="text-sm text-zinc-600 dark:text-zinc-300 text-center mb-4">
-                        Para o dia <strong>{currentDateDisplay}</strong>, qual período você pode servir?
-                    </p>
-                    <button onClick={() => onSelect('M')} className="w-full flex items-center justify-between p-3 rounded-lg border border-orange-200 bg-orange-50 hover:bg-orange-100 text-orange-700 transition-colors">
-                        <span className="font-bold flex items-center gap-2"><Sun size={18}/> Apenas Manhã</span>
-                    </button>
-                    <button onClick={() => onSelect('N')} className="w-full flex items-center justify-between p-3 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition-colors">
-                         <span className="font-bold flex items-center gap-2"><Moon size={18}/> Apenas Noite</span>
-                    </button>
-                    <button onClick={() => onSelect('BOTH')} className="w-full flex items-center justify-between p-3 rounded-lg border border-green-200 bg-green-50 hover:bg-green-100 text-green-700 transition-colors">
-                         <span className="font-bold flex items-center gap-2"><CheckCircle2 size={18}/> Ambos (Dia Todo)</span>
-                    </button>
+                <div className="p-6 space-y-4 overflow-y-auto">
+                    <div>
+                        <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Período Disponível</label>
+                        <div className="space-y-2">
+                            <button onClick={() => setType('BOTH')} className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors ${type === 'BOTH' ? 'border-green-500 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 ring-1 ring-green-500' : 'border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700'}`}>
+                                <span className="font-bold flex items-center gap-2"><CheckCircle2 size={18}/> Dia Todo</span>
+                            </button>
+                            <button onClick={() => setType('M')} className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors ${type === 'M' ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 ring-1 ring-orange-500' : 'border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700'}`}>
+                                <span className="font-bold flex items-center gap-2"><Sun size={18}/> Apenas Manhã</span>
+                            </button>
+                            <button onClick={() => setType('N')} className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors ${type === 'N' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-500' : 'border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700'}`}>
+                                <span className="font-bold flex items-center gap-2"><Moon size={18}/> Apenas Noite</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Observação (Opcional)</label>
+                        <textarea 
+                            value={note}
+                            onChange={e => setNote(e.target.value)}
+                            placeholder="Ex: Chego às 19h30..."
+                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]"
+                        />
+                    </div>
+                </div>
+                <div className="p-4 border-t border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 flex gap-3">
+                    <button onClick={onDelete} className="px-4 py-2 text-red-600 font-bold hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors text-sm">Remover</button>
+                    <div className="flex-1"></div>
+                    <button onClick={onClose} className="px-4 py-2 text-zinc-500 font-bold hover:bg-zinc-200 rounded-lg transition-colors text-sm">Cancelar</button>
+                    <button onClick={() => onSave(type, note)} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-lg active:scale-95 transition-all text-sm">Salvar</button>
                 </div>
             </div>
         </div>
@@ -47,14 +78,16 @@ const SundaySelectionModal = ({ isOpen, onClose, onSelect, currentDateDisplay }:
 };
 
 export const AvailabilityScreen: React.FC<Props> = ({ 
-    availability, setAvailability, allMembersList, currentMonth, 
+    availability, availabilityNotes, setAvailability, allMembersList, currentMonth, 
     onMonthChange, onNotify, currentUser, onSaveAvailability,
     availabilityWindow 
 }) => {
   const [selectedMember, setSelectedMember] = useState("");
-  const [tempDates, setTempDates] = useState<string[]>([]); // Formato: "YYYY-MM-DD" ou "YYYY-MM-DD_M" ou "YYYY-MM-DD_N"
+  const [tempDates, setTempDates] = useState<string[]>([]); // "YYYY-MM-DD" or "YYYY-MM-DD_M" etc
+  const [tempNotes, setTempNotes] = useState<Record<string, string>>({}); // "YYYY-MM-DD": "Note content"
+  
   const [hasChanges, setHasChanges] = useState(false);
-  const [sundayModal, setSundayModal] = useState<{ isOpen: boolean, day: number } | null>(null);
+  const [detailsModal, setDetailsModal] = useState<{ isOpen: boolean, day: number } | null>(null);
   const { addToast } = useToast();
 
   const [year, month] = currentMonth.split('-').map(Number);
@@ -63,9 +96,8 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   const isAdmin = currentUser?.role === 'admin';
 
-  // Verifica se a janela de edição está aberta
   const isWindowOpen = () => {
-      if (!availabilityWindow?.start || !availabilityWindow?.end) return true; // Se não configurado, assume aberto
+      if (!availabilityWindow?.start || !availabilityWindow?.end) return true;
       const now = new Date();
       const start = new Date(availabilityWindow.start);
       const end = new Date(availabilityWindow.end);
@@ -74,20 +106,30 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   const isEditable = isAdmin || isWindowOpen();
 
-  // Efeito para selecionar automaticamente o usuário logado e carregar dados iniciais
   useEffect(() => {
     if (currentUser && currentUser.name) {
         setSelectedMember(currentUser.name);
     }
   }, [currentUser]);
 
-  // Carrega os dados do membro selecionado para o estado local
   useEffect(() => {
     if (selectedMember) {
         setTempDates(availability[selectedMember] || []);
+        
+        // Filter notes for selected member
+        const memberNotes: Record<string, string> = {};
+        if (availabilityNotes) {
+            Object.keys(availabilityNotes).forEach(key => {
+                if (key.startsWith(selectedMember + '_')) {
+                    const datePart = key.split('_')[1]; // Member_Date
+                    memberNotes[datePart] = availabilityNotes[key];
+                }
+            });
+        }
+        setTempNotes(memberNotes);
         setHasChanges(false);
     }
-  }, [selectedMember, availability, currentMonth]);
+  }, [selectedMember, availability, availabilityNotes, currentMonth]);
 
   const handlePrevMonth = () => {
     onMonthChange(adjustMonth(currentMonth, -1));
@@ -103,72 +145,67 @@ export const AvailabilityScreen: React.FC<Props> = ({
       if (!isEditable) return;
 
       if (isMonthBlocked) {
-          // Desbloquear: Remove apenas a tag de bloqueio, permitindo edição novamente
           setTempDates(prev => prev.filter(d => !(d.startsWith(currentMonth) && d.includes('BLOCKED'))));
       } else {
-          // Bloquear: Remove todas as datas do mês atual e adiciona a tag de bloqueio
-          // Preserva datas de outros meses
           const otherMonths = tempDates.filter(d => !d.startsWith(currentMonth));
-          const blockTag = `${currentMonth}-01_BLOCKED`; // Usamos dia 01 como âncora
+          const blockTag = `${currentMonth}-01_BLOCKED`; 
           setTempDates([...otherMonths, blockTag]);
       }
       setHasChanges(true);
   };
 
-  const handleToggleDate = (day: number) => {
+  const handleDayClick = (day: number) => {
     if (!selectedMember || isMonthBlocked || !isEditable) return;
-    
-    // Verifica se é Domingo (0 = Domingo)
-    const dateObj = new Date(year, month - 1, day);
-    const isSunday = dateObj.getDay() === 0;
-    const dateStrBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
-
-    // Se for domingo, e a data NÃO estiver marcada ainda, abre modal
-    // Se já estiver marcada (qualquer variação), remove direto (toggle off)
-    const existingIndex = tempDates.findIndex(d => d.startsWith(dateStrBase));
-
-    if (isSunday) {
-        if (existingIndex >= 0) {
-            // Se já existe, remove (independente se é M, N ou Both)
-            const newDates = [...tempDates];
-            newDates.splice(existingIndex, 1);
-            setTempDates(newDates);
-            setHasChanges(true);
-        } else {
-            // Se não existe, abre modal para escolher
-            setSundayModal({ isOpen: true, day });
-        }
-    } else {
-        // Dias normais (Seg-Sáb) funcionam como boolean (Dia todo)
-        if (existingIndex >= 0) {
-             setTempDates(prev => prev.filter(d => !d.startsWith(dateStrBase)));
-        } else {
-             setTempDates(prev => [...prev, dateStrBase]);
-        }
-        setHasChanges(true);
-    }
+    setDetailsModal({ isOpen: true, day });
   };
 
-  const handleSundaySelection = (type: 'M' | 'N' | 'BOTH') => {
-      if (!sundayModal) return;
-      const { day } = sundayModal;
+  const handleModalSave = (type: 'M' | 'N' | 'BOTH', note: string) => {
+      if (!detailsModal) return;
+      const { day } = detailsModal;
       const dateStrBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
       
+      // Remove existing entry for this day
+      const newDates = tempDates.filter(d => !d.startsWith(dateStrBase));
+      
+      // Add new entry
       let finalString = dateStrBase;
       if (type === 'M') finalString += '_M';
       if (type === 'N') finalString += '_N';
-      // 'BOTH' fica apenas a data limpa (padrão legado)
+      
+      setTempDates([...newDates, finalString]);
+      
+      // Update Notes
+      const newNotes = { ...tempNotes };
+      if (note.trim()) {
+          newNotes[dateStrBase] = note.trim();
+      } else {
+          delete newNotes[dateStrBase];
+      }
+      setTempNotes(newNotes);
 
-      setTempDates(prev => [...prev, finalString]);
       setHasChanges(true);
-      setSundayModal(null);
+      setDetailsModal(null);
+  };
+
+  const handleModalDelete = () => {
+      if (!detailsModal) return;
+      const { day } = detailsModal;
+      const dateStrBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
+      
+      setTempDates(prev => prev.filter(d => !d.startsWith(dateStrBase)));
+      
+      const newNotes = { ...tempNotes };
+      delete newNotes[dateStrBase];
+      setTempNotes(newNotes);
+
+      setHasChanges(true);
+      setDetailsModal(null);
   };
 
   const handleSave = async () => {
       if (!selectedMember) return;
 
-      // Salva no banco de dados
-      await onSaveAvailability(selectedMember, tempDates);
+      await onSaveAvailability(selectedMember, tempDates, tempNotes);
       setHasChanges(false);
       
       if (isMonthBlocked) {
@@ -177,9 +214,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
           addToast("Disponibilidade salva com sucesso!", "success");
       }
 
-      // Envia notificação apenas ao clicar em Salvar
       if (onNotify) {
-          const count = tempDates.filter(d => d.startsWith(currentMonth)).length;
           onNotify(`${selectedMember} atualizou disponibilidade para ${getMonthName(currentMonth)}.`);
       }
   };
@@ -189,9 +224,11 @@ export const AvailabilityScreen: React.FC<Props> = ({
       const entry = tempDates.find(d => d.startsWith(dateStrBase));
       
       if (!entry) return null;
-      if (entry.endsWith('_M')) return 'M';
-      if (entry.endsWith('_N')) return 'N';
-      return 'BOTH';
+      let status = 'BOTH';
+      if (entry.endsWith('_M')) status = 'M';
+      if (entry.endsWith('_N')) status = 'N';
+      
+      return { status, note: tempNotes[dateStrBase] };
   };
 
   return (
@@ -206,7 +243,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
           </p>
         </div>
         
-        {/* Month Selector Reuse */}
         <div className="flex items-center gap-4 bg-white dark:bg-zinc-800 p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm self-end">
             <button onClick={handlePrevMonth} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md">←</button>
             <div className="text-center min-w-[120px]">
@@ -217,7 +253,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Lock Notice */}
       {!isEditable && (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-xl flex items-start gap-3 animate-slide-up">
               <Lock className="text-red-500 shrink-0 mt-0.5" size={20} />
@@ -231,7 +266,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
       )}
       
       <div className="space-y-6">
-        {/* Seletor de Membro */}
         <div className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
             <label className="block text-xs font-bold text-zinc-500 uppercase mb-2">Membro</label>
             
@@ -261,7 +295,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
             )}
         </div>
 
-        {/* Toggle de Bloqueio de Mês */}
         {selectedMember && isEditable && (
             <div className={`p-4 rounded-xl border flex items-center justify-between transition-all ${
                 isMonthBlocked 
@@ -279,7 +312,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                         <p className="text-xs text-zinc-500 dark:text-zinc-400">
                             {isMonthBlocked 
                                 ? 'Você não será incluído em nenhuma escala deste mês.' 
-                                : 'Marque se não puder servir em NENHUM dia deste mês.'}
+                                : 'Clique nos dias para marcar disponibilidade ou adicionar observações.'}
                         </p>
                     </div>
                 </div>
@@ -299,7 +332,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
         {selectedMember ? (
           <div className="animate-slide-up pb-20 relative">
             
-            {/* Overlay de Bloqueio */}
             {isMonthBlocked && (
                 <div className="absolute inset-0 z-20 bg-zinc-50/80 dark:bg-zinc-900/80 backdrop-blur-[2px] rounded-xl flex flex-col items-center justify-center text-center border-2 border-dashed border-red-300 dark:border-red-900/50">
                     <div className="bg-white dark:bg-zinc-800 p-6 rounded-full shadow-xl mb-4">
@@ -312,7 +344,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
                 </div>
             )}
 
-            {/* Cabeçalho dos dias da semana (Visível apenas em telas maiores que mobile) */}
             <div className="hidden sm:grid sm:grid-cols-7 gap-3 mb-2">
                 {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => (
                     <div key={i} className="text-center text-xs font-bold text-zinc-400 uppercase py-2">{d}</div>
@@ -320,18 +351,18 @@ export const AvailabilityScreen: React.FC<Props> = ({
             </div>
 
             <div className={`grid grid-cols-4 sm:grid-cols-7 gap-2 sm:gap-3 transition-opacity duration-300 ${isMonthBlocked || !isEditable ? 'opacity-50' : 'opacity-100'}`}>
-                {/* Espaços em branco para alinhar o primeiro dia (Apenas Desktop) */}
                 {Array.from({ length: new Date(year, month - 1, 1).getDay() }).map((_, i) => (
                     <div key={`empty-${i}`} className="hidden sm:block" />
                 ))}
                 
                 {days.map(day => {
-                    const status = getDayStatus(day);
-                    const isSelectedAvailable = status !== null;
+                    const data = getDayStatus(day);
+                    const isSelected = data !== null;
+                    const status = data?.status;
+                    const hasNote = !!data?.note;
                     const dateObj = new Date(year, month - 1, day);
                     const weekDayShort = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' }).substring(0, 3).toUpperCase();
 
-                    // Estilos baseados no tipo de disponibilidade
                     let bgClass = 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700';
                     if (status === 'BOTH') bgClass = 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-green-500/30 ring-2 ring-green-400 dark:ring-green-600';
                     if (status === 'M') bgClass = 'bg-gradient-to-br from-orange-400 to-amber-500 text-white shadow-orange-500/30 ring-2 ring-orange-400';
@@ -340,11 +371,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
                     return (
                         <button
                             key={day}
-                            onClick={() => handleToggleDate(day)}
+                            onClick={() => handleDayClick(day)}
                             disabled={!isEditable}
-                            className={`aspect-square flex flex-col items-center justify-center rounded-xl transition-all shadow-sm relative overflow-hidden group ${bgClass} ${isSelectedAvailable ? 'scale-100 z-10' : ''} ${!isEditable ? 'cursor-not-allowed opacity-80' : ''}`}
+                            className={`aspect-square flex flex-col items-center justify-center rounded-xl transition-all shadow-sm relative overflow-hidden group ${bgClass} ${isSelected ? 'scale-100 z-10' : ''} ${!isEditable ? 'cursor-not-allowed opacity-80' : ''}`}
                         >
-                            {/* Mostra dia da semana apenas no mobile (quando grid não é de 7 colunas) */}
                             <span className="text-[10px] font-bold uppercase opacity-60 sm:hidden mb-0.5">{weekDayShort}</span>
                             <span className="text-lg sm:text-lg font-bold relative z-10 leading-none">{day}</span>
                             
@@ -352,7 +382,12 @@ export const AvailabilityScreen: React.FC<Props> = ({
                             {status === 'M' && <Sun size={16} className="absolute top-1 right-1 opacity-70 hidden sm:block" />}
                             {status === 'N' && <Moon size={16} className="absolute top-1 right-1 opacity-70 hidden sm:block" />}
                             
-                            {/* Ícones Mobile (Centralizados abaixo do número) */}
+                            {hasNote && (
+                                <div className="absolute bottom-1 right-1">
+                                    <MessageSquare size={12} className="text-white drop-shadow-md" fill="currentColor"/>
+                                </div>
+                            )}
+
                             <div className="sm:hidden mt-1">
                                 {status === 'BOTH' && <CheckCircle2 size={12} className="opacity-80" />}
                                 {status === 'M' && <Sun size={12} className="opacity-80" />}
@@ -382,7 +417,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
                 </div>
             </div>
 
-            {/* Barra de Ação Fixa ou Flutuante */}
             {isEditable && (
                 <div className="fixed bottom-6 right-6 left-6 md:left-auto flex justify-end z-40">
                     <button
@@ -400,13 +434,15 @@ export const AvailabilityScreen: React.FC<Props> = ({
                 </div>
             )}
             
-            {/* Modal de Domingo */}
-            {sundayModal && (
-                <SundaySelectionModal 
+            {detailsModal && (
+                <DateDetailsModal 
                     isOpen={true} 
-                    onClose={() => setSundayModal(null)} 
-                    onSelect={handleSundaySelection}
-                    currentDateDisplay={`${sundayModal.day}/${month}`}
+                    onClose={() => setDetailsModal(null)} 
+                    onSave={handleModalSave}
+                    onDelete={handleModalDelete}
+                    currentDateDisplay={`${detailsModal.day}/${month}`}
+                    initialType={getDayStatus(detailsModal.day)?.status}
+                    initialNote={getDayStatus(detailsModal.day)?.note}
                 />
             )}
 

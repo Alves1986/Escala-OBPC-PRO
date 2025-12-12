@@ -27,6 +27,10 @@ export interface AvailabilityMap {
   [memberName: string]: string[]; // Array of YYYY-MM-DD (prefix '+' for preferred)
 }
 
+export interface AvailabilityNotesMap {
+  [key: string]: string; // Key: "MemberName_YYYY-MM-DD" -> Note content
+}
+
 export interface MinistrySettings {
     displayName: string;
     roles: string[];

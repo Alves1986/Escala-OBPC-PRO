@@ -4,7 +4,7 @@ import * as Supabase from '../services/supabaseService';
 import { 
   User, ScheduleMap, AttendanceMap, AvailabilityMap, 
   AppNotification, Announcement, SwapRequest, RepertoireItem, 
-  TeamMemberProfile, MemberMap, Role, GlobalConflictMap 
+  TeamMemberProfile, MemberMap, Role, GlobalConflictMap, AvailabilityNotesMap 
 } from '../types';
 import { useToast } from '../components/Toast';
 import { saveOfflineData, loadOfflineData } from '../services/offlineService';
@@ -19,6 +19,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   const [membersMap, setMembersMap] = useState<MemberMap>({});
   const [publicMembers, setPublicMembers] = useState<TeamMemberProfile[]>([]);
   const [availability, setAvailability] = useState<AvailabilityMap>({});
+  const [availabilityNotes, setAvailabilityNotes] = useState<AvailabilityNotesMap>({});
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [repertoire, setRepertoire] = useState<RepertoireItem[]>([]);
@@ -69,7 +70,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
         const settings = getValue(settingsResult, { displayName: '', roles: [] });
         const schedData = getValue(schedResult, { events: [], schedule: {}, attendance: {} });
         const membersData = getValue(membersResult, { memberMap: {}, publicList: [] });
-        const availData = getValue(availResult, {});
+        const availData = getValue(availResult, { availability: {}, notes: {} }); // Updated to receive notes
         const notifs = getValue(notifsResult, []);
         const ann = getValue(annResult, []);
         const swaps = getValue(swapsResult, []);
@@ -93,7 +94,8 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
         setMembersMap(membersData.memberMap);
         setPublicMembers(membersData.publicList);
 
-        setAvailability(availData);
+        setAvailability(availData.availability);
+        setAvailabilityNotes(availData.notes);
 
         setNotifications(notifs);
         setAnnouncements(ann);
@@ -139,7 +141,8 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
                 setMembersMap(cached.membersData.memberMap);
                 setPublicMembers(cached.membersData.publicList);
 
-                setAvailability(cached.availData);
+                setAvailability(cached.availData.availability);
+                setAvailabilityNotes(cached.availData.notes || {});
 
                 setNotifications(cached.notifs);
                 setAnnouncements(cached.ann);
@@ -172,6 +175,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     membersMap, setMembersMap,
     publicMembers, setPublicMembers,
     availability, setAvailability,
+    availabilityNotes, setAvailabilityNotes,
     notifications, setNotifications,
     announcements, setAnnouncements,
     repertoire, setRepertoire,

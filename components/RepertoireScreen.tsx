@@ -22,14 +22,18 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   // UI State
   const [activeTab, setActiveTab] = useState<'manual' | 'spotify' | 'playlists'>('spotify');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [date, setDate] = useState("");
+  
+  // Persist Date in LocalStorage to survive redirects
+  const [date, setDate] = useState(() => {
+      return localStorage.getItem('repertoire_draft_date') || "";
+  });
 
   // Manual Form
   const [title, setTitle] = useState("");
   const [link, setLink] = useState("");
 
   // Spotify Auth & Data
-  const [isSpotifyLoggedIn, setIsSpotifyLoggedIn] = useState(isUserLoggedIn());
+  const [isSpotifyLoggedIn, setIsSpotifyLoggedIn] = useState(false);
   const [spotifyUser, setSpotifyUser] = useState<any>(null);
   const [userPlaylists, setUserPlaylists] = useState<any[]>([]);
   const [selectedPlaylist, setSelectedPlaylist] = useState<any>(null);
@@ -47,20 +51,30 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<{title: string, artist: string, reason: string}[]>([]);
 
-  // Init - Verifica login
+  // Init - Verifica login e persistência
   useEffect(() => {
-      // Verifica se voltou do login do Spotify
+      // 1. Verifica token do hash (Redirecionamento)
       const token = handleLoginCallback();
       if (token) {
           setIsSpotifyLoggedIn(true);
           setActiveTab('playlists');
           addToast("Spotify conectado com sucesso!", "success");
+      } else if (isUserLoggedIn()) {
+          // 2. Verifica token armazenado
+          setIsSpotifyLoggedIn(true);
       }
 
+      // Se estiver logado, carrega perfil
       if (isUserLoggedIn()) {
           loadUserProfile();
       }
   }, []);
+
+  // Update date persistence
+  const handleDateChange = (val: string) => {
+      setDate(val);
+      localStorage.setItem('repertoire_draft_date', val);
+  };
 
   const loadUserProfile = async () => {
       const profile = await getUserProfile();
@@ -68,12 +82,18 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   };
 
   const handleSpotifyLogin = () => {
-      if (!ministryId) return;
+      if (!ministryId) {
+          addToast("Erro: ID do ministério não encontrado.", "error");
+          return;
+      }
+      // Salva estado antes de ir
+      localStorage.setItem('repertoire_draft_date', date);
+      
       const url = getLoginUrl(ministryId);
       if (url) {
           window.location.href = url;
       } else {
-          addToast("Client ID do Spotify não configurado. Avise o Admin.", "error");
+          addToast("Client ID do Spotify não configurado. Vá em Configurações.", "error");
       }
   };
 
@@ -116,13 +136,20 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     const finalTitle = overrideTitle || title;
     const finalLink = overrideLink || link;
 
-    if (!finalTitle || !date) {
-        addToast("Preencha a Data do Culto.", "error");
+    if (!finalTitle) {
+        addToast("O título da música é obrigatório.", "error");
+        return;
+    }
+
+    if (!date) {
+        addToast("Por favor, selecione a Data do Culto antes de adicionar.", "warning");
+        // Scroll to top to see error
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
     }
 
     if (!currentUser?.ministryId) {
-        addToast("Erro: Ministério não identificado.", "error");
+        addToast("Erro: Ministério não identificado. Faça login novamente.", "error");
         return;
     }
 
@@ -136,9 +163,9 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     });
 
     if (onItemAdd) onItemAdd(finalTitle);
-    await setRepertoire([]); 
+    await setRepertoire([]); // Reload list
     
-    // Clear forms
+    // Clear forms but keep date
     setTitle("");
     setLink("");
     
@@ -225,9 +252,11 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                       </div>
                       <div>
                           <h3 className="text-sm font-bold text-zinc-800 dark:text-white">Adicionar Música</h3>
-                          {isSpotifyLoggedIn && spotifyUser && (
+                          {isSpotifyLoggedIn && spotifyUser ? (
                               <p className="text-[10px] text-zinc-500">Logado como: <span className="font-bold text-green-600">{spotifyUser.display_name}</span></p>
-                          )}
+                          ) : isSpotifyLoggedIn ? (
+                              <p className="text-[10px] text-green-600 font-bold">● Conectado ao Spotify</p>
+                          ) : null}
                       </div>
                   </div>
                   <div className="flex gap-2 w-full sm:w-auto">
@@ -238,7 +267,9 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                           <Sparkles size={14} /> Sugestão IA
                       </button>
                       {isSpotifyLoggedIn ? (
-                          <button onClick={handleSpotifyLogout} className="text-xs bg-zinc-100 dark:bg-zinc-700 p-2 rounded-lg text-zinc-500 hover:text-red-500" title="Sair do Spotify"><LogOut size={16}/></button>
+                          <button onClick={handleSpotifyLogout} className="text-xs bg-zinc-100 dark:bg-zinc-700 p-2 rounded-lg text-zinc-500 hover:text-red-500 flex items-center gap-1" title="Sair do Spotify">
+                              <LogOut size={16}/> Sair
+                          </button>
                       ) : (
                           <button 
                             onClick={handleSpotifyLogin}
@@ -250,15 +281,16 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                   </div>
               </div>
 
-              {/* Data Selection */}
+              {/* Data Selection - IMPORTANT: Controlled Input with LocalStorage persistence */}
               <div className="mb-4 bg-zinc-50 dark:bg-zinc-900/50 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800">
                   <label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block flex items-center gap-1"><Calendar size={10}/> Data do Culto (Obrigatório)</label>
                   <input 
                       type="date" 
                       value={date} 
-                      onChange={e => setDate(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-green-500"
+                      onChange={e => handleDateChange(e.target.value)}
+                      className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-green-500 font-medium"
                   />
+                  {!date && <p className="text-[10px] text-red-400 mt-1">Selecione uma data para habilitar a adição.</p>}
               </div>
 
               {/* Tabs */}
@@ -356,7 +388,10 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                                       <button 
                                           onClick={() => handleAdd(`${track.name} - ${track.artists[0].name}`, track.external_urls.spotify)}
                                           disabled={isSubmitting || !date}
-                                          className="shrink-0 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-3 py-1.5 rounded-full font-bold hover:bg-green-200 dark:hover:bg-green-800 transition-colors disabled:opacity-50"
+                                          className={`shrink-0 text-xs px-3 py-1.5 rounded-full font-bold transition-colors disabled:opacity-50 ${
+                                              !date ? 'bg-zinc-200 text-zinc-400 cursor-not-allowed' : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-800'
+                                          }`}
+                                          title={!date ? "Selecione uma data primeiro" : "Adicionar à escala"}
                                       >
                                           Adicionar
                                       </button>
@@ -397,7 +432,9 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                                               <button 
                                                   onClick={() => handleAdd(`${track.name} - ${track.artists[0].name}`, track.external_urls.spotify)}
                                                   disabled={isSubmitting || !date}
-                                                  className="text-[10px] font-bold bg-zinc-200 dark:bg-zinc-700 px-2 py-1 rounded hover:bg-green-500 hover:text-white transition-colors disabled:opacity-50"
+                                                  className={`text-[10px] font-bold px-2 py-1 rounded transition-colors disabled:opacity-50 ${
+                                                      !date ? 'bg-zinc-200 text-zinc-400 cursor-not-allowed' : 'bg-zinc-200 dark:bg-zinc-700 hover:bg-green-500 hover:text-white'
+                                                  }`}
                                               >
                                                   Add
                                               </button>
@@ -445,7 +482,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                           <input type="text" placeholder="Link do vídeo ou playlist..." value={link} onChange={e => setLink(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-pink-500"/>
                       </div>
                       <div className="md:col-span-2 flex justify-end">
-                          <button onClick={() => handleAdd()} disabled={isSubmitting} className="bg-pink-600 hover:bg-pink-700 text-white font-bold py-2.5 px-6 rounded-lg transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50">
+                          <button onClick={() => handleAdd()} disabled={isSubmitting || !date} className="bg-pink-600 hover:bg-pink-700 text-white font-bold py-2.5 px-6 rounded-lg transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                               {isSubmitting ? 'Salvando...' : 'Adicionar Manualmente'}
                           </button>
                       </div>

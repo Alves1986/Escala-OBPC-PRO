@@ -58,9 +58,12 @@ export const getLoginUrl = (ministryId: string) => {
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     const clientId = localStorage.getItem(`spotify_cid_${cleanMid}`);
     
-    if (!clientId) return null;
+    if (!clientId) {
+        console.error("Client ID not found for", cleanMid);
+        return null;
+    }
 
-    const redirectUri = window.location.origin; // A própria página
+    const redirectUri = window.location.origin; 
     const scopes = [
         "user-read-private",
         "user-read-email",
@@ -74,8 +77,9 @@ export const getLoginUrl = (ministryId: string) => {
 // Salva token da URL (Hash) e persiste no LocalStorage
 export const handleLoginCallback = () => {
     const hash = window.location.hash;
+    // O hash vem como #access_token=...&token_type=Bearer...
     if (hash && hash.includes('access_token')) {
-        const params = new URLSearchParams(hash.substring(1));
+        const params = new URLSearchParams(hash.substring(1)); // Remove o #
         const token = params.get('access_token');
         const expiresIn = params.get('expires_in');
         
@@ -162,15 +166,18 @@ export const getPlaylistTracks = async (playlistId: string): Promise<SpotifyTrac
 };
 
 export const searchSpotifyTracks = async (query: string, ministryId: string): Promise<SpotifyTrack[]> => {
-    // Usa token de usuário se tiver, senão usa credentials do app
+    // 1. Tenta User Token
     let token = getUserToken();
     
-    // Se não tiver token de usuário, tenta pegar o token de aplicativo
+    // 2. Se não tiver, tenta App Token (Client Credentials)
     if (!token) {
         token = await getClientCredentialsToken(ministryId);
     }
 
-    if (!token) throw new Error("Credenciais do Spotify não configuradas.");
+    if (!token) {
+        console.warn("Nenhum token disponível para busca.");
+        return []; 
+    }
 
     try {
         const data = await fetchSpotify(`/search?q=${encodeURIComponent(query)}&type=track&limit=10`, token);
