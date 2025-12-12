@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
     // Importante: Permite que o Vite leia variáveis de ambiente iniciadas com NEXT_PUBLIC_
     envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
     define: {
-      // Defines globais para injetar valores de ambiente de forma segura
+      // Defines globais para injetar valores de ambiente de forma segura e persistente
       '__SUPABASE_URL__': JSON.stringify(env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || ''),
       '__SUPABASE_KEY__': JSON.stringify(env.VITE_SUPABASE_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''),
       

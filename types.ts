@@ -170,7 +170,7 @@ export const DEFAULT_ROLES: Record<string, string[]> = {
 // SECURITY CONFIGURATION
 // ============================================================================
 
-// Globals injected by Vite
+// Globals injected by Vite via define
 declare const __SUPABASE_URL__: string;
 declare const __SUPABASE_KEY__: string;
 
@@ -181,11 +181,13 @@ const getLocal = (key: string) => {
   return null;
 };
 
-// 1. Try Injected Globals (Build-time env vars)
+// 1. Try Injected Globals (Build-time env vars - MOST ROBUST)
 let injectedUrl = '';
 let injectedKey = '';
 try {
+    // @ts-ignore
     if (typeof __SUPABASE_URL__ !== 'undefined') injectedUrl = __SUPABASE_URL__;
+    // @ts-ignore
     if (typeof __SUPABASE_KEY__ !== 'undefined') injectedKey = __SUPABASE_KEY__;
 } catch(e) {}
 
@@ -201,15 +203,17 @@ try {
   }
 } catch (e) {}
 
-// 3. Try LocalStorage (User entered)
+// 3. Try LocalStorage (User entered manually in Setup Screen)
 const localUrl = getLocal('VITE_SUPABASE_URL');
 const localKey = getLocal('VITE_SUPABASE_KEY');
 
 // Priority: LocalStorage (Manual Override) > Injected Globals > Import Meta
+// If Injected Globals exist, they usually mean the .env is correct, so we prefer them over empty values.
 export const SUPABASE_URL = localUrl || injectedUrl || metaUrl || "";
 export const SUPABASE_KEY = localKey || injectedKey || metaKey || "";
 
-// Debug Log (Opcional - pode remover em produção)
+// Debug Log (Optional - remove in production)
+// Only warns if absolutely nothing is found
 if ((!SUPABASE_URL || !SUPABASE_KEY) && typeof window !== 'undefined' && window.location.pathname !== '/setup') {
   console.warn("⚠️ Sistema aguardando credenciais. Verifique o arquivo .env na raiz ou configure manualmente.");
 }

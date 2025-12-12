@@ -2,7 +2,7 @@
 import React, { useMemo, useCallback, useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis, GlobalConflictMap, TeamMemberProfile } from '../types';
-import { CheckCircle2, AlertTriangle, Trash2, Edit, Clock, User, ChevronDown, ChevronLeft, ChevronRight, X, Search, AlertOctagon } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Trash2, Edit, Clock, User, ChevronDown, ChevronLeft, ChevronRight, X, Search, AlertOctagon, XCircle } from 'lucide-react';
 
 interface Props {
   events: { iso: string; dateDisplay: string; title: string }[];
@@ -126,8 +126,8 @@ const MemberSelector = ({
     const filteredOptions = options.filter(opt => opt.toLowerCase().includes(search.toLowerCase())).sort((a, b) => {
         const availA = checkAvailability(a);
         const availB = checkAvailability(b);
-        if (availA && !availB) return -1;
-        if (!availA && availB) return 1;
+        if (availA && !availB) return -1; // A (Available) comes first
+        if (!availA && availB) return 1;  // B (Available) comes first
         return 0;
     });
 
@@ -230,7 +230,7 @@ const MemberSelector = ({
                         <div className="overflow-y-auto custom-scrollbar p-1 flex-1">
                             <button 
                                 onClick={() => { onChange(""); setIsOpen(false); }}
-                                className="w-full text-left px-3 py-3 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center gap-2 mb-1"
+                                className="w-full text-left px-3 py-3 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center gap-2 mb-1 border border-transparent"
                             >
                                 <Trash2 size={16} /> Remover da Escala
                             </button>
@@ -242,21 +242,30 @@ const MemberSelector = ({
                                 </div>
                             )}
 
-                            {filteredOptions.map(opt => {
+                            {filteredOptions.map((opt, idx) => {
                                 const profile = memberProfiles?.find(p => p.name === opt);
                                 const count = memberStats[opt] || 0;
                                 const isAvailable = checkAvailability(opt);
                                 
+                                // Separador visual (opcional se a lista for longa)
+                                const prevIsAvailable = idx > 0 ? checkAvailability(filteredOptions[idx-1]) : true;
+                                const showSeparator = !isAvailable && prevIsAvailable;
+
                                 return (
+                                    <React.Fragment key={opt}>
+                                    {showSeparator && (
+                                        <div className="px-3 py-1.5 text-[10px] uppercase font-bold text-zinc-400 bg-zinc-50 dark:bg-zinc-800/50 mt-1 mb-1 rounded">
+                                            Indisponíveis
+                                        </div>
+                                    )}
                                     <button
-                                        key={opt}
                                         onClick={() => { onChange(opt); setIsOpen(false); }}
-                                        className={`w-full text-left px-3 py-3 text-sm rounded-lg flex items-center justify-between group transition-colors mb-1 ${
+                                        className={`w-full text-left px-3 py-2 text-sm rounded-lg flex items-center justify-between group transition-colors mb-1 ${
                                             value === opt 
                                             ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30' 
                                             : isAvailable 
-                                                ? 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50' 
-                                                : 'opacity-50 hover:opacity-100 hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                                                ? 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50 border border-transparent' 
+                                                : 'opacity-50 hover:opacity-80 hover:bg-zinc-50 dark:hover:bg-zinc-800 border border-transparent'
                                         }`}
                                     >
                                         <div className="flex items-center gap-3 overflow-hidden">
@@ -268,8 +277,12 @@ const MemberSelector = ({
                                                 </div>
                                             )}
                                             <div className="flex flex-col truncate text-left">
-                                                <span className={`font-medium truncate text-sm ${isAvailable ? 'text-zinc-800 dark:text-zinc-100' : 'text-zinc-400 dark:text-zinc-500'}`}>{opt}</span>
-                                                {isAvailable && <span className="text-[10px] text-green-600 dark:text-green-400 font-bold flex items-center gap-1"><CheckCircle2 size={10}/> Disponível</span>}
+                                                <span className={`font-medium truncate text-sm ${isAvailable ? 'text-zinc-800 dark:text-zinc-100' : 'text-zinc-400 dark:text-zinc-500 line-through decoration-zinc-400/50'}`}>{opt}</span>
+                                                {isAvailable ? (
+                                                    <span className="text-[10px] text-green-600 dark:text-green-400 font-bold flex items-center gap-1"><CheckCircle2 size={10}/> Disponível</span>
+                                                ) : (
+                                                    <span className="text-[10px] text-zinc-400 font-medium flex items-center gap-1"><XCircle size={10}/> Indisponível</span>
+                                                )}
                                             </div>
                                         </div>
                                         
@@ -281,6 +294,7 @@ const MemberSelector = ({
                                             {count}x
                                         </span>
                                     </button>
+                                    </React.Fragment>
                                 );
                             })}
                         </div>

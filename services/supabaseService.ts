@@ -969,6 +969,7 @@ export const fetchMinistryAvailability = async (ministryId: string): Promise<Ava
             let dateStr = row.date;
             if (row.status === 'M') dateStr += '_M';
             else if (row.status === 'N') dateStr += '_N';
+            else if (row.status === 'BLOCKED') dateStr += '_BLOCKED';
             availability[name].push(dateStr);
         });
         return availability;
@@ -986,6 +987,7 @@ export const saveMemberAvailability = async (userId: string, memberName: string,
             let status = 'BOTH';
             if (d.endsWith('_M')) { date = d.replace('_M', ''); status = 'M'; }
             else if (d.endsWith('_N')) { date = d.replace('_N', ''); status = 'N'; }
+            else if (d.endsWith('_BLOCKED')) { date = d.replace('_BLOCKED', ''); status = 'BLOCKED'; }
             return { member_id: member.id, date, status };
         });
         await supabase.from('availability').delete().eq('member_id', member.id);

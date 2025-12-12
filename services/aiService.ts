@@ -38,6 +38,18 @@ const prepareMinifiedContext = (context: AIContext) => {
     .filter(m => m.roles && m.roles.some(r => context.roles.includes(r)))
     .map(m => {
       const rawAvail = context.availability[m.name] || [];
+      
+      // Critical check: if any date in this month is marked as 'BLOCKED', clear the schedule for this member
+      const isBlocked = rawAvail.some(d => d.startsWith(monthPrefix) && d.includes('BLOCKED'));
+      
+      if (isBlocked) {
+          return {
+              n: m.name,
+              r: m.roles?.filter(r => context.roles.includes(r)) || [],
+              d: [] // Empty days means completely unavailable for AI
+          };
+      }
+
       const days = rawAvail
         .filter(d => d.startsWith(monthPrefix))
         .map(d => {
@@ -71,37 +83,55 @@ export const generateScheduleWithAI = async (context: AIContext): Promise<Schedu
       }
 
       const systemInstruction = `
-        You are an expert Ministry Scheduler. 
-        Task: Assign members to events for Ministry: ${ministryId}.
-        Required Roles to fill per event: ${JSON.stringify(roles)}.
+        You are an expert Ministry Scheduler for "${ministryId}".
         
-        INPUT DATA FORMAT:
-        - Events (e): {id: "ISO", d: day, h: hour}
+        GOAL: Create a fair schedule based strictly on availability.
+        
+        INPUT DATA:
+        - Events (e): {id: "ISO_Date", d: day_number, h: hour_of_day}
         - Members (m): {n: name, r: [roles], d: [available_days]}
-        
-        AVAILABILITY RULES:
-        - "d" array contains days user CAN serve.
-        - format "5": All day. "5(M)": Morning only (<13h). "5(N)": Night only (>=13h).
-        - If event hour < 13: User must have "D" or "D(M)". Reject "D(N)".
-        - If event hour >= 13: User must have "D" or "D(N)". Reject "D(M)".
-        - If day not listed, member is UNAVAILABLE. DO NOT ASSIGN.
+        - Required Roles: ${JSON.stringify(roles)}
 
-        DISTRIBUTION RULES:
-        - Distribute load evenly. Avoid same person 2 days in a row if possible.
-        - For 'louvor' & role 'Vocal': assign 3 to 5 people per event (keys: _Vocal_1, _Vocal_2...).
-        - For others: 1 person per role key.
+        AVAILABILITY CODES in Member Data (d):
+        - "5": Available ALL day on the 5th.
+        - "5(M)": Available ONLY Morning (events where h < 13).
+        - "5(N)": Available ONLY Night (events where h >= 13).
         
-        RETURN JSON:
-        { "EventISO_Role": "MemberName" }
+        CRITICAL RULES (MUST FOLLOW OR FAIL):
+        
+        1. **ONE ROLE PER DAY (HARD CONSTRAINT)**: 
+           - A member CANNOT appear more than ONCE per calendar day (d).
+           - Even if they are available all day, DO NOT assign them to both Morning and Night services.
+           - DO NOT assign the same person to 2 different roles in the same event.
+           - Example: If John is "Camera" on Day 5, he CANNOT be "Sound" on Day 5.
+
+        2. **AVAILABILITY CHECK**: 
+           - Member MUST have the day listed in their 'd' array.
+           - If event is Morning (h<13), member must have "X" or "X(M)". Reject "X(N)".
+           - If event is Night (h>=13), member must have "X" or "X(N)". Reject "X(M)".
+        
+        3. **SCARCITY PRIORITY**:
+           - Count how many available days each member has.
+           - Assign members with FEW available days (1 or 2) FIRST.
+           - Members with wide availability (4+ days) should fill the remaining gaps.
+
+        4. **MISSING PEOPLE**:
+           - If NO ONE matches the criteria for a slot, return "" (empty string). DO NOT force an unavailable person.
+
+        OUTPUT FORMAT (JSON Only):
+        { 
+          "EventISO_RoleName": "MemberName",
+          "EventISO_RoleName2": "" (if empty)
+        }
       `;
 
       const response = await ai.models.generateContent({
-          model: 'gemini-3-pro-preview', // Stronger reasoning for constraints
+          model: 'gemini-2.5-flash', 
           contents: JSON.stringify(inputData),
           config: {
               systemInstruction: systemInstruction,
               responseMimeType: "application/json",
-              temperature: 0.2, // Low temp for strict adherence to availability
+              temperature: 0.1, // Very low temperature for strict logic
           }
       });
 
@@ -110,6 +140,9 @@ export const generateScheduleWithAI = async (context: AIContext): Promise<Schedu
 
     } catch (error: any) {
       console.error("AI Schedule Error:", error);
+      if (error.message?.includes("429") || error.message?.includes("Quota")) {
+          throw new Error("Limite da IA excedido. Aguarde alguns instantes e tente novamente.");
+      }
       throw new Error(error.message || "Falha na geração inteligente.");
     }
 };
@@ -156,16 +189,16 @@ export const polishAnnouncementAI = async (text: string, tone: 'professional' | 
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: `
-                Act as a professional editor. Rewrite the following announcement text to be ${tonePrompt[tone]}. 
+                Act as a professional copywriter. Rewrite the announcement text below to be ${tonePrompt[tone]}. 
                 
-                Rules:
-                1. Keep the core information intact.
-                2. Improve clarity and grammar.
-                3. Language: Portuguese.
-                4. CRITICAL: Return ONLY the rewritten text. Do not provide options. Do not add conversational filler like "Here is the text" or "Sure". Just the final text.
-                5. Provide a single, best version.
+                STRICT RULES:
+                1. Return ONLY the rewritten text.
+                2. NO conversational filler (e.g., "Here is your text", "Sure!").
+                3. Provide ONE single best version.
+                4. Language: Portuguese.
+                5. Keep emojis relevant but professional.
 
-                Text to rewrite: "${text}"
+                Original Text: "${text}"
             `,
         });
 
