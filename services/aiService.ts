@@ -98,6 +98,12 @@ export const generateScheduleWithAI = async (context: AIContext): Promise<Schedu
         - "5(N)": Available ONLY Night (events where h >= 13).
         
         CRITICAL RULES (MUST FOLLOW OR FAIL):
+
+        0. **STRICT IMMUTABLE EVENTS**:
+           - Use ONLY the Event IDs provided in "Events (e)".
+           - DO NOT create new events. DO NOT invent dates, times, or shift existing times.
+           - If a specific date/time is not in the "Events (e)" list, DO NOT schedule anyone for it.
+           - Output keys MUST start with one of the provided Event IDs.
         
         1. **ONE ROLE PER DAY (HARD CONSTRAINT)**: 
            - A member CANNOT appear more than ONCE per calendar day (d).
@@ -131,12 +137,26 @@ export const generateScheduleWithAI = async (context: AIContext): Promise<Schedu
           config: {
               systemInstruction: systemInstruction,
               responseMimeType: "application/json",
-              temperature: 0.1, // Very low temperature for strict logic
+              temperature: 0.0, // Zero temperature for deterministic output and strict rule adherence
           }
       });
 
       if (!response.text) throw new Error("A IA não retornou uma escala válida.");
-      return JSON.parse(response.text);
+      const rawSchedule = JSON.parse(response.text);
+
+      // SAFETY FILTER: Ensure AI didn't hallucinate events
+      const filteredSchedule: ScheduleMap = {};
+      const validEventIds = new Set(inputData.e.map(evt => evt.id));
+
+      Object.entries(rawSchedule).forEach(([key, value]) => {
+          // Check if key starts with a valid event ID
+          const isValidEvent = Array.from(validEventIds).some(validId => key.startsWith(validId));
+          if (isValidEvent) {
+              filteredSchedule[key] = value as string;
+          }
+      });
+
+      return filteredSchedule;
 
     } catch (error: any) {
       console.error("AI Schedule Error:", error);

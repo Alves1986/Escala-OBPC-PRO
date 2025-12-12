@@ -265,7 +265,6 @@ const InnerApp = () => {
           if (!confirm("A escala já possui itens preenchidos. Deseja sobrescrever usando Inteligência Artificial?")) return;
       }
 
-      const toastId = "ai-generating";
       addToast("Gerando escala inteligente com Gemini... aguarde.", "info");
 
       try {
@@ -279,8 +278,8 @@ const InnerApp = () => {
 
           // Update State Local
           setSchedule(generatedSchedule);
-          // Save Bulk to DB
-          await Supabase.saveScheduleBulk(ministryId, generatedSchedule);
+          // Save Bulk to DB with Strict Mode enabled to prevent event duplication
+          await Supabase.saveScheduleBulk(ministryId, generatedSchedule, true);
           
           addToast("Escala gerada com sucesso!", "success");
       } catch (e: any) {
@@ -475,7 +474,7 @@ const InnerApp = () => {
                                 }
                             }}
                             onResetEvents={() => {
-                                if(confirm("Restaurar eventos padrão?")) {
+                                if(confirm("Restaurar eventos padrão? (Isso removerá eventos duplicados)")) {
                                     Supabase.resetToDefaultEvents(ministryId, currentMonth).then(loadData);
                                 }
                             }}

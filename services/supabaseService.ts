@@ -866,7 +866,8 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
     } catch (e) { return false; }
 };
 
-export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap): Promise<boolean> => {
+// strictMode: Se true, NÃO cria eventos novos. Útil para IA não alucinar eventos duplicados.
+export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap, strictMode: boolean = false): Promise<boolean> => {
     if (isPreviewMode) return true;
     if (!supabase || !ministryId) return false;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
@@ -889,25 +890,29 @@ export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap
         if (existingEvents) existingEvents.forEach(e => eventIdMap.set(e.date_time, e.id));
 
         const eventsToCreate = [];
-        for (const ts of neededTimestamps) {
-            if (!eventIdMap.has(ts)) {
-                const dateObj = new Date(ts);
-                const dayOfWeek = dateObj.getDay();
-                const hour = dateObj.getHours();
-                let title = "Evento Extra";
-                if (dayOfWeek === 3) title = "Culto (Quarta)";
-                else if (dayOfWeek === 0) {
-                    if (hour < 13) title = "Culto (Domingo - Manhã)";
-                    else title = "Culto (Domingo - Noite)";
+        
+        // Em Strict Mode (IA), não criamos eventos novos se não existirem
+        if (!strictMode) {
+            for (const ts of neededTimestamps) {
+                if (!eventIdMap.has(ts)) {
+                    const dateObj = new Date(ts);
+                    const dayOfWeek = dateObj.getDay();
+                    const hour = dateObj.getHours();
+                    let title = "Evento Extra";
+                    if (dayOfWeek === 3) title = "Culto (Quarta)";
+                    else if (dayOfWeek === 0) {
+                        if (hour < 13) title = "Culto (Domingo - Manhã)";
+                        else title = "Culto (Domingo - Noite)";
+                    }
+                    eventsToCreate.push({ ministry_id: cleanMid, title: title, date_time: ts });
                 }
-                eventsToCreate.push({ ministry_id: cleanMid, title: title, date_time: ts });
             }
-        }
 
-        if (eventsToCreate.length > 0) {
-            const { data: newEvents, error: createError } = await supabase.from('events').insert(eventsToCreate).select('id, date_time');
-            if (createError) throw createError;
-            newEvents?.forEach(e => eventIdMap.set(e.date_time, e.id));
+            if (eventsToCreate.length > 0) {
+                const { data: newEvents, error: createError } = await supabase.from('events').insert(eventsToCreate).select('id, date_time');
+                if (createError) throw createError;
+                newEvents?.forEach(e => eventIdMap.set(e.date_time, e.id));
+            }
         }
 
         const assignmentsToUpsert = [];
@@ -918,6 +923,10 @@ export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap
             const role = key.substring(lastUnderscore + 1);
             const ts = `${isoDate}:00`;
             const eventId = eventIdMap.get(ts);
+            
+            // Em Strict Mode, se o evento não existe, ignora a atribuição
+            if (!eventId && strictMode) continue;
+
             const memberId = memberMap.get(memberName.toLowerCase().trim());
             if (eventId && memberId) assignmentsToUpsert.push({ event_id: eventId, role: role, member_id: memberId });
         }
@@ -1085,71 +1094,154 @@ export const syncMemberProfile = async (ministryId: string, user: User) => {
 
 export const registerWithEmail = async (email: string, pass: string, name: string, ministries: string[], whatsapp?: string, roles?: string[]) => {
     if (isPreviewMode) return { success: true, message: "Conta criada (Demo)" };
-    if (!supabase) return { success: false, message: "Erro conexão" };
+    if (!supabase) return { success: false, message: "Erro de conexão" };
+
     const { data, error } = await supabase.auth.signUp({
-        email, password: pass,
-        options: { data: { name, ministryId: ministries[0] || 'midia', allowedMinistries: ministries, whatsapp, functions: roles } }
+        email,
+        password: pass,
+        options: {
+            data: {
+                full_name: name,
+                name: name
+            }
+        }
     });
+
     if (error) return { success: false, message: error.message };
+
     if (data.user) {
-        await syncMemberProfile(ministries[0] || 'midia', { id: data.user.id, email, name, role: 'member', ministryId: ministries[0], allowedMinistries: ministries, whatsapp, functions: roles });
-        await sendNotificationSQL(ministries[0] || 'midia', { title: "Novo Membro", message: `${name} acabou de se cadastrar no ministério!`, type: "info" });
+        // Create profile
+        const mainMinistry = ministries[0] || 'midia';
+        const { error: profileError } = await supabase.from('profiles').insert({
+            id: data.user.id,
+            email: email,
+            name: name,
+            ministry_id: mainMinistry,
+            allowed_ministries: ministries,
+            whatsapp: whatsapp,
+            role: 'member',
+            functions: roles || []
+        });
+
+        if (profileError) {
+             console.error("Erro ao criar perfil:", profileError);
+             return { success: true, message: "Conta criada, mas houve erro no perfil. Contate suporte." };
+        }
     }
+
     return { success: true, message: "Conta criada com sucesso!" };
 };
 
 export const sendPasswordResetEmail = async (email: string) => {
-    if (isPreviewMode) return { success: true, message: "Email enviado (Demo)" };
-    if (!supabase) return { success: false, message: "Erro conexão" };
-    let redirectUrl = window.location.origin;
-    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') redirectUrl = "https://escalaobpcpro.vercel.app";
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: redirectUrl + '?reset=true' });
+    if (isPreviewMode) return { success: true, message: "Link de recuperação enviado (Demo)" };
+    if (!supabase) return { success: false, message: "Erro de conexão" };
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + '/?tab=reset-password',
+    });
+
     if (error) return { success: false, message: error.message };
-    return { success: true, message: "Link de recuperação enviado para o e-mail." };
+    return { success: true, message: "Link de recuperação enviado para seu e-mail!" };
+};
+
+export const joinMinistry = async (ministryId: string, roles: string[]) => {
+    if (isPreviewMode) return { success: true, message: "Entrou no ministério (Demo)" };
+    if (!supabase) return { success: false, message: "Erro de conexão" };
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, message: "Usuário não logado" };
+
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+
+    try {
+        const { data: profile } = await supabase.from('profiles').select('allowed_ministries, functions').eq('id', user.id).single();
+        
+        if (profile) {
+            const currentMinistries = profile.allowed_ministries || [];
+            const currentFunctions = profile.functions || [];
+
+            if (currentMinistries.includes(cleanMid)) {
+                return { success: false, message: "Você já faz parte deste ministério." };
+            }
+
+            const newMinistries = [...currentMinistries, cleanMid];
+            const newFunctions = [...new Set([...currentFunctions, ...roles])];
+
+            const { error } = await supabase.from('profiles').update({
+                allowed_ministries: newMinistries,
+                functions: newFunctions
+            }).eq('id', user.id);
+
+            if (error) throw error;
+            return { success: true, message: `Bem-vindo ao ministério!` };
+        }
+    } catch (e: any) {
+        return { success: false, message: e.message || "Erro ao entrar no ministério." };
+    }
+    return { success: false, message: "Erro desconhecido." };
+};
+
+export const deleteMember = async (ministryId: string, userId: string, memberName: string) => {
+    if (isPreviewMode) return;
+    if (!supabase) return;
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data: requester } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single();
+    if (!requester?.is_admin) return;
+
+    try {
+        const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+        const { data: targetProfile } = await supabase.from('profiles').select('allowed_ministries, ministry_id').eq('id', userId).single();
+        
+        if (targetProfile) {
+            const newAllowed = (targetProfile.allowed_ministries || []).filter((m: string) => m !== cleanMid);
+            
+            if (newAllowed.length === 0) {
+                // If user has no other ministries, delete profile
+                await supabase.from('profiles').delete().eq('id', userId);
+            } else {
+                let updates: any = { allowed_ministries: newAllowed };
+                if (targetProfile.ministry_id === cleanMid) {
+                    updates.ministry_id = newAllowed[0];
+                }
+                await supabase.from('profiles').update(updates).eq('id', userId);
+            }
+            
+            await logActionSQL(ministryId, "Remoção de Membro", `${memberName} foi removido da equipe por ${user.email}.`);
+        }
+    } catch (e) {
+        console.error("Erro ao deletar membro:", e);
+    }
 };
 
 export const updateUserProfile = async (name: string, whatsapp: string, avatar_url?: string, functions?: string[], birthDate?: string, ministryId?: string) => {
     if (isPreviewMode) return { success: true, message: "Perfil atualizado (Demo)" };
-    if (!supabase) return { success: false, message: "Erro conexão" };
+    if (!supabase) return { success: false, message: "Erro de conexão" };
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, message: "Usuário não logado" };
+
     try {
-        const authUpdates = { name, whatsapp, avatar_url, functions, birthDate, ministryId };
-        const dbUpdates = { name, whatsapp, avatar_url, functions, birth_date: birthDate || null };
-        await supabase.auth.updateUser({ data: authUpdates });
-        const { error } = await supabase.from('profiles').update(dbUpdates).eq('id', user.id);
+        const updates: any = {
+            name,
+            whatsapp,
+            updated_at: new Date().toISOString(),
+        };
+        if (avatar_url !== undefined) updates.avatar_url = avatar_url;
+        if (functions !== undefined) updates.functions = functions;
+        if (birthDate !== undefined) updates.birth_date = birthDate;
+
+        const { error } = await supabase.from('profiles').update(updates).eq('id', user.id);
+
         if (error) throw error;
-        return { success: true, message: "Perfil atualizado!" };
-    } catch (e: any) { return { success: false, message: e.message }; }
-};
+        
+        if (ministryId) {
+             await logActionSQL(ministryId, "Atualização de Perfil", `${name} atualizou seus dados.`);
+        }
 
-export const joinMinistry = async (newMinistryId: string, roles: string[]): Promise<{ success: boolean; message: string }> => {
-    if (isPreviewMode) return { success: true, message: "Entrou no ministério (Demo)" };
-    if (!supabase) return { success: false, message: "Erro de conexão." };
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { success: false, message: "Usuário não logado." };
-    try {
-        const cleanMid = newMinistryId.trim().toLowerCase().replace(/\s+/g, '-');
-        const { data: profile } = await supabase.from('profiles').select('name, allowed_ministries, functions').eq('id', user.id).single();
-        if (!profile) return { success: false, message: "Perfil não encontrado." };
-        const currentAllowed = profile.allowed_ministries || [];
-        const currentFunctions = profile.functions || [];
-        if (currentAllowed.includes(cleanMid)) return { success: false, message: "Você já faz parte deste ministério." };
-        const newAllowed = [...currentAllowed, cleanMid];
-        const newFunctions = [...new Set([...currentFunctions, ...roles])];
-        await supabase.from('profiles').update({ allowed_ministries: newAllowed, functions: newFunctions }).eq('id', user.id);
-        await supabase.auth.updateUser({ data: { allowedMinistries: newAllowed, functions: newFunctions } });
-        await sendNotificationSQL(cleanMid, { title: "Novo Integrante", message: `${profile.name || 'Um novo membro'} entrou para a equipe via link/código.`, type: "info", actionLink: "members" });
-        return { success: true, message: "Bem-vindo ao novo ministério!" };
-    } catch (e: any) { console.error(e); return { success: false, message: "Erro ao entrar no ministério." }; }
-};
-
-export const deleteMember = async (ministryId: string, memberId: string, memberName: string) => {
-    if (isPreviewMode) return;
-    if (!supabase) return;
-    try {
-        await supabase.from('availability').delete().eq('member_id', memberId);
-        await supabase.from('schedule_assignments').delete().eq('member_id', memberId);
-        await supabase.from('profiles').delete().eq('id', memberId);
-    } catch (e) { console.error("Erro ao deletar membro:", e); }
+        return { success: true, message: "Perfil atualizado com sucesso!" };
+    } catch (e: any) {
+        return { success: false, message: e.message || "Erro ao atualizar perfil." };
+    }
 };
