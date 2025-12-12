@@ -167,6 +167,20 @@ export interface AppState {
   sidebarOpen: boolean;
 }
 
+export interface RankingEntry {
+    memberId: string;
+    name: string;
+    avatar_url?: string;
+    points: number;
+    stats: {
+        confirmedEvents: number;
+        missedEvents: number;
+        swapsRequested: number;
+        announcementsRead: number;
+        announcementsLiked: number;
+    };
+}
+
 export const DEFAULT_ROLES: Record<string, string[]> = {
   'midia': ["Projeção", "Transmissão", "Fotografia", "Storys"],
   'louvor': ['Ministro', 'Vocal', 'Guitarra', 'Baixo', 'Teclado', 'Bateria', 'Mesa de Som'],

@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Calendar, CalendarCheck, RefreshCcw, Music, 
   Megaphone, Settings, FileBarChart, CalendarDays,
   Users, Edit, Send, ListMusic, Trash2, ShieldAlert, Clock, ArrowLeft, ArrowRight,
-  ShieldCheck, Mail, Phone, Calendar as CalendarIcon, Gift
+  ShieldCheck, Mail, Phone, Calendar as CalendarIcon, Gift, Trophy
 } from 'lucide-react';
 import { ToastProvider, useToast } from './components/Toast';
 import { LoginScreen } from './components/LoginScreen';
@@ -32,6 +32,7 @@ import { EventDetailsModal } from './components/EventDetailsModal';
 import { StatsModal } from './components/StatsModal';
 import { ConfirmationModal } from './components/ConfirmationModal';
 import { EventsModal, AvailabilityModal, RolesModal } from './components/ManagementModals';
+import { RankingScreen } from './components/RankingScreen';
 
 import * as Supabase from './services/supabaseService';
 import { generateScheduleWithAI } from './services/aiService';
@@ -298,6 +299,7 @@ const InnerApp = () => {
     { id: 'availability', label: 'Disponibilidade', icon: <CalendarCheck size={20}/> },
     { id: 'swaps', label: 'Trocas de Escala', icon: <RefreshCcw size={20}/> },
     { id: 'repertoire', label: 'Repertório', icon: <Music size={20}/> },
+    { id: 'ranking', label: 'Destaques', icon: <Trophy size={20}/> },
     { id: 'settings', label: 'Configurações', icon: <Settings size={20}/> },
   ];
 
@@ -582,6 +584,13 @@ const InnerApp = () => {
                     const result = await Supabase.performSwapSQL(ministryId, reqId, currentUser.name, currentUser.id!);
                     if(result.success) { addToast(result.message, "success"); loadData(); } else { addToast(result.message, "error"); }
                 }}
+            />
+        )}
+
+        {currentTab === 'ranking' && (
+            <RankingScreen 
+                ministryId={ministryId}
+                currentUser={currentUser}
             />
         )}
 

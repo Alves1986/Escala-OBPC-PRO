@@ -4,7 +4,8 @@ import {
     SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, 
     AppNotification, TeamMemberProfile, AvailabilityMap, SwapRequest, 
     ScheduleMap, RepertoireItem, Announcement, GlobalConflictMap, 
-    GlobalConflict, DEFAULT_ROLES, AttendanceMap, AuditLogEntry, MinistrySettings
+    GlobalConflict, DEFAULT_ROLES, AttendanceMap, AuditLogEntry, MinistrySettings,
+    RankingEntry
 } from '../types';
 
 // Detecta modo de preview
@@ -21,6 +22,126 @@ export const getSupabase = () => supabase;
 // ============================================================================
 // SQL DATABASE ADAPTERS (NEW SYSTEM)
 // ============================================================================
+
+// --- GAMIFICATION / RANKING ---
+export const fetchRankingData = async (ministryId: string): Promise<RankingEntry[]> => {
+    if (isPreviewMode) return [
+        { memberId: '1', name: 'Usuário Demo', avatar_url: '', points: 1500, stats: { confirmedEvents: 10, missedEvents: 0, swapsRequested: 0, announcementsRead: 20, announcementsLiked: 5 } },
+        { memberId: '2', name: 'Membro Top', avatar_url: '', points: 1200, stats: { confirmedEvents: 8, missedEvents: 0, swapsRequested: 1, announcementsRead: 15, announcementsLiked: 2 } },
+        { memberId: '3', name: 'Membro Novo', avatar_url: '', points: 500, stats: { confirmedEvents: 3, missedEvents: 1, swapsRequested: 0, announcementsRead: 5, announcementsLiked: 0 } },
+    ];
+    if (!supabase || !ministryId) return [];
+    
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+    const currentYear = new Date().getFullYear();
+    const startOfYear = `${currentYear}-01-01T00:00:00`;
+    const endOfYear = `${currentYear}-12-31T23:59:59`;
+    const now = new Date().toISOString();
+
+    try {
+        // 1. Fetch Members
+        const { data: members } = await supabase
+            .from('profiles')
+            .select('id, name, avatar_url')
+            .or(`ministry_id.eq.${cleanMid},allowed_ministries.cs.{${cleanMid}}`);
+
+        if (!members || members.length === 0) return [];
+
+        const rankingMap: Record<string, RankingEntry> = {};
+        
+        // Init Map
+        members.forEach((m: any) => {
+            rankingMap[m.id] = {
+                memberId: m.id,
+                name: m.name || 'Sem Nome',
+                avatar_url: m.avatar_url,
+                points: 0,
+                stats: { confirmedEvents: 0, missedEvents: 0, swapsRequested: 0, announcementsRead: 0, announcementsLiked: 0 }
+            };
+        });
+
+        // 2. Fetch Assignments (Past & Future in current year)
+        // Precisamos dos eventos para verificar a data
+        const { data: assignments } = await supabase
+            .from('schedule_assignments')
+            .select(`
+                member_id, 
+                confirmed, 
+                events!inner ( date_time, ministry_id )
+            `)
+            .eq('events.ministry_id', cleanMid)
+            .gte('events.date_time', startOfYear)
+            .lte('events.date_time', endOfYear);
+
+        // 3. Fetch Swaps
+        const { data: swaps } = await supabase
+            .from('swap_requests')
+            .select('requester_id')
+            .eq('ministry_id', cleanMid)
+            .gte('created_at', startOfYear);
+
+        // 4. Fetch Interactions
+        const { data: interactions } = await supabase
+            .from('announcement_interactions')
+            .select('user_id, interaction_type, created_at')
+            .gte('created_at', startOfYear);
+            // Note: interactions might not have ministry_id directly if announcements are global, 
+            // but usually we filter by announcement author's ministry. 
+            // For simplicity, we count all interactions of the user in the system for now, 
+            // assuming mostly relevant content.
+
+        // --- CALCULATE POINTS ---
+
+        // A. Assignments
+        assignments?.forEach((assign: any) => {
+            const entry = rankingMap[assign.member_id];
+            if (!entry) return;
+
+            const eventTime = assign.events.date_time;
+            const isPast = eventTime < now;
+
+            if (assign.confirmed) {
+                entry.points += 100; // +100 por escala cumprida/confirmada
+                entry.stats.confirmedEvents += 1;
+            } else if (isPast) {
+                // Se o evento já passou e não confirmou (Falta ou esqueceu check-in)
+                entry.points -= 100; // -100 por falta
+                entry.stats.missedEvents += 1;
+            }
+        });
+
+        // B. Swaps (Penalties)
+        swaps?.forEach((swap: any) => {
+            const entry = rankingMap[swap.requester_id];
+            if (!entry) return;
+            entry.points -= 50; // -50 por solicitar troca
+            entry.stats.swapsRequested += 1;
+        });
+
+        // C. Interactions (Engagement)
+        interactions?.forEach((int: any) => {
+            const entry = rankingMap[int.user_id];
+            if (!entry) return;
+
+            if (int.interaction_type === 'read') {
+                entry.points += 5; // +5 por ler aviso
+                entry.stats.announcementsRead += 1;
+            } else if (int.interaction_type === 'like') {
+                entry.points += 10; // +10 por curtir
+                entry.stats.announcementsLiked += 1;
+            }
+        });
+
+        // Convert Map to Array & Sort
+        return Object.values(rankingMap)
+            .sort((a, b) => b.points - a.points)
+            .filter(e => e.points !== 0 || e.stats.confirmedEvents > 0); // Oculta quem não tem atividade nenhuma (0 pts e 0 escalas)
+
+    } catch (e) {
+        console.error("Erro ao calcular ranking:", e);
+        return [];
+    }
+};
 
 // --- AUDIT LOGS ---
 export const fetchAuditLogs = async (ministryId: string): Promise<AuditLogEntry[]> => {
