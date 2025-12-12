@@ -19,6 +19,12 @@ if (SUPABASE_URL && SUPABASE_KEY && !isPreviewMode) {
 
 export const getSupabase = () => supabase;
 
+// --- SAFETY HELPER ---
+const safeDb = () => {
+    if (!supabase) throw new Error("Conexão com banco de dados não estabelecida.");
+    return supabase;
+};
+
 // ============================================================================
 // SQL DATABASE ADAPTERS (NEW SYSTEM)
 // ============================================================================
@@ -39,7 +45,6 @@ export const fetchRankingData = async (ministryId: string): Promise<RankingEntry
     const now = new Date().toISOString();
 
     try {
-        // 1. Fetch Members
         const { data: members } = await supabase
             .from('profiles')
             .select('id, name, avatar_url')
@@ -49,7 +54,6 @@ export const fetchRankingData = async (ministryId: string): Promise<RankingEntry
 
         const rankingMap: Record<string, RankingEntry> = {};
         
-        // Init Map
         members.forEach((m: any) => {
             rankingMap[m.id] = {
                 memberId: m.id,
@@ -60,43 +64,43 @@ export const fetchRankingData = async (ministryId: string): Promise<RankingEntry
             };
         });
 
-        // 2. Fetch Assignments (Past & Future in current year)
-        // Precisamos dos eventos para verificar a data
-        const { data: assignments } = await supabase
-            .from('schedule_assignments')
-            .select(`
-                member_id, 
-                confirmed, 
-                events!inner ( date_time, ministry_id )
-            `)
-            .eq('events.ministry_id', cleanMid)
-            .gte('events.date_time', startOfYear)
-            .lte('events.date_time', endOfYear);
+        const [assignmentsResult, swapsResult, interactionsResult] = await Promise.all([
+            supabase
+                .from('schedule_assignments')
+                .select(`
+                    member_id, 
+                    confirmed, 
+                    events!inner ( date_time, ministry_id )
+                `)
+                .eq('events.ministry_id', cleanMid)
+                .gte('events.date_time', startOfYear)
+                .lte('events.date_time', endOfYear)
+                .then(res => res.data || [])
+                .catch(() => []),
+            
+            supabase
+                .from('swap_requests')
+                .select('requester_id')
+                .eq('ministry_id', cleanMid)
+                .gte('created_at', startOfYear)
+                .then(res => res.data || [])
+                .catch(() => []),
 
-        // 3. Fetch Swaps
-        const { data: swaps } = await supabase
-            .from('swap_requests')
-            .select('requester_id')
-            .eq('ministry_id', cleanMid)
-            .gte('created_at', startOfYear);
+            supabase
+                .from('announcement_interactions')
+                .select('user_id, interaction_type, created_at')
+                .gte('created_at', startOfYear)
+                .then(res => res.data || [])
+                .catch(() => [])
+        ]);
 
-        // 4. Fetch Interactions
-        const { data: interactions } = await supabase
-            .from('announcement_interactions')
-            .select('user_id, interaction_type, created_at')
-            .gte('created_at', startOfYear);
-            // Note: interactions might not have ministry_id directly if announcements are global, 
-            // but usually we filter by announcement author's ministry. 
-            // For simplicity, we count all interactions of the user in the system for now, 
-            // assuming mostly relevant content.
+        const assignments = assignmentsResult;
+        const swaps = swapsResult;
+        const interactions = interactionsResult;
 
-        // --- CALCULATE POINTS ---
-
-        // A. Assignments
-        assignments?.forEach((assign: any) => {
+        assignments.forEach((assign: any) => {
             if (!assign.member_id) return;
             const entry = rankingMap[assign.member_id];
-            // If the member was deleted but history exists, entry will be undefined
             if (!entry) return;
 
             const eventTime = assign.events?.date_time;
@@ -105,43 +109,39 @@ export const fetchRankingData = async (ministryId: string): Promise<RankingEntry
             const isPast = eventTime < now;
 
             if (assign.confirmed) {
-                entry.points += 100; // +100 por escala cumprida/confirmada
+                entry.points += 100; 
                 entry.stats.confirmedEvents += 1;
             } else if (isPast) {
-                // Se o evento já passou e não confirmou (Falta ou esqueceu check-in)
-                entry.points -= 100; // -100 por falta
+                entry.points -= 100;
                 entry.stats.missedEvents += 1;
             }
         });
 
-        // B. Swaps (Penalties)
-        swaps?.forEach((swap: any) => {
+        swaps.forEach((swap: any) => {
             if (!swap.requester_id) return;
             const entry = rankingMap[swap.requester_id];
             if (!entry) return;
-            entry.points -= 50; // -50 por solicitar troca
+            entry.points -= 50;
             entry.stats.swapsRequested += 1;
         });
 
-        // C. Interactions (Engagement)
-        interactions?.forEach((int: any) => {
+        interactions.forEach((int: any) => {
             if (!int.user_id) return;
             const entry = rankingMap[int.user_id];
             if (!entry) return;
 
             if (int.interaction_type === 'read') {
-                entry.points += 5; // +5 por ler aviso
+                entry.points += 5;
                 entry.stats.announcementsRead += 1;
             } else if (int.interaction_type === 'like') {
-                entry.points += 10; // +10 por curtir
+                entry.points += 10;
                 entry.stats.announcementsLiked += 1;
             }
         });
 
-        // Convert Map to Array & Sort
         return Object.values(rankingMap)
             .sort((a, b) => b.points - a.points)
-            .filter(e => e.points !== 0 || e.stats.confirmedEvents > 0); // Oculta quem não tem atividade nenhuma (0 pts e 0 escalas)
+            .filter(e => e.points !== 0 || e.stats.confirmedEvents > 0); 
 
     } catch (e) {
         console.error("Erro ao calcular ranking:", e);
@@ -177,14 +177,16 @@ export const logActionSQL = async (ministryId: string, action: string, details: 
     if (isPreviewMode) return;
     if (!supabase || !ministryId) return;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-    await supabase.from('audit_logs').insert({
+    supabase.from('audit_logs').insert({
         ministry_id: cleanMid,
         action,
         details
+    }).then(({ error }) => {
+        if(error) console.warn("Falha ao salvar log de auditoria", error);
     });
 };
 
-// --- SETTINGS (Roles & Title) ---
+// --- SETTINGS (Roles, Title & Spotify) ---
 export const fetchMinistrySettings = async (ministryId: string): Promise<MinistrySettings> => {
     if (isPreviewMode) return { displayName: 'Ministério Demo', roles: DEFAULT_ROLES['midia'] || [] };
     if (!supabase || !ministryId) return { displayName: '', roles: [] };
@@ -197,18 +199,33 @@ export const fetchMinistrySettings = async (ministryId: string): Promise<Ministr
             .eq('ministry_id', cleanMid)
             .single();
 
+        // Armazena credenciais do Spotify no localStorage para uso imediato no front
+        // Em um app de produção real, isso deveria ser feito via proxy backend, mas aqui facilita a integração "sem backend"
+        if (data?.spotify_client_id) localStorage.setItem(`spotify_cid_${cleanMid}`, data.spotify_client_id);
+        if (data?.spotify_client_secret) localStorage.setItem(`spotify_sec_${cleanMid}`, data.spotify_client_secret);
+
         return { 
             displayName: data?.display_name || '', 
             roles: (data?.roles && data.roles.length > 0) ? data.roles : (DEFAULT_ROLES[cleanMid] || DEFAULT_ROLES['default']),
             availabilityStart: data?.availability_start,
-            availabilityEnd: data?.availability_end
+            availabilityEnd: data?.availability_end,
+            spotifyClientId: data?.spotify_client_id,
+            spotifyClientSecret: data?.spotify_client_secret
         };
     } catch (e) {
         return { displayName: '', roles: DEFAULT_ROLES[cleanMid] || [] };
     }
 };
 
-export const saveMinistrySettings = async (ministryId: string, displayName?: string, roles?: string[], availabilityStart?: string, availabilityEnd?: string) => {
+export const saveMinistrySettings = async (
+    ministryId: string, 
+    displayName?: string, 
+    roles?: string[], 
+    availabilityStart?: string, 
+    availabilityEnd?: string,
+    spotifyClientId?: string,
+    spotifyClientSecret?: string
+) => {
     if (isPreviewMode) return;
     if (!supabase || !ministryId) return;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
@@ -218,9 +235,28 @@ export const saveMinistrySettings = async (ministryId: string, displayName?: str
     if (roles !== undefined) updates.roles = roles;
     if (availabilityStart !== undefined) updates.availability_start = availabilityStart;
     if (availabilityEnd !== undefined) updates.availability_end = availabilityEnd;
+    
+    // Novos campos de Spotify (assume que a tabela suporta ou é JSONB, se não, precisa de migration manual ou usar meta_data)
+    // Para compatibilidade sem migration, vamos tentar salvar nas colunas se existirem, ou ignorar silenciosamente
+    if (spotifyClientId !== undefined) {
+        updates.spotify_client_id = spotifyClientId;
+        localStorage.setItem(`spotify_cid_${cleanMid}`, spotifyClientId);
+    }
+    if (spotifyClientSecret !== undefined) {
+        updates.spotify_client_secret = spotifyClientSecret;
+        localStorage.setItem(`spotify_sec_${cleanMid}`, spotifyClientSecret);
+    }
 
     const { error } = await supabase.from('ministry_settings').upsert(updates, { onConflict: 'ministry_id' });
-    if (error) console.error("Error saving settings:", error);
+    if (error) {
+        console.error("Error saving settings:", error);
+        // Fallback: Se der erro (provavelmente coluna não existe), tente salvar sem os campos do Spotify
+        if (error.code === 'PGRST204' || error.message.includes('column')) {
+             delete updates.spotify_client_id;
+             delete updates.spotify_client_secret;
+             await supabase.from('ministry_settings').upsert(updates, { onConflict: 'ministry_id' });
+        }
+    }
 };
 
 // --- REPERTOIRE ---
@@ -253,15 +289,17 @@ export const fetchRepertoire = async (ministryId: string): Promise<RepertoireIte
 
 export const addToRepertoire = async (ministryId: string, item: Omit<RepertoireItem, 'id' | 'createdAt'>) => {
     if (isPreviewMode) return;
-    if (!supabase) return;
-    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-    await supabase.from('repertoire').insert({
-        ministry_id: cleanMid,
-        title: item.title,
-        link: item.link,
-        event_date: item.date,
-        added_by: item.addedBy
-    });
+    try {
+        const sb = safeDb();
+        const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+        await sb.from('repertoire').insert({
+            ministry_id: cleanMid,
+            title: item.title,
+            link: item.link,
+            event_date: item.date,
+            added_by: item.addedBy
+        });
+    } catch(e) { console.error(e); }
 };
 
 export const deleteFromRepertoire = async (id: string) => {
@@ -304,7 +342,6 @@ export const createSwapRequestSQL = async (ministryId: string, req: SwapRequest)
     if (!supabase) return false;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     
-    // Garante formato ISO correto para o banco
     const eventIsoString = req.eventIso.length === 16 ? req.eventIso + ":00" : req.eventIso;
 
     const { error } = await supabase.from('swap_requests').insert({
@@ -344,7 +381,7 @@ export const performSwapSQL = async (ministryId: string, requestId: string, take
         if (reqError || !req) return { success: false, message: "Solicitação não encontrada." };
         if (req.status !== 'pending') return { success: false, message: "Esta troca já foi realizada ou cancelada." };
 
-        const searchIso = req.event_iso.slice(0, 16); // YYYY-MM-DDTHH:mm
+        const searchIso = req.event_iso.slice(0, 16); 
 
         const { data: events } = await supabase
             .from('events')
@@ -398,9 +435,7 @@ export const performSwapSQL = async (ministryId: string, requestId: string, take
 
 // --- NOTIFICATIONS ---
 export const fetchNotificationsSQL = async (ministryId: string, userId: string): Promise<AppNotification[]> => {
-    if (isPreviewMode) return [{
-        id: '1', type: 'info', title: 'Bem-vindo', message: 'Este é um ambiente de demonstração.', timestamp: new Date().toISOString(), read: false
-    }];
+    if (isPreviewMode) return [{ id: '1', type: 'info', title: 'Bem-vindo', message: 'Modo demonstração.', timestamp: new Date().toISOString(), read: false }];
     if (!supabase) return [];
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     try {
@@ -430,6 +465,7 @@ export const sendNotificationSQL = async (ministryId: string, payload: { title: 
     if (!supabase) return;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     
+    // Insere no banco
     await supabase.from('notifications').insert({
         ministry_id: cleanMid,
         title: payload.title,
@@ -438,48 +474,19 @@ export const sendNotificationSQL = async (ministryId: string, payload: { title: 
         action_link: payload.actionLink
     });
 
+    // Dispara Edge Function para Push (fire and forget)
     try {
-        await supabase.functions.invoke('push-notification', {
+        supabase.functions.invoke('push-notification', {
             body: { ministryId: cleanMid, ...payload }
-        });
+        }).then(() => {}); // No await needed
     } catch (e) { /* ignore */ }
-};
-
-export const testPushNotification = async (ministryId: string) => {
-    if (isPreviewMode) return { success: true, message: "Push simulado" };
-    if (!supabase) return { success: false, message: "Sem conexão" };
-    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-    
-    try {
-        const { data, error } = await supabase.functions.invoke('push-notification', {
-            body: { 
-                ministryId: cleanMid, 
-                title: "Teste de Notificação", 
-                message: "Se você viu isso, o sistema de Push está funcionando no seu dispositivo!",
-                type: "success"
-            }
-        });
-
-        if (error) throw error;
-
-        if (data && data.success === false) {
-            return { success: false, message: `Erro no servidor: ${data.message}` };
-        }
-
-        return { success: true, message: data?.message || "Notificação enviada! Verifique seu celular." };
-    } catch (e: any) {
-        let msg = e.message || "Erro desconhecido";
-        if (msg.includes("non-2xx")) {
-             msg = "Erro Crítico na Edge Function.";
-        }
-        return { success: false, message: msg };
-    }
 };
 
 export const markNotificationsReadSQL = async (ids: string[], userId: string) => {
     if (isPreviewMode) return;
     if (!supabase) return;
     
+    // Loop é ineficiente para muitos IDs, mas ok para uso típico
     for (const id of ids) {
         const { data } = await supabase.from('notifications').select('read_by').eq('id', id).single();
         const currentRead = data?.read_by || [];
@@ -500,7 +507,7 @@ export const clearAllNotificationsSQL = async (ministryId: string) => {
 
 // --- ANNOUNCEMENTS ---
 export const fetchAnnouncementsSQL = async (ministryId: string): Promise<Announcement[]> => {
-    if (isPreviewMode) return [{ id: '1', title: 'Aviso Demo', message: 'Sistema em visualização', type: 'info', timestamp: new Date().toISOString(), author: 'Admin', readBy: [], likedBy: [] }];
+    if (isPreviewMode) return [];
     if (!supabase) return [];
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     try {
@@ -737,7 +744,6 @@ export const fetchMinistryMembers = async (ministryId: string): Promise<{
 
 export const fetchMinistrySchedule = async (ministryId: string, monthIso: string): Promise<{ schedule: ScheduleMap, events: any[], attendance: AttendanceMap }> => {
     if (isPreviewMode) {
-        // Generate Fake Events for current month
         const [y, m] = monthIso.split('-').map(Number);
         const demoEvents = [
             { id: '1', title: 'Culto Demo 1', date_time: `${monthIso}-05T19:30:00` },
@@ -997,7 +1003,6 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
     } catch (e) { return false; }
 };
 
-// strictMode: Se true, NÃO cria eventos novos. Útil para IA não alucinar eventos duplicados.
 export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap, strictMode: boolean = false): Promise<boolean> => {
     if (isPreviewMode) return true;
     if (!supabase || !ministryId) return false;
@@ -1022,7 +1027,6 @@ export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap
 
         const eventsToCreate = [];
         
-        // Em Strict Mode (IA), não criamos eventos novos se não existirem
         if (!strictMode) {
             for (const ts of neededTimestamps) {
                 if (!eventIdMap.has(ts)) {
@@ -1055,7 +1059,6 @@ export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap
             const ts = `${isoDate}:00`;
             const eventId = eventIdMap.get(ts);
             
-            // Em Strict Mode, se o evento não existe, ignora a atribuição
             if (!eventId && strictMode) continue;
 
             const memberId = memberMap.get(memberName.toLowerCase().trim());
@@ -1329,7 +1332,6 @@ export const deleteMember = async (ministryId: string, userId: string, memberNam
             const newAllowed = (targetProfile.allowed_ministries || []).filter((m: string) => m !== cleanMid);
             
             if (newAllowed.length === 0) {
-                // If user has no other ministries, delete profile
                 await supabase.from('profiles').delete().eq('id', userId);
             } else {
                 let updates: any = { allowed_ministries: newAllowed };
@@ -1354,10 +1356,11 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
     if (!user) return { success: false, message: "Usuário não logado" };
 
     try {
+        // SECURITY FIX: Whitelist only allowed fields to prevent role escalation attacks
         const updates: any = {
             name,
             whatsapp,
-            updated_at: new Date().toISOString(),
+            // updated_at: new Date().toISOString(), // Removed to fix schema error
         };
         if (avatar_url !== undefined) updates.avatar_url = avatar_url;
         if (functions !== undefined) updates.functions = functions;
@@ -1368,7 +1371,8 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
         if (error) throw error;
         
         if (ministryId) {
-             await logActionSQL(ministryId, "Atualização de Perfil", `${name} atualizou seus dados.`);
+             // Non-blocking log
+             logActionSQL(ministryId, "Atualização de Perfil", `${name} atualizou seus dados.`);
         }
 
         return { success: true, message: "Perfil atualizado com sucesso!" };

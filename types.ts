@@ -32,6 +32,8 @@ export interface MinistrySettings {
     roles: string[];
     availabilityStart?: string; // ISO String
     availabilityEnd?: string;   // ISO String
+    spotifyClientId?: string;   // New
+    spotifyClientSecret?: string; // New
 }
 
 export interface AuditLogEntry {

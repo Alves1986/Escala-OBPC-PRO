@@ -1,10 +1,11 @@
 
-import React, { useState } from 'react';
-import { Music, Plus, Trash2, ExternalLink, PlayCircle, Calendar, Settings, ListMusic, Sparkles, Loader2, Search } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Music, Plus, Trash2, ExternalLink, PlayCircle, Calendar, Settings, ListMusic, Sparkles, Loader2, Search, Youtube, LogOut, LogIn, ChevronRight, ArrowLeft } from 'lucide-react';
 import { RepertoireItem, User } from '../types';
 import { useToast } from './Toast';
 import { addToRepertoire, deleteFromRepertoire } from '../services/supabaseService';
 import { suggestRepertoireAI } from '../services/aiService';
+import { searchSpotifyTracks, getLoginUrl, handleLoginCallback, isUserLoggedIn, logoutSpotify, getUserProfile, getUserPlaylists, getPlaylistTracks } from '../services/spotifyService';
 
 interface Props {
   repertoire: RepertoireItem[];
@@ -12,16 +13,33 @@ interface Props {
   currentUser: User | null;
   mode: 'view' | 'manage';
   onItemAdd?: (title: string) => void;
+  ministryId?: string | null;
 }
 
-export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, currentUser, mode, onItemAdd }) => {
+export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, currentUser, mode, onItemAdd, ministryId }) => {
   const { addToast, confirmAction } = useToast();
   
-  // Form State
+  // UI State
+  const [activeTab, setActiveTab] = useState<'manual' | 'spotify' | 'playlists'>('spotify');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [date, setDate] = useState("");
+
+  // Manual Form
   const [title, setTitle] = useState("");
   const [link, setLink] = useState("");
-  const [date, setDate] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Spotify Auth & Data
+  const [isSpotifyLoggedIn, setIsSpotifyLoggedIn] = useState(isUserLoggedIn());
+  const [spotifyUser, setSpotifyUser] = useState<any>(null);
+  const [userPlaylists, setUserPlaylists] = useState<any[]>([]);
+  const [selectedPlaylist, setSelectedPlaylist] = useState<any>(null);
+  const [playlistTracks, setPlaylistTracks] = useState<any[]>([]);
+  const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
+
+  // Search State
+  const [spotifyQuery, setSpotifyQuery] = useState("");
+  const [spotifyResults, setSpotifyResults] = useState<any[]>([]);
+  const [spotifyLoading, setSpotifyLoading] = useState(false);
 
   // AI State
   const [showAiModal, setShowAiModal] = useState(false);
@@ -29,28 +47,69 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<{title: string, artist: string, reason: string}[]>([]);
 
-  // Extrai ID de vídeo único
-  const getYouTubeId = (url: string) => {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
+  // Init - Verifica login
+  useEffect(() => {
+      // Verifica se voltou do login do Spotify
+      const token = handleLoginCallback();
+      if (token) {
+          setIsSpotifyLoggedIn(true);
+          setActiveTab('playlists');
+          addToast("Spotify conectado com sucesso!", "success");
+      }
+
+      if (isUserLoggedIn()) {
+          loadUserProfile();
+      }
+  }, []);
+
+  const loadUserProfile = async () => {
+      const profile = await getUserProfile();
+      if (profile) setSpotifyUser(profile);
   };
 
-  // Extrai ID de Playlist
-  const getPlaylistId = (url: string) => {
-    const regExp = /[?&]list=([^#\&\?]+)/;
-    const match = url.match(regExp);
-    return match ? match[1] : null;
+  const handleSpotifyLogin = () => {
+      if (!ministryId) return;
+      const url = getLoginUrl(ministryId);
+      if (url) {
+          window.location.href = url;
+      } else {
+          addToast("Client ID do Spotify não configurado. Avise o Admin.", "error");
+      }
   };
 
-  const getGradient = (str: string) => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const c1 = Math.abs(hash % 360);
-    const c2 = (c1 + 40) % 360;
-    return `linear-gradient(135deg, hsl(${c1}, 70%, 60%), hsl(${c2}, 70%, 40%))`;
+  const handleSpotifyLogout = () => {
+      logoutSpotify();
+      setIsSpotifyLoggedIn(false);
+      setSpotifyUser(null);
+      setUserPlaylists([]);
+      addToast("Desconectado do Spotify.", "info");
+  };
+
+  const handleLoadPlaylists = async () => {
+      setIsLoadingPlaylists(true);
+      const playlists = await getUserPlaylists();
+      setUserPlaylists(playlists);
+      setIsLoadingPlaylists(false);
+  };
+
+  const handleOpenPlaylist = async (playlist: any) => {
+      setSelectedPlaylist(playlist);
+      setIsLoadingPlaylists(true);
+      const tracks = await getPlaylistTracks(playlist.id);
+      setPlaylistTracks(tracks);
+      setIsLoadingPlaylists(false);
+  };
+
+  const handleSpotifySearch = async () => {
+      if (!spotifyQuery.trim() || !ministryId) return;
+      setSpotifyLoading(true);
+      const results = await searchSpotifyTracks(spotifyQuery, ministryId);
+      setSpotifyResults(results);
+      setSpotifyLoading(false);
+      
+      if (results.length === 0) {
+          addToast("Nenhum resultado encontrado.", "warning");
+      }
   };
 
   const handleAdd = async (overrideTitle?: string, overrideLink?: string) => {
@@ -58,7 +117,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     const finalLink = overrideLink || link;
 
     if (!finalTitle || !date) {
-        addToast("Preencha título e data.", "error");
+        addToast("Preencha a Data do Culto.", "error");
         return;
     }
 
@@ -69,7 +128,6 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
 
     setIsSubmitting(true);
     
-    // Add via SQL Service
     await addToRepertoire(currentUser.ministryId, {
         title: finalTitle,
         link: finalLink,
@@ -78,13 +136,12 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     });
 
     if (onItemAdd) onItemAdd(finalTitle);
-    
     await setRepertoire([]); 
     
-    if (!overrideTitle) {
-        setTitle("");
-        setLink("");
-    }
+    // Clear forms
+    setTitle("");
+    setLink("");
+    
     setIsSubmitting(false);
     addToast("Música adicionada!", "success");
   };
@@ -103,6 +160,34 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
           await setRepertoire([]); // Trigger reload
           addToast("Item removido.", "success");
       });
+  };
+
+  // Helpers de Visualização
+  const getYouTubeId = (url: string) => {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  };
+
+  const getSpotifyId = (url: string) => {
+      const match = url.match(/track\/([a-zA-Z0-9]+)/);
+      return match ? match[1] : null;
+  };
+
+  const getPlaylistId = (url: string) => {
+    const regExp = /[?&]list=([^#\&\?]+)/;
+    const match = url.match(regExp);
+    return match ? match[1] : null;
+  };
+
+  const getGradient = (str: string) => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const c1 = Math.abs(hash % 360);
+    const c2 = (c1 + 40) % 360;
+    return `linear-gradient(135deg, hsl(${c1}, 70%, 60%), hsl(${c2}, 70%, 40%))`;
   };
 
   const groupedRepertoire = repertoire.reduce((acc, item) => {
@@ -124,32 +209,79 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
           </h2>
           <p className="text-zinc-500 text-sm mt-1">
             {mode === 'manage' 
-                ? 'Adicione, edite e remova músicas ou playlists dos cultos.' 
-                : 'Lista de louvores e referências para os próximos cultos.'}
+                ? 'Adicione músicas do Spotify, YouTube ou sugestões de IA.' 
+                : 'Lista de louvores para os próximos cultos.'}
           </p>
         </div>
       </div>
 
       {mode === 'manage' && (
           <div className="bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-fade-in">
-              <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-2">
-                      <Plus size={14}/> Adicionar Novo Item
-                  </h3>
-                  <button 
-                    onClick={() => setShowAiModal(!showAiModal)}
-                    className="text-xs font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-purple-100 transition-colors"
-                  >
-                      <Sparkles size={14} /> Sugestão IA
+              {/* Header do Form */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+                  <div className="flex items-center gap-2">
+                      <div className="bg-green-500 text-white p-1.5 rounded-lg shadow-sm">
+                          <Music size={16}/> 
+                      </div>
+                      <div>
+                          <h3 className="text-sm font-bold text-zinc-800 dark:text-white">Adicionar Música</h3>
+                          {isSpotifyLoggedIn && spotifyUser && (
+                              <p className="text-[10px] text-zinc-500">Logado como: <span className="font-bold text-green-600">{spotifyUser.display_name}</span></p>
+                          )}
+                      </div>
+                  </div>
+                  <div className="flex gap-2 w-full sm:w-auto">
+                      <button 
+                        onClick={() => setShowAiModal(!showAiModal)}
+                        className="flex-1 sm:flex-none justify-center text-xs font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-3 py-2 rounded-lg flex items-center gap-1 hover:bg-purple-100 transition-colors"
+                      >
+                          <Sparkles size={14} /> Sugestão IA
+                      </button>
+                      {isSpotifyLoggedIn ? (
+                          <button onClick={handleSpotifyLogout} className="text-xs bg-zinc-100 dark:bg-zinc-700 p-2 rounded-lg text-zinc-500 hover:text-red-500" title="Sair do Spotify"><LogOut size={16}/></button>
+                      ) : (
+                          <button 
+                            onClick={handleSpotifyLogin}
+                            className="flex-1 sm:flex-none justify-center text-xs font-bold text-white bg-[#1DB954] hover:bg-[#1ed760] px-3 py-2 rounded-lg flex items-center gap-1 transition-colors shadow-sm"
+                          >
+                              <LogIn size={14} /> Conectar Spotify
+                          </button>
+                      )}
+                  </div>
+              </div>
+
+              {/* Data Selection */}
+              <div className="mb-4 bg-zinc-50 dark:bg-zinc-900/50 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800">
+                  <label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block flex items-center gap-1"><Calendar size={10}/> Data do Culto (Obrigatório)</label>
+                  <input 
+                      type="date" 
+                      value={date} 
+                      onChange={e => setDate(e.target.value)}
+                      className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-green-500"
+                  />
+              </div>
+
+              {/* Tabs */}
+              <div className="flex gap-2 mb-4 border-b border-zinc-100 dark:border-zinc-700 pb-1 overflow-x-auto">
+                  <button onClick={() => setActiveTab('spotify')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'spotify' ? 'text-green-600 border-green-500 bg-green-50 dark:bg-green-900/10' : 'text-zinc-500 border-transparent'}`}>
+                      <Search size={14}/> Busca
+                  </button>
+                  {isSpotifyLoggedIn && (
+                      <button onClick={() => { setActiveTab('playlists'); if(userPlaylists.length === 0) handleLoadPlaylists(); }} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'playlists' ? 'text-green-600 border-green-500 bg-green-50 dark:bg-green-900/10' : 'text-zinc-500 border-transparent'}`}>
+                          <ListMusic size={14}/> Minhas Playlists
+                      </button>
+                  )}
+                  <button onClick={() => setActiveTab('manual')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'manual' ? 'text-pink-600 border-pink-500 bg-pink-50 dark:bg-pink-900/10' : 'text-zinc-500 border-transparent'}`}>
+                      <Youtube size={14}/> Manual / YouTube
                   </button>
               </div>
 
-              {/* AI Suggestions Panel */}
+              {/* AI Panel (Condicional) */}
               {showAiModal && (
                   <div className="mb-6 p-4 bg-purple-50 dark:bg-zinc-900/50 rounded-xl border border-purple-100 dark:border-zinc-700">
                       <div className="flex gap-2 mb-4">
                           <input 
-                             placeholder="Ex: Páscoa, Gratidão, Culto Jovem..." 
+                             placeholder="Tema (Ex: Gratidão, Cruz, Natal...)" 
                              value={aiTheme}
                              onChange={e => setAiTheme(e.target.value)}
                              className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm outline-none focus:ring-2 focus:ring-purple-500"
@@ -159,8 +291,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                              disabled={aiLoading || !aiTheme}
                              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 disabled:opacity-50"
                           >
-                              {aiLoading ? <Loader2 size={14} className="animate-spin"/> : <Search size={14}/>}
-                              Buscar
+                              {aiLoading ? <Loader2 size={14} className="animate-spin"/> : <Sparkles size={14}/>}
                           </button>
                       </div>
                       
@@ -174,13 +305,14 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                                       </div>
                                       <button 
                                         onClick={() => {
-                                            setTitle(`${sug.title} - ${sug.artist}`);
-                                            // Auto-fill title but user needs to set date/link or we can allow direct add if we want
-                                            addToast("Título preenchido! Selecione a data e adicione o link.", "info");
+                                            setSpotifyQuery(`${sug.title} ${sug.artist}`);
+                                            setActiveTab('spotify');
+                                            setShowAiModal(false);
+                                            handleSpotifySearch(); // Auto trigger search
                                         }}
-                                        className="text-xs bg-zinc-100 dark:bg-zinc-700 hover:bg-purple-100 dark:hover:bg-purple-900/30 text-zinc-600 dark:text-zinc-300 px-3 py-1.5 rounded transition-colors"
+                                        className="text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-3 py-1.5 rounded font-bold"
                                       >
-                                          Usar
+                                          Buscar
                                       </button>
                                   </div>
                               ))}
@@ -189,49 +321,140 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                   </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div>
-                      <label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Data do Culto</label>
-                      <input 
-                          type="date" 
-                          value={date} 
-                          onChange={e => setDate(e.target.value)}
-                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-pink-500"
-                      />
+              {/* === SEARCH TAB === */}
+              {activeTab === 'spotify' && (
+                  <div className="space-y-4 animate-fade-in">
+                      <div className="flex gap-2">
+                          <input 
+                              type="text" 
+                              placeholder="Digite música ou artista..."
+                              value={spotifyQuery} 
+                              onChange={e => setSpotifyQuery(e.target.value)}
+                              onKeyDown={e => e.key === 'Enter' && handleSpotifySearch()}
+                              className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-green-500"
+                          />
+                          <button 
+                              onClick={handleSpotifySearch}
+                              disabled={spotifyLoading}
+                              className="bg-green-600 hover:bg-green-700 text-white px-4 rounded-lg font-bold flex items-center justify-center disabled:opacity-50"
+                          >
+                              {spotifyLoading ? <Loader2 className="animate-spin" size={18}/> : <Search size={18}/>}
+                          </button>
+                      </div>
+
+                      {spotifyResults.length > 0 && (
+                          <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-2 border border-zinc-100 dark:border-zinc-700 rounded-xl p-2 bg-zinc-50 dark:bg-zinc-900/30">
+                              {spotifyResults.map(track => (
+                                  <div key={track.id} className="flex items-center justify-between p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors group">
+                                      <div className="flex items-center gap-3 overflow-hidden">
+                                          <img src={track.album.images[2]?.url || track.album.images[0]?.url} className="w-10 h-10 rounded shadow-sm shrink-0" alt="Album" />
+                                          <div className="min-w-0">
+                                              <p className="font-bold text-sm text-zinc-800 dark:text-white line-clamp-1">{track.name}</p>
+                                              <p className="text-xs text-zinc-500 truncate">{track.artists[0].name}</p>
+                                          </div>
+                                      </div>
+                                      <button 
+                                          onClick={() => handleAdd(`${track.name} - ${track.artists[0].name}`, track.external_urls.spotify)}
+                                          disabled={isSubmitting || !date}
+                                          className="shrink-0 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-3 py-1.5 rounded-full font-bold hover:bg-green-200 dark:hover:bg-green-800 transition-colors disabled:opacity-50"
+                                      >
+                                          Adicionar
+                                      </button>
+                                  </div>
+                              ))}
+                          </div>
+                      )}
                   </div>
-                  <div className="md:col-span-1">
-                      <label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Título</label>
-                      <input 
-                          type="text" 
-                          placeholder="Ex: Todavia Me Alegrarei"
-                          value={title} 
-                          onChange={e => setTitle(e.target.value)}
-                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-pink-500"
-                      />
+              )}
+
+              {/* === PLAYLISTS TAB === */}
+              {activeTab === 'playlists' && isSpotifyLoggedIn && (
+                  <div className="animate-fade-in">
+                      {selectedPlaylist ? (
+                          // TRACKS VIEW
+                          <div className="space-y-3">
+                              <button onClick={() => setSelectedPlaylist(null)} className="flex items-center gap-2 text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300 mb-2">
+                                  <ArrowLeft size={14}/> Voltar para Playlists
+                              </button>
+                              <div className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-lg mb-2">
+                                  {selectedPlaylist.images?.[0] && <img src={selectedPlaylist.images[0].url} className="w-12 h-12 rounded shadow-sm" />}
+                                  <div>
+                                      <h4 className="font-bold text-sm text-zinc-800 dark:text-white">{selectedPlaylist.name}</h4>
+                                      <p className="text-xs text-zinc-500">{playlistTracks.length} músicas</p>
+                                  </div>
+                              </div>
+                              
+                              {isLoadingPlaylists ? (
+                                  <div className="py-8 text-center"><Loader2 className="animate-spin mx-auto text-green-500" /></div>
+                              ) : (
+                                  <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-1">
+                                      {playlistTracks.map((track, idx) => (
+                                          <div key={idx} className="flex items-center justify-between p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg group">
+                                              <div className="flex-1 min-w-0 pr-2">
+                                                  <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate">{track.name}</p>
+                                                  <p className="text-xs text-zinc-500 truncate">{track.artists[0].name}</p>
+                                              </div>
+                                              <button 
+                                                  onClick={() => handleAdd(`${track.name} - ${track.artists[0].name}`, track.external_urls.spotify)}
+                                                  disabled={isSubmitting || !date}
+                                                  className="text-[10px] font-bold bg-zinc-200 dark:bg-zinc-700 px-2 py-1 rounded hover:bg-green-500 hover:text-white transition-colors disabled:opacity-50"
+                                              >
+                                                  Add
+                                              </button>
+                                          </div>
+                                      ))}
+                                  </div>
+                              )}
+                          </div>
+                      ) : (
+                          // PLAYLISTS LIST VIEW
+                          <div>
+                              {isLoadingPlaylists ? (
+                                  <div className="py-10 text-center"><Loader2 className="animate-spin mx-auto text-green-500"/></div>
+                              ) : userPlaylists.length === 0 ? (
+                                  <div className="text-center py-8 text-zinc-400 text-sm">Nenhuma playlist encontrada.</div>
+                              ) : (
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-80 overflow-y-auto custom-scrollbar">
+                                      {userPlaylists.map(pl => (
+                                          <button 
+                                              key={pl.id}
+                                              onClick={() => handleOpenPlaylist(pl)}
+                                              className="flex flex-col items-start p-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-colors text-left group"
+                                          >
+                                              <img src={pl.images?.[0]?.url || '/icon.png'} className="w-full aspect-square object-cover rounded-lg mb-2 shadow-sm group-hover:shadow-md transition-shadow bg-zinc-200" />
+                                              <span className="font-bold text-xs text-zinc-800 dark:text-zinc-200 line-clamp-1 w-full">{pl.name}</span>
+                                              <span className="text-[10px] text-zinc-500">{pl.tracks.total} músicas</span>
+                                          </button>
+                                      ))}
+                                  </div>
+                              )}
+                          </div>
+                      )}
                   </div>
-                  <div className="md:col-span-1">
-                      <label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Link YouTube</label>
-                      <input 
-                          type="text" 
-                          placeholder="Link do vídeo ou playlist..."
-                          value={link} 
-                          onChange={e => setLink(e.target.value)}
-                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-pink-500"
-                      />
+              )}
+
+              {/* === MANUAL TAB === */}
+              {activeTab === 'manual' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in">
+                      <div className="md:col-span-1">
+                          <label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Título</label>
+                          <input type="text" placeholder="Ex: Todavia Me Alegrarei" value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-pink-500"/>
+                      </div>
+                      <div className="md:col-span-1">
+                          <label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Link YouTube</label>
+                          <input type="text" placeholder="Link do vídeo ou playlist..." value={link} onChange={e => setLink(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-pink-500"/>
+                      </div>
+                      <div className="md:col-span-2 flex justify-end">
+                          <button onClick={() => handleAdd()} disabled={isSubmitting} className="bg-pink-600 hover:bg-pink-700 text-white font-bold py-2.5 px-6 rounded-lg transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50">
+                              {isSubmitting ? 'Salvando...' : 'Adicionar Manualmente'}
+                          </button>
+                      </div>
                   </div>
-                  <div className="flex items-end">
-                      <button 
-                          onClick={() => handleAdd()}
-                          disabled={isSubmitting}
-                          className="w-full bg-pink-600 hover:bg-pink-700 text-white font-bold py-2.5 rounded-lg transition-all active:scale-95 flex items-center justify-center gap-2"
-                      >
-                          {isSubmitting ? 'Salvando...' : 'Adicionar'}
-                      </button>
-                  </div>
-              </div>
+              )}
           </div>
       )}
 
+      {/* Listagem de Músicas (Card View) */}
       <div className="space-y-8">
           {sortedDates.length === 0 ? (
               <div className="text-center py-12 text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
@@ -254,6 +477,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                           
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                               {groupedRepertoire[dateKey].map(item => {
+                                  const spotifyId = getSpotifyId(item.link);
                                   const videoId = getYouTubeId(item.link);
                                   const isPlaylist = getPlaylistId(item.link);
                                   const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '';
@@ -261,61 +485,43 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                                   return (
                                       <div key={item.id} className="bg-white dark:bg-zinc-800 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md transition-all group">
                                           <div className="relative aspect-video bg-zinc-900 overflow-hidden">
-                                              {thumbnailUrl ? (
-                                                  <img src={thumbnailUrl} alt={item.title} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                                              {spotifyId ? (
+                                                  <div className="w-full h-full bg-[#1DB954] flex items-center justify-center relative">
+                                                      <iframe src={`https://open.spotify.com/embed/track/${spotifyId}?utm_source=generator&theme=0`} width="100%" height="100%" frameBorder="0" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy" className="absolute inset-0"></iframe>
+                                                  </div>
+                                              ) : thumbnailUrl ? (
+                                                  <>
+                                                      <img src={thumbnailUrl} alt={item.title} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                                                      <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-colors">
+                                                          <a href={item.link} target="_blank" rel="noopener noreferrer" className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center text-white shadow-lg transform group-hover:scale-110 transition-transform z-20">
+                                                              {isPlaylist ? <ListMusic size={24} /> : <PlayCircle size={28} fill="white" />}
+                                                          </a>
+                                                      </div>
+                                                  </>
                                               ) : (
-                                                  <div 
-                                                    className="w-full h-full flex flex-col items-center justify-center text-white p-4 text-center relative"
-                                                    style={{ background: getGradient(item.title + item.id) }}
-                                                  >
+                                                  <div className="w-full h-full flex flex-col items-center justify-center text-white p-4 text-center relative" style={{ background: getGradient(item.title + item.id) }}>
                                                       <div className="absolute inset-0 bg-black/20" />
                                                       <div className="relative z-10">
                                                           <ListMusic size={32} className="mb-2 opacity-90 mx-auto drop-shadow-md"/>
-                                                          <span className="text-xs font-bold uppercase tracking-widest opacity-90 drop-shadow-sm line-clamp-2">
-                                                              {item.title}
-                                                          </span>
+                                                          <span className="text-xs font-bold uppercase tracking-widest opacity-90 drop-shadow-sm line-clamp-2">{item.title}</span>
                                                       </div>
                                                   </div>
                                               )}
                                               
-                                              <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-colors">
-                                                  <a 
-                                                      href={item.link} 
-                                                      target="_blank" 
-                                                      rel="noopener noreferrer"
-                                                      className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center text-white shadow-lg transform group-hover:scale-110 transition-transform z-20"
-                                                  >
-                                                      {isPlaylist ? <ListMusic size={24} /> : <PlayCircle size={28} fill="white" />}
-                                                  </a>
-                                              </div>
-                                              
                                               {mode === 'manage' && (
-                                                  <button 
-                                                      onClick={() => handleDelete(item.id)}
-                                                      className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100 z-30"
-                                                      title="Excluir"
-                                                  >
-                                                      <Trash2 size={14} />
-                                                  </button>
+                                                  <button onClick={() => handleDelete(item.id)} className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100 z-30" title="Excluir"><Trash2 size={14} /></button>
                                               )}
                                           </div>
                                           
                                           <div className="p-4">
-                                              <h4 className="font-bold text-zinc-800 dark:text-white line-clamp-1" title={item.title}>
-                                                  {item.title}
-                                              </h4>
+                                              <h4 className="font-bold text-zinc-800 dark:text-white line-clamp-1" title={item.title}>{item.title}</h4>
                                               <div className="flex justify-between items-center mt-2">
-                                                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider">
-                                                      {isPlaylist ? 'Playlist' : 'Youtube'}
+                                                  <span className={`text-[10px] uppercase tracking-wider flex items-center gap-1 ${spotifyId ? 'text-green-600' : 'text-zinc-500'}`}>
+                                                      {spotifyId ? <><Music size={10}/> Spotify</> : isPlaylist ? 'YouTube Playlist' : 'YouTube'}
                                                   </span>
-                                                  <a 
-                                                      href={item.link} 
-                                                      target="_blank" 
-                                                      rel="noopener noreferrer"
-                                                      className="text-xs text-blue-500 hover:text-blue-400 flex items-center gap-1 font-medium"
-                                                  >
-                                                      Abrir <ExternalLink size={12} />
-                                                  </a>
+                                                  {!spotifyId && (
+                                                      <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:text-blue-400 flex items-center gap-1 font-medium">Abrir <ExternalLink size={12} /></a>
+                                                  )}
                                               </div>
                                           </div>
                                       </div>

@@ -36,18 +36,20 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     const CACHE_KEY = `offline_data_${ministryId}_${currentMonth}`;
 
     try {
-        // Carregamento paralelo de dados otimizado com Promise.all
+        // Carregamento paralelo RESILIENTE (Partial Failure Tolerance)
+        // Se uma requisição falhar (ex: notificações), as outras continuam.
+        // Isso impede a Tela Branca da Morte se uma tabela do Supabase travar.
         const [
-            settings,
-            schedData,
-            membersData,
-            availData,
-            notifs,
-            ann,
-            swaps,
-            rep,
-            conflicts
-        ] = await Promise.all([
+            settingsResult,
+            schedResult,
+            membersResult,
+            availResult,
+            notifsResult,
+            annResult,
+            swapsResult,
+            repResult,
+            conflictsResult
+        ] = await Promise.allSettled([
             Supabase.fetchMinistrySettings(ministryId),
             Supabase.fetchMinistrySchedule(ministryId, currentMonth),
             Supabase.fetchMinistryMembers(ministryId),
@@ -59,13 +61,30 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
             Supabase.fetchGlobalSchedules(currentMonth, ministryId)
         ]);
 
+        // Helper para extrair valor seguro de Promise.allSettled
+        const getValue = <T>(result: PromiseSettledResult<T>, fallback: T): T => {
+            return result.status === 'fulfilled' ? result.value : fallback;
+        };
+
+        const settings = getValue(settingsResult, { displayName: '', roles: [] });
+        const schedData = getValue(schedResult, { events: [], schedule: {}, attendance: {} });
+        const membersData = getValue(membersResult, { memberMap: {}, publicList: [] });
+        const availData = getValue(availResult, {});
+        const notifs = getValue(notifsResult, []);
+        const ann = getValue(annResult, []);
+        const swaps = getValue(swapsResult, []);
+        const rep = getValue(repResult, []);
+        const conflicts = getValue(conflictsResult, {});
+
         // 1. Atualização de estado em lote (Dados da Nuvem)
-        setMinistryTitle(settings.displayName || ministryId.charAt(0).toUpperCase() + ministryId.slice(1));
-        setRoles(settings.roles);
-        setAvailabilityWindow({
-            start: settings.availabilityStart,
-            end: settings.availabilityEnd
-        });
+        if (settings.displayName) {
+            setMinistryTitle(settings.displayName || ministryId.charAt(0).toUpperCase() + ministryId.slice(1));
+            setRoles(settings.roles);
+            setAvailabilityWindow({
+                start: settings.availabilityStart,
+                end: settings.availabilityEnd
+            });
+        }
 
         setEvents(schedData.events);
         setSchedule(schedData.schedule);
@@ -85,7 +104,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
         setGlobalConflicts(conflicts);
 
         // 2. Salvar no Cache Local Assíncrono (IndexedDB)
-        // Fire-and-forget: não esperamos salvar para liberar a UI, mas tratamos erros internamente no service
         saveOfflineData(CACHE_KEY, {
             timestamp: Date.now(),
             settings,
@@ -100,11 +118,10 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
         });
 
     } catch (error) {
-        console.error("Erro ao carregar dados online:", error);
+        console.error("Erro Crítico Global ao carregar dados:", error);
 
         // 3. Fallback: Tentar carregar do IndexedDB
         try {
-            // Nota: JSON.parse removido pois IndexedDB armazena objetos nativamente
             const cached: any = await loadOfflineData(CACHE_KEY);
             
             if (cached) {

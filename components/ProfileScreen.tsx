@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { User } from '../types';
 import { User as UserIcon, Mail, Hash, Briefcase, Save, Key, Camera, Image as ImageIcon, Check, Calendar, Shield, Sparkles } from 'lucide-react';
@@ -98,7 +99,10 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
     
     setLoading(true);
     try {
-      await onUpdateProfile(name, whatsapp, avatar, selectedFunctions, birthDate);
+      // Otimização: Só envia avatar se mudou, para evitar envio desnecessário de base64 grande
+      const avatarToSend = avatar !== (user.avatar_url || '') ? avatar : undefined;
+      
+      await onUpdateProfile(name, whatsapp, avatarToSend, selectedFunctions, birthDate);
     } catch (e) {
       addToast("Erro ao atualizar perfil", "error");
     } finally {

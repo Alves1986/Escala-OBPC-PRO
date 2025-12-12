@@ -32,12 +32,37 @@ export const RankingScreen: React.FC<Props> = ({ ministryId, currentUser }) => {
       return 'text-zinc-500';
   };
 
-  const getBgGradient = (index: number) => {
-      if (index === 0) return 'bg-gradient-to-br from-yellow-100 to-yellow-50 border-yellow-200 dark:from-yellow-900/20 dark:to-yellow-900/5 dark:border-yellow-700/50';
-      if (index === 1) return 'bg-gradient-to-br from-zinc-100 to-zinc-50 border-zinc-200 dark:from-zinc-800 dark:to-zinc-900/50 dark:border-zinc-700';
-      if (index === 2) return 'bg-gradient-to-br from-orange-100 to-orange-50 border-orange-200 dark:from-orange-900/20 dark:to-orange-900/5 dark:border-orange-800/50';
-      return 'bg-white dark:bg-zinc-800 border-zinc-100 dark:border-zinc-700/50';
-  };
+  if (loading) {
+    return (
+        <div className="space-y-6 animate-fade-in max-w-4xl mx-auto pb-10">
+             {/* Header Skeleton */}
+             <div className="flex justify-between items-center border-b border-zinc-200 dark:border-zinc-700 pb-4">
+                 <div className="space-y-2">
+                    <div className="h-8 w-48 bg-zinc-200 dark:bg-zinc-800 rounded animate-pulse"></div>
+                    <div className="h-4 w-64 bg-zinc-200 dark:bg-zinc-800 rounded animate-pulse"></div>
+                 </div>
+                 <div className="h-8 w-24 bg-zinc-200 dark:bg-zinc-800 rounded animate-pulse"></div>
+             </div>
+             
+             {/* Podium Skeleton */}
+             <div className="grid grid-cols-3 gap-4 items-end mb-8 h-48 px-4">
+                 <div className="h-32 bg-zinc-200 dark:bg-zinc-800 rounded-t-lg animate-pulse opacity-60"></div>
+                 <div className="h-48 bg-zinc-200 dark:bg-zinc-800 rounded-t-lg animate-pulse"></div>
+                 <div className="h-24 bg-zinc-200 dark:bg-zinc-800 rounded-t-lg animate-pulse opacity-60"></div>
+             </div>
+
+             {/* Score Card Skeleton */}
+             <div className="h-24 w-full bg-zinc-200 dark:bg-zinc-800 rounded-xl animate-pulse mb-6"></div>
+
+             {/* List Skeleton */}
+             <div className="space-y-3">
+                 {[1,2,3,4,5].map(i => (
+                     <div key={i} className="h-16 w-full bg-zinc-100 dark:bg-zinc-800 rounded-xl animate-pulse border border-zinc-200 dark:border-zinc-700"></div>
+                 ))}
+             </div>
+        </div>
+    )
+  }
 
   const myRank = ranking.findIndex(r => r.memberId === currentUser.id);
   const myData = ranking[myRank];
