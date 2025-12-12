@@ -77,25 +77,27 @@ export const getLoginUrl = (ministryId: string) => {
 // Salva token da URL (Hash) e persiste no LocalStorage
 export const handleLoginCallback = () => {
     const hash = window.location.hash;
-    // O hash vem como #access_token=...&token_type=Bearer...
-    if (hash && hash.includes('access_token')) {
-        const params = new URLSearchParams(hash.substring(1)); // Remove o #
-        const token = params.get('access_token');
-        const expiresIn = params.get('expires_in');
-        
-        if (token) {
-            // Salva no localStorage para persistir após refresh
-            localStorage.setItem('spotify_user_token', token);
-            
-            // Define expiração (padrão 1 hora geralmente)
-            const expiryTime = Date.now() + (Number(expiresIn) || 3600) * 1000;
-            localStorage.setItem('spotify_token_expiry', expiryTime.toString());
+    
+    // Regex robusto para pegar o access_token mesmo se houver outros parâmetros ou lixo na URL
+    const tokenMatch = hash.match(/access_token=([^&]*)/);
+    const expiresInMatch = hash.match(/expires_in=([^&]*)/);
 
-            // Limpa a URL para ficar limpa
-            window.history.replaceState(null, '', ' ');
-            return token;
-        }
+    if (tokenMatch && tokenMatch[1]) {
+        const token = tokenMatch[1];
+        const expiresIn = expiresInMatch ? expiresInMatch[1] : "3600";
+        
+        // Salva no localStorage para persistir após refresh
+        localStorage.setItem('spotify_user_token', token);
+        
+        // Define expiração (padrão 1 hora geralmente)
+        const expiryTime = Date.now() + (Number(expiresIn) || 3600) * 1000;
+        localStorage.setItem('spotify_token_expiry', expiryTime.toString());
+
+        // Limpa a URL para ficar limpa e remover o token da barra de endereço
+        window.history.replaceState(null, '', ' ');
+        return token;
     }
+    
     return null;
 };
 

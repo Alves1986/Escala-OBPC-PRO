@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { AvailabilityMap, ScheduleMap, TeamMemberProfile } from "../types";
+import { AvailabilityMap, ScheduleMap, TeamMemberProfile, AvailabilityNotesMap } from "../types";
 
 // Initialize Gemini Client Lazily with robust env check
 const getAiClient = () => {
@@ -29,6 +29,7 @@ interface AIContext {
   events: { iso: string; title: string }[];
   members: TeamMemberProfile[];
   availability: AvailabilityMap;
+  availabilityNotes?: AvailabilityNotesMap;
   roles: string[];
   ministryId: string;
 }
@@ -58,7 +59,8 @@ const prepareMinifiedContext = (context: AIContext) => {
           return {
               n: m.name,
               r: m.roles?.filter(r => context.roles.includes(r)) || [],
-              d: [] // Empty days means completely unavailable for AI
+              d: [], // Empty days means completely unavailable for AI
+              nt: {}
           };
       }
 
@@ -70,10 +72,26 @@ const prepareMinifiedContext = (context: AIContext) => {
             return suffix ? `${day}(${suffix})` : `${day}`;
         });
 
+      // Extract notes for this member for this month
+      const notes: Record<string, string> = {};
+      if (context.availabilityNotes) {
+          Object.entries(context.availabilityNotes).forEach(([key, note]) => {
+             // key is "Name_YYYY-MM-DD"
+             if (key.startsWith(`${m.name}_`)) {
+                 const datePart = key.substring(m.name.length + 1); // YYYY-MM-DD
+                 if (datePart.startsWith(monthPrefix)) {
+                     const day = parseInt(datePart.split('-')[2], 10);
+                     notes[day] = note;
+                 }
+             }
+          });
+      }
+
       return {
         n: m.name,
         r: m.roles?.filter(r => context.roles.includes(r)) || [],
-        d: days 
+        d: days,
+        nt: Object.keys(notes).length > 0 ? notes : undefined
       };
     });
 
@@ -97,50 +115,30 @@ export const generateScheduleWithAI = async (context: AIContext): Promise<Schedu
       const systemInstruction = `
         You are an expert Ministry Scheduler for "${ministryId}".
         
-        GOAL: Create a fair schedule based strictly on availability.
+        GOAL: Create a fair schedule based strictly on availability and notes.
         
         INPUT DATA:
         - Events (e): {id: "ISO_Date", d: day_number, h: hour_of_day}
-        - Members (m): {n: name, r: [roles], d: [available_days]}
+        - Members (m): {n: name, r: [roles], d: [available_days], nt: {day: "note"}}
         - Required Roles: ${JSON.stringify(roles)}
 
-        AVAILABILITY CODES in Member Data (d):
-        - "5": Available ALL day on the 5th.
-        - "5(M)": Available ONLY Morning (events where h < 13).
-        - "5(N)": Available ONLY Night (events where h >= 13).
+        AVAILABILITY CODES (d):
+        - "5": Available ALL day.
+        - "5(M)": Available ONLY Morning (h < 13).
+        - "5(N)": Available ONLY Night (h >= 13).
         
-        CRITICAL RULES (MUST FOLLOW OR FAIL):
+        RULES:
+        0. **STRICT EVENTS**: Schedule ONLY for provided Event IDs.
+        1. **ONE ROLE PER DAY**: A member takes max 1 slot per day.
+        2. **AVAILABILITY**: Respect (M)/(N) constraints vs event hour (h).
+        3. **NOTES (nt)**: 
+           - If 'nt' exists for a day, READ IT.
+           - If note says "Prefer [Role]", prioritize assignment to that role.
+           - If note says "Chego as 20h" (late arrival) and event is 19:30, try to avoid or assign a role that allows it.
+           - Notes are high priority hints.
+        4. **FAIRNESS**: Distribute load. Prioritize those with fewer available days to ensure they get a spot.
 
-        0. **STRICT IMMUTABLE EVENTS**:
-           - Use ONLY the Event IDs provided in "Events (e)".
-           - DO NOT create new events. DO NOT invent dates, times, or shift existing times.
-           - If a specific date/time is not in the "Events (e)" list, DO NOT schedule anyone for it.
-           - Output keys MUST start with one of the provided Event IDs.
-        
-        1. **ONE ROLE PER DAY (HARD CONSTRAINT)**: 
-           - A member CANNOT appear more than ONCE per calendar day (d).
-           - Even if they are available all day, DO NOT assign them to both Morning and Night services.
-           - DO NOT assign the same person to 2 different roles in the same event.
-           - Example: If John is "Camera" on Day 5, he CANNOT be "Sound" on Day 5.
-
-        2. **AVAILABILITY CHECK**: 
-           - Member MUST have the day listed in their 'd' array.
-           - If event is Morning (h<13), member must have "X" or "X(M)". Reject "X(N)".
-           - If event is Night (h>=13), member must have "X" or "X(N)". Reject "X(M)".
-        
-        3. **SCARCITY PRIORITY**:
-           - Count how many available days each member has.
-           - Assign members with FEW available days (1 or 2) FIRST.
-           - Members with wide availability (4+ days) should fill the remaining gaps.
-
-        4. **MISSING PEOPLE**:
-           - If NO ONE matches the criteria for a slot, return "" (empty string). DO NOT force an unavailable person.
-
-        OUTPUT FORMAT (JSON Only):
-        { 
-          "EventISO_RoleName": "MemberName",
-          "EventISO_RoleName2": "" (if empty)
-        }
+        OUTPUT (JSON): { "EventISO_RoleName": "MemberName" }
       `;
 
       const response = await ai.models.generateContent({

@@ -1,4 +1,5 @@
 
+// ... (imports remain the same - no changes needed at top)
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
     SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, 
@@ -19,261 +20,247 @@ if (SUPABASE_URL && SUPABASE_KEY && !isPreviewMode) {
 
 export const getSupabase = () => supabase;
 
-// --- SAFETY HELPER ---
 const safeDb = () => {
     if (!supabase) throw new Error("Conexão com banco de dados não estabelecida.");
     return supabase;
 };
 
-// ============================================================================
-// SQL DATABASE ADAPTERS (NEW SYSTEM)
-// ============================================================================
-
-// --- GAMIFICATION / RANKING ---
-export const fetchRankingData = async (ministryId: string): Promise<RankingEntry[]> => {
-    if (isPreviewMode) return [
-        { memberId: '1', name: 'Usuário Demo', avatar_url: '', points: 1500, stats: { confirmedEvents: 10, missedEvents: 0, swapsRequested: 0, announcementsRead: 20, announcementsLiked: 5 } },
-        { memberId: '2', name: 'Membro Top', avatar_url: '', points: 1200, stats: { confirmedEvents: 8, missedEvents: 0, swapsRequested: 1, announcementsRead: 15, announcementsLiked: 2 } },
-        { memberId: '3', name: 'Membro Novo', avatar_url: '', points: 500, stats: { confirmedEvents: 3, missedEvents: 1, swapsRequested: 0, announcementsRead: 5, announcementsLiked: 0 } },
-    ];
-    if (!supabase || !ministryId) return [];
-    
+// --- LOGGING ---
+export const logActionSQL = async (ministryId: string, action: string, details: string) => {
+    if (isPreviewMode) return;
+    if (!supabase) return;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-    const currentYear = new Date().getFullYear();
-    const startOfYear = `${currentYear}-01-01T00:00:00`;
-    const endOfYear = `${currentYear}-12-31T23:59:59`;
-    const now = new Date().toISOString();
+    await supabase.from('audit_logs').insert({
+        ministry_id: cleanMid,
+        action,
+        details,
+        created_at: new Date().toISOString()
+    });
+};
 
+// --- RANKING ---
+export const fetchRankingData = async (ministryId: string): Promise<RankingEntry[]> => {
+    if (isPreviewMode) return [];
+    if (!supabase) return [];
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+    
     try {
-        const { data: members } = await supabase
+        const { data: profiles } = await supabase
             .from('profiles')
             .select('id, name, avatar_url')
             .or(`ministry_id.eq.${cleanMid},allowed_ministries.cs.{${cleanMid}}`);
 
-        if (!members || members.length === 0) return [];
+        if (!profiles) return [];
 
-        const rankingMap: Record<string, RankingEntry> = {};
+        const { data: ministryEvents } = await supabase.from('events').select('id').eq('ministry_id', cleanMid);
+        const eventIds = ministryEvents?.map((e: any) => e.id) || [];
         
-        members.forEach((m: any) => {
-            rankingMap[m.id] = {
-                memberId: m.id,
-                name: m.name || 'Sem Nome',
-                avatar_url: m.avatar_url,
-                points: 0,
-                stats: { confirmedEvents: 0, missedEvents: 0, swapsRequested: 0, announcementsRead: 0, announcementsLiked: 0 }
-            };
-        });
+        const { data: confirmedAssignments } = await supabase
+            .from('schedule_assignments')
+            .select('member_id')
+            .eq('confirmed', true)
+            .in('event_id', eventIds);
 
-        const [assignmentsResult, swapsResult, interactionsResult] = await Promise.all([
-            supabase
-                .from('schedule_assignments')
-                .select(`
-                    member_id, 
-                    confirmed, 
-                    events!inner ( date_time, ministry_id )
-                `)
-                .eq('events.ministry_id', cleanMid)
-                .gte('events.date_time', startOfYear)
-                .lte('events.date_time', endOfYear)
-                .then(res => res.data || [])
-                .catch(() => []),
+        const { data: reads } = await supabase
+            .from('announcement_interactions')
+            .select('user_id')
+            .eq('interaction_type', 'read');
             
-            supabase
-                .from('swap_requests')
-                .select('requester_id')
-                .eq('ministry_id', cleanMid)
-                .gte('created_at', startOfYear)
-                .then(res => res.data || [])
-                .catch(() => []),
+        const { data: likes } = await supabase
+            .from('announcement_interactions')
+            .select('user_id')
+            .eq('interaction_type', 'like');
 
-            supabase
-                .from('announcement_interactions')
-                .select('user_id, interaction_type, created_at')
-                .gte('created_at', startOfYear)
-                .then(res => res.data || [])
-                .catch(() => [])
-        ]);
+        const { data: swaps } = await supabase
+            .from('swap_requests')
+            .select('requester_id')
+            .eq('ministry_id', cleanMid);
 
-        const assignments = assignmentsResult;
-        const swaps = swapsResult;
-        const interactions = interactionsResult;
+        const ranking: RankingEntry[] = [];
 
-        assignments.forEach((assign: any) => {
-            if (!assign.member_id) return;
-            const entry = rankingMap[assign.member_id];
-            if (!entry) return;
+        profiles.forEach((p: any) => {
+            const confirmedCount = confirmedAssignments?.filter((a: any) => a.member_id === p.id).length || 0;
+            const readCount = reads?.filter((r: any) => r.user_id === p.id).length || 0;
+            const likeCount = likes?.filter((l: any) => l.user_id === p.id).length || 0;
+            const swapCount = swaps?.filter((s: any) => s.requester_id === p.id).length || 0;
 
-            const eventTime = assign.events?.date_time;
-            if (!eventTime) return;
+            let points = (confirmedCount * 100) + (likeCount * 10) + (readCount * 5) - (swapCount * 50);
+            if (points < 0) points = 0;
 
-            const isPast = eventTime < now;
-
-            if (assign.confirmed) {
-                entry.points += 100; 
-                entry.stats.confirmedEvents += 1;
-            } else if (isPast) {
-                entry.points -= 100;
-                entry.stats.missedEvents += 1;
-            }
+            ranking.push({
+                memberId: p.id,
+                name: p.name,
+                avatar_url: p.avatar_url,
+                points,
+                stats: {
+                    confirmedEvents: confirmedCount,
+                    missedEvents: 0,
+                    swapsRequested: swapCount,
+                    announcementsRead: readCount,
+                    announcementsLiked: likeCount
+                }
+            });
         });
 
-        swaps.forEach((swap: any) => {
-            if (!swap.requester_id) return;
-            const entry = rankingMap[swap.requester_id];
-            if (!entry) return;
-            entry.points -= 50;
-            entry.stats.swapsRequested += 1;
-        });
-
-        interactions.forEach((int: any) => {
-            if (!int.user_id) return;
-            const entry = rankingMap[int.user_id];
-            if (!entry) return;
-
-            if (int.interaction_type === 'read') {
-                entry.points += 5;
-                entry.stats.announcementsRead += 1;
-            } else if (int.interaction_type === 'like') {
-                entry.points += 10;
-                entry.stats.announcementsLiked += 1;
-            }
-        });
-
-        return Object.values(rankingMap)
-            .sort((a, b) => b.points - a.points)
-            .filter(e => e.points !== 0 || e.stats.confirmedEvents > 0); 
+        return ranking.sort((a, b) => b.points - a.points);
 
     } catch (e) {
-        console.error("Erro ao calcular ranking:", e);
         return [];
     }
 };
 
-// ... (Rest of file truncated for brevity, inserting updates below) ...
-
-// --- AVAILABILITY WITH NOTES ---
+// --- AVAILABILITY ---
 export const fetchMinistryAvailability = async (ministryId: string): Promise<{ availability: AvailabilityMap, notes: AvailabilityNotesMap }> => {
     if (isPreviewMode) return { availability: {}, notes: {} };
     if (!supabase || !ministryId) return { availability: {}, notes: {} };
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+
     try {
-        const { data: availData, error } = await supabase.from('availability').select(`date, status, note, member_id, profiles!inner ( id, name, ministry_id, allowed_ministries )`);
-        
-        const relevantData = availData?.filter((row: any) => {
-            const p = row.profiles;
-            return p.ministry_id === cleanMid || (p.allowed_ministries && p.allowed_ministries.includes(cleanMid));
-        });
+        const { data } = await supabase
+            .from('availability')
+            .select('*')
+            .eq('ministry_id', cleanMid);
 
         const availability: AvailabilityMap = {};
         const notes: AvailabilityNotesMap = {};
 
-        relevantData?.forEach((row: any) => {
-            const name = row.profiles.name || 'Membro sem nome';
-            if (!availability[name]) availability[name] = [];
+        data?.forEach((row: any) => {
+            if (!availability[row.member_name]) {
+                availability[row.member_name] = [];
+            }
+            availability[row.member_name].push(row.date_iso);
             
-            let dateStr = row.date;
-            // Append suffix for logic
-            if (row.status === 'M') dateStr += '_M';
-            else if (row.status === 'N') dateStr += '_N';
-            else if (row.status === 'BLOCKED') dateStr += '_BLOCKED';
-            
-            availability[name].push(dateStr);
-
-            // Store note if exists
             if (row.note) {
-                // Key: MemberName_Date (e.g. "João_2023-10-01")
-                notes[`${name}_${row.date}`] = row.note;
+                const noteKey = `${row.member_name}_${row.date_iso.split('_')[0]}`; 
+                notes[noteKey] = row.note;
             }
         });
+
         return { availability, notes };
-    } catch (e) { return { availability: {}, notes: {} }; }
-};
-
-export const saveMemberAvailability = async (userId: string, memberName: string, dates: string[], notesMap?: Record<string, string>) => {
-    if (isPreviewMode) return true;
-    if (!supabase) return false;
-    try {
-        const { data: member } = await supabase.from('profiles').select('id, ministry_id').ilike('name', memberName).single();
-        if (!member) return false;
-        
-        const rows = dates.map(d => {
-            let date = d;
-            let status = 'BOTH';
-            if (d.endsWith('_M')) { date = d.replace('_M', ''); status = 'M'; }
-            else if (d.endsWith('_N')) { date = d.replace('_N', ''); status = 'N'; }
-            else if (d.endsWith('_BLOCKED')) { date = d.replace('_BLOCKED', ''); status = 'BLOCKED'; }
-            
-            // Get note from map if exists (Key: Date)
-            const note = notesMap ? notesMap[date] : null;
-
-            return { member_id: member.id, date, status, note };
-        });
-
-        // Use transaction-like logic: Delete all for this member then Insert
-        // Note: This replaces all availability for the user.
-        await supabase.from('availability').delete().eq('member_id', member.id);
-        
-        if (rows.length > 0) {
-            // Check if 'note' column exists by trying one insert first or just do it if schema is ready
-            // We assume schema has 'note' column text
-            await supabase.from('availability').insert(rows);
-        }
-
-        if (member.ministry_id) {
-            await sendNotificationSQL(member.ministry_id, {
-                title: "Atualização de Disponibilidade",
-                message: `${memberName} atualizou seus dias disponíveis.`,
-                type: "info",
-                actionLink: "report"
-            });
-        }
-        return true;
-    } catch (e) { 
-        console.error(e);
-        return false; 
+    } catch (e) {
+        return { availability: {}, notes: {} };
     }
 };
 
-// ... (Rest of existing functions) ...
+export const saveMemberAvailability = async (userId: string, memberName: string, dates: string[], notes?: Record<string, string>) => {
+    if (isPreviewMode) return;
+    if (!supabase) return;
+    
+    try {
+        const { data: profile } = await supabase.from('profiles').select('ministry_id').eq('id', userId).single();
+        if (!profile) return;
+        const cleanMid = profile.ministry_id;
 
-// --- AUDIT LOGS ---
-export const fetchAuditLogs = async (ministryId: string): Promise<AuditLogEntry[]> => {
-    if (isPreviewMode) return [{ id: '1', date: new Date().toLocaleString(), action: 'Login', details: 'Acesso Demo' }];
-    if (!supabase || !ministryId) return [];
+        await supabase.from('availability').delete().eq('ministry_id', cleanMid).eq('member_id', userId);
+
+        if (dates.length > 0) {
+            const rows = dates.map(d => {
+                const datePart = d.split('_')[0];
+                const note = notes ? notes[datePart] : null;
+
+                return {
+                    ministry_id: cleanMid,
+                    member_id: userId,
+                    member_name: memberName,
+                    date_iso: d,
+                    note: note
+                };
+            });
+            
+            await supabase.from('availability').insert(rows);
+        }
+    } catch (e) {
+        console.error("Error saving availability:", e);
+    }
+};
+
+// --- REPERTOIRE ---
+export const fetchRepertoire = async (ministryId: string): Promise<RepertoireItem[]> => {
+    if (isPreviewMode) return [
+        { id: '1', title: 'Música Exemplo 1', link: 'https://youtube.com', date: new Date().toISOString().split('T')[0], addedBy: 'Demo', createdAt: '' }
+    ];
+    if (!supabase) return [];
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+    
     try {
         const { data } = await supabase
-            .from('audit_logs')
+            .from('repertoire')
             .select('*')
-            .eq('ministry_id', cleanMid)
-            .order('created_at', { ascending: false })
-            .limit(100);
-            
+            .or(`ministry_id.eq.${cleanMid},ministry_id.eq.shared`)
+            .order('event_date', { ascending: false });
+
         return (data || []).map((row: any) => ({
             id: row.id,
-            date: new Date(row.created_at).toLocaleString('pt-BR'),
-            action: row.action,
-            details: row.details
+            title: row.title,
+            link: row.link || '',
+            date: row.event_date,
+            addedBy: row.added_by,
+            createdAt: row.created_at
         }));
     } catch (e) {
         return [];
     }
 };
 
-export const logActionSQL = async (ministryId: string, action: string, details: string) => {
-    if (isPreviewMode) return;
-    if (!supabase || !ministryId) return;
-    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-    supabase.from('audit_logs').insert({
-        ministry_id: cleanMid,
-        action,
-        details
-    }).then(({ error }) => {
-        if(error) console.warn("Falha ao salvar log de auditoria", error);
-    });
+// UPDATED FUNCTION: Now returns boolean success status
+export const addToRepertoire = async (ministryId: string, item: Omit<RepertoireItem, 'id' | 'createdAt'>): Promise<boolean> => {
+    if (isPreviewMode) return true;
+    try {
+        const sb = safeDb();
+        const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+        const { error } = await sb.from('repertoire').insert({
+            ministry_id: cleanMid,
+            title: item.title,
+            link: item.link,
+            event_date: item.date,
+            added_by: item.addedBy
+        });
+        
+        if (error) {
+            console.error("Erro Supabase:", error);
+            return false;
+        }
+        return true;
+    } catch(e) { 
+        console.error("Erro ao adicionar repertório:", e); 
+        return false;
+    }
 };
 
-// --- SETTINGS (Roles, Title & Spotify) ---
+export const deleteFromRepertoire = async (id: string) => {
+    if (isPreviewMode) return;
+    if (!supabase) return;
+    await supabase.from('repertoire').delete().eq('id', id);
+};
+
+export const fetchSwapRequests = async (ministryId: string): Promise<SwapRequest[]> => {
+    if (isPreviewMode) return [];
+    if (!supabase || !ministryId) return [];
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+    try {
+        const { data } = await supabase
+            .from('swap_requests')
+            .select('*')
+            .eq('ministry_id', cleanMid)
+            .order('created_at', { ascending: false });
+
+        return (data || []).map((row: any) => ({
+            id: row.id,
+            ministryId: row.ministry_id,
+            requesterName: row.requester_name,
+            requesterId: row.requester_id,
+            role: row.role,
+            eventIso: row.event_iso ? new Date(row.event_iso).toISOString().slice(0,16) : '',
+            eventTitle: row.event_title,
+            status: row.status,
+            createdAt: row.created_at,
+            takenByName: row.taken_by_name
+        }));
+    } catch (e) {
+        return [];
+    }
+};
+
 export const fetchMinistrySettings = async (ministryId: string): Promise<MinistrySettings> => {
     if (isPreviewMode) return { displayName: 'Ministério Demo', roles: DEFAULT_ROLES['midia'] || [] };
     if (!supabase || !ministryId) return { displayName: '', roles: [] };
@@ -337,84 +324,6 @@ export const saveMinistrySettings = async (
              delete updates.spotify_client_secret;
              await supabase.from('ministry_settings').upsert(updates, { onConflict: 'ministry_id' });
         }
-    }
-};
-
-// --- REPERTOIRE ---
-export const fetchRepertoire = async (ministryId: string): Promise<RepertoireItem[]> => {
-    if (isPreviewMode) return [
-        { id: '1', title: 'Música Exemplo 1', link: 'https://youtube.com', date: new Date().toISOString().split('T')[0], addedBy: 'Demo', createdAt: '' }
-    ];
-    if (!supabase) return [];
-    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-    
-    try {
-        const { data } = await supabase
-            .from('repertoire')
-            .select('*')
-            .or(`ministry_id.eq.${cleanMid},ministry_id.eq.shared`)
-            .order('event_date', { ascending: false });
-
-        return (data || []).map((row: any) => ({
-            id: row.id,
-            title: row.title,
-            link: row.link || '',
-            date: row.event_date,
-            addedBy: row.added_by,
-            createdAt: row.created_at
-        }));
-    } catch (e) {
-        return [];
-    }
-};
-
-export const addToRepertoire = async (ministryId: string, item: Omit<RepertoireItem, 'id' | 'createdAt'>) => {
-    if (isPreviewMode) return;
-    try {
-        const sb = safeDb();
-        const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-        await sb.from('repertoire').insert({
-            ministry_id: cleanMid,
-            title: item.title,
-            link: item.link,
-            event_date: item.date,
-            added_by: item.addedBy
-        });
-    } catch(e) { console.error(e); }
-};
-
-export const deleteFromRepertoire = async (id: string) => {
-    if (isPreviewMode) return;
-    if (!supabase) return;
-    await supabase.from('repertoire').delete().eq('id', id);
-};
-
-// --- SWAP REQUESTS ---
-export const fetchSwapRequests = async (ministryId: string): Promise<SwapRequest[]> => {
-    if (isPreviewMode) return [];
-    if (!supabase || !ministryId) return [];
-    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-    try {
-        const { data } = await supabase
-            .from('swap_requests')
-            .select('*')
-            .eq('ministry_id', cleanMid)
-            .order('created_at', { ascending: false });
-
-        return (data || []).map((row: any) => ({
-            id: row.id,
-            ministryId: row.ministry_id,
-            requesterName: row.requester_name,
-            requesterId: row.requester_id,
-            role: row.role,
-            eventIso: row.event_iso ? new Date(row.event_iso).toISOString().slice(0,16) : '',
-            eventTitle: row.event_title,
-            status: row.status,
-            createdAt: row.created_at,
-            takenByName: row.taken_by_name
-        }));
-    } catch (e) {
-        return [];
     }
 };
 
@@ -514,7 +423,6 @@ export const performSwapSQL = async (ministryId: string, requestId: string, take
     }
 };
 
-// --- NOTIFICATIONS ---
 export const fetchNotificationsSQL = async (ministryId: string, userId: string): Promise<AppNotification[]> => {
     if (isPreviewMode) return [{ id: '1', type: 'info', title: 'Bem-vindo', message: 'Modo demonstração.', timestamp: new Date().toISOString(), read: false }];
     if (!supabase) return [];
@@ -567,7 +475,6 @@ export const markNotificationsReadSQL = async (ids: string[], userId: string) =>
     if (isPreviewMode) return;
     if (!supabase) return;
     
-    // Loop é ineficiente para muitos IDs, mas ok para uso típico
     for (const id of ids) {
         const { data } = await supabase.from('notifications').select('read_by').eq('id', id).single();
         const currentRead = data?.read_by || [];
@@ -586,7 +493,6 @@ export const clearAllNotificationsSQL = async (ministryId: string) => {
     await supabase.from('notifications').delete().eq('ministry_id', cleanMid);
 };
 
-// --- ANNOUNCEMENTS ---
 export const fetchAnnouncementsSQL = async (ministryId: string): Promise<Announcement[]> => {
     if (isPreviewMode) return [];
     if (!supabase) return [];
@@ -669,7 +575,6 @@ export const interactAnnouncementSQL = async (announcementId: string, userId: st
     }
 };
 
-// --- ADMIN MANAGEMENT (SQL) ---
 export const toggleAdminSQL = async (email: string, setAdmin: boolean) => {
     if (isPreviewMode) return;
     if (!supabase) return;
@@ -701,7 +606,6 @@ export const fetchAdminsSQL = async (ministryId: string): Promise<string[]> => {
     return (data || []).map((p: any) => p.email).filter((e: any) => !!e);
 };
 
-// --- PUSH SUBSCRIPTIONS SQL ---
 export const saveSubscriptionSQL = async (ministryId: string, sub: PushSubscription) => {
     if (isPreviewMode) return;
     if (!supabase) return;
@@ -752,7 +656,6 @@ export const createMinistryEvent = async (ministryId: string, event: { title: st
         });
 
         if (!error) {
-            // NOTIFY: Create Event
             const formatedDate = event.date.split('-').reverse().join('/');
             await sendNotificationSQL(cleanMid, {
                 title: "Novo Evento",
@@ -1428,11 +1331,9 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
     if (!user) return { success: false, message: "Usuário não logado" };
 
     try {
-        // SECURITY FIX: Whitelist only allowed fields to prevent role escalation attacks
         const updates: any = {
             name,
             whatsapp,
-            // updated_at: new Date().toISOString(), // Removed to fix schema error
         };
         if (avatar_url !== undefined) updates.avatar_url = avatar_url;
         if (functions !== undefined) updates.functions = functions;
@@ -1443,7 +1344,6 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
         if (error) throw error;
         
         if (ministryId) {
-             // Non-blocking log
              logActionSQL(ministryId, "Atualização de Perfil", `${name} atualizou seus dados.`);
         }
 

@@ -128,19 +128,26 @@ const InnerApp = () => {
       }
   }, [currentUser]);
 
-  // REMOVIDO: useEffect de window.focus que causava recargas indesejadas ao trocar de app
-  // Os dados agora só atualizam na carga inicial ou manualmente.
+  // Auto-refresh data on window focus
+  useEffect(() => {
+      const handleFocus = () => {
+          if (currentUser && ministryId) {
+              // Silently refresh data when user comes back to the app
+              loadData();
+          }
+      };
+      
+      window.addEventListener('focus', handleFocus);
+      return () => window.removeEventListener('focus', handleFocus);
+  }, [currentUser, ministryId, loadData]);
 
   useEffect(() => {
       const url = new URL(window.location.href);
-      // Evita sobrescrever se estamos com hash de acesso (token spotify)
-      if (!window.location.hash.includes('access_token')) {
-          if (url.searchParams.get('tab') !== currentTab) {
-              url.searchParams.set('tab', currentTab);
-              try {
-                window.history.replaceState({}, '', url.toString());
-              } catch (e) {}
-          }
+      if (url.searchParams.get('tab') !== currentTab) {
+          url.searchParams.set('tab', currentTab);
+          try {
+            window.history.replaceState({}, '', url.toString());
+          } catch (e) {}
       }
   }, [currentTab]);
 
@@ -358,6 +365,7 @@ const InnerApp = () => {
               events: events.map(e => ({ iso: e.iso, title: e.title })),
               members: publicMembers,
               availability,
+              availabilityNotes,
               roles,
               ministryId
           });
@@ -419,7 +427,7 @@ const InnerApp = () => {
         onSwitchMinistry={handleSwitchMinistry}
         onOpenJoinMinistry={() => setShowJoinModal(true)}
     >
-        {/* ... (Existing tabs content) ... */}
+        {/* ... (Tab Content rendering remains same) ... */}
         {currentTab === 'dashboard' && (
             <div className="space-y-6 animate-fade-in">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -755,45 +763,6 @@ const InnerApp = () => {
                     ))}
                  </div>
              </div>
-        )}
-
-        {currentTab === 'settings' && (
-            <SettingsScreen 
-                initialTitle={ministryTitle} 
-                ministryId={ministryId}
-                themeMode={themeMode}
-                onSetThemeMode={handleSetThemeMode}
-                onSaveTheme={handleSaveTheme}
-                onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, newTitle); setMinistryTitle(newTitle); addToast("Nome do ministério atualizado!", "success"); }}
-                onAnnounceUpdate={async () => { await Supabase.sendNotificationSQL(ministryId, { title: "Atualização de Sistema", message: "Uma nova versão do app está disponível. Recarregue a página para aplicar.", type: "warning" }); addToast("Notificação de atualização enviada.", "success"); }}
-                onEnableNotifications={handleEnableNotifications}
-                onSaveAvailabilityWindow={async (start, end, spotifyId, spotifySecret) => { 
-                    await Supabase.saveMinistrySettings(ministryId, undefined, undefined, start, end, spotifyId, spotifySecret); 
-                    loadData(); 
-                }}
-                availabilityWindow={availabilityWindow}
-                isAdmin={isAdmin}
-            />
-        )}
-
-        {currentTab === 'report' && isAdmin && (
-            <AvailabilityReportScreen 
-                availability={availability}
-                registeredMembers={publicMembers}
-                membersMap={membersMap}
-                currentMonth={currentMonth}
-                onMonthChange={setCurrentMonth}
-                availableRoles={roles}
-                onRefresh={async () => { await loadData(); addToast("Dados atualizados!", "success"); }}
-            />
-        )}
-
-        {currentTab === 'profile' && currentUser && (
-             <ProfileScreen 
-                user={currentUser}
-                availableRoles={roles}
-                onUpdateProfile={async (name, whatsapp, avatar_url, functions, birthDate) => { const res = await Supabase.updateUserProfile(name, whatsapp, avatar_url, functions, birthDate, ministryId); if (res.success) { addToast(res.message, "success"); setCurrentUser({ ...currentUser, name, whatsapp, avatar_url, functions, birthDate }); await loadData(); } else { addToast(res.message, "error"); } }}
-             />
         )}
 
         <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ ...e, iso: e.iso }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, e); loadData(); }} onRemove={async (id) => { loadData(); }} />

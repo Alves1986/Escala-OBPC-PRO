@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Music, Plus, Trash2, ExternalLink, PlayCircle, Calendar, Settings, ListMusic, Sparkles, Loader2, Search, Youtube, LogOut, LogIn, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Music, Plus, Trash2, ExternalLink, PlayCircle, Calendar, Settings, ListMusic, Sparkles, Loader2, Search, Youtube, LogOut, LogIn, ChevronRight, ArrowLeft, AlertCircle } from 'lucide-react';
 import { RepertoireItem, User } from '../types';
 import { useToast } from './Toast';
 import { addToRepertoire, deleteFromRepertoire } from '../services/supabaseService';
@@ -25,7 +25,10 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   
   // Persist Date in LocalStorage to survive redirects
   const [date, setDate] = useState(() => {
-      return localStorage.getItem('repertoire_draft_date') || "";
+      if (typeof window !== 'undefined') {
+          return localStorage.getItem('repertoire_draft_date') || "";
+      }
+      return "";
   });
 
   // Manual Form
@@ -53,14 +56,15 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
 
   // Init - Verifica login e persistência
   useEffect(() => {
-      // 1. Verifica token do hash (Redirecionamento)
-      const token = handleLoginCallback();
-      if (token) {
+      // 1. Verifica token do hash (Redirecionamento) com prioridade máxima
+      const tokenFromHash = handleLoginCallback();
+      
+      if (tokenFromHash) {
           setIsSpotifyLoggedIn(true);
           setActiveTab('playlists');
           addToast("Spotify conectado com sucesso!", "success");
       } else if (isUserLoggedIn()) {
-          // 2. Verifica token armazenado
+          // 2. Verifica token armazenado se não veio do hash
           setIsSpotifyLoggedIn(true);
       }
 
@@ -87,7 +91,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
           return;
       }
       // Salva estado antes de ir
-      localStorage.setItem('repertoire_draft_date', date);
+      if(date) localStorage.setItem('repertoire_draft_date', date);
       
       const url = getLoginUrl(ministryId);
       if (url) {
@@ -128,7 +132,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       setSpotifyLoading(false);
       
       if (results.length === 0) {
-          addToast("Nenhum resultado encontrado.", "warning");
+          addToast("Nenhum resultado encontrado. Verifique se o Client Secret foi configurado.", "warning");
       }
   };
 
@@ -142,9 +146,14 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     }
 
     if (!date) {
-        addToast("Por favor, selecione a Data do Culto antes de adicionar.", "warning");
-        // Scroll to top to see error
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        addToast("ATENÇÃO: Selecione a Data do Culto acima antes de adicionar músicas!", "warning");
+        // Highlight date input
+        const dateInput = document.getElementById('date-input');
+        if (dateInput) {
+            dateInput.focus();
+            dateInput.classList.add('ring-4', 'ring-red-500');
+            setTimeout(() => dateInput.classList.remove('ring-4', 'ring-red-500'), 2000);
+        }
         return;
     }
 
@@ -155,22 +164,27 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
 
     setIsSubmitting(true);
     
-    await addToRepertoire(currentUser.ministryId, {
+    // Agora capturamos o sucesso/falha explicitamente
+    const success = await addToRepertoire(currentUser.ministryId, {
         title: finalTitle,
         link: finalLink,
         date,
         addedBy: currentUser.name
     });
 
-    if (onItemAdd) onItemAdd(finalTitle);
-    await setRepertoire([]); // Reload list
-    
-    // Clear forms but keep date
-    setTitle("");
-    setLink("");
+    if (success) {
+        if (onItemAdd) onItemAdd(finalTitle);
+        await setRepertoire([]); // Reload list to force refresh from DB
+        
+        // Clear forms but keep date
+        setTitle("");
+        setLink("");
+        addToast("Música adicionada com sucesso!", "success");
+    } else {
+        addToast("Erro ao salvar música no banco de dados. Tente novamente.", "error");
+    }
     
     setIsSubmitting(false);
-    addToast("Música adicionada!", "success");
   };
 
   const handleAiSuggest = async () => {
@@ -285,12 +299,13 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
               <div className="mb-4 bg-zinc-50 dark:bg-zinc-900/50 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800">
                   <label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block flex items-center gap-1"><Calendar size={10}/> Data do Culto (Obrigatório)</label>
                   <input 
+                      id="date-input"
                       type="date" 
                       value={date} 
                       onChange={e => handleDateChange(e.target.value)}
-                      className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-green-500 font-medium"
+                      className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-green-500 font-medium transition-all"
                   />
-                  {!date && <p className="text-[10px] text-red-400 mt-1">Selecione uma data para habilitar a adição.</p>}
+                  {!date && <p className="text-[10px] text-red-500 font-bold mt-1 flex items-center gap-1"><AlertCircle size={10}/> Selecione uma data para habilitar a adição.</p>}
               </div>
 
               {/* Tabs */}
