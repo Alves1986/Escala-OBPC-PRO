@@ -155,10 +155,21 @@ export const polishAnnouncementAI = async (text: string, tone: 'professional' | 
 
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: `Rewrite the following announcement text to be ${tonePrompt[tone]}. Keep the core information, improve clarity and grammar. Portuguese language.\n\nText: "${text}"`,
+            contents: `
+                Act as a professional editor. Rewrite the following announcement text to be ${tonePrompt[tone]}. 
+                
+                Rules:
+                1. Keep the core information intact.
+                2. Improve clarity and grammar.
+                3. Language: Portuguese.
+                4. CRITICAL: Return ONLY the rewritten text. Do not provide options. Do not add conversational filler like "Here is the text" or "Sure". Just the final text.
+                5. Provide a single, best version.
+
+                Text to rewrite: "${text}"
+            `,
         });
 
-        return response.text || text;
+        return response.text ? response.text.trim() : text;
     } catch (e) {
         return text;
     }
