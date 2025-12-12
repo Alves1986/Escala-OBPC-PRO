@@ -264,7 +264,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
         <div>
           <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-            {mode === 'manage' ? <Settings className="text-pink-500"/> : <Music className="text-pink-500"/>}
+            {mode === 'manage' ? <Settings className="text-zinc-500"/> : <Music className="text-pink-500"/>}
             {mode === 'manage' ? 'Gerenciar Repertório' : 'Repertório Musical'}
           </h2>
           <p className="text-zinc-500 text-sm mt-1">
@@ -287,9 +287,6 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                           </div>
                           <div>
                               <h3 className="text-sm font-bold text-zinc-800 dark:text-white">Buscar Músicas</h3>
-                              {isSpotifyLoggedIn && (
-                                  <p className="text-[10px] text-green-600 font-bold">● Spotify Conectado</p>
-                              )}
                           </div>
                       </div>
                       <div className="flex gap-2 w-full sm:w-auto">
@@ -299,31 +296,6 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                           >
                               <Sparkles size={14} /> IA
                           </button>
-                          
-                          <button 
-                              onClick={isSpotifyLoggedIn ? undefined : handleSpotifyLogin}
-                              disabled={isSpotifyLoggedIn}
-                              className={`flex-1 sm:flex-none justify-center text-xs font-bold text-white px-3 py-2 rounded-lg flex items-center gap-2 transition-all shadow-sm ${
-                                  isSpotifyLoggedIn 
-                                  ? "bg-green-800 cursor-default opacity-90 border border-green-700" 
-                                  : "bg-[#1DB954] hover:bg-[#1ed760]"
-                              }`}
-                          >
-                              {isSpotifyLoggedIn ? (
-                                  <>
-                                      <Check size={14} className="text-green-200"/>
-                                      <span>Conectado</span>
-                                  </>
-                              ) : (
-                                  <>
-                                      <LogIn size={14} />
-                                      <span>Conectar</span>
-                                  </>
-                              )}
-                          </button>
-                          {isSpotifyLoggedIn && (
-                              <button onClick={handleSpotifyLogout} className="text-zinc-400 hover:text-red-500 p-2"><LogOut size={16}/></button>
-                          )}
                       </div>
                   </div>
 

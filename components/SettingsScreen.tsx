@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, Moon, Sun, BellRing, Megaphone, Monitor, Loader2, CalendarClock, Lock, Unlock, Music, Copy, AlertCircle, BellOff, Check, ShieldCheck, XCircle } from 'lucide-react';
+import { Settings, Save, Moon, Sun, BellRing, Megaphone, Monitor, Loader2, CalendarClock, Lock, Unlock, BellOff, Check, Music, ShieldCheck, AlertCircle } from 'lucide-react';
 import { useToast } from './Toast';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { ThemeMode } from '../types';
@@ -33,8 +33,15 @@ export const SettingsScreen: React.FC<Props> = ({
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
   const { addToast } = useToast();
 
-  // Verifica se as variáveis de ambiente estão presentes
-  const hasEnvVars = !!import.meta.env.VITE_SPOTIFY_CLIENT_ID;
+  // Verifica se as variáveis de ambiente estão presentes de forma segura
+  const hasEnvVars = (() => {
+      try {
+          // @ts-ignore
+          return !!(import.meta.env && import.meta.env.VITE_SPOTIFY_CLIENT_ID);
+      } catch (e) {
+          return false;
+      }
+  })();
 
   // Efeito: Sincroniza Janela de Disponibilidade
   useEffect(() => {
@@ -75,8 +82,6 @@ export const SettingsScreen: React.FC<Props> = ({
           setIsNotifLoading(false);
       }
   };
-
-  const redirectUri = window.location.origin;
 
   return (
     <div className="space-y-6 animate-fade-in max-w-4xl mx-auto pb-10">
@@ -158,47 +163,19 @@ export const SettingsScreen: React.FC<Props> = ({
                             <h4 className="text-sm font-bold text-zinc-700 dark:text-zinc-200 uppercase">Integração Spotify</h4>
                         </div>
                         
-                        <div className="mb-4 p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-lg border border-zinc-200 dark:border-zinc-700">
-                            <div className="flex items-center gap-2 mb-2 text-zinc-700 dark:text-zinc-300 text-xs font-bold">
-                                <AlertCircle size={14}/> Configuração Obrigatória
+                        <div className={`flex items-center gap-3 p-4 rounded-xl border transition-colors ${hasEnvVars ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-900/30' : 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-900/30'}`}>
+                            <div className={`p-2 rounded-full ${hasEnvVars ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'}`}>
+                                {hasEnvVars ? <ShieldCheck size={20} /> : <AlertCircle size={20} />}
                             </div>
-                            <p className="text-xs text-zinc-500 mb-2">
-                                Certifique-se que esta URL está nas "Redirect URIs" no painel do Spotify Developer:
-                            </p>
-                            <div className="flex gap-2">
-                                <code className="flex-1 bg-white dark:bg-black/20 p-2 rounded border border-zinc-200 dark:border-zinc-700 text-[10px] font-mono truncate select-all">
-                                    {redirectUri}
-                                </code>
-                                <button 
-                                    onClick={() => { navigator.clipboard.writeText(redirectUri); addToast("Copiado!", "success"); }}
-                                    className="p-2 bg-zinc-200 dark:bg-zinc-700 rounded hover:bg-zinc-300 dark:hover:bg-zinc-600"
-                                >
-                                    <Copy size={14}/>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center justify-between p-3 rounded-lg border border-zinc-100 dark:border-zinc-700/50 bg-zinc-50 dark:bg-zinc-900/30">
-                            <div className="flex items-center gap-3">
-                                {hasEnvVars ? (
-                                    <div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
-                                        <ShieldCheck size={18} />
-                                    </div>
-                                ) : (
-                                    <div className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-600 dark:text-red-400">
-                                        <XCircle size={18} />
-                                    </div>
-                                )}
-                                <div>
-                                    <p className="text-sm font-bold text-zinc-800 dark:text-zinc-100">
-                                        Status da Integração
-                                    </p>
-                                    <p className="text-xs text-zinc-500">
-                                        {hasEnvVars 
-                                            ? 'Credenciais carregadas via Variáveis de Ambiente (Seguro).' 
-                                            : 'Credenciais não encontradas no arquivo .env.'}
-                                    </p>
-                                </div>
+                            <div>
+                                <p className={`text-sm font-bold ${hasEnvVars ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300'}`}>
+                                    {hasEnvVars ? 'Conectado via Client ID (Ambiente)' : 'Credenciais Ausentes'}
+                                </p>
+                                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                                    {hasEnvVars 
+                                        ? 'O sistema detectou suas chaves de API seguras.' 
+                                        : 'Configure VITE_SPOTIFY_CLIENT_ID nas variáveis de ambiente.'}
+                                </p>
                             </div>
                         </div>
                     </div>

@@ -27,12 +27,18 @@ const getCredentials = (ministryId: string) => {
     let clientId = localStorage.getItem(`spotify_cid_${cleanMid}`);
     let clientSecret = localStorage.getItem(`spotify_sec_${cleanMid}`);
 
-    // 2. Se não tiver, tenta pegar das variáveis de ambiente (.env)
-    if (!clientId) {
-        clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID || "";
-    }
-    if (!clientSecret) {
-        clientSecret = import.meta.env.VITE_SPOTIFY_CLIENT_SECRET || "";
+    // 2. Se não tiver, tenta pegar das variáveis de ambiente (.env) de forma segura
+    try {
+        // @ts-ignore
+        if (!clientId && import.meta.env) {
+            clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID || "";
+        }
+        // @ts-ignore
+        if (!clientSecret && import.meta.env) {
+            clientSecret = import.meta.env.VITE_SPOTIFY_CLIENT_SECRET || "";
+        }
+    } catch(e) {
+        console.warn("Env vars inacessíveis");
     }
 
     return { clientId, clientSecret };
