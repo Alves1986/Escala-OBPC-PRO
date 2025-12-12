@@ -1,5 +1,4 @@
 
-// ... (imports remain same)
 import React, { useState, useMemo, useEffect } from 'react';
 import { AvailabilityMap, TeamMemberProfile, MemberMap } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
@@ -8,7 +7,7 @@ import { CalendarSearch, Search, Filter, CalendarX, RefreshCw, Ban, CheckCircle2
 interface Props {
   availability: AvailabilityMap;
   registeredMembers: TeamMemberProfile[];
-  membersMap: MemberMap; // Para fallback de funções manuais
+  membersMap: MemberMap;
   currentMonth: string;
   onMonthChange: (newMonth: string) => void;
   availableRoles: string[];
@@ -44,7 +43,6 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
     onMonthChange(adjustMonth(currentMonth, 1));
   };
 
-  // Função auxiliar para normalizar nomes (ignora acentos, case e espaços extras)
   const normalizeString = (str: string) => {
       return str
         .normalize("NFD")
@@ -53,15 +51,12 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
         .trim();
   };
 
-  // Processa e combina os dados
   const reportData = useMemo(() => {
     const data = registeredMembers.map((profile) => {
-      // Determina as funções (Perfil > Mapa Manual)
       let roles: string[] = [];
       if (profile.roles && profile.roles.length > 0) {
         roles = profile.roles;
       } else {
-        // Fallback: Procura no mapa manual
         Object.entries(membersMap).forEach(([role, members]) => {
           if ((members as string[]).some(m => normalizeString(m) === normalizeString(profile.name))) {
               roles.push(role);
@@ -69,27 +64,23 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
         });
       }
 
-      // Pega dias disponíveis no mês atual com busca insensível a case/trim/acentos
       const normalizedName = normalizeString(profile.name);
       let dates: string[] = [];
-      
-      // Tenta encontrar a chave no mapa de disponibilidade usando a string normalizada
       const availKey = Object.keys(availability).find(k => normalizeString(k) === normalizedName);
       
       if (availKey) {
           dates = availability[availKey] || [];
       }
 
-      // Verifica se o mês está bloqueado explicitamente
-      // Check for both _BLOCKED suffix or just BLOCKED in string to be safe
-      const isBlocked = dates.some(d => d.startsWith(currentMonth) && (d.includes('BLOCKED') || d.includes('BLK')));
+      // Nova lógica de detecção de bloqueio total (prioridade máxima)
+      const isBlocked = dates.some(d => d.startsWith(currentMonth) && d.includes('WHOLE_MONTH_BLOCKED'));
 
       const monthDates = dates
-        .filter(d => d.startsWith(currentMonth) && !d.includes('BLOCKED') && !d.includes('BLK'))
+        .filter(d => d.startsWith(currentMonth) && !d.includes('BLOCKED'))
         .map(d => {
             const parts = d.split('_');
             const dayNum = parseInt(d.split('-')[2]);
-            const type = parts.length > 1 ? parts[1] : 'BOTH'; // 'M', 'N' or 'BOTH'
+            const type = parts.length > 1 ? parts[1] : 'BOTH';
             return { day: dayNum, type };
         })
         .sort((a, b) => a.day - b.day);
@@ -98,13 +89,12 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
         name: profile.name,
         avatar_url: profile.avatar_url,
         roles,
-        days: monthDates,
-        count: monthDates.length,
-        isBlocked // Flag para UI
+        days: isBlocked ? [] : monthDates,
+        count: isBlocked ? 0 : monthDates.length,
+        isBlocked
       };
     });
 
-    // Filtragem
     return data
       .filter(item => {
         const matchesSearch = normalizeString(item.name).includes(normalizeString(searchTerm));
@@ -112,7 +102,6 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
         return matchesSearch && matchesRole;
       })
       .sort((a, b) => {
-          // Ordena: Disponíveis primeiro, depois bloqueados, depois sem resposta
           if (a.isBlocked && !b.isBlocked) return 1;
           if (!a.isBlocked && b.isBlocked) return -1;
           return a.name.localeCompare(b.name);
@@ -120,10 +109,8 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
 
   }, [registeredMembers, availability, currentMonth, membersMap, searchTerm, selectedRole]);
 
-  // ... (render remains exactly the same)
   return (
     <div className="space-y-6 animate-fade-in max-w-6xl mx-auto">
-      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
         <div>
           <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
@@ -134,7 +121,6 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
           </p>
         </div>
         
-        {/* Actions */}
         <div className="flex items-center gap-2 self-end">
             <button 
                 onClick={handleManualRefresh}
@@ -144,7 +130,6 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
                 <RefreshCw size={20} className={isRefreshing ? "animate-spin" : ""} />
             </button>
 
-            {/* Month Selector */}
             <div className="flex items-center gap-4 bg-white dark:bg-zinc-800 p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm">
                 <button onClick={handlePrevMonth} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md">←</button>
                 <div className="text-center min-w-[120px]">
@@ -156,7 +141,6 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-col md:flex-row gap-4 bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
          <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
@@ -183,7 +167,6 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
          </div>
       </div>
 
-      {/* Report Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {reportData.length === 0 ? (
           <div className="col-span-full py-12 text-center text-zinc-400">
@@ -192,7 +175,7 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
           </div>
         ) : (
           reportData.map((item) => (
-            <div key={item.name} className={`bg-white dark:bg-zinc-800 rounded-xl border p-5 shadow-sm hover:shadow-md transition-shadow ${item.isBlocked ? 'border-red-200 dark:border-red-900/30' : 'border-zinc-200 dark:border-zinc-700'}`}>
+            <div key={item.name} className={`bg-white dark:bg-zinc-800 rounded-xl border p-5 shadow-sm hover:shadow-md transition-shadow ${item.isBlocked ? 'border-red-200 dark:border-red-900/30 bg-red-50/10' : 'border-zinc-200 dark:border-zinc-700'}`}>
                <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
                      {item.avatar_url ? (
@@ -216,7 +199,6 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
                      </div>
                   </div>
                   
-                  {/* Badge de Contagem ou Bloqueio */}
                   {item.isBlocked ? (
                       <div className="px-2 py-1 rounded text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 flex items-center gap-1">
                           <Ban size={12} /> Bloqueado
@@ -230,7 +212,7 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
 
                <div className="pt-4 border-t border-zinc-100 dark:border-zinc-700/50">
                   {item.isBlocked ? (
-                      <div className="text-center py-2 text-red-500 dark:text-red-400 text-xs font-bold flex items-center justify-center gap-2 bg-red-50 dark:bg-red-900/10 rounded-lg">
+                      <div className="text-center py-2 text-red-500 dark:text-red-400 text-xs font-bold flex items-center justify-center gap-2 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-900/20">
                           <Ban size={16}/> Membro indisponível neste mês
                       </div>
                   ) : item.days.length > 0 ? (
@@ -259,7 +241,6 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
           ))
         )}
       </div>
-
     </div>
   );
 };

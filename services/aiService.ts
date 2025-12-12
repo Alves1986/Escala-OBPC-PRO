@@ -4,7 +4,6 @@ import { AvailabilityMap, ScheduleMap, TeamMemberProfile, AvailabilityNotesMap }
 
 // Initialize Gemini Client Lazily with robust env check
 const getAiClient = () => {
-  // Tenta obter a chave de várias fontes possíveis para garantir compatibilidade
   let key = '';
   try {
       // @ts-ignore
@@ -34,7 +33,6 @@ interface AIContext {
   ministryId: string;
 }
 
-// Helper to minify data context for the AI to save tokens
 const prepareMinifiedContext = (context: AIContext) => {
   const firstEvent = context.events[0];
   if (!firstEvent) return { events: [], members: [] };
@@ -52,8 +50,8 @@ const prepareMinifiedContext = (context: AIContext) => {
     .map(m => {
       const rawAvail = context.availability[m.name] || [];
       
-      // Critical check: if any date in this month is marked as 'BLOCKED', clear the schedule for this member
-      const isBlocked = rawAvail.some(d => d.startsWith(monthPrefix) && d.includes('BLOCKED'));
+      // Critical check for NEW Block Tag
+      const isBlocked = rawAvail.some(d => d.startsWith(monthPrefix) && d.includes('WHOLE_MONTH_BLOCKED'));
       
       if (isBlocked) {
           return {
@@ -154,12 +152,10 @@ export const generateScheduleWithAI = async (context: AIContext): Promise<Schedu
       if (!response.text) throw new Error("A IA não retornou uma escala válida.");
       const rawSchedule = JSON.parse(response.text);
 
-      // SAFETY FILTER: Ensure AI didn't hallucinate events
       const filteredSchedule: ScheduleMap = {};
       const validEventIds = new Set(inputData.e.map(evt => evt.id));
 
       Object.entries(rawSchedule).forEach(([key, value]) => {
-          // Check if key starts with a valid event ID
           const isValidEvent = Array.from(validEventIds).some(validId => key.startsWith(validId));
           if (isValidEvent) {
               filteredSchedule[key] = value as string;

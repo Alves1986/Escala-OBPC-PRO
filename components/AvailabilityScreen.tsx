@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { AvailabilityMap, AvailabilityNotesMap, User } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
-import { User as UserIcon, CalendarCheck, ChevronDown, Save, CheckCircle2, Sun, Moon, X, Ban, Lock, MessageSquare, Info, Loader2 } from 'lucide-react';
+import { User as UserIcon, CalendarCheck, ChevronDown, Save, CheckCircle2, Sun, Moon, X, Ban, Lock, MessageSquare } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface Props {
@@ -17,6 +17,9 @@ interface Props {
   onSaveAvailability: (member: string, dates: string[], notes: Record<string, string>) => Promise<void>;
   availabilityWindow?: { start?: string, end?: string };
 }
+
+// Constante global para a tag de bloqueio
+const BLOCK_TAG = 'WHOLE_MONTH_BLOCKED';
 
 // Modal simplificado APENAS para Domingos (Seleção de Período)
 const SundaySelectionModal = ({ isOpen, onClose, onSave, onDelete, currentDateDisplay, initialType }: { 
@@ -33,36 +36,30 @@ const SundaySelectionModal = ({ isOpen, onClose, onSave, onDelete, currentDateDi
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-            <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-2xl w-full max-w-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden flex flex-col animate-slide-up transform transition-all">
-                <div className="p-5 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900/50">
+            <div className="bg-white dark:bg-zinc-800 rounded-xl shadow-2xl w-full max-w-xs border border-zinc-200 dark:border-zinc-700 overflow-hidden flex flex-col animate-slide-up">
+                <div className="p-4 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900">
+                    <h3 className="font-bold text-zinc-800 dark:text-white text-sm">Domingo - {currentDateDisplay}</h3>
+                    <button onClick={onClose}><X size={18} className="text-zinc-500"/></button>
+                </div>
+                <div className="p-4 space-y-4">
                     <div>
-                        <h3 className="font-bold text-zinc-800 dark:text-white text-lg">Domingo</h3>
-                        <p className="text-zinc-500 text-xs font-medium">{currentDateDisplay}</p>
-                    </div>
-                    <button onClick={onClose} className="p-1 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"><X size={20} className="text-zinc-500"/></button>
-                </div>
-                
-                <div className="p-6 space-y-4">
-                    <p className="text-sm text-zinc-600 dark:text-zinc-300 mb-2">Selecione seu período de disponibilidade:</p>
-                    <div className="space-y-3">
-                        <button onClick={() => setType('BOTH')} className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${type === 'BOTH' ? 'border-green-500 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300' : 'border-zinc-100 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:border-green-200 dark:hover:border-green-800'}`}>
-                            <span className="font-bold flex items-center gap-3"><CheckCircle2 size={20}/> Dia Todo</span>
-                            {type === 'BOTH' && <div className="w-3 h-3 bg-green-500 rounded-full shadow-sm"></div>}
-                        </button>
-                        <button onClick={() => setType('M')} className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${type === 'M' ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300' : 'border-zinc-100 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:border-orange-200 dark:hover:border-orange-800'}`}>
-                            <span className="font-bold flex items-center gap-3"><Sun size={20}/> Apenas Manhã</span>
-                            {type === 'M' && <div className="w-3 h-3 bg-orange-500 rounded-full shadow-sm"></div>}
-                        </button>
-                        <button onClick={() => setType('N')} className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${type === 'N' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300' : 'border-zinc-100 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:border-indigo-200 dark:hover:border-indigo-800'}`}>
-                            <span className="font-bold flex items-center gap-3"><Moon size={20}/> Apenas Noite</span>
-                            {type === 'N' && <div className="w-3 h-3 bg-indigo-500 rounded-full shadow-sm"></div>}
-                        </button>
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase mb-2 block">Qual período você servirá?</label>
+                        <div className="space-y-2">
+                            <button onClick={() => setType('BOTH')} className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors ${type === 'BOTH' ? 'border-green-500 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 ring-1 ring-green-500' : 'border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700'}`}>
+                                <span className="font-bold flex items-center gap-2 text-sm"><CheckCircle2 size={16}/> Dia Todo</span>
+                            </button>
+                            <button onClick={() => setType('M')} className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors ${type === 'M' ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 ring-1 ring-orange-500' : 'border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700'}`}>
+                                <span className="font-bold flex items-center gap-2 text-sm"><Sun size={16}/> Apenas Manhã</span>
+                            </button>
+                            <button onClick={() => setType('N')} className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors ${type === 'N' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-500' : 'border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700'}`}>
+                                <span className="font-bold flex items-center gap-2 text-sm"><Moon size={16}/> Apenas Noite</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
-
-                <div className="p-5 border-t border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 flex gap-3">
-                    <button onClick={onDelete} className="flex-1 py-3 text-red-600 font-bold hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors text-sm">Remover</button>
-                    <button onClick={() => onSave(type)} className="flex-[2] py-3 bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-white text-white dark:text-zinc-900 font-bold rounded-xl shadow-lg transition-transform active:scale-95 text-sm">Confirmar</button>
+                <div className="p-3 border-t border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 flex gap-2">
+                    <button onClick={onDelete} className="flex-1 py-2 text-red-600 font-bold hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors text-xs border border-transparent hover:border-red-200">Remover</button>
+                    <button onClick={() => onSave(type)} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md active:scale-95 transition-all text-xs">Confirmar</button>
                 </div>
             </div>
         </div>
@@ -79,7 +76,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const [generalNote, setGeneralNote] = useState(""); 
   
   const [hasChanges, setHasChanges] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [sundayModal, setSundayModal] = useState<{ isOpen: boolean, day: number } | null>(null);
   const { addToast } = useToast();
 
@@ -107,12 +103,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   useEffect(() => {
     if (selectedMember) {
-        // Carrega as datas, excluindo o marcador de nota geral ('-00')
-        const rawDates = availability[selectedMember] || [];
-        const visualDates = rawDates.filter(d => !d.endsWith('-00'));
-        setTempDates(visualDates);
+        const storedDates = availability[selectedMember] || [];
+        setTempDates(storedDates);
         
-        // Carrega nota geral (chave 'YYYY-MM-00')
+        // Carrega nota geral (usamos o dia '00' como chave para nota do mês)
         const generalNoteKey = `${selectedMember}_${currentMonth}-00`;
         setGeneralNote(availabilityNotes?.[generalNoteKey] || "");
         
@@ -128,17 +122,21 @@ export const AvailabilityScreen: React.FC<Props> = ({
     onMonthChange(adjustMonth(currentMonth, 1));
   };
 
-  const isMonthBlocked = tempDates.some(d => d.startsWith(currentMonth) && d.includes('BLOCKED'));
+  // Verifica se o mês atual tem a tag de bloqueio exclusiva
+  const isMonthBlocked = tempDates.some(d => d.startsWith(currentMonth) && d.includes(BLOCK_TAG));
 
   const handleToggleBlockMonth = () => {
       if (!isEditable) return;
 
       if (isMonthBlocked) {
-          setTempDates(prev => prev.filter(d => !(d.startsWith(currentMonth) && d.includes('BLOCKED'))));
+          // Desbloquear: Remove a tag de bloqueio, mantendo datas de outros meses
+          setTempDates(prev => prev.filter(d => !d.includes(BLOCK_TAG) || !d.startsWith(currentMonth)));
       } else {
-          const otherMonths = tempDates.filter(d => !d.startsWith(currentMonth));
-          const blockTag = `${currentMonth}-01_BLOCKED`; 
-          setTempDates([...otherMonths, blockTag]);
+          // Bloquear: Remove TODAS as datas deste mês e adiciona APENAS a tag de bloqueio
+          // Isso garante integridade: não existem dias selecionados E bloqueio ao mesmo tempo
+          const datesOtherMonths = tempDates.filter(d => !d.startsWith(currentMonth));
+          const blockTag = `${currentMonth}-01_${BLOCK_TAG}`; 
+          setTempDates([...datesOtherMonths, blockTag]);
       }
       setHasChanges(true);
   };
@@ -151,15 +149,12 @@ export const AvailabilityScreen: React.FC<Props> = ({
     const dateStrBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
 
     if (isSunday) {
-        // Domingo: Abre modal para escolher período
         setSundayModal({ isOpen: true, day });
     } else {
-        // Outros dias (Quartas, Sábados, etc): Toggle simples (Verde/Nada)
         const exists = tempDates.some(d => d.startsWith(dateStrBase));
         if (exists) {
             setTempDates(prev => prev.filter(d => !d.startsWith(dateStrBase)));
         } else {
-            // Assume disponibilidade total/padrão
             setTempDates(prev => [...prev, dateStrBase]);
         }
         setHasChanges(true);
@@ -176,7 +171,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
       let finalString = dateStrBase;
       if (type === 'M') finalString += '_M';
       if (type === 'N') finalString += '_N';
-      // _BOTH não precisa de sufixo
       
       setTempDates([...newDates, finalString]);
       setHasChanges(true);
@@ -194,35 +188,19 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   const handleSave = async () => {
       if (!selectedMember) return;
-      
-      setIsSaving(true);
 
       const notesToSave: Record<string, string> = {};
-      let datesToSave = [...tempDates];
-
-      // Processa a nota geral
       if (generalNote.trim()) {
-          const generalDateKey = `${currentMonth}-00`; // Data fictícia para atrelar a nota
-          notesToSave[generalDateKey] = generalNote.trim();
-          
-          // Garante que a data fictícia esteja na lista para ser salva no banco
-          if (!datesToSave.includes(generalDateKey)) {
-              datesToSave.push(generalDateKey);
-          }
-      } else {
-          // Remove se estiver vazia
-          datesToSave = datesToSave.filter(d => d !== `${currentMonth}-00`);
+          notesToSave[`${currentMonth}-00`] = generalNote.trim();
       }
 
-      await onSaveAvailability(selectedMember, datesToSave, notesToSave);
+      // Garante que o estado seja enviado corretamente
+      await onSaveAvailability(selectedMember, tempDates, notesToSave);
       
       setHasChanges(false);
-      setIsSaving(false);
       
-      const currentMonthBlocked = datesToSave.some(d => d.startsWith(currentMonth) && d.includes('BLOCKED'));
-
-      if (currentMonthBlocked) {
-          addToast("Mês marcado como Indisponível.", "info");
+      if (isMonthBlocked) {
+          addToast("Mês marcado como Indisponível.", "warning");
       } else {
           addToast("Disponibilidade salva com sucesso!", "success");
       }
@@ -237,7 +215,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
       const entry = tempDates.find(d => d.startsWith(dateStrBase));
       
       if (!entry) return null;
-      let status = 'BOTH'; 
+      let status = 'BOTH';
       if (entry.endsWith('_M')) status = 'M';
       if (entry.endsWith('_N')) status = 'N';
       
@@ -279,7 +257,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
       )}
       
       <div className="space-y-6">
-        {/* Seletor de Membro (Admin) */}
         {isAdmin && (
             <div className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
                 <label className="block text-xs font-bold text-zinc-500 uppercase mb-2">Membro</label>
@@ -331,11 +308,12 @@ export const AvailabilityScreen: React.FC<Props> = ({
           <div className="animate-slide-up pb-32 relative">
             
             {isMonthBlocked && (
-                <div className="absolute inset-0 z-20 bg-zinc-50/80 dark:bg-zinc-900/80 backdrop-blur-[2px] rounded-xl flex flex-col items-center justify-center text-center border-2 border-dashed border-red-300 dark:border-red-900/50">
-                    <div className="bg-white dark:bg-zinc-800 p-6 rounded-full shadow-xl mb-4">
+                <div className="absolute inset-0 z-20 bg-zinc-50/90 dark:bg-zinc-900/90 backdrop-blur-[2px] rounded-xl flex flex-col items-center justify-center text-center border-2 border-dashed border-red-300 dark:border-red-900/50 transition-opacity">
+                    <div className="bg-white dark:bg-zinc-800 p-6 rounded-full shadow-xl mb-4 animate-bounce">
                         <Lock size={32} className="text-red-500"/>
                     </div>
                     <h3 className="text-xl font-bold text-zinc-800 dark:text-zinc-100">Mês Bloqueado</h3>
+                    <p className="text-sm text-zinc-500 mt-2">Você sinalizou indisponibilidade total.</p>
                 </div>
             )}
 
@@ -378,7 +356,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
                             <span className="text-[10px] font-bold uppercase opacity-60 sm:hidden mb-0.5">{weekDayShort}</span>
                             <span className="text-lg sm:text-lg font-bold relative z-10 leading-none">{day}</span>
                             
-                            {/* Ícones de Domingo */}
                             {isSelected && isSunday && (
                                 <div className="absolute top-1 right-1">
                                     {status === 'BOTH' && <CheckCircle2 size={14} className="opacity-70" />}
@@ -391,49 +368,40 @@ export const AvailabilityScreen: React.FC<Props> = ({
                 })}
             </div>
             
-            {/* Campo de Observação Geral */}
-            <div className="mt-8 bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
-                <div className="flex items-center gap-2 mb-3 text-zinc-600 dark:text-zinc-300 border-b border-zinc-100 dark:border-zinc-700 pb-2">
-                    <MessageSquare size={18} className="text-blue-500"/>
-                    <label className="text-sm font-bold uppercase tracking-wide">Observações Gerais</label>
+            <div className="mt-8 bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                <div className="flex items-center gap-2 mb-2 text-zinc-500 dark:text-zinc-400">
+                    <MessageSquare size={16} />
+                    <label className="text-xs font-bold uppercase">Observações Gerais</label>
                 </div>
-                <div className="relative">
-                    <textarea 
-                        value={generalNote}
-                        onChange={(e) => { setGeneralNote(e.target.value); setHasChanges(true); }}
-                        disabled={!isEditable || isMonthBlocked}
-                        placeholder="Ex: Tenho prova na faculdade dia 15; Chego atrasado nas quartas; Estarei de férias..."
-                        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 text-sm outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px] resize-none disabled:opacity-50 transition-all focus:bg-white dark:focus:bg-black/20"
-                    />
-                    <div className="absolute bottom-3 right-3 text-zinc-400 pointer-events-none">
-                        <Info size={14} />
-                    </div>
-                </div>
-                <p className="text-[10px] text-zinc-400 mt-2 ml-1">* Esta observação é válida para todo o mês de {getMonthName(currentMonth)}.</p>
+                <textarea 
+                    value={generalNote}
+                    onChange={(e) => { setGeneralNote(e.target.value); setHasChanges(true); }}
+                    disabled={!isEditable || isMonthBlocked}
+                    placeholder="Ex: Chego atrasado nas quartas; Estarei de férias do dia 10 ao 20..."
+                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px] resize-none disabled:opacity-50"
+                />
             </div>
 
-            {/* Legenda */}
             <div className="flex flex-wrap gap-4 justify-center mt-6 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-green-600 rounded-full"/> Disponível</div>
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-zinc-200 dark:bg-zinc-700 rounded-full"/> Indisponível</div>
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-orange-400 rounded-full"/> Manhã (Dom)</div>
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-indigo-500 rounded-full"/> Noite (Dom)</div>
+                <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-green-600 rounded-sm"/> Disponível</div>
+                <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-zinc-200 dark:bg-zinc-700 rounded-sm"/> Indisponível</div>
+                <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-orange-400 rounded-sm"/> Manhã (Dom)</div>
+                <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-indigo-500 rounded-sm"/> Noite (Dom)</div>
             </div>
 
-            {/* Botão Salvar Flutuante */}
             {isEditable && (
                 <div className="fixed bottom-6 right-6 left-6 md:left-auto flex justify-end z-40 pointer-events-none">
                     <button
                         onClick={handleSave}
-                        disabled={!hasChanges || isSaving}
+                        disabled={!hasChanges}
                         className={`pointer-events-auto flex items-center gap-2 px-6 py-3 rounded-full font-bold shadow-xl transition-all transform ${
                             hasChanges 
-                            ? 'bg-blue-600 hover:bg-blue-700 text-white translate-y-0 opacity-100 scale-100 ring-4 ring-blue-500/20' 
+                            ? 'bg-blue-600 hover:bg-blue-700 text-white translate-y-0 opacity-100 scale-100' 
                             : 'bg-zinc-300 dark:bg-zinc-800 text-zinc-500 translate-y-10 opacity-0 scale-90'
                         }`}
                     >
-                        {isSaving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
-                        {isSaving ? 'Salvando...' : 'Salvar Alterações'}
+                        <Save size={20} />
+                        Salvar Alterações
                     </button>
                 </div>
             )}
