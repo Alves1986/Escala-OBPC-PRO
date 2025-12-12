@@ -10,6 +10,11 @@ try {
   }
 } catch (e) {}
 
+// Fallback manual check for process.env if Vite replacement didn't happen
+if (!vapidKey && typeof process !== 'undefined' && process.env) {
+    vapidKey = process.env.VITE_VAPID_PUBLIC_KEY || "";
+}
+
 export const VAPID_PUBLIC_KEY = vapidKey || "";
 
 if (!VAPID_PUBLIC_KEY) {
@@ -17,6 +22,8 @@ if (!VAPID_PUBLIC_KEY) {
 }
 
 export function urlBase64ToUint8Array(base64String: string) {
+  if (!base64String) throw new Error("VAPID Key is empty");
+  
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
   const base64 = (base64String + padding)
     .replace(/\-/g, '+')

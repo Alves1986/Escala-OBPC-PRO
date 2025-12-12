@@ -259,7 +259,6 @@ const InnerApp = () => {
   };
 
   const handleEnableNotifications = async () => {
-      // Implementation kept concise for brevity, assumes same logic as before
       try {
           if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error("Push não suportado");
           const reg = await navigator.serviceWorker.ready;
@@ -348,6 +347,7 @@ const InnerApp = () => {
         onSwitchMinistry={handleSwitchMinistry}
         onOpenJoinMinistry={() => setShowJoinModal(true)}
     >
+        {/* ... (Tab Content rendering remains same) ... */}
         {currentTab === 'dashboard' && (
             <div className="space-y-6 animate-fade-in">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -556,7 +556,6 @@ const InnerApp = () => {
             </div>
         )}
 
-        {/* Existing render logic for other tabs (events, availability, swaps, repertoire, announcements, etc.) remains identical */}
         {currentTab === 'events' && isAdmin && (
             <EventsScreen 
                 customEvents={events.map(e => ({ ...e, iso: e.iso }))}
@@ -613,6 +612,7 @@ const InnerApp = () => {
                 setRepertoire={async () => { await loadData(); }}
                 currentUser={currentUser}
                 mode={currentTab === 'repertoire-manager' ? 'manage' : 'view'}
+                ministryId={ministryId}
             />
         )}
 
@@ -690,7 +690,10 @@ const InnerApp = () => {
                 onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, newTitle); setMinistryTitle(newTitle); addToast("Nome do ministério atualizado!", "success"); }}
                 onAnnounceUpdate={async () => { await Supabase.sendNotificationSQL(ministryId, { title: "Atualização de Sistema", message: "Uma nova versão do app está disponível. Recarregue a página para aplicar.", type: "warning" }); addToast("Notificação de atualização enviada.", "success"); }}
                 onEnableNotifications={handleEnableNotifications}
-                onSaveAvailabilityWindow={async (start, end) => { await Supabase.saveMinistrySettings(ministryId, undefined, undefined, start, end); loadData(); }}
+                onSaveAvailabilityWindow={async (start, end, spotifyId, spotifySecret) => { 
+                    await Supabase.saveMinistrySettings(ministryId, undefined, undefined, start, end, spotifyId, spotifySecret); 
+                    loadData(); 
+                }}
                 availabilityWindow={availabilityWindow}
                 isAdmin={isAdmin}
             />

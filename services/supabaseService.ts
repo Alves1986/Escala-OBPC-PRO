@@ -673,6 +673,18 @@ export const createMinistryEvent = async (ministryId: string, event: { title: st
             title: event.title,
             date_time: dateTime
         });
+
+        if (!error) {
+            // NOTIFY: Create Event
+            const formatedDate = event.date.split('-').reverse().join('/');
+            await sendNotificationSQL(cleanMid, {
+                title: "Novo Evento",
+                message: `Novo evento adicionado: ${event.title} dia ${formatedDate} às ${event.time}`,
+                type: 'info',
+                actionLink: 'calendar'
+            });
+        }
+
         return !error;
     } catch (e) {
         return false;
@@ -934,9 +946,30 @@ export const updateMinistryEvent = async (ministryId: string, oldIso: string, ne
                 return supabase.from('events').update({ title: newTitle, date_time: newDateTime }).eq('id', evt.id);
             });
             await Promise.all(updatePromises);
+            
+            // NOTIFY: Bulk Update
+            await sendNotificationSQL(cleanMid, {
+                title: "Alteração de Horários",
+                message: `Os horários dos eventos "${originalEvent.title}" foram atualizados.`,
+                type: 'warning',
+                actionLink: 'calendar'
+            });
+
             return true;
         } else {
             const { error } = await supabase.from('events').update({ title: newTitle, date_time: formatTimestamp(newIso) }).eq('id', originalEvent.id);
+            
+            if (!error) {
+                // NOTIFY: Single Update
+                const dateDisplay = newIso.split('T')[0].split('-').reverse().join('/');
+                await sendNotificationSQL(cleanMid, {
+                    title: "Evento Atualizado",
+                    message: `O evento do dia ${dateDisplay} foi alterado para ${newTitle} às ${newIso.split('T')[1]}.`,
+                    type: 'info',
+                    actionLink: 'calendar'
+                });
+            }
+
             return !error;
         }
     } catch (e) { return false; }
@@ -948,11 +981,25 @@ export const deleteMinistryEvent = async (ministryId: string, iso: string): Prom
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     const dateTime = `${iso}:00`; 
     try {
-        const { data: events } = await supabase.from('events').select('id').eq('ministry_id', cleanMid).eq('date_time', dateTime);
+        const { data: events } = await supabase.from('events').select('id, title').eq('ministry_id', cleanMid).eq('date_time', dateTime);
         if (!events || events.length === 0) return true; 
         const ids = events.map(e => e.id);
+        const title = events[0].title;
+
         await supabase.from('schedule_assignments').delete().in('event_id', ids);
         const { error } = await supabase.from('events').delete().in('id', ids);
+
+        if (!error) {
+            // NOTIFY: Delete
+            const dateDisplay = iso.split('T')[0].split('-').reverse().join('/');
+            await sendNotificationSQL(cleanMid, {
+                title: "Evento Cancelado",
+                message: `O evento ${title} do dia ${dateDisplay} foi removido da agenda.`,
+                type: 'alert',
+                actionLink: 'calendar'
+            });
+        }
+
         return !error;
     } catch (e) { return false; }
 };

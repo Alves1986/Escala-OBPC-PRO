@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, Moon, Sun, BellRing, Megaphone, Monitor, Loader2, CalendarClock, Lock, Unlock, Music, Copy, AlertCircle } from 'lucide-react';
+import { Settings, Save, Moon, Sun, BellRing, Megaphone, Monitor, Loader2, CalendarClock, Lock, Unlock, Music, Copy, AlertCircle, BellOff, Check } from 'lucide-react';
 import { useToast } from './Toast';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { ThemeMode } from '../types';
@@ -31,6 +31,7 @@ export const SettingsScreen: React.FC<Props> = ({
   const [spotifySecret, setSpotifySecret] = useState("");
   const [legalDoc, setLegalDoc] = useState<LegalDocType>(null);
   const [isNotifLoading, setIsNotifLoading] = useState(false);
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -43,6 +44,10 @@ export const SettingsScreen: React.FC<Props> = ({
           const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
           setSpotifyId(localStorage.getItem(`spotify_cid_${cleanMid}`) || "");
       }
+
+      if ('Notification' in window) {
+          setNotifPermission(Notification.permission);
+      }
   }, [availabilityWindow, ministryId]);
 
   const handleSaveAdvanced = async () => {
@@ -50,6 +55,25 @@ export const SettingsScreen: React.FC<Props> = ({
           const secretToSend = spotifySecret.trim() ? spotifySecret.trim() : undefined;
           await onSaveAvailabilityWindow(availStart, availEnd, spotifyId.trim(), secretToSend);
           addToast("Configurações avançadas salvas!", "success");
+      }
+  };
+
+  const handleNotificationClick = async () => {
+      if (!onEnableNotifications) return;
+
+      if (notifPermission === 'denied') {
+          alert("As notificações estão bloqueadas no seu navegador. Para ativar, clique no ícone de cadeado/configurações na barra de endereço e permita as notificações para este site.");
+          return;
+      }
+
+      setIsNotifLoading(true);
+      try {
+          await onEnableNotifications();
+          setNotifPermission(Notification.permission);
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setIsNotifLoading(false);
       }
   };
 
@@ -212,24 +236,27 @@ export const SettingsScreen: React.FC<Props> = ({
                  </div>
                  <div className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-900 rounded-lg border border-zinc-100 dark:border-zinc-700/50 mt-4">
                      <div className="flex items-center gap-3">
-                         <BellRing size={20} className="text-blue-500"/>
+                         {notifPermission === 'granted' ? <BellRing size={20} className="text-green-500"/> : notifPermission === 'denied' ? <BellOff size={20} className="text-red-500"/> : <BellRing size={20} className="text-blue-500"/>}
                          <div>
                              <p className="font-bold text-zinc-800 dark:text-zinc-200 text-sm">Notificações Push</p>
-                             <p className="text-xs text-zinc-500">Receber avisos e escalas neste dispositivo.</p>
+                             <p className="text-xs text-zinc-500">
+                                 {notifPermission === 'granted' ? 'Ativas neste dispositivo.' : notifPermission === 'denied' ? 'Bloqueadas pelo navegador.' : 'Receber avisos e escalas.'}
+                             </p>
                          </div>
                      </div>
                      <button 
-                        disabled={isNotifLoading || !onEnableNotifications}
-                        onClick={async () => {
-                            if (onEnableNotifications) {
-                                setIsNotifLoading(true);
-                                try { await onEnableNotifications(); } catch (e) { console.error(e); } finally { setIsNotifLoading(false); }
-                            }
-                        }}
-                        className="text-xs font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-4 py-2 rounded-lg hover:opacity-80 transition-opacity flex items-center gap-2 disabled:opacity-50"
+                        disabled={isNotifLoading || notifPermission === 'granted'}
+                        onClick={handleNotificationClick}
+                        className={`text-xs font-bold px-4 py-2 rounded-lg transition-opacity flex items-center gap-2 disabled:opacity-50 ${
+                            notifPermission === 'granted' 
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 cursor-default' 
+                            : notifPermission === 'denied'
+                            ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:opacity-80'
+                            : 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:opacity-80'
+                        }`}
                      >
                         {isNotifLoading && <Loader2 size={12} className="animate-spin" />}
-                        {isNotifLoading ? 'Ativando...' : 'Ativar'}
+                        {notifPermission === 'granted' ? <><Check size={12}/> Ativado</> : notifPermission === 'denied' ? 'Bloqueado (Ajuda)' : 'Ativar'}
                      </button>
                  </div>
              </div>

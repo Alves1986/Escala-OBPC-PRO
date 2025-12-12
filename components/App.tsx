@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Calendar, CalendarCheck, RefreshCcw, Music, 
@@ -6,43 +5,43 @@ import {
   Users, Edit, Send, ListMusic, Trash2, ShieldAlert, Clock, ArrowLeft, ArrowRight,
   ShieldCheck, Mail, Phone, Calendar as CalendarIcon, Gift, Trophy
 } from 'lucide-react';
-import { ToastProvider, useToast } from './components/Toast';
-import { LoginScreen } from './components/LoginScreen';
-import { SetupScreen } from './components/SetupScreen';
-import { DashboardLayout } from './components/DashboardLayout';
-import { NextEventCard } from './components/NextEventCard';
-import { BirthdayCard } from './components/BirthdayCard';
-import { WeatherWidget } from './components/WeatherWidget';
-import { ScheduleTable } from './components/ScheduleTable';
-import { CalendarGrid } from './components/CalendarGrid';
-import { AvailabilityScreen } from './components/AvailabilityScreen';
-import { SwapRequestsScreen } from './components/SwapRequestsScreen';
-import { RepertoireScreen } from './components/RepertoireScreen';
-import { AnnouncementsScreen } from './components/AnnouncementsScreen';
-import { AlertsManager } from './components/AlertsManager';
-import { AvailabilityReportScreen } from './components/AvailabilityReportScreen';
-import { SettingsScreen } from './components/SettingsScreen';
-import { ProfileScreen } from './components/ProfileScreen';
-import { EventsScreen } from './components/EventsScreen';
-import { InstallBanner } from './components/InstallBanner';
-import { InstallModal } from './components/InstallModal';
-import { JoinMinistryModal } from './components/JoinMinistryModal';
-import { ToolsMenu } from './components/ToolsMenu';
-import { EventDetailsModal } from './components/EventDetailsModal';
-import { StatsModal } from './components/StatsModal';
-import { ConfirmationModal } from './components/ConfirmationModal';
-import { EventsModal, AvailabilityModal, RolesModal } from './components/ManagementModals';
-import { RankingScreen } from './components/RankingScreen';
+import { ToastProvider, useToast } from './Toast';
+import { LoginScreen } from './LoginScreen';
+import { SetupScreen } from './SetupScreen';
+import { DashboardLayout } from './DashboardLayout';
+import { NextEventCard } from './NextEventCard';
+import { BirthdayCard } from './BirthdayCard';
+import { WeatherWidget } from './WeatherWidget';
+import { ScheduleTable } from './ScheduleTable';
+import { CalendarGrid } from './CalendarGrid';
+import { AvailabilityScreen } from './AvailabilityScreen';
+import { SwapRequestsScreen } from './SwapRequestsScreen';
+import { RepertoireScreen } from './RepertoireScreen';
+import { AnnouncementsScreen } from './AnnouncementsScreen';
+import { AlertsManager } from './AlertsManager';
+import { AvailabilityReportScreen } from './AvailabilityReportScreen';
+import { SettingsScreen } from './SettingsScreen';
+import { ProfileScreen } from './ProfileScreen';
+import { EventsScreen } from './EventsScreen';
+import { InstallBanner } from './InstallBanner';
+import { InstallModal } from './InstallModal';
+import { JoinMinistryModal } from './JoinMinistryModal';
+import { ToolsMenu } from './ToolsMenu';
+import { EventDetailsModal } from './EventDetailsModal';
+import { StatsModal } from './StatsModal';
+import { ConfirmationModal } from './ConfirmationModal';
+import { EventsModal, AvailabilityModal, RolesModal } from './ManagementModals';
+import { RankingScreen } from './RankingScreen';
 
-import * as Supabase from './services/supabaseService';
-import { generateScheduleWithAI } from './services/aiService';
-import { ThemeMode, SUPABASE_URL, SUPABASE_KEY } from './types';
-import { adjustMonth, getMonthName, getLocalDateISOString } from './utils/dateUtils';
-import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from './utils/pushUtils';
+import * as Supabase from '../services/supabaseService';
+import { generateScheduleWithAI } from '../services/aiService';
+import { ThemeMode, SUPABASE_URL, SUPABASE_KEY } from '../types';
+import { adjustMonth, getMonthName, getLocalDateISOString } from '../utils/dateUtils';
+import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from '../utils/pushUtils';
 
 // Novos Hooks
-import { useAuth } from './hooks/useAuth';
-import { useMinistryData } from './hooks/useMinistryData';
+import { useAuth } from '../hooks/useAuth';
+import { useMinistryData } from '../hooks/useMinistryData';
 
 const InnerApp = () => {
   // --- CONFIG CHECK ---
@@ -733,3 +732,14 @@ const InnerApp = () => {
     </DashboardLayout>
   );
 };
+
+// Default export wrapper
+const App = () => {
+  return (
+    <ToastProvider>
+      <InnerApp />
+    </ToastProvider>
+  );
+};
+
+export default App;
