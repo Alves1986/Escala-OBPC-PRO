@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Music, Plus, Trash2, ExternalLink, PlayCircle, Calendar, Settings, ListMusic, Sparkles, Loader2, Search, Youtube, LogOut, LogIn, ChevronRight, ArrowLeft, AlertCircle } from 'lucide-react';
+import { Music, Plus, Trash2, ExternalLink, PlayCircle, Calendar, Settings, ListMusic, Sparkles, Loader2, Search, Youtube, LogOut, LogIn, ChevronRight, ArrowLeft, AlertCircle, Check } from 'lucide-react';
 import { RepertoireItem, User } from '../types';
 import { useToast } from './Toast';
 import { addToRepertoire, deleteFromRepertoire } from '../services/supabaseService';
@@ -97,7 +97,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       if (url) {
           window.location.href = url;
       } else {
-          addToast("Client ID do Spotify não configurado. Vá em Configurações.", "error");
+          addToast("Client ID não configurado! Vá em Configurações > Integração Spotify e salve o ID.", "error");
       }
   };
 
@@ -280,16 +280,34 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                       >
                           <Sparkles size={14} /> Sugestão IA
                       </button>
-                      {isSpotifyLoggedIn ? (
-                          <button onClick={handleSpotifyLogout} className="text-xs bg-zinc-100 dark:bg-zinc-700 p-2 rounded-lg text-zinc-500 hover:text-red-500 flex items-center gap-1" title="Sair do Spotify">
-                              <LogOut size={16}/> Sair
-                          </button>
-                      ) : (
-                          <button 
-                            onClick={handleSpotifyLogin}
-                            className="flex-1 sm:flex-none justify-center text-xs font-bold text-white bg-[#1DB954] hover:bg-[#1ed760] px-3 py-2 rounded-lg flex items-center gap-1 transition-colors shadow-sm"
-                          >
-                              <LogIn size={14} /> Conectar Spotify
+                      
+                      {/* Lógica do Botão Spotify Atualizada */}
+                      <button 
+                          onClick={isSpotifyLoggedIn ? undefined : handleSpotifyLogin}
+                          disabled={isSpotifyLoggedIn}
+                          className={`flex-1 sm:flex-none justify-center text-xs font-bold text-white px-3 py-2 rounded-lg flex items-center gap-2 transition-all shadow-sm ${
+                              isSpotifyLoggedIn 
+                              ? "bg-green-800 cursor-default opacity-90 border border-green-700" 
+                              : "bg-[#1DB954] hover:bg-[#1ed760]"
+                          }`}
+                      >
+                          {isSpotifyLoggedIn ? (
+                              <>
+                                  <Check size={14} className="text-green-200"/>
+                                  <span>Spotify Conectado</span>
+                              </>
+                          ) : (
+                              <>
+                                  <LogIn size={14} />
+                                  <span>Conectar Spotify</span>
+                              </>
+                          )}
+                      </button>
+
+                      {/* Botão Sair separado para manter funcionalidade */}
+                      {isSpotifyLoggedIn && (
+                          <button onClick={handleSpotifyLogout} className="text-xs bg-zinc-100 dark:bg-zinc-700 p-2 rounded-lg text-zinc-500 hover:text-red-500 flex items-center justify-center transition-colors" title="Desconectar">
+                              <LogOut size={16}/>
                           </button>
                       )}
                   </div>

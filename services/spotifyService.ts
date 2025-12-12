@@ -23,7 +23,7 @@ let tokenExpiry: number = 0;
 export const getClientCredentialsToken = async (ministryId: string): Promise<string | null> => {
     if (appToken && Date.now() < tokenExpiry) return appToken;
 
-    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+    const cleanMid = (ministryId || "").trim().toLowerCase().replace(/\s+/g, '-');
     const clientId = localStorage.getItem(`spotify_cid_${cleanMid}`);
     const clientSecret = localStorage.getItem(`spotify_sec_${cleanMid}`);
 
@@ -55,7 +55,7 @@ export const getClientCredentialsToken = async (ministryId: string): Promise<str
 
 // Gera a URL de login
 export const getLoginUrl = (ministryId: string) => {
-    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+    const cleanMid = (ministryId || "").trim().toLowerCase().replace(/\s+/g, '-');
     const clientId = localStorage.getItem(`spotify_cid_${cleanMid}`);
     
     if (!clientId) {
