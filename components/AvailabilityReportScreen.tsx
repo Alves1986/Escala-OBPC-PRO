@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { AvailabilityMap, TeamMemberProfile, MemberMap } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
-import { CalendarSearch, Search, Filter, CalendarX, RefreshCw } from 'lucide-react';
+import { CalendarSearch, Search, Filter, CalendarX, RefreshCw, Ban, CheckCircle2 } from 'lucide-react';
 
 interface Props {
   availability: AvailabilityMap;
@@ -54,9 +54,6 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
 
   // Processa e combina os dados
   const reportData = useMemo(() => {
-    // FIX: Utiliza APENAS membros registrados (que já passaram pelo filtro do SupabaseService)
-    // Isso remove membros de outros ministérios ou dados órfãos da visualização.
-    
     const data = registeredMembers.map((profile) => {
       // Determina as funções (Perfil > Mapa Manual)
       let roles: string[] = [];
@@ -82,8 +79,11 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
           dates = availability[availKey] || [];
       }
 
+      // Verifica se o mês está bloqueado explicitamente
+      const isBlocked = dates.some(d => d.startsWith(currentMonth) && d.includes('BLOCKED'));
+
       const monthDates = dates
-        .filter(d => d.startsWith(currentMonth))
+        .filter(d => d.startsWith(currentMonth) && !d.includes('BLOCKED'))
         .map(d => {
             const parts = d.split('_');
             const dayNum = parseInt(d.split('-')[2]);
@@ -97,7 +97,8 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
         avatar_url: profile.avatar_url,
         roles,
         days: monthDates,
-        count: monthDates.length
+        count: monthDates.length,
+        isBlocked // Flag para UI
       };
     });
 
@@ -108,7 +109,12 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
         const matchesRole = selectedRole === "Todos" || item.roles.includes(selectedRole);
         return matchesSearch && matchesRole;
       })
-      .sort((a, b) => a.name.localeCompare(b.name)); // Ordem Alfabética
+      .sort((a, b) => {
+          // Ordena: Disponíveis primeiro, depois bloqueados, depois sem resposta
+          if (a.isBlocked && !b.isBlocked) return 1;
+          if (!a.isBlocked && b.isBlocked) return -1;
+          return a.name.localeCompare(b.name);
+      });
 
   }, [registeredMembers, availability, currentMonth, membersMap, searchTerm, selectedRole]);
 
@@ -183,7 +189,7 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
           </div>
         ) : (
           reportData.map((item) => (
-            <div key={item.name} className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 p-5 shadow-sm hover:shadow-md transition-shadow">
+            <div key={item.name} className={`bg-white dark:bg-zinc-800 rounded-xl border p-5 shadow-sm hover:shadow-md transition-shadow ${item.isBlocked ? 'border-red-200 dark:border-red-900/30' : 'border-zinc-200 dark:border-zinc-700'}`}>
                <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
                      {item.avatar_url ? (
@@ -206,13 +212,25 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
                         </div>
                      </div>
                   </div>
-                  <div className={`px-2 py-1 rounded text-xs font-bold ${item.count > 0 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
-                     {item.count} dias
-                  </div>
+                  
+                  {/* Badge de Contagem ou Bloqueio */}
+                  {item.isBlocked ? (
+                      <div className="px-2 py-1 rounded text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 flex items-center gap-1">
+                          <Ban size={12} /> Bloqueado
+                      </div>
+                  ) : (
+                      <div className={`px-2 py-1 rounded text-xs font-bold ${item.count > 0 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400'}`}>
+                         {item.count > 0 ? `${item.count} dias` : 'Pendente'}
+                      </div>
+                  )}
                </div>
 
                <div className="pt-4 border-t border-zinc-100 dark:border-zinc-700/50">
-                  {item.days.length > 0 ? (
+                  {item.isBlocked ? (
+                      <div className="text-center py-2 text-red-500 dark:text-red-400 text-xs font-bold flex items-center justify-center gap-2 bg-red-50 dark:bg-red-900/10 rounded-lg">
+                          <Ban size={16}/> Membro indisponível neste mês
+                      </div>
+                  ) : item.days.length > 0 ? (
                      <div className="flex flex-wrap gap-1.5">
                         {item.days.map(({day, type}) => {
                            let bgClass = "bg-green-500 text-white";
@@ -230,7 +248,7 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
                      </div>
                   ) : (
                      <div className="text-center py-2 text-zinc-400 text-xs italic flex items-center justify-center gap-2">
-                        <CalendarX size={14}/> Nenhuma disponibilidade informada
+                        <CalendarX size={14}/> Aguardando resposta
                      </div>
                   )}
                </div>
