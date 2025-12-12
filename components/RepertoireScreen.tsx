@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import { Music, Plus, Trash2, ExternalLink, PlayCircle, Calendar, Settings, ListMusic, Sparkles, Loader2, Search, Youtube, LogOut, LogIn, ChevronRight, ArrowLeft, AlertCircle, Check, Save, X } from 'lucide-react';
+import { Music, Plus, Trash2, ExternalLink, Calendar, Settings, ListMusic, Sparkles, Loader2, Search, Youtube, Link, ArrowLeft, X, PlayCircle, Save } from 'lucide-react';
 import { RepertoireItem, User } from '../types';
 import { useToast } from './Toast';
 import { addToRepertoire, deleteFromRepertoire, sendNotificationSQL } from '../services/supabaseService';
 import { suggestRepertoireAI } from '../services/aiService';
 import { searchSpotifyTracks, getLoginUrl, handleLoginCallback, isUserLoggedIn, logoutSpotify, getUserProfile, getUserPlaylists, getPlaylistTracks } from '../services/spotifyService';
+import { searchYouTubeVideos } from '../services/youtubeService';
 
 interface Props {
   repertoire: RepertoireItem[];
@@ -20,7 +21,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   const { addToast, confirmAction } = useToast();
   
   // UI State
-  const [activeTab, setActiveTab] = useState<'manual' | 'spotify' | 'playlists'>('spotify');
+  const [activeTab, setActiveTab] = useState<'manual' | 'spotify' | 'playlists' | 'youtube'>('spotify');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Staging / Draft State (Novas músicas aguardando envio)
@@ -46,10 +47,15 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   const [playlistTracks, setPlaylistTracks] = useState<any[]>([]);
   const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
 
-  // Search State
+  // Search State (Spotify)
   const [spotifyQuery, setSpotifyQuery] = useState("");
   const [spotifyResults, setSpotifyResults] = useState<any[]>([]);
   const [spotifyLoading, setSpotifyLoading] = useState(false);
+
+  // Search State (YouTube)
+  const [youtubeQuery, setYoutubeQuery] = useState("");
+  const [youtubeResults, setYoutubeResults] = useState<any[]>([]);
+  const [youtubeLoading, setYoutubeLoading] = useState(false);
 
   // AI State
   const [showAiModal, setShowAiModal] = useState(false);
@@ -104,14 +110,6 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       }
   };
 
-  const handleSpotifyLogout = () => {
-      logoutSpotify();
-      setIsSpotifyLoggedIn(false);
-      setSpotifyUser(null);
-      setUserPlaylists([]);
-      addToast("Desconectado do Spotify.", "info");
-  };
-
   const handleLoadPlaylists = async () => {
       setIsLoadingPlaylists(true);
       const playlists = await getUserPlaylists();
@@ -135,7 +133,19 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       setSpotifyLoading(false);
       
       if (results.length === 0) {
-          addToast("Nenhum resultado encontrado. Verifique se o Client Secret foi configurado.", "warning");
+          addToast("Nenhum resultado no Spotify.", "warning");
+      }
+  };
+
+  const handleYouTubeSearch = async () => {
+      if (!youtubeQuery.trim()) return;
+      setYoutubeLoading(true);
+      const results = await searchYouTubeVideos(youtubeQuery);
+      setYoutubeResults(results);
+      setYoutubeLoading(false);
+      
+      if (results.length === 0) {
+          addToast("Nenhum vídeo encontrado. Verifique a API Key em Configurações.", "warning");
       }
   };
 
@@ -191,7 +201,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     setIsSubmitting(true);
     let successCount = 0;
 
-    // Loop para salvar (Supabase insert bulk seria melhor, mas mantemos compatibilidade com a função existente por enquanto)
+    // Loop para salvar
     for (const item of draftItems) {
         const success = await addToRepertoire(currentUser.ministryId, {
             title: item.title,
@@ -244,12 +254,6 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       });
   };
 
-  const getYouTubeId = (url: string) => {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
-  };
-
   const groupedRepertoire = repertoire.reduce((acc, item) => {
       const dateKey = item.date;
       if (!acc[dateKey]) acc[dateKey] = [];
@@ -260,7 +264,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   const sortedDates = Object.keys(groupedRepertoire).sort((a, b) => b.localeCompare(a));
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-5xl mx-auto">
+    <div className="space-y-6 animate-fade-in max-w-6xl mx-auto">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
         <div>
           <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
@@ -282,7 +286,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
               <div className="flex-1 bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-fade-in">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
                       <div className="flex items-center gap-2">
-                          <div className="bg-green-500 text-white p-1.5 rounded-lg shadow-sm">
+                          <div className="bg-indigo-500 text-white p-1.5 rounded-lg shadow-sm">
                               <Music size={16}/> 
                           </div>
                           <div>
@@ -294,7 +298,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                             onClick={() => setShowAiModal(!showAiModal)}
                             className="flex-1 sm:flex-none justify-center text-xs font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-3 py-2 rounded-lg flex items-center gap-1 hover:bg-purple-100 transition-colors"
                           >
-                              <Sparkles size={14} /> IA
+                              <Sparkles size={14} /> Sugestões IA
                           </button>
                       </div>
                   </div>
@@ -302,21 +306,24 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                   {/* Tabs */}
                   <div className="flex gap-2 mb-4 border-b border-zinc-100 dark:border-zinc-700 pb-1 overflow-x-auto">
                       <button onClick={() => setActiveTab('spotify')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'spotify' ? 'text-green-600 border-green-500 bg-green-50 dark:bg-green-900/10' : 'text-zinc-500 border-transparent'}`}>
-                          <Search size={14}/> Busca
+                          <Search size={14}/> Spotify
+                      </button>
+                      <button onClick={() => setActiveTab('youtube')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'youtube' ? 'text-red-600 border-red-500 bg-red-50 dark:bg-red-900/10' : 'text-zinc-500 border-transparent'}`}>
+                          <Youtube size={14}/> YouTube
                       </button>
                       {isSpotifyLoggedIn && (
                           <button onClick={() => { setActiveTab('playlists'); if(userPlaylists.length === 0) handleLoadPlaylists(); }} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'playlists' ? 'text-green-600 border-green-500 bg-green-50 dark:bg-green-900/10' : 'text-zinc-500 border-transparent'}`}>
                               <ListMusic size={14}/> Playlists
                           </button>
                       )}
-                      <button onClick={() => setActiveTab('manual')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'manual' ? 'text-pink-600 border-pink-500 bg-pink-50 dark:bg-pink-900/10' : 'text-zinc-500 border-transparent'}`}>
-                          <Youtube size={14}/> Manual
+                      <button onClick={() => setActiveTab('manual')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'manual' ? 'text-blue-600 border-blue-500 bg-blue-50 dark:bg-blue-900/10' : 'text-zinc-500 border-transparent'}`}>
+                          <Link size={14}/> Link Manual
                       </button>
                   </div>
 
                   {/* AI Panel */}
                   {showAiModal && (
-                      <div className="mb-6 p-4 bg-purple-50 dark:bg-zinc-900/50 rounded-xl border border-purple-100 dark:border-zinc-700">
+                      <div className="mb-6 p-4 bg-purple-50 dark:bg-zinc-900/50 rounded-xl border border-purple-100 dark:border-zinc-700 animate-slide-up">
                           <div className="flex gap-2 mb-4">
                               <input 
                                  placeholder="Tema (Ex: Gratidão, Natal...)" 
@@ -341,17 +348,30 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                                               <p className="font-bold text-zinc-800 dark:text-zinc-100 text-sm">{sug.title} <span className="font-normal text-zinc-500">- {sug.artist}</span></p>
                                               <p className="text-xs text-purple-500 italic">{sug.reason}</p>
                                           </div>
-                                          <button 
-                                            onClick={() => {
-                                                setSpotifyQuery(`${sug.title} ${sug.artist}`);
-                                                setActiveTab('spotify');
-                                                setShowAiModal(false);
-                                                handleSpotifySearch();
-                                            }}
-                                            className="text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-3 py-1.5 rounded font-bold"
-                                          >
-                                              Buscar
-                                          </button>
+                                          <div className="flex gap-1">
+                                              <button 
+                                                onClick={() => {
+                                                    setSpotifyQuery(`${sug.title} ${sug.artist}`);
+                                                    setActiveTab('spotify');
+                                                    setShowAiModal(false);
+                                                    handleSpotifySearch();
+                                                }}
+                                                className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-1.5 rounded font-bold"
+                                              >
+                                                  Spotify
+                                              </button>
+                                              <button 
+                                                onClick={() => {
+                                                    setYoutubeQuery(`${sug.title} ${sug.artist} oficial`);
+                                                    setActiveTab('youtube');
+                                                    setShowAiModal(false);
+                                                    handleYouTubeSearch();
+                                                }}
+                                                className="text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-2 py-1.5 rounded font-bold"
+                                              >
+                                                  YouTube
+                                              </button>
+                                          </div>
                                       </div>
                                   ))}
                               </div>
@@ -359,7 +379,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                       </div>
                   )}
 
-                  {/* === SEARCH TAB === */}
+                  {/* === SPOTIFY SEARCH === */}
                   {activeTab === 'spotify' && (
                       <div className="space-y-4 animate-fade-in">
                           <div className="flex gap-2">
@@ -394,6 +414,57 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                                           <button 
                                               onClick={() => handleAddToDraft(`${track.name} - ${track.artists[0].name}`, track.external_urls.spotify)}
                                               className="shrink-0 text-xs px-3 py-1.5 rounded-full font-bold transition-colors bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-800 flex items-center gap-1"
+                                          >
+                                              <Plus size={14}/> Add
+                                          </button>
+                                      </div>
+                                  ))}
+                              </div>
+                          )}
+                          {!isSpotifyLoggedIn && (
+                              <div className="p-3 bg-green-50 dark:bg-green-900/10 rounded-lg text-xs text-green-800 dark:text-green-300 flex justify-between items-center">
+                                  <span>Conecte sua conta para acessar playlists.</span>
+                                  <button onClick={handleSpotifyLogin} className="font-bold underline hover:text-green-600">Conectar Spotify</button>
+                              </div>
+                          )}
+                      </div>
+                  )}
+
+                  {/* === YOUTUBE SEARCH === */}
+                  {activeTab === 'youtube' && (
+                      <div className="space-y-4 animate-fade-in">
+                          <div className="flex gap-2">
+                              <input 
+                                  type="text" 
+                                  placeholder="Buscar vídeo no YouTube..."
+                                  value={youtubeQuery} 
+                                  onChange={e => setYoutubeQuery(e.target.value)}
+                                  onKeyDown={e => e.key === 'Enter' && handleYouTubeSearch()}
+                                  className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-red-500"
+                              />
+                              <button 
+                                  onClick={handleYouTubeSearch}
+                                  disabled={youtubeLoading}
+                                  className="bg-red-600 hover:bg-red-700 text-white px-4 rounded-lg font-bold flex items-center justify-center disabled:opacity-50"
+                              >
+                                  {youtubeLoading ? <Loader2 className="animate-spin" size={18}/> : <Search size={18}/>}
+                              </button>
+                          </div>
+
+                          {youtubeResults.length > 0 && (
+                              <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2 border border-zinc-100 dark:border-zinc-700 rounded-xl p-2 bg-zinc-50 dark:bg-zinc-900/30">
+                                  {youtubeResults.map(video => (
+                                      <div key={video.id} className="flex items-center justify-between p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors group">
+                                          <div className="flex items-center gap-3 overflow-hidden w-full">
+                                              <img src={video.thumbnail} className="w-16 h-10 object-cover rounded shadow-sm shrink-0" alt="Thumb" />
+                                              <div className="min-w-0 flex-1">
+                                                  <p className="font-bold text-sm text-zinc-800 dark:text-white line-clamp-1" title={video.title}>{video.title}</p>
+                                                  <p className="text-xs text-zinc-500 truncate">{video.channelTitle}</p>
+                                              </div>
+                                          </div>
+                                          <button 
+                                              onClick={() => handleAddToDraft(video.title, video.link)}
+                                              className="shrink-0 text-xs px-3 py-1.5 rounded-full font-bold transition-colors bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-800 flex items-center gap-1 ml-2"
                                           >
                                               <Plus size={14}/> Add
                                           </button>
@@ -472,14 +543,14 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                       <div className="space-y-4 animate-fade-in">
                           <div>
                               <label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Título</label>
-                              <input type="text" placeholder="Ex: Todavia Me Alegrarei" value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-pink-500"/>
+                              <input type="text" placeholder="Ex: Todavia Me Alegrarei" value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"/>
                           </div>
                           <div>
-                              <label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Link YouTube</label>
-                              <input type="text" placeholder="Link do vídeo ou playlist..." value={link} onChange={e => setLink(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-pink-500"/>
+                              <label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Link (URL)</label>
+                              <input type="text" placeholder="https://..." value={link} onChange={e => setLink(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"/>
                           </div>
                           <div className="flex justify-end">
-                              <button onClick={() => handleAddToDraft()} className="bg-pink-600 hover:bg-pink-700 text-white font-bold py-2.5 px-6 rounded-lg transition-all active:scale-95 flex items-center justify-center gap-2">
+                              <button onClick={() => handleAddToDraft()} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-lg transition-all active:scale-95 flex items-center justify-center gap-2">
                                   <Plus size={16}/> Adicionar
                               </button>
                           </div>
@@ -559,17 +630,19 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                           <div className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden shadow-sm">
                               {groupedRepertoire[dateKey].map((item, idx) => {
                                   const isSpotify = item.link.includes('spotify');
+                                  const isYouTube = item.link.includes('youtu');
+                                  
                                   return (
                                       <div key={item.id} className={`flex items-center justify-between p-3 sm:p-4 hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors group ${idx !== groupedRepertoire[dateKey].length - 1 ? 'border-b border-zinc-100 dark:border-zinc-700/50' : ''}`}>
                                           <div className="flex items-center gap-3 sm:gap-4 overflow-hidden">
-                                              <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${isSpotify ? 'bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400' : 'bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400'}`}>
-                                                  <Music size={20} />
+                                              <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${isSpotify ? 'bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400' : isYouTube ? 'bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'}`}>
+                                                  {isYouTube ? <Youtube size={20}/> : <Music size={20} />}
                                               </div>
                                               <div className="min-w-0">
                                                   <h4 className="font-bold text-sm text-zinc-800 dark:text-white truncate pr-2">{item.title}</h4>
                                                   <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${isSpotify ? 'bg-green-50 text-green-700 dark:bg-green-900/30' : 'bg-red-50 text-red-700 dark:bg-red-900/30'}`}>
-                                                          {isSpotify ? 'Spotify' : 'YouTube'}
+                                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${isSpotify ? 'bg-green-50 text-green-700 dark:bg-green-900/30' : isYouTube ? 'bg-red-50 text-red-700 dark:bg-red-900/30' : 'bg-blue-50 text-blue-700 dark:bg-blue-900/30'}`}>
+                                                          {isSpotify ? 'Spotify' : isYouTube ? 'YouTube' : 'Link'}
                                                       </span>
                                                       <span className="hidden sm:inline">• Adicionado por {item.addedBy.split(' ')[0]}</span>
                                                   </div>
