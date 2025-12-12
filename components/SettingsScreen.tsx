@@ -34,12 +34,16 @@ export const SettingsScreen: React.FC<Props> = ({
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
   const { addToast } = useToast();
 
+  // Efeito 1: Sincroniza APENAS a Janela de Disponibilidade
   useEffect(() => {
       if (availabilityWindow) {
           setAvailStart(availabilityWindow.start || "");
           setAvailEnd(availabilityWindow.end || "");
       }
-      
+  }, [availabilityWindow]);
+
+  // Efeito 2: Carrega credenciais do Spotify APENAS ao trocar de ministério (evita reset ao digitar)
+  useEffect(() => {
       if (ministryId) {
           const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
           setSpotifyId(localStorage.getItem(`spotify_cid_${cleanMid}`) || "");
@@ -48,7 +52,7 @@ export const SettingsScreen: React.FC<Props> = ({
       if ('Notification' in window) {
           setNotifPermission(Notification.permission);
       }
-  }, [availabilityWindow, ministryId]);
+  }, [ministryId]);
 
   const handleSaveAdvanced = async () => {
       if (onSaveAvailabilityWindow) {
