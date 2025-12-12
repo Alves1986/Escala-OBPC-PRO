@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { Settings, Save, Moon, Sun, BellRing, Megaphone, Monitor, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Settings, Save, Moon, Sun, BellRing, Megaphone, Monitor, Loader2, CalendarClock, Lock, Unlock } from 'lucide-react';
 import { useToast } from './Toast';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { ThemeMode } from '../types';
@@ -14,14 +14,36 @@ interface Props {
   onSaveTitle: (newTitle: string) => Promise<void>;
   onAnnounceUpdate?: () => Promise<void>;
   onEnableNotifications?: () => Promise<void>;
+  onSaveAvailabilityWindow?: (start: string, end: string) => Promise<void>;
+  availabilityWindow?: { start?: string, end?: string };
   isAdmin?: boolean;
 }
 
-export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, themeMode, onSetThemeMode, onSaveTheme, onSaveTitle, onAnnounceUpdate, onEnableNotifications, isAdmin = false }) => {
+export const SettingsScreen: React.FC<Props> = ({ 
+    initialTitle, ministryId, themeMode, onSetThemeMode, onSaveTheme, 
+    onSaveTitle, onAnnounceUpdate, onEnableNotifications, 
+    onSaveAvailabilityWindow, availabilityWindow, isAdmin = false 
+}) => {
   const [tempTitle, setTempTitle] = useState(initialTitle);
+  const [availStart, setAvailStart] = useState("");
+  const [availEnd, setAvailEnd] = useState("");
   const [legalDoc, setLegalDoc] = useState<LegalDocType>(null);
   const [isNotifLoading, setIsNotifLoading] = useState(false);
   const { addToast } = useToast();
+
+  useEffect(() => {
+      if (availabilityWindow) {
+          setAvailStart(availabilityWindow.start || "");
+          setAvailEnd(availabilityWindow.end || "");
+      }
+  }, [availabilityWindow]);
+
+  const handleSaveAvailability = async () => {
+      if (onSaveAvailabilityWindow) {
+          await onSaveAvailabilityWindow(availStart, availEnd);
+          addToast("Janela de disponibilidade atualizada!", "success");
+      }
+  };
 
   return (
     <div className="space-y-6 animate-fade-in max-w-4xl mx-auto pb-10">
@@ -40,7 +62,7 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
          {isAdmin && (
              <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
                  <h3 className="text-sm font-bold text-zinc-500 uppercase mb-4">Geral</h3>
-                 <div className="space-y-4">
+                 <div className="space-y-6">
                     <div>
                         <label className="text-xs font-bold text-zinc-500 uppercase block mb-1">Nome de Exibição do Ministério</label>
                         <div className="flex gap-2">
@@ -58,6 +80,48 @@ export const SettingsScreen: React.FC<Props> = ({ initialTitle, ministryId, them
                                 <Save size={16}/> Salvar
                             </button>
                         </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-zinc-100 dark:border-zinc-700">
+                        <div className="flex items-center gap-2 mb-3">
+                            <CalendarClock size={18} className="text-purple-500"/>
+                            <h4 className="text-sm font-bold text-zinc-700 dark:text-zinc-200 uppercase">Janela de Disponibilidade</h4>
+                        </div>
+                        <p className="text-xs text-zinc-500 mb-4 leading-relaxed">
+                            Defina o período em que os membros podem editar suas disponibilidades. 
+                            Fora dessas datas, a tela de disponibilidade ficará bloqueada (somente leitura) para não-administradores.
+                        </p>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="text-[10px] font-bold text-zinc-500 uppercase block mb-1 flex items-center gap-1">
+                                    <Unlock size={10} className="text-green-500"/> Abertura (Início)
+                                </label>
+                                <input 
+                                    type="datetime-local"
+                                    value={availStart}
+                                    onChange={(e) => setAvailStart(e.target.value)}
+                                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-zinc-500 uppercase block mb-1 flex items-center gap-1">
+                                    <Lock size={10} className="text-red-500"/> Fechamento (Fim)
+                                </label>
+                                <input 
+                                    type="datetime-local"
+                                    value={availEnd}
+                                    onChange={(e) => setAvailEnd(e.target.value)}
+                                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                                />
+                            </div>
+                        </div>
+                        <button 
+                            onClick={handleSaveAvailability}
+                            className="mt-3 w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2"
+                        >
+                            <Save size={16}/> Atualizar Janela
+                        </button>
                     </div>
                  </div>
              </div>

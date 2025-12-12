@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { AvailabilityMap, User } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
-import { User as UserIcon, CalendarCheck, ChevronDown, Save, CheckCircle2, Sun, Moon, X, Ban, Lock } from 'lucide-react';
+import { User as UserIcon, CalendarCheck, ChevronDown, Save, CheckCircle2, Sun, Moon, X, Ban, Lock, Clock } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface Props {
@@ -14,6 +14,7 @@ interface Props {
   onNotify?: (message: string) => void;
   currentUser: User | null;
   onSaveAvailability: (member: string, dates: string[]) => Promise<void>;
+  availabilityWindow?: { start?: string, end?: string };
 }
 
 // Modal Interno para Seleção de Período
@@ -45,7 +46,11 @@ const SundaySelectionModal = ({ isOpen, onClose, onSelect, currentDateDisplay }:
     );
 };
 
-export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailability, allMembersList, currentMonth, onMonthChange, onNotify, currentUser, onSaveAvailability }) => {
+export const AvailabilityScreen: React.FC<Props> = ({ 
+    availability, setAvailability, allMembersList, currentMonth, 
+    onMonthChange, onNotify, currentUser, onSaveAvailability,
+    availabilityWindow 
+}) => {
   const [selectedMember, setSelectedMember] = useState("");
   const [tempDates, setTempDates] = useState<string[]>([]); // Formato: "YYYY-MM-DD" ou "YYYY-MM-DD_M" ou "YYYY-MM-DD_N"
   const [hasChanges, setHasChanges] = useState(false);
@@ -55,6 +60,19 @@ export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailabil
   const [year, month] = currentMonth.split('-').map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+  const isAdmin = currentUser?.role === 'admin';
+
+  // Verifica se a janela de edição está aberta
+  const isWindowOpen = () => {
+      if (!availabilityWindow?.start || !availabilityWindow?.end) return true; // Se não configurado, assume aberto
+      const now = new Date();
+      const start = new Date(availabilityWindow.start);
+      const end = new Date(availabilityWindow.end);
+      return now >= start && now <= end;
+  };
+
+  const isEditable = isAdmin || isWindowOpen();
 
   // Efeito para selecionar automaticamente o usuário logado e carregar dados iniciais
   useEffect(() => {
@@ -82,6 +100,8 @@ export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailabil
   const isMonthBlocked = tempDates.some(d => d.startsWith(currentMonth) && d.includes('BLOCKED'));
 
   const handleToggleBlockMonth = () => {
+      if (!isEditable) return;
+
       if (isMonthBlocked) {
           // Desbloquear: Remove apenas a tag de bloqueio, permitindo edição novamente
           setTempDates(prev => prev.filter(d => !(d.startsWith(currentMonth) && d.includes('BLOCKED'))));
@@ -96,7 +116,7 @@ export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailabil
   };
 
   const handleToggleDate = (day: number) => {
-    if (!selectedMember || isMonthBlocked) return;
+    if (!selectedMember || isMonthBlocked || !isEditable) return;
     
     // Verifica se é Domingo (0 = Domingo)
     const dateObj = new Date(year, month - 1, day);
@@ -174,8 +194,6 @@ export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailabil
       return 'BOTH';
   };
 
-  const isAdmin = currentUser?.role === 'admin';
-
   return (
     <div className="space-y-6 animate-fade-in max-w-4xl mx-auto">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
@@ -198,6 +216,19 @@ export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailabil
             <button onClick={handleNextMonth} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md">→</button>
         </div>
       </div>
+
+      {/* Lock Notice */}
+      {!isEditable && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-xl flex items-start gap-3 animate-slide-up">
+              <Lock className="text-red-500 shrink-0 mt-0.5" size={20} />
+              <div>
+                  <h4 className="text-sm font-bold text-red-700 dark:text-red-300">Edição Fechada</h4>
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                      O período para envio de disponibilidade foi encerrado. Entre em contato com a liderança se precisar fazer alterações urgentes.
+                  </p>
+              </div>
+          </div>
+      )}
       
       <div className="space-y-6">
         {/* Seletor de Membro */}
@@ -224,14 +255,14 @@ export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailabil
                     </div>
                     <div>
                         <p className="font-bold text-zinc-800 dark:text-zinc-100 text-lg">{currentUser?.name}</p>
-                        <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Você está editando sua disponibilidade</p>
+                        <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Você está visualizando sua disponibilidade</p>
                     </div>
                 </div>
             )}
         </div>
 
         {/* Toggle de Bloqueio de Mês */}
-        {selectedMember && (
+        {selectedMember && isEditable && (
             <div className={`p-4 rounded-xl border flex items-center justify-between transition-all ${
                 isMonthBlocked 
                 ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-900/30' 
@@ -288,7 +319,7 @@ export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailabil
                 ))}
             </div>
 
-            <div className={`grid grid-cols-4 sm:grid-cols-7 gap-2 sm:gap-3 transition-opacity duration-300 ${isMonthBlocked ? 'opacity-20 pointer-events-none' : 'opacity-100'}`}>
+            <div className={`grid grid-cols-4 sm:grid-cols-7 gap-2 sm:gap-3 transition-opacity duration-300 ${isMonthBlocked || !isEditable ? 'opacity-50' : 'opacity-100'}`}>
                 {/* Espaços em branco para alinhar o primeiro dia (Apenas Desktop) */}
                 {Array.from({ length: new Date(year, month - 1, 1).getDay() }).map((_, i) => (
                     <div key={`empty-${i}`} className="hidden sm:block" />
@@ -310,7 +341,8 @@ export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailabil
                         <button
                             key={day}
                             onClick={() => handleToggleDate(day)}
-                            className={`aspect-square flex flex-col items-center justify-center rounded-xl transition-all shadow-sm relative overflow-hidden group ${bgClass} ${isSelectedAvailable ? 'scale-100 z-10' : ''}`}
+                            disabled={!isEditable}
+                            className={`aspect-square flex flex-col items-center justify-center rounded-xl transition-all shadow-sm relative overflow-hidden group ${bgClass} ${isSelectedAvailable ? 'scale-100 z-10' : ''} ${!isEditable ? 'cursor-not-allowed opacity-80' : ''}`}
                         >
                             {/* Mostra dia da semana apenas no mobile (quando grid não é de 7 colunas) */}
                             <span className="text-[10px] font-bold uppercase opacity-60 sm:hidden mb-0.5">{weekDayShort}</span>
@@ -351,20 +383,22 @@ export const AvailabilityScreen: React.FC<Props> = ({ availability, setAvailabil
             </div>
 
             {/* Barra de Ação Fixa ou Flutuante */}
-            <div className="fixed bottom-6 right-6 left-6 md:left-auto flex justify-end z-40">
-                <button
-                    onClick={handleSave}
-                    disabled={!hasChanges}
-                    className={`flex items-center gap-2 px-6 py-3 rounded-full font-bold shadow-xl transition-all ${
-                        hasChanges 
-                        ? 'bg-blue-600 hover:bg-blue-700 text-white translate-y-0 opacity-100' 
-                        : 'bg-zinc-300 dark:bg-zinc-800 text-zinc-500 cursor-not-allowed translate-y-10 opacity-0'
-                    }`}
-                >
-                    <Save size={20} />
-                    Salvar {isMonthBlocked ? 'Bloqueio' : 'Disponibilidade'}
-                </button>
-            </div>
+            {isEditable && (
+                <div className="fixed bottom-6 right-6 left-6 md:left-auto flex justify-end z-40">
+                    <button
+                        onClick={handleSave}
+                        disabled={!hasChanges}
+                        className={`flex items-center gap-2 px-6 py-3 rounded-full font-bold shadow-xl transition-all ${
+                            hasChanges 
+                            ? 'bg-blue-600 hover:bg-blue-700 text-white translate-y-0 opacity-100' 
+                            : 'bg-zinc-300 dark:bg-zinc-800 text-zinc-500 cursor-not-allowed translate-y-10 opacity-0'
+                        }`}
+                    >
+                        <Save size={20} />
+                        Salvar {isMonthBlocked ? 'Bloqueio' : 'Disponibilidade'}
+                    </button>
+                </div>
+            )}
             
             {/* Modal de Domingo */}
             {sundayModal && (

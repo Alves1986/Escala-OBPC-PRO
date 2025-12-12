@@ -27,6 +27,13 @@ export interface AvailabilityMap {
   [memberName: string]: string[]; // Array of YYYY-MM-DD (prefix '+' for preferred)
 }
 
+export interface MinistrySettings {
+    displayName: string;
+    roles: string[];
+    availabilityStart?: string; // ISO String
+    availabilityEnd?: string;   // ISO String
+}
+
 export interface AuditLogEntry {
   id?: string;
   date: string;

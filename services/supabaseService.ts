@@ -4,7 +4,7 @@ import {
     SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, 
     AppNotification, TeamMemberProfile, AvailabilityMap, SwapRequest, 
     ScheduleMap, RepertoireItem, Announcement, GlobalConflictMap, 
-    GlobalConflict, DEFAULT_ROLES, AttendanceMap, AuditLogEntry 
+    GlobalConflict, DEFAULT_ROLES, AttendanceMap, AuditLogEntry, MinistrySettings
 } from '../types';
 
 // Detecta modo de preview
@@ -58,7 +58,7 @@ export const logActionSQL = async (ministryId: string, action: string, details: 
 };
 
 // --- SETTINGS (Roles & Title) ---
-export const fetchMinistrySettings = async (ministryId: string): Promise<{ displayName: string, roles: string[] }> => {
+export const fetchMinistrySettings = async (ministryId: string): Promise<MinistrySettings> => {
     if (isPreviewMode) return { displayName: 'Ministério Demo', roles: DEFAULT_ROLES['midia'] || [] };
     if (!supabase || !ministryId) return { displayName: '', roles: [] };
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
@@ -72,14 +72,16 @@ export const fetchMinistrySettings = async (ministryId: string): Promise<{ displ
 
         return { 
             displayName: data?.display_name || '', 
-            roles: (data?.roles && data.roles.length > 0) ? data.roles : (DEFAULT_ROLES[cleanMid] || DEFAULT_ROLES['default'])
+            roles: (data?.roles && data.roles.length > 0) ? data.roles : (DEFAULT_ROLES[cleanMid] || DEFAULT_ROLES['default']),
+            availabilityStart: data?.availability_start,
+            availabilityEnd: data?.availability_end
         };
     } catch (e) {
         return { displayName: '', roles: DEFAULT_ROLES[cleanMid] || [] };
     }
 };
 
-export const saveMinistrySettings = async (ministryId: string, displayName?: string, roles?: string[]) => {
+export const saveMinistrySettings = async (ministryId: string, displayName?: string, roles?: string[], availabilityStart?: string, availabilityEnd?: string) => {
     if (isPreviewMode) return;
     if (!supabase || !ministryId) return;
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
@@ -87,6 +89,8 @@ export const saveMinistrySettings = async (ministryId: string, displayName?: str
     const updates: any = { ministry_id: cleanMid };
     if (displayName !== undefined) updates.display_name = displayName;
     if (roles !== undefined) updates.roles = roles;
+    if (availabilityStart !== undefined) updates.availability_start = availabilityStart;
+    if (availabilityEnd !== undefined) updates.availability_end = availabilityEnd;
 
     const { error } = await supabase.from('ministry_settings').upsert(updates, { onConflict: 'ministry_id' });
     if (error) console.error("Error saving settings:", error);

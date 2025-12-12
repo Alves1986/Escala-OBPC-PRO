@@ -78,6 +78,7 @@ const InnerApp = () => {
     globalConflicts,
     roles, 
     ministryTitle, setMinistryTitle,
+    availabilityWindow,
     refreshData: loadData
   } = useMinistryData(ministryId, currentMonth, currentUser);
 
@@ -466,8 +467,6 @@ const InnerApp = () => {
                             onExportIndividual={() => {}} 
                             onExportFull={() => {}} 
                             onWhatsApp={() => {}} 
-                            onCSV={() => {}} 
-                            onImportCSV={() => {}} 
                             onClearMonth={() => {
                                 if(confirm("Limpar toda a escala deste mês?")) {
                                     Supabase.clearScheduleForMonth(ministryId, currentMonth).then(loadData);
@@ -565,6 +564,7 @@ const InnerApp = () => {
                      const p = publicMembers.find(pm => pm.name === member);
                      if (p) { await Supabase.saveMemberAvailability(p.id, member, dates); loadData(); }
                 }}
+                availabilityWindow={availabilityWindow}
             />
         )}
 
@@ -668,6 +668,8 @@ const InnerApp = () => {
                 onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, newTitle); setMinistryTitle(newTitle); addToast("Nome do ministério atualizado!", "success"); }}
                 onAnnounceUpdate={async () => { await Supabase.sendNotificationSQL(ministryId, { title: "Atualização de Sistema", message: "Uma nova versão do app está disponível. Recarregue a página para aplicar.", type: "warning" }); addToast("Notificação de atualização enviada.", "success"); }}
                 onEnableNotifications={handleEnableNotifications}
+                onSaveAvailabilityWindow={async (start, end) => { await Supabase.saveMinistrySettings(ministryId, undefined, undefined, start, end); loadData(); }}
+                availabilityWindow={availabilityWindow}
                 isAdmin={isAdmin}
             />
         )}

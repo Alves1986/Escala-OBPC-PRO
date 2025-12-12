@@ -26,6 +26,8 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   const [globalConflicts, setGlobalConflicts] = useState<GlobalConflictMap>({});
   const [roles, setRoles] = useState<Role[]>([]);
   const [ministryTitle, setMinistryTitle] = useState("");
+  // Availability Window State
+  const [availabilityWindow, setAvailabilityWindow] = useState<{ start?: string, end?: string }>({});
 
   const refreshData = useCallback(async () => {
     if (!currentUser || !ministryId) return;
@@ -60,6 +62,10 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
         // 1. Atualização de estado em lote (Dados da Nuvem)
         setMinistryTitle(settings.displayName || ministryId.charAt(0).toUpperCase() + ministryId.slice(1));
         setRoles(settings.roles);
+        setAvailabilityWindow({
+            start: settings.availabilityStart,
+            end: settings.availabilityEnd
+        });
 
         setEvents(schedData.events);
         setSchedule(schedData.schedule);
@@ -104,6 +110,10 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
             if (cached) {
                 setMinistryTitle(cached.settings.displayName || ministryId.charAt(0).toUpperCase() + ministryId.slice(1));
                 setRoles(cached.settings.roles);
+                setAvailabilityWindow({
+                    start: cached.settings.availabilityStart,
+                    end: cached.settings.availabilityEnd
+                });
 
                 setEvents(cached.schedData.events);
                 setSchedule(cached.schedData.schedule);
@@ -152,6 +162,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     globalConflicts, setGlobalConflicts,
     roles, setRoles,
     ministryTitle, setMinistryTitle,
+    availabilityWindow,
     refreshData
   };
 }
