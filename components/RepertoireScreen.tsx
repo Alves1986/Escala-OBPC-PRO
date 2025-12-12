@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import { Music, Plus, Trash2, ExternalLink, Calendar, Settings, ListMusic, Sparkles, Loader2, Search, Youtube, Link, ArrowLeft, X, PlayCircle, Save } from 'lucide-react';
+import { Music, Plus, Trash2, ExternalLink, Calendar, Settings, ListMusic, Loader2, Search, Youtube, Link, ArrowLeft, X, PlayCircle, Save, FileText } from 'lucide-react';
 import { RepertoireItem, User } from '../types';
 import { useToast } from './Toast';
 import { addToRepertoire, deleteFromRepertoire, sendNotificationSQL } from '../services/supabaseService';
-import { suggestRepertoireAI } from '../services/aiService';
 import { searchSpotifyTracks, getLoginUrl, handleLoginCallback, isUserLoggedIn, logoutSpotify, getUserProfile, getUserPlaylists, getPlaylistTracks } from '../services/spotifyService';
 import { searchYouTubeVideos } from '../services/youtubeService';
+import { searchCifraClub } from '../services/cifraClubService';
 
 interface Props {
   repertoire: RepertoireItem[];
@@ -21,7 +21,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   const { addToast, confirmAction } = useToast();
   
   // UI State
-  const [activeTab, setActiveTab] = useState<'manual' | 'spotify' | 'playlists' | 'youtube'>('spotify');
+  const [activeTab, setActiveTab] = useState<'manual' | 'spotify' | 'playlists' | 'youtube' | 'cifra'>('spotify');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Staging / Draft State (Novas músicas aguardando envio)
@@ -57,11 +57,10 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   const [youtubeResults, setYoutubeResults] = useState<any[]>([]);
   const [youtubeLoading, setYoutubeLoading] = useState(false);
 
-  // AI State
-  const [showAiModal, setShowAiModal] = useState(false);
-  const [aiTheme, setAiTheme] = useState("");
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiSuggestions, setAiSuggestions] = useState<{title: string, artist: string, reason: string}[]>([]);
+  // Search State (Cifra Club)
+  const [cifraQuery, setCifraQuery] = useState("");
+  const [cifraResults, setCifraResults] = useState<any[]>([]);
+  const [cifraLoading, setCifraLoading] = useState(false);
 
   // Init - Verifica login e persistência
   useEffect(() => {
@@ -146,6 +145,18 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       
       if (results.length === 0) {
           addToast("Nenhum vídeo encontrado. Verifique a API Key em Configurações.", "warning");
+      }
+  };
+
+  const handleCifraSearch = async () => {
+      if (!cifraQuery.trim()) return;
+      setCifraLoading(true);
+      const results = await searchCifraClub(cifraQuery);
+      setCifraResults(results);
+      setCifraLoading(false);
+      
+      if (results.length === 0) {
+          addToast("Nenhuma cifra encontrada.", "warning");
       }
   };
 
@@ -238,14 +249,6 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     setIsSubmitting(false);
   };
 
-  const handleAiSuggest = async () => {
-      if (!aiTheme) return;
-      setAiLoading(true);
-      const results = await suggestRepertoireAI(aiTheme);
-      setAiSuggestions(results);
-      setAiLoading(false);
-  };
-
   const handleDelete = (id: string) => {
       confirmAction("Excluir Item", "Tem certeza que deseja remover este item do repertório?", async () => {
           await deleteFromRepertoire(id);
@@ -262,6 +265,8 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   }, {} as Record<string, RepertoireItem[]>);
 
   const sortedDates = Object.keys(groupedRepertoire).sort((a, b) => b.localeCompare(a));
+
+  const isLouvor = ministryId === 'louvor';
 
   return (
     <div className="space-y-6 animate-fade-in max-w-6xl mx-auto">
@@ -293,14 +298,6 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                               <h3 className="text-sm font-bold text-zinc-800 dark:text-white">Buscar Músicas</h3>
                           </div>
                       </div>
-                      <div className="flex gap-2 w-full sm:w-auto">
-                          <button 
-                            onClick={() => setShowAiModal(!showAiModal)}
-                            className="flex-1 sm:flex-none justify-center text-xs font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-3 py-2 rounded-lg flex items-center gap-1 hover:bg-purple-100 transition-colors"
-                          >
-                              <Sparkles size={14} /> Sugestões IA
-                          </button>
-                      </div>
                   </div>
 
                   {/* Tabs */}
@@ -308,76 +305,27 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                       <button onClick={() => setActiveTab('spotify')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'spotify' ? 'text-green-600 border-green-500 bg-green-50 dark:bg-green-900/10' : 'text-zinc-500 border-transparent'}`}>
                           <Search size={14}/> Spotify
                       </button>
+                      
                       <button onClick={() => setActiveTab('youtube')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'youtube' ? 'text-red-600 border-red-500 bg-red-50 dark:bg-red-900/10' : 'text-zinc-500 border-transparent'}`}>
                           <Youtube size={14}/> YouTube
                       </button>
+
+                      {isLouvor && (
+                          <button onClick={() => setActiveTab('cifra')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'cifra' ? 'text-orange-600 border-orange-500 bg-orange-50 dark:bg-orange-900/10' : 'text-zinc-500 border-transparent'}`}>
+                              <FileText size={14}/> Cifras
+                          </button>
+                      )}
+
                       {isSpotifyLoggedIn && (
                           <button onClick={() => { setActiveTab('playlists'); if(userPlaylists.length === 0) handleLoadPlaylists(); }} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'playlists' ? 'text-green-600 border-green-500 bg-green-50 dark:bg-green-900/10' : 'text-zinc-500 border-transparent'}`}>
                               <ListMusic size={14}/> Playlists
                           </button>
                       )}
+                      
                       <button onClick={() => setActiveTab('manual')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'manual' ? 'text-blue-600 border-blue-500 bg-blue-50 dark:bg-blue-900/10' : 'text-zinc-500 border-transparent'}`}>
                           <Link size={14}/> Link Manual
                       </button>
                   </div>
-
-                  {/* AI Panel */}
-                  {showAiModal && (
-                      <div className="mb-6 p-4 bg-purple-50 dark:bg-zinc-900/50 rounded-xl border border-purple-100 dark:border-zinc-700 animate-slide-up">
-                          <div className="flex gap-2 mb-4">
-                              <input 
-                                 placeholder="Tema (Ex: Gratidão, Natal...)" 
-                                 value={aiTheme}
-                                 onChange={e => setAiTheme(e.target.value)}
-                                 className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-                              />
-                              <button 
-                                 onClick={handleAiSuggest}
-                                 disabled={aiLoading || !aiTheme}
-                                 className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 disabled:opacity-50"
-                              >
-                                  {aiLoading ? <Loader2 size={14} className="animate-spin"/> : <Sparkles size={14}/>}
-                              </button>
-                          </div>
-                          
-                          {aiSuggestions.length > 0 && (
-                              <div className="space-y-2">
-                                  {aiSuggestions.map((sug, idx) => (
-                                      <div key={idx} className="flex justify-between items-center bg-white dark:bg-zinc-800 p-3 rounded-lg border border-purple-100 dark:border-zinc-700">
-                                          <div>
-                                              <p className="font-bold text-zinc-800 dark:text-zinc-100 text-sm">{sug.title} <span className="font-normal text-zinc-500">- {sug.artist}</span></p>
-                                              <p className="text-xs text-purple-500 italic">{sug.reason}</p>
-                                          </div>
-                                          <div className="flex gap-1">
-                                              <button 
-                                                onClick={() => {
-                                                    setSpotifyQuery(`${sug.title} ${sug.artist}`);
-                                                    setActiveTab('spotify');
-                                                    setShowAiModal(false);
-                                                    handleSpotifySearch();
-                                                }}
-                                                className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-1.5 rounded font-bold"
-                                              >
-                                                  Spotify
-                                              </button>
-                                              <button 
-                                                onClick={() => {
-                                                    setYoutubeQuery(`${sug.title} ${sug.artist} oficial`);
-                                                    setActiveTab('youtube');
-                                                    setShowAiModal(false);
-                                                    handleYouTubeSearch();
-                                                }}
-                                                className="text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-2 py-1.5 rounded font-bold"
-                                              >
-                                                  YouTube
-                                              </button>
-                                          </div>
-                                      </div>
-                                  ))}
-                              </div>
-                          )}
-                      </div>
-                  )}
 
                   {/* === SPOTIFY SEARCH === */}
                   {activeTab === 'spotify' && (
@@ -468,6 +416,60 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                                           >
                                               <Plus size={14}/> Add
                                           </button>
+                                      </div>
+                                  ))}
+                              </div>
+                          )}
+                      </div>
+                  )}
+
+                  {/* === CIFRA CLUB SEARCH === */}
+                  {activeTab === 'cifra' && isLouvor && (
+                      <div className="space-y-4 animate-fade-in">
+                          <div className="bg-orange-50 dark:bg-orange-900/20 p-3 rounded-lg border border-orange-100 dark:border-orange-800/30 mb-2 flex items-center gap-2">
+                              <FileText className="text-orange-500" size={16} />
+                              <p className="text-xs text-orange-700 dark:text-orange-300">Integração exclusiva para Louvor. Encontre tons e cifras.</p>
+                          </div>
+                          <div className="flex gap-2">
+                              <input 
+                                  type="text" 
+                                  placeholder="Música ou Artista no Cifra Club..."
+                                  value={cifraQuery} 
+                                  onChange={e => setCifraQuery(e.target.value)}
+                                  onKeyDown={e => e.key === 'Enter' && handleCifraSearch()}
+                                  className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-orange-500"
+                              />
+                              <button 
+                                  onClick={handleCifraSearch}
+                                  disabled={cifraLoading}
+                                  className="bg-orange-500 hover:bg-orange-600 text-white px-4 rounded-lg font-bold flex items-center justify-center disabled:opacity-50"
+                              >
+                                  {cifraLoading ? <Loader2 className="animate-spin" size={18}/> : <Search size={18}/>}
+                              </button>
+                          </div>
+
+                          {cifraResults.length > 0 && (
+                              <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2 border border-zinc-100 dark:border-zinc-700 rounded-xl p-2 bg-zinc-50 dark:bg-zinc-900/30">
+                                  {cifraResults.map((result, idx) => (
+                                      <div key={idx} className="flex items-center justify-between p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors group">
+                                          <div className="flex items-center gap-3 w-full overflow-hidden">
+                                              <div className="w-10 h-10 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 flex items-center justify-center shrink-0">
+                                                  <span className="font-bold text-xs">{result.key || '?'}</span>
+                                              </div>
+                                              <div className="min-w-0 flex-1">
+                                                  <p className="font-bold text-sm text-zinc-800 dark:text-white line-clamp-1">{result.title}</p>
+                                                  <p className="text-xs text-zinc-500 truncate">{result.artist}</p>
+                                              </div>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                              <a href={result.url} target="_blank" rel="noopener noreferrer" className="p-2 text-zinc-400 hover:text-orange-500 transition-colors" title="Abrir Cifra"><ExternalLink size={16}/></a>
+                                              <button 
+                                                  onClick={() => handleAddToDraft(result.title + (result.key ? ` (${result.key})` : ''), result.url)}
+                                                  className="shrink-0 text-xs px-3 py-1.5 rounded-full font-bold transition-colors bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-800 flex items-center gap-1 ml-1"
+                                              >
+                                                  <Plus size={14}/> Add
+                                              </button>
+                                          </div>
                                       </div>
                                   ))}
                               </div>
@@ -631,18 +633,29 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                               {groupedRepertoire[dateKey].map((item, idx) => {
                                   const isSpotify = item.link.includes('spotify');
                                   const isYouTube = item.link.includes('youtu');
+                                  const isCifra = item.link.includes('cifraclub');
                                   
                                   return (
                                       <div key={item.id} className={`flex items-center justify-between p-3 sm:p-4 hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors group ${idx !== groupedRepertoire[dateKey].length - 1 ? 'border-b border-zinc-100 dark:border-zinc-700/50' : ''}`}>
                                           <div className="flex items-center gap-3 sm:gap-4 overflow-hidden">
-                                              <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${isSpotify ? 'bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400' : isYouTube ? 'bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'}`}>
-                                                  {isYouTube ? <Youtube size={20}/> : <Music size={20} />}
+                                              <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
+                                                  isSpotify ? 'bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400' : 
+                                                  isYouTube ? 'bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400' : 
+                                                  isCifra ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400' :
+                                                  'bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'
+                                              }`}>
+                                                  {isYouTube ? <Youtube size={20}/> : isCifra ? <FileText size={20}/> : <Music size={20} />}
                                               </div>
                                               <div className="min-w-0">
                                                   <h4 className="font-bold text-sm text-zinc-800 dark:text-white truncate pr-2">{item.title}</h4>
                                                   <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${isSpotify ? 'bg-green-50 text-green-700 dark:bg-green-900/30' : isYouTube ? 'bg-red-50 text-red-700 dark:bg-red-900/30' : 'bg-blue-50 text-blue-700 dark:bg-blue-900/30'}`}>
-                                                          {isSpotify ? 'Spotify' : isYouTube ? 'YouTube' : 'Link'}
+                                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${
+                                                          isSpotify ? 'bg-green-50 text-green-700 dark:bg-green-900/30' : 
+                                                          isYouTube ? 'bg-red-50 text-red-700 dark:bg-red-900/30' : 
+                                                          isCifra ? 'bg-orange-50 text-orange-700 dark:bg-orange-900/30' :
+                                                          'bg-blue-50 text-blue-700 dark:bg-blue-900/30'
+                                                      }`}>
+                                                          {isSpotify ? 'Spotify' : isYouTube ? 'YouTube' : isCifra ? 'Cifra' : 'Link'}
                                                       </span>
                                                       <span className="hidden sm:inline">• Adicionado por {item.addedBy.split(' ')[0]}</span>
                                                   </div>
