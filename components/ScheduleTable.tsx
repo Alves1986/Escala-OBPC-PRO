@@ -2,7 +2,7 @@
 import React, { useMemo, useCallback, useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis, GlobalConflictMap, TeamMemberProfile } from '../types';
-import { CheckCircle2, AlertTriangle, Trash2, Edit, Clock, User, ChevronDown, ChevronLeft, ChevronRight, X, Search, AlertOctagon, XCircle } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Trash2, Edit, Clock, User, ChevronDown, ChevronLeft, ChevronRight, X, Search, AlertOctagon, XCircle, Info } from 'lucide-react';
 
 interface Props {
   events: { iso: string; dateDisplay: string; title: string }[];
@@ -142,7 +142,6 @@ const MemberSelector = ({
                     ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20 shadow-[0_0_0_1px_rgba(245,158,11,0.5)]'
                     : 'border-zinc-200 dark:border-zinc-700 hover:border-blue-400 dark:hover:border-blue-500'
                 }`}
-                title={hasWarning ? warningMsg : undefined}
             >
                 {value ? (
                     <div className="flex items-center gap-2 min-w-0">
@@ -163,20 +162,29 @@ const MemberSelector = ({
                 <ChevronDown size={16} className={`text-zinc-400 shrink-0 ml-1 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </div>
 
-            {/* Warning Badge / Icon */}
+            {/* Warning Badge / Icon with Tooltip Logic */}
             {hasWarning && (
-                <div className="absolute -top-2 -right-2 z-20 animate-pulse">
-                    <div className="bg-amber-500 text-white p-1 rounded-full shadow-md border-2 border-white dark:border-zinc-800" title={warningMsg}>
+                <div className="absolute -top-2 -right-2 z-20 group/warn">
+                    <div className="bg-amber-500 text-white p-1 rounded-full shadow-md border-2 border-white dark:border-zinc-800 cursor-help">
                         <AlertTriangle size={12} fill="currentColor" />
+                    </div>
+                    {/* Tooltip */}
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-zinc-800 text-white text-[10px] rounded-lg shadow-lg opacity-0 group-hover/warn:opacity-100 transition-opacity pointer-events-none z-50 text-center">
+                        {warningMsg}
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-zinc-800"></div>
                     </div>
                 </div>
             )}
 
             {/* Error Badge */}
             {hasError && !hasWarning && (
-                <div className="absolute -top-2 -right-2 z-20">
-                    <div className="bg-red-500 text-white p-1 rounded-full shadow-md border-2 border-white dark:border-zinc-800" title="Membro indisponível nesta data">
+                <div className="absolute -top-2 -right-2 z-20 group/err">
+                    <div className="bg-red-500 text-white p-1 rounded-full shadow-md border-2 border-white dark:border-zinc-800">
                         <AlertOctagon size={12} fill="currentColor" />
+                    </div>
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 p-2 bg-zinc-800 text-white text-[10px] rounded-lg shadow-lg opacity-0 group-hover/err:opacity-100 transition-opacity pointer-events-none z-50 text-center">
+                        Membro marcou indisponibilidade.
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-zinc-800"></div>
                     </div>
                 </div>
             )}
@@ -383,7 +391,7 @@ const ScheduleRow = React.memo(({
                         const conflict = conflicts.find((c: any) => c.eventIso === event.iso);
                         if (conflict) {
                             hasGlobalConflict = true;
-                            globalConflictMsg = `Conflito: ${currentValue} já está em ${conflict.ministryId.toUpperCase()} como ${conflict.role}`;
+                            globalConflictMsg = `Conflito de Agenda: ${currentValue} já está escalado em ${conflict.ministryId.toUpperCase()} como ${conflict.role} neste horário.`;
                         }
                     }
                 }
@@ -412,6 +420,7 @@ const ScheduleRow = React.memo(({
                                         availability={availability}
                                     />
                                     
+                                    {/* Visual Alerts Below Selector */}
                                     {hasLocalConflict && (
                                         <div className="text-[10px] text-red-500 mt-1 flex items-center gap-1 font-medium animate-pulse">
                                             <AlertOctagon size={10} /> Indisponível nesta data
@@ -688,7 +697,9 @@ export const ScheduleTable: React.FC<Props> = React.memo(({
                                           <p className="text-[10px] text-red-500 mt-1 flex items-center gap-1 font-medium"><AlertOctagon size={10}/> Indisponível</p>
                                       )}
                                       {hasGlobalConflict && (
-                                          <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1 font-bold animate-pulse"><AlertTriangle size={10}/> {globalConflictMsg}</p>
+                                          <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1 font-bold animate-pulse group/tooltip relative">
+                                               <AlertTriangle size={10}/> {globalConflictMsg}
+                                          </div>
                                       )}
                                   </div>
                               </div>

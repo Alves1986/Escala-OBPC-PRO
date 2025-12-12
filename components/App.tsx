@@ -211,10 +211,18 @@ const InnerApp = () => {
     );
   };
 
-  const handleSwitchMinistry = (id: string) => {
+  const handleSwitchMinistry = async (id: string) => {
+      // 1. Atualiza estado local imediatamente para feedback visual
       setMinistryId(id);
+      
+      // 2. Atualiza contexto do usuário
       if (currentUser) {
           setCurrentUser({ ...currentUser, ministryId: id });
+          
+          // 3. CRUCIAL: Persiste a escolha no banco para não perder ao recarregar token
+          if (currentUser.id) {
+              await Supabase.updateProfileMinistry(currentUser.id, id);
+          }
       }
       addToast(`Alternado para ${id}`, 'info');
   };
@@ -433,7 +441,6 @@ const InnerApp = () => {
         onSwitchMinistry={handleSwitchMinistry}
         onOpenJoinMinistry={() => setShowJoinModal(true)}
     >
-        {/* ... (Tab Content rendering remains same) ... */}
         {currentTab === 'dashboard' && (
             <div className="space-y-6 animate-fade-in">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">

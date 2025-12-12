@@ -26,7 +26,15 @@ const getAiClient = () => {
     return new GoogleGenAI({ apiKey: key });
 };
 
+// Cache simples para evitar chamadas repetitivas
+const searchCache: Record<string, CifraClubResult[]> = {};
+
 export const searchCifraClub = async (query: string): Promise<CifraClubResult[]> => {
+    const cacheKey = query.toLowerCase().trim();
+    if (searchCache[cacheKey]) {
+        return searchCache[cacheKey];
+    }
+
     const ai = getAiClient();
     if (!ai) {
         console.warn("AI Key missing for Cifra Club search");
@@ -67,7 +75,9 @@ export const searchCifraClub = async (query: string): Promise<CifraClubResult[]>
         });
 
         if (response.text) {
-            return JSON.parse(response.text);
+            const results = JSON.parse(response.text);
+            searchCache[cacheKey] = results; // Save to cache
+            return results;
         }
         return [];
     } catch (error) {

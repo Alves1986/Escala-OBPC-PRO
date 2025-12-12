@@ -202,7 +202,6 @@ export const fetchRepertoire = async (ministryId: string): Promise<RepertoireIte
     }
 };
 
-// UPDATED FUNCTION: Now returns boolean success status
 export const addToRepertoire = async (ministryId: string, item: Omit<RepertoireItem, 'id' | 'createdAt'>): Promise<boolean> => {
     if (isPreviewMode) return true;
     try {
@@ -996,11 +995,13 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
         const dateTime = `${isoDate}:00`; 
 
         let eventId = null;
+        // First try finding the event
         const { data: eventData } = await supabase.from('events').select('id').eq('ministry_id', cleanMid).eq('date_time', dateTime).limit(1); 
 
         if (eventData && eventData.length > 0) {
             eventId = eventData[0].id;
         } else {
+            // Auto-create event if it doesn't exist (Professional UX: don't fail silently)
             if (!memberName) return true;
             const dateObj = new Date(isoDate);
             const dayOfWeek = dateObj.getDay(); 
@@ -1016,16 +1017,36 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
             eventId = newEvent.id;
         }
 
+        // If clearing
         if (!memberName) {
             if (eventId) await supabase.from('schedule_assignments').delete().eq('event_id', eventId).eq('role', role);
             return true;
         }
 
-        const { data: memberData } = await supabase.from('profiles').select('id').ilike('name', memberName).limit(1).single();
-        if (!memberData) return false; 
+        // Find member by Exact Name first, fallback to ILIKE if needed but exact is safer
+        // Professional Update: Try to find by Exact Name to avoid "Ana" matching "Ana Clara"
+        const { data: memberData } = await supabase.from('profiles').select('id')
+            .or(`ministry_id.eq.${cleanMid},allowed_ministries.cs.{${cleanMid}}`)
+            .eq('name', memberName.trim()) // Exact match preferred
+            .limit(1)
+            .single();
+        
+        let targetMemberId = memberData?.id;
+
+        if (!targetMemberId) {
+             // Fallback for older data or fuzzy matches (Riskier but keeps compatibility)
+             const { data: fuzzyMember } = await supabase.from('profiles').select('id')
+                .or(`ministry_id.eq.${cleanMid},allowed_ministries.cs.{${cleanMid}}`)
+                .ilike('name', memberName.trim())
+                .limit(1)
+                .single();
+             targetMemberId = fuzzyMember?.id;
+        }
+
+        if (!targetMemberId) return false; 
 
         await supabase.from('schedule_assignments').delete().eq('event_id', eventId).eq('role', role);
-        const { error: insertError } = await supabase.from('schedule_assignments').insert({ event_id: eventId, role: role, member_id: memberData.id });
+        const { error: insertError } = await supabase.from('schedule_assignments').insert({ event_id: eventId, role: role, member_id: targetMemberId });
         return !insertError;
     } catch (e) { return false; }
 };
@@ -1054,27 +1075,27 @@ export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap
 
         const eventsToCreate = [];
         
-        if (!strictMode) {
-            for (const ts of neededTimestamps) {
-                if (!eventIdMap.has(ts)) {
-                    const dateObj = new Date(ts);
-                    const dayOfWeek = dateObj.getDay();
-                    const hour = dateObj.getHours();
-                    let title = "Evento Extra";
-                    if (dayOfWeek === 3) title = "Culto (Quarta)";
-                    else if (dayOfWeek === 0) {
-                        if (hour < 13) title = "Culto (Domingo - Manhã)";
-                        else title = "Culto (Domingo - Noite)";
-                    }
-                    eventsToCreate.push({ ministry_id: cleanMid, title: title, date_time: ts });
+        // Even in strict mode (AI generation), if the AI suggests a valid date that isn't in DB yet, create it.
+        // NOTE: Strict mode usually meant "don't create duplicates", but we check eventIdMap.
+        for (const ts of neededTimestamps) {
+            if (!eventIdMap.has(ts)) {
+                const dateObj = new Date(ts);
+                const dayOfWeek = dateObj.getDay();
+                const hour = dateObj.getHours();
+                let title = "Evento Extra";
+                if (dayOfWeek === 3) title = "Culto (Quarta)";
+                else if (dayOfWeek === 0) {
+                    if (hour < 13) title = "Culto (Domingo - Manhã)";
+                    else title = "Culto (Domingo - Noite)";
                 }
+                eventsToCreate.push({ ministry_id: cleanMid, title: title, date_time: ts });
             }
+        }
 
-            if (eventsToCreate.length > 0) {
-                const { data: newEvents, error: createError } = await supabase.from('events').insert(eventsToCreate).select('id, date_time');
-                if (createError) throw createError;
-                newEvents?.forEach(e => eventIdMap.set(e.date_time, e.id));
-            }
+        if (eventsToCreate.length > 0) {
+            const { data: newEvents, error: createError } = await supabase.from('events').insert(eventsToCreate).select('id, date_time');
+            if (createError) throw createError;
+            newEvents?.forEach(e => eventIdMap.set(e.date_time, e.id));
         }
 
         const assignmentsToUpsert = [];
@@ -1086,7 +1107,7 @@ export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap
             const ts = `${isoDate}:00`;
             const eventId = eventIdMap.get(ts);
             
-            if (!eventId && strictMode) continue;
+            if (!eventId) continue;
 
             const memberId = memberMap.get(memberName.toLowerCase().trim());
             if (eventId && memberId) assignmentsToUpsert.push({ event_id: eventId, role: role, member_id: memberId });
@@ -1095,6 +1116,7 @@ export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap
         if (assignmentsToUpsert.length > 0) {
             const { error: upsertError } = await supabase.from('schedule_assignments').upsert(assignmentsToUpsert, { onConflict: 'event_id,role' }); 
             if (upsertError) {
+                // Fallback for older Postgrest versions
                 for (const item of assignmentsToUpsert) { await supabase.from('schedule_assignments').delete().match({ event_id: item.event_id, role: item.role }); }
                 await supabase.from('schedule_assignments').insert(assignmentsToUpsert);
             }
@@ -1122,29 +1144,73 @@ export const toggleAssignmentConfirmation = async (ministryId: string, key: stri
     } catch (e) { return false; }
 };
 
+// IMPROVED CONFLICT DETECTION: Uses User ID grouping instead of Name String
 export const fetchGlobalSchedules = async (currentMonth: string, currentMinistryId: string): Promise<GlobalConflictMap> => {
     if (isPreviewMode) return {};
     if (!supabase) return {};
     const start = `${currentMonth}-01T00:00:00`;
     const [y, m] = currentMonth.split('-').map(Number);
     const nextMonth = new Date(y, m, 1).toISOString().split('T')[0] + 'T00:00:00';
+    const cleanMid = currentMinistryId.trim().toLowerCase().replace(/\s+/g, '-');
+
     try {
-        const { data, error } = await supabase
-            .from('schedule_assignments')
-            .select(`role, events!inner ( date_time, ministry_id ), profiles!inner ( name )`)
-            .gte('events.date_time', start).lt('events.date_time', nextMonth).neq('events.ministry_id', currentMinistryId); 
-        if (error) throw error;
-        const conflicts: GlobalConflictMap = {};
-        data?.forEach((row: any) => {
-            const name = row.profiles.name;
-            if (!name) return;
-            const normalized = name.trim().toLowerCase();
-            if (!conflicts[normalized]) conflicts[normalized] = [];
-            const conflict: GlobalConflict = { ministryId: row.events.ministry_id, eventIso: row.events.date_time.slice(0, 16), role: row.role };
-            conflicts[normalized].push(conflict);
+        // 1. Get IDs of current ministry members to filter conflicts relevant only to them
+        const { data: ministryMembers } = await supabase
+            .from('profiles')
+            .select('id, name')
+            .or(`ministry_id.eq.${cleanMid},allowed_ministries.cs.{${cleanMid}}`);
+            
+        if (!ministryMembers || ministryMembers.length === 0) return {};
+
+        const memberIdToName = new Map<string, string>();
+        const relevantIds = ministryMembers.map(m => {
+            memberIdToName.set(m.id, m.name.trim()); // Store for reverse lookup
+            return m.id;
         });
+
+        // 2. Fetch assignments from OTHER ministries where member is one of ours
+        const { data: conflictsData, error } = await supabase
+            .from('schedule_assignments')
+            .select(`
+                role, 
+                member_id,
+                events!inner ( date_time, ministry_id )
+            `)
+            .gte('events.date_time', start)
+            .lt('events.date_time', nextMonth)
+            .neq('events.ministry_id', cleanMid) // Exclude current ministry
+            .in('member_id', relevantIds); // Only check our members
+
+        if (error) throw error;
+
+        // 3. Build Conflict Map (Key: Member Name in Current Ministry -> Conflicts)
+        // Using Name as key because ScheduleTable uses names for rendering cells
+        const conflicts: GlobalConflictMap = {};
+        
+        conflictsData?.forEach((row: any) => {
+            const memberName = memberIdToName.get(row.member_id);
+            if (!memberName) return;
+
+            const normalized = memberName.toLowerCase();
+            if (!conflicts[normalized]) conflicts[normalized] = [];
+            
+            const conflict: GlobalConflict = { 
+                ministryId: row.events.ministry_id, 
+                eventIso: row.events.date_time.slice(0, 16), 
+                role: row.role 
+            };
+            
+            // Avoid duplicates
+            if (!conflicts[normalized].some(c => c.eventIso === conflict.eventIso && c.ministryId === conflict.ministryId)) {
+                conflicts[normalized].push(conflict);
+            }
+        });
+
         return conflicts;
-    } catch (e) { return {}; }
+    } catch (e) { 
+        console.error("Conflict Fetch Error:", e);
+        return {}; 
+    }
 };
 
 export const logout = async () => {
@@ -1351,4 +1417,10 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
     } catch (e: any) {
         return { success: false, message: e.message || "Erro ao atualizar perfil." };
     }
+};
+
+export const updateProfileMinistry = async (userId: string, ministryId: string) => {
+    if (isPreviewMode) return;
+    if (!supabase) return;
+    await supabase.from('profiles').update({ ministry_id: ministryId }).eq('id', userId);
 };

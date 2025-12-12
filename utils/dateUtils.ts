@@ -38,7 +38,7 @@ export const generateMonthEvents = (year: number, month: number, customEvents: C
   if (customEvents && customEvents.length > 0) {
       customEvents.forEach(evt => {
         // Garante que a data existe e pertence ao mês atual
-        // Comparação estrita de string para evitar conversão de data
+        // Comparação estrita de string para evitar conversão de data e shifts de timezone
         if (evt.date && evt.date.startsWith(monthStr)) {
            const parts = evt.date.split('-');
            // parts[0] = Year, parts[1] = Month, parts[2] = Day
@@ -54,6 +54,6 @@ export const generateMonthEvents = (year: number, month: number, customEvents: C
       });
   }
 
-  // Ordena por string ISO, que funciona cronologicamente
+  // Ordena por string ISO, que funciona cronologicamente de forma consistente
   return events.sort((a, b) => a.iso.localeCompare(b.iso));
 };
