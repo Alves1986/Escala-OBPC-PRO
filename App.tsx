@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, Calendar, CalendarCheck, RefreshCcw, Music, 
   Megaphone, Settings, FileBarChart, CalendarDays,
@@ -57,13 +56,31 @@ const InnerApp = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
   const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
+  
+  // Lógica de Tabs Atualizada: Detecta retorno do Spotify IMEDIATAMENTE na inicialização
   const [currentTab, setCurrentTab] = useState(() => {
       if (typeof window !== 'undefined') {
+          // Se tiver voltando do Spotify com token no hash, força a aba de gerenciamento
+          if (window.location.hash && window.location.hash.includes('access_token')) {
+              // Verifica se é admin para decidir a aba correta, mas garante que não vá para dashboard
+              // Como currentUser pode ser null aqui, assumimos repertoire-manager por segurança se tiver hash
+              return 'repertoire-manager'; 
+          }
           const params = new URLSearchParams(window.location.search);
           return params.get('tab') || 'dashboard';
       }
       return 'dashboard';
   });
+
+  // Ajuste fino de Tab se voltar do Spotify (Garante permissão correta após carregar user)
+  useEffect(() => {
+      if (window.location.hash && window.location.hash.includes('access_token') && currentUser) {
+          const target = currentUser.role === 'admin' ? 'repertoire-manager' : 'repertoire';
+          if (currentTab !== target) {
+              setCurrentTab(target);
+          }
+      }
+  }, [currentUser]);
 
   const { 
     events, setEvents,
@@ -72,6 +89,7 @@ const InnerApp = () => {
     membersMap, 
     publicMembers, 
     availability, setAvailability,
+    availabilityNotes, 
     notifications, setNotifications,
     announcements, 
     repertoire, setRepertoire,
@@ -128,10 +146,13 @@ const InnerApp = () => {
   useEffect(() => {
       const url = new URL(window.location.href);
       if (url.searchParams.get('tab') !== currentTab) {
-          url.searchParams.set('tab', currentTab);
-          try {
-            window.history.replaceState({}, '', url.toString());
-          } catch (e) {}
+          // Não sobrescreve se tiver hash do spotify
+          if (!window.location.hash.includes('access_token')) {
+              url.searchParams.set('tab', currentTab);
+              try {
+                window.history.replaceState({}, '', url.toString());
+              } catch (e) {}
+          }
       }
   }, [currentTab]);
 
@@ -273,6 +294,69 @@ const InnerApp = () => {
       }
   };
 
+  const handleSyncCalendar = () => {
+      if (!currentUser || !schedule || !events) return;
+
+      const myEvents: any[] = [];
+      
+      // Filter events where user is assigned
+      Object.keys(schedule).forEach(key => {
+          if (schedule[key] === currentUser.name) {
+              const iso = key.slice(0, 16); // Extract YYYY-MM-DDTHH:mm
+              const role = key.split('_').pop() || 'Escala';
+              const eventInfo = events.find(e => e.iso.startsWith(iso));
+              
+              if (eventInfo) {
+                  myEvents.push({
+                      title: `${eventInfo.title} (${role})`,
+                      start: iso,
+                      end: calculateEndTime(iso),
+                      description: `Você está escalado como ${role} em ${ministryTitle}.`
+                  });
+              }
+          }
+      });
+
+      if (myEvents.length === 0) {
+          addToast("Você não tem escalas para sincronizar este mês.", "info");
+          return;
+      }
+
+      // Generate ICS content
+      let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//EscalaOBPC//PT\n";
+      
+      myEvents.forEach(evt => {
+          const dtStart = evt.start.replace(/[-:]/g, "").replace("T", "T") + "00";
+          const dtEnd = evt.end.replace(/[-:]/g, "").replace("T", "T") + "00";
+          
+          icsContent += "BEGIN:VEVENT\n";
+          icsContent += `SUMMARY:${evt.title}\n`;
+          icsContent += `DTSTART:${dtStart}\n`;
+          icsContent += `DTEND:${dtEnd}\n`;
+          icsContent += `DESCRIPTION:${evt.description}\n`;
+          icsContent += "END:VEVENT\n";
+      });
+      
+      icsContent += "END:VCALENDAR";
+
+      // Trigger Download
+      const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+      const link = document.createElement('a');
+      link.href = window.URL.createObjectURL(blob);
+      link.setAttribute('download', `escala_${currentMonth}.ics`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      addToast("Arquivo de calendário baixado!", "success");
+  };
+
+  const calculateEndTime = (iso: string) => {
+      const date = new Date(iso);
+      date.setHours(date.getHours() + 2); // Default 2 hours duration
+      return date.toISOString().slice(0, 19);
+  };
+
   // --- AI HANDLER ---
   const handleAiAutoFill = async () => {
       if (Object.keys(schedule).length > 0) {
@@ -286,6 +370,7 @@ const InnerApp = () => {
               events: events.map(e => ({ iso: e.iso, title: e.title })),
               members: publicMembers,
               availability,
+              availabilityNotes,
               roles,
               ministryId
           });
@@ -347,7 +432,6 @@ const InnerApp = () => {
         onSwitchMinistry={handleSwitchMinistry}
         onOpenJoinMinistry={() => setShowJoinModal(true)}
     >
-        {/* ... (Tab Content rendering remains same) ... */}
         {currentTab === 'dashboard' && (
             <div className="space-y-6 animate-fade-in">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -493,6 +577,7 @@ const InnerApp = () => {
                                 }
                             }}
                             onAiAutoFill={handleAiAutoFill}
+                            onSyncCalendar={handleSyncCalendar}
                             allMembers={publicMembers.map(m => m.name)}
                          />
                          
@@ -569,14 +654,18 @@ const InnerApp = () => {
         {currentTab === 'availability' && (
             <AvailabilityScreen 
                 availability={availability}
+                availabilityNotes={availabilityNotes}
                 setAvailability={setAvailability}
                 allMembersList={publicMembers.map(m => m.name)}
                 currentMonth={currentMonth}
                 onMonthChange={setCurrentMonth}
                 currentUser={currentUser}
-                onSaveAvailability={async (member, dates) => {
+                onSaveAvailability={async (member, dates, notes) => {
                      const p = publicMembers.find(pm => pm.name === member);
-                     if (p) { await Supabase.saveMemberAvailability(p.id, member, dates); loadData(); }
+                     if (p) { 
+                         await Supabase.saveMemberAvailability(p.id, member, dates, notes); 
+                         loadData(); 
+                     }
                 }}
                 availabilityWindow={availabilityWindow}
             />
@@ -680,6 +769,37 @@ const InnerApp = () => {
              </div>
         )}
 
+        {currentTab === 'report' && isAdmin && (
+            <AvailabilityReportScreen 
+                availability={availability}
+                registeredMembers={publicMembers}
+                membersMap={membersMap}
+                currentMonth={currentMonth}
+                onMonthChange={setCurrentMonth}
+                availableRoles={roles}
+                onRefresh={async () => { await loadData(); }}
+            />
+        )}
+
+        {currentTab === 'profile' && (
+            <ProfileScreen 
+                user={currentUser}
+                onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => {
+                    const res = await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId);
+                    if (res.success) {
+                        addToast(res.message, "success");
+                        if (currentUser) {
+                            setCurrentUser({ ...currentUser, name, whatsapp, avatar_url: avatar || currentUser.avatar_url, functions: funcs, birthDate: bdate });
+                        }
+                        loadData(); // Reload to update other components
+                    } else {
+                        addToast(res.message, "error");
+                    }
+                }}
+                availableRoles={roles}
+            />
+        )}
+
         {currentTab === 'settings' && (
             <SettingsScreen 
                 initialTitle={ministryTitle} 
@@ -690,33 +810,13 @@ const InnerApp = () => {
                 onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, newTitle); setMinistryTitle(newTitle); addToast("Nome do ministério atualizado!", "success"); }}
                 onAnnounceUpdate={async () => { await Supabase.sendNotificationSQL(ministryId, { title: "Atualização de Sistema", message: "Uma nova versão do app está disponível. Recarregue a página para aplicar.", type: "warning" }); addToast("Notificação de atualização enviada.", "success"); }}
                 onEnableNotifications={handleEnableNotifications}
-                onSaveAvailabilityWindow={async (start, end, spotifyId, spotifySecret) => { 
-                    await Supabase.saveMinistrySettings(ministryId, undefined, undefined, start, end, spotifyId, spotifySecret); 
+                onSaveAvailabilityWindow={async (start, end) => { 
+                    await Supabase.saveMinistrySettings(ministryId, undefined, undefined, start, end); 
                     loadData(); 
                 }}
                 availabilityWindow={availabilityWindow}
                 isAdmin={isAdmin}
             />
-        )}
-
-        {currentTab === 'report' && isAdmin && (
-            <AvailabilityReportScreen 
-                availability={availability}
-                registeredMembers={publicMembers}
-                membersMap={membersMap}
-                currentMonth={currentMonth}
-                onMonthChange={setCurrentMonth}
-                availableRoles={roles}
-                onRefresh={async () => { await loadData(); addToast("Dados atualizados!", "success"); }}
-            />
-        )}
-
-        {currentTab === 'profile' && currentUser && (
-             <ProfileScreen 
-                user={currentUser}
-                availableRoles={roles}
-                onUpdateProfile={async (name, whatsapp, avatar_url, functions, birthDate) => { const res = await Supabase.updateUserProfile(name, whatsapp, avatar_url, functions, birthDate, ministryId); if (res.success) { addToast(res.message, "success"); setCurrentUser({ ...currentUser, name, whatsapp, avatar_url, functions, birthDate }); await loadData(); } else { addToast(res.message, "error"); } }}
-             />
         )}
 
         <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ ...e, iso: e.iso }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, e); loadData(); }} onRemove={async (id) => { loadData(); }} />

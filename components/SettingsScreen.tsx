@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, Moon, Sun, BellRing, Megaphone, Monitor, Loader2, CalendarClock, Lock, Unlock, Music, Copy, AlertCircle, BellOff, Check } from 'lucide-react';
+import { Settings, Save, Moon, Sun, BellRing, Megaphone, Monitor, Loader2, CalendarClock, Lock, Unlock, Music, Copy, AlertCircle, BellOff, Check, ShieldCheck, XCircle } from 'lucide-react';
 import { useToast } from './Toast';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { ThemeMode } from '../types';
@@ -14,7 +14,7 @@ interface Props {
   onSaveTitle: (newTitle: string) => Promise<void>;
   onAnnounceUpdate?: () => Promise<void>;
   onEnableNotifications?: () => Promise<void>;
-  onSaveAvailabilityWindow?: (start: string, end: string, spotifyId?: string, spotifySecret?: string) => Promise<void>;
+  onSaveAvailabilityWindow?: (start: string, end: string) => Promise<void>;
   availabilityWindow?: { start?: string, end?: string };
   isAdmin?: boolean;
 }
@@ -27,14 +27,16 @@ export const SettingsScreen: React.FC<Props> = ({
   const [tempTitle, setTempTitle] = useState(initialTitle);
   const [availStart, setAvailStart] = useState("");
   const [availEnd, setAvailEnd] = useState("");
-  const [spotifyId, setSpotifyId] = useState("");
-  const [spotifySecret, setSpotifySecret] = useState("");
+  
   const [legalDoc, setLegalDoc] = useState<LegalDocType>(null);
   const [isNotifLoading, setIsNotifLoading] = useState(false);
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
   const { addToast } = useToast();
 
-  // Efeito 1: Sincroniza APENAS a Janela de Disponibilidade
+  // Verifica se as variáveis de ambiente estão presentes
+  const hasEnvVars = !!import.meta.env.VITE_SPOTIFY_CLIENT_ID;
+
+  // Efeito: Sincroniza Janela de Disponibilidade
   useEffect(() => {
       if (availabilityWindow) {
           setAvailStart(availabilityWindow.start || "");
@@ -42,23 +44,16 @@ export const SettingsScreen: React.FC<Props> = ({
       }
   }, [availabilityWindow]);
 
-  // Efeito 2: Carrega credenciais do Spotify APENAS ao trocar de ministério (evita reset ao digitar)
   useEffect(() => {
-      if (ministryId) {
-          const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-          setSpotifyId(localStorage.getItem(`spotify_cid_${cleanMid}`) || "");
-      }
-
       if ('Notification' in window) {
           setNotifPermission(Notification.permission);
       }
-  }, [ministryId]);
+  }, []);
 
   const handleSaveAdvanced = async () => {
       if (onSaveAvailabilityWindow) {
-          const secretToSend = spotifySecret.trim() ? spotifySecret.trim() : undefined;
-          await onSaveAvailabilityWindow(availStart, availEnd, spotifyId.trim(), secretToSend);
-          addToast("Configurações avançadas salvas!", "success");
+          await onSaveAvailabilityWindow(availStart, availEnd);
+          addToast("Configurações salvas!", "success");
       }
   };
 
@@ -148,6 +143,13 @@ export const SettingsScreen: React.FC<Props> = ({
                                 />
                             </div>
                         </div>
+                        
+                        <button 
+                            onClick={handleSaveAdvanced}
+                            className="mt-4 w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 shadow-sm"
+                        >
+                            <Save size={16}/> Salvar Datas
+                        </button>
                     </div>
 
                     <div className="pt-4 border-t border-zinc-100 dark:border-zinc-700">
@@ -161,7 +163,7 @@ export const SettingsScreen: React.FC<Props> = ({
                                 <AlertCircle size={14}/> Configuração Obrigatória
                             </div>
                             <p className="text-xs text-zinc-500 mb-2">
-                                Para o login funcionar, adicione esta URL exata nas "Redirect URIs" do seu app no <a href="https://developer.spotify.com/dashboard" target="_blank" className="text-blue-500 underline">Dashboard do Spotify</a>:
+                                Certifique-se que esta URL está nas "Redirect URIs" no painel do Spotify Developer:
                             </p>
                             <div className="flex gap-2">
                                 <code className="flex-1 bg-white dark:bg-black/20 p-2 rounded border border-zinc-200 dark:border-zinc-700 text-[10px] font-mono truncate select-all">
@@ -176,35 +178,29 @@ export const SettingsScreen: React.FC<Props> = ({
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <label className="text-[10px] font-bold text-zinc-500 uppercase block mb-1">Client ID</label>
-                                <input 
-                                    type="text"
-                                    value={spotifyId}
-                                    onChange={(e) => setSpotifyId(e.target.value)}
-                                    placeholder="Ex: 84a..."
-                                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-green-500 font-mono"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-bold text-zinc-500 uppercase block mb-1">Client Secret (Opcional se usar Login)</label>
-                                <input 
-                                    type="password"
-                                    value={spotifySecret}
-                                    onChange={(e) => setSpotifySecret(e.target.value)}
-                                    placeholder={spotifySecret ? "••••••••" : "Cole para busca sem login"}
-                                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-green-500 font-mono"
-                                />
+                        <div className="flex items-center justify-between p-3 rounded-lg border border-zinc-100 dark:border-zinc-700/50 bg-zinc-50 dark:bg-zinc-900/30">
+                            <div className="flex items-center gap-3">
+                                {hasEnvVars ? (
+                                    <div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
+                                        <ShieldCheck size={18} />
+                                    </div>
+                                ) : (
+                                    <div className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-600 dark:text-red-400">
+                                        <XCircle size={18} />
+                                    </div>
+                                )}
+                                <div>
+                                    <p className="text-sm font-bold text-zinc-800 dark:text-zinc-100">
+                                        Status da Integração
+                                    </p>
+                                    <p className="text-xs text-zinc-500">
+                                        {hasEnvVars 
+                                            ? 'Credenciais carregadas via Variáveis de Ambiente (Seguro).' 
+                                            : 'Credenciais não encontradas no arquivo .env.'}
+                                    </p>
+                                </div>
                             </div>
                         </div>
-                        
-                        <button 
-                            onClick={handleSaveAdvanced}
-                            className="mt-6 w-full bg-zinc-900 dark:bg-zinc-100 hover:opacity-90 text-white dark:text-zinc-900 px-4 py-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 shadow-lg"
-                        >
-                            <Save size={16}/> Salvar Configurações Avançadas
-                        </button>
                     </div>
                  </div>
              </div>
