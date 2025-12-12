@@ -1,4 +1,5 @@
 
+// ... (imports remain same)
 import React, { useState, useMemo, useEffect } from 'react';
 import { AvailabilityMap, TeamMemberProfile, MemberMap } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
@@ -80,10 +81,11 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
       }
 
       // Verifica se o mês está bloqueado explicitamente
-      const isBlocked = dates.some(d => d.startsWith(currentMonth) && d.includes('BLOCKED'));
+      // Check for both _BLOCKED suffix or just BLOCKED in string to be safe
+      const isBlocked = dates.some(d => d.startsWith(currentMonth) && (d.includes('BLOCKED') || d.includes('BLK')));
 
       const monthDates = dates
-        .filter(d => d.startsWith(currentMonth) && !d.includes('BLOCKED'))
+        .filter(d => d.startsWith(currentMonth) && !d.includes('BLOCKED') && !d.includes('BLK'))
         .map(d => {
             const parts = d.split('_');
             const dayNum = parseInt(d.split('-')[2]);
@@ -118,6 +120,7 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
 
   }, [registeredMembers, availability, currentMonth, membersMap, searchTerm, selectedRole]);
 
+  // ... (render remains exactly the same)
   return (
     <div className="space-y-6 animate-fade-in max-w-6xl mx-auto">
       {/* Header */}
