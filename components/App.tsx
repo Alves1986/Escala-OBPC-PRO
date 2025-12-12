@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, Calendar, CalendarCheck, RefreshCcw, Music, 
   Megaphone, Settings, FileBarChart, CalendarDays,
@@ -56,8 +57,14 @@ const InnerApp = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
   const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
+  
+  // Lógica de Tabs Atualizada: Detecta retorno do Spotify
   const [currentTab, setCurrentTab] = useState(() => {
       if (typeof window !== 'undefined') {
+          // Se tiver voltando do Spotify com token no hash, força a aba de gerenciamento
+          if (window.location.hash && window.location.hash.includes('access_token')) {
+              return 'repertoire-manager';
+          }
           const params = new URLSearchParams(window.location.search);
           return params.get('tab') || 'dashboard';
       }
@@ -93,6 +100,9 @@ const InnerApp = () => {
   const [isAvailModalOpen, setAvailModalOpen] = useState(false);
   const [isRolesModalOpen, setRolesModalOpen] = useState(false);
 
+  // Ref para controlar a última atualização e evitar recargas agressivas
+  const lastRefreshTimeRef = useRef<number>(Date.now());
+
   const { addToast, confirmAction } = useToast();
 
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
@@ -111,12 +121,18 @@ const InnerApp = () => {
       }
   }, [currentUser]);
 
-  // Auto-refresh data on window focus
+  // Auto-refresh data on window focus (THROTTLED)
   useEffect(() => {
       const handleFocus = () => {
           if (currentUser && ministryId) {
-              // Silently refresh data when user comes back to the app
-              loadData();
+              const now = Date.now();
+              // Só atualiza se passaram mais de 10 minutos (600000ms) desde a última carga
+              // Isso evita perder dados de formulários ao trocar de aba/app rapidamente
+              if (now - lastRefreshTimeRef.current > 600000) {
+                  console.log("Retornou ao app após tempo inativo: Atualizando dados...");
+                  loadData();
+                  lastRefreshTimeRef.current = now;
+              }
           }
       };
       
@@ -126,11 +142,14 @@ const InnerApp = () => {
 
   useEffect(() => {
       const url = new URL(window.location.href);
-      if (url.searchParams.get('tab') !== currentTab) {
-          url.searchParams.set('tab', currentTab);
-          try {
-            window.history.replaceState({}, '', url.toString());
-          } catch (e) {}
+      // Evita sobrescrever se estamos com hash de acesso (token spotify)
+      if (!window.location.hash.includes('access_token')) {
+          if (url.searchParams.get('tab') !== currentTab) {
+              url.searchParams.set('tab', currentTab);
+              try {
+                window.history.replaceState({}, '', url.toString());
+              } catch (e) {}
+          }
       }
   }, [currentTab]);
 
@@ -346,7 +365,7 @@ const InnerApp = () => {
         onSwitchMinistry={handleSwitchMinistry}
         onOpenJoinMinistry={() => setShowJoinModal(true)}
     >
-        {/* ... (Existing tabs) ... */}
+        {/* ... (Tab Content rendering remains same) ... */}
         {currentTab === 'dashboard' && (
             <div className="space-y-6 animate-fade-in">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -433,8 +452,6 @@ const InnerApp = () => {
             </div>
         )}
 
-        {/* ... (Existing tabs omitted for brevity, keeping only modified ones) ... */}
-        
         {currentTab === 'calendar' && (
             <div className="space-y-6 animate-fade-in">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -733,13 +750,10 @@ const InnerApp = () => {
   );
 };
 
-// Default export wrapper
-const App = () => {
+export default function App() {
   return (
     <ToastProvider>
       <InnerApp />
     </ToastProvider>
   );
-};
-
-export default App;
+}

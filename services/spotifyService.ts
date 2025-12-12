@@ -15,9 +15,8 @@ interface SpotifyPlaylist {
     tracks: { total: number };
 }
 
-// Cache para tokens
+// Cache para tokens de APPLICATIVO (Client Credentials)
 let appToken: string | null = null;
-let userToken: string | null = null; // Token do usuário logado
 let tokenExpiry: number = 0;
 
 // --- 1. AUTENTICAÇÃO DO APLICATIVO (Client Credentials - Para busca genérica se não logado) ---
@@ -72,14 +71,22 @@ export const getLoginUrl = (ministryId: string) => {
     return `https://accounts.spotify.com/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&response_type=token&show_dialog=true`;
 };
 
-// Salva token da URL (Hash)
+// Salva token da URL (Hash) e persiste no LocalStorage
 export const handleLoginCallback = () => {
     const hash = window.location.hash;
     if (hash && hash.includes('access_token')) {
         const params = new URLSearchParams(hash.substring(1));
         const token = params.get('access_token');
+        const expiresIn = params.get('expires_in');
+        
         if (token) {
-            userToken = token;
+            // Salva no localStorage para persistir após refresh
+            localStorage.setItem('spotify_user_token', token);
+            
+            // Define expiração (padrão 1 hora geralmente)
+            const expiryTime = Date.now() + (Number(expiresIn) || 3600) * 1000;
+            localStorage.setItem('spotify_token_expiry', expiryTime.toString());
+
             // Limpa a URL para ficar limpa
             window.history.replaceState(null, '', ' ');
             return token;
@@ -89,10 +96,28 @@ export const handleLoginCallback = () => {
 };
 
 export const logoutSpotify = () => {
-    userToken = null;
+    localStorage.removeItem('spotify_user_token');
+    localStorage.removeItem('spotify_token_expiry');
 };
 
-export const isUserLoggedIn = () => !!userToken;
+export const isUserLoggedIn = () => {
+    const token = localStorage.getItem('spotify_user_token');
+    const expiry = localStorage.getItem('spotify_token_expiry');
+    
+    if (!token) return false;
+    if (expiry && Date.now() > Number(expiry)) {
+        logoutSpotify();
+        return false;
+    }
+    return true;
+};
+
+const getUserToken = () => {
+    if (isUserLoggedIn()) {
+        return localStorage.getItem('spotify_user_token');
+    }
+    return null;
+};
 
 // --- 3. FUNÇÕES DE DADOS ---
 
@@ -101,23 +126,25 @@ const fetchSpotify = async (endpoint: string, token: string) => {
         headers: { 'Authorization': `Bearer ${token}` }
     });
     if (res.status === 401) {
-        userToken = null; // Token expirou
+        logoutSpotify(); // Token expirou na API
         throw new Error("Token expirado");
     }
     return res.json();
 };
 
 export const getUserProfile = async () => {
-    if (!userToken) return null;
+    const token = getUserToken();
+    if (!token) return null;
     try {
-        return await fetchSpotify('/me', userToken);
+        return await fetchSpotify('/me', token);
     } catch (e) { return null; }
 };
 
 export const getUserPlaylists = async (): Promise<SpotifyPlaylist[]> => {
-    if (!userToken) return [];
+    const token = getUserToken();
+    if (!token) return [];
     try {
-        const data = await fetchSpotify('/me/playlists?limit=50', userToken);
+        const data = await fetchSpotify('/me/playlists?limit=50', token);
         return data.items || [];
     } catch (e) {
         console.error(e);
@@ -126,16 +153,19 @@ export const getUserPlaylists = async (): Promise<SpotifyPlaylist[]> => {
 };
 
 export const getPlaylistTracks = async (playlistId: string): Promise<SpotifyTrack[]> => {
-    if (!userToken) return [];
+    const token = getUserToken();
+    if (!token) return [];
     try {
-        const data = await fetchSpotify(`/playlists/${playlistId}/tracks?limit=50`, userToken);
+        const data = await fetchSpotify(`/playlists/${playlistId}/tracks?limit=50`, token);
         return data.items.map((item: any) => item.track).filter((t: any) => t && t.id);
     } catch (e) { return []; }
 };
 
 export const searchSpotifyTracks = async (query: string, ministryId: string): Promise<SpotifyTrack[]> => {
     // Usa token de usuário se tiver, senão usa credentials do app
-    let token = userToken;
+    let token = getUserToken();
+    
+    // Se não tiver token de usuário, tenta pegar o token de aplicativo
     if (!token) {
         token = await getClientCredentialsToken(ministryId);
     }
