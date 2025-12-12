@@ -19,13 +19,30 @@ interface SpotifyPlaylist {
 let appToken: string | null = null;
 let tokenExpiry: number = 0;
 
+// Helper para obter credenciais (Prioridade: LocalStorage/DB > Env Vars)
+const getCredentials = (ministryId: string) => {
+    const cleanMid = (ministryId || "").trim().toLowerCase().replace(/\s+/g, '-');
+    
+    // 1. Tenta pegar das configurações salvas no banco (via localStorage)
+    let clientId = localStorage.getItem(`spotify_cid_${cleanMid}`);
+    let clientSecret = localStorage.getItem(`spotify_sec_${cleanMid}`);
+
+    // 2. Se não tiver, tenta pegar das variáveis de ambiente (.env)
+    if (!clientId) {
+        clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID || "";
+    }
+    if (!clientSecret) {
+        clientSecret = import.meta.env.VITE_SPOTIFY_CLIENT_SECRET || "";
+    }
+
+    return { clientId, clientSecret };
+};
+
 // --- 1. AUTENTICAÇÃO DO APLICATIVO (Client Credentials - Para busca genérica se não logado) ---
 export const getClientCredentialsToken = async (ministryId: string): Promise<string | null> => {
     if (appToken && Date.now() < tokenExpiry) return appToken;
 
-    const cleanMid = (ministryId || "").trim().toLowerCase().replace(/\s+/g, '-');
-    const clientId = localStorage.getItem(`spotify_cid_${cleanMid}`);
-    const clientSecret = localStorage.getItem(`spotify_sec_${cleanMid}`);
+    const { clientId, clientSecret } = getCredentials(ministryId);
 
     if (!clientId || !clientSecret) return null;
 
@@ -55,11 +72,10 @@ export const getClientCredentialsToken = async (ministryId: string): Promise<str
 
 // Gera a URL de login
 export const getLoginUrl = (ministryId: string) => {
-    const cleanMid = (ministryId || "").trim().toLowerCase().replace(/\s+/g, '-');
-    const clientId = localStorage.getItem(`spotify_cid_${cleanMid}`);
+    const { clientId } = getCredentials(ministryId);
     
     if (!clientId) {
-        console.error("Client ID not found for", cleanMid);
+        console.error("Client ID not found for", ministryId);
         return null;
     }
 
@@ -168,10 +184,10 @@ export const getPlaylistTracks = async (playlistId: string): Promise<SpotifyTrac
 };
 
 export const searchSpotifyTracks = async (query: string, ministryId: string): Promise<SpotifyTrack[]> => {
-    // 1. Tenta User Token
+    // 1. Tenta User Token (Melhor, pois usa a conta de quem está logado)
     let token = getUserToken();
     
-    // 2. Se não tiver, tenta App Token (Client Credentials)
+    // 2. Se não tiver, tenta App Token (Client Credentials - fallback genérico)
     if (!token) {
         token = await getClientCredentialsToken(ministryId);
     }
