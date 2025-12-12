@@ -2,13 +2,25 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AvailabilityMap, ScheduleMap, TeamMemberProfile } from "../types";
 
-// Initialize Gemini Client Lazily
-// Isso previne que o app quebre (Tela Branca) se a chave não estiver configurada no carregamento
+// Initialize Gemini Client Lazily with robust env check
 const getAiClient = () => {
-  const key = process.env.API_KEY;
+  // Tenta obter a chave de várias fontes possíveis para garantir compatibilidade
+  let key = '';
+  try {
+      // @ts-ignore
+      if (import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) {
+          // @ts-ignore
+          key = import.meta.env.VITE_GEMINI_API_KEY;
+      }
+  } catch(e) {}
+
+  if (!key && typeof process !== 'undefined' && process.env) {
+      key = process.env.API_KEY || '';
+  }
+
   if (!key) {
-    console.warn("API Key do Gemini não encontrada. Verifique VITE_GEMINI_API_KEY.");
-    throw new Error("Chave de API não configurada.");
+    console.warn("API Key do Gemini não encontrada.");
+    throw new Error("Chave de API da Inteligência Artificial não configurada. Verifique o arquivo .env.");
   }
   return new GoogleGenAI({ apiKey: key });
 };

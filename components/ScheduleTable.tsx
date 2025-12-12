@@ -72,7 +72,7 @@ const MemberSelector = ({
             setPosition({
                 top: openUp ? rect.top - 300 : rect.bottom + 5,
                 left: rect.left,
-                width: rect.width
+                width: Math.max(rect.width, 240)
             });
         }
     }, [isOpen, isMobile]);
@@ -192,14 +192,14 @@ const MemberSelector = ({
                         id="member-selector-portal"
                         className={`fixed z-[9999] bg-white dark:bg-zinc-800 flex flex-col overflow-hidden animate-fade-in
                             ${isMobile 
-                                ? 'bottom-0 left-0 w-full rounded-t-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.3)] max-h-[70vh] border-t border-zinc-200 dark:border-zinc-700' 
+                                ? 'bottom-0 left-0 w-full rounded-t-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.3)] max-h-[85vh] border-t border-zinc-200 dark:border-zinc-700' 
                                 : 'rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-700 max-h-[300px]'
                             }
                         `}
                         style={isMobile ? {} : { 
                             top: position.top, 
                             left: position.left, 
-                            width: Math.max(position.width, 240) 
+                            width: position.width 
                         }}
                     >
                         {/* Header do Seletor (Mobile) */}

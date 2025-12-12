@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, UserPlus, ArrowLeft, Check, ChevronDown, KeyRound, Layers } from 'lucide-react';
 import { loginWithEmail, loginWithGoogle, registerWithEmail, fetchMinistrySettings, sendPasswordResetEmail } from '../services/supabaseService';
@@ -87,7 +88,11 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
     setLocalLoading(true);
     setErrorMsg("");
 
-    const result = await loginWithEmail(email, password);
+    // Trim inputs to avoid space errors
+    const cleanEmail = email.trim();
+    const cleanPass = password.trim();
+
+    const result = await loginWithEmail(cleanEmail, cleanPass);
 
     if (!result.success) {
       setErrorMsg(result.message);
@@ -116,13 +121,17 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
       setLocalLoading(true);
       setErrorMsg("");
       
-      const result = await registerWithEmail(regEmail, regPassword, regName, regSelectedMinistries, undefined, regSelectedRoles);
+      const cleanEmail = regEmail.trim();
+      const cleanPass = regPassword.trim();
+      const cleanName = regName.trim();
+
+      const result = await registerWithEmail(cleanEmail, cleanPass, cleanName, regSelectedMinistries, undefined, regSelectedRoles);
       
       if (result.success) {
           setSuccessMsg(result.message);
           setTimeout(() => {
-             setEmail(regEmail);
-             setPassword(regPassword);
+             setEmail(cleanEmail);
+             setPassword(""); // Don't autofill password for security/UX
              setView('login');
              setSuccessMsg("Conta criada! Faça login.");
              setErrorMsg("");
@@ -143,7 +152,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
       setLocalLoading(true);
       setErrorMsg("");
 
-      const result = await sendPasswordResetEmail(email);
+      const result = await sendPasswordResetEmail(email.trim());
       
       if (result.success) {
           setSuccessMsg(result.message);

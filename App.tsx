@@ -112,6 +112,19 @@ const InnerApp = () => {
       }
   }, [currentUser]);
 
+  // Auto-refresh data on window focus
+  useEffect(() => {
+      const handleFocus = () => {
+          if (currentUser && ministryId) {
+              // Silently refresh data when user comes back to the app
+              loadData();
+          }
+      };
+      
+      window.addEventListener('focus', handleFocus);
+      return () => window.removeEventListener('focus', handleFocus);
+  }, [currentUser, ministryId, loadData]);
+
   useEffect(() => {
       const url = new URL(window.location.href);
       if (url.searchParams.get('tab') !== currentTab) {

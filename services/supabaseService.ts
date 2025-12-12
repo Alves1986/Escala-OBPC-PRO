@@ -94,10 +94,14 @@ export const fetchRankingData = async (ministryId: string): Promise<RankingEntry
 
         // A. Assignments
         assignments?.forEach((assign: any) => {
+            if (!assign.member_id) return;
             const entry = rankingMap[assign.member_id];
+            // If the member was deleted but history exists, entry will be undefined
             if (!entry) return;
 
-            const eventTime = assign.events.date_time;
+            const eventTime = assign.events?.date_time;
+            if (!eventTime) return;
+
             const isPast = eventTime < now;
 
             if (assign.confirmed) {
@@ -112,6 +116,7 @@ export const fetchRankingData = async (ministryId: string): Promise<RankingEntry
 
         // B. Swaps (Penalties)
         swaps?.forEach((swap: any) => {
+            if (!swap.requester_id) return;
             const entry = rankingMap[swap.requester_id];
             if (!entry) return;
             entry.points -= 50; // -50 por solicitar troca
@@ -120,6 +125,7 @@ export const fetchRankingData = async (ministryId: string): Promise<RankingEntry
 
         // C. Interactions (Engagement)
         interactions?.forEach((int: any) => {
+            if (!int.user_id) return;
             const entry = rankingMap[int.user_id];
             if (!entry) return;
 
