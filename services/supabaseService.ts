@@ -19,7 +19,7 @@ if (SUPABASE_URL && SUPABASE_KEY && !isPreviewMode) {
 
 export const getSupabase = () => supabase;
 
-// ... (other exports: logout, loginWithEmail, etc. - keep unchanged)
+// ... (other exports like logout, login... keep unchanged until deleteMember)
 export const logout = async () => {
     if (isPreviewMode) return;
     if (!supabase) return;
@@ -82,7 +82,6 @@ export const joinMinistry = async (newMinistryId: string, roles: string[]) => {
         const newFunctions = [...new Set([...(profile.functions || []), ...roles])];
         await supabase.from('profiles').update({ allowed_ministries: newAllowed, functions: newFunctions }).eq('id', user.id);
         
-        // --- NEW: NOTIFY TEAM ---
         const msg = `${profile.name} entrou na equipe! 🎉`;
         await supabase.from('notifications').insert({ 
             ministry_id: cleanNewMid, 
@@ -92,7 +91,6 @@ export const joinMinistry = async (newMinistryId: string, roles: string[]) => {
             action_link: 'members' 
         });
         try { supabase.functions.invoke('push-notification', { body: { ministryId: cleanNewMid, title: "Novo Membro", message: msg, type: 'success' } }); } catch (e) {}
-        // -----------------------
 
         return { success: true, message: `Bem-vindo ao ministério ${cleanNewMid}!` };
     } catch (e: any) { return { success: false, message: e.message }; }
@@ -136,12 +134,11 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
             if (newAllowed.length > 0) {
                 updates.ministry_id = newAllowed[0];
             } else {
-                // Se não sobrou nenhum, define como null (ou 'none' se o banco não aceitar null)
-                updates.ministry_id = null; 
+                updates.ministry_id = null; // Sem ministério principal
             }
         }
 
-        // 4. Executa o Update com VERIFICAÇÃO DE COUNT (Correção Crítica)
+        // 4. Executa o Update com VERIFICAÇÃO DE COUNT
         const { error: updateError, count } = await supabase
             .from('profiles')
             .update(updates, { count: 'exact' })
@@ -149,19 +146,14 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
 
         if (updateError) {
             console.error("Erro no update:", updateError);
-            // Tratamento de Erro RLS Amigável
             if (updateError.code === '42501' || updateError.message.includes('policy')) {
-                return { success: false, message: "Permissão negada. Apenas Super Admins ou o próprio usuário podem alterar perfis. Contate o suporte para ajustar as Políticas RLS." };
-            }
-            if (updateError.code === '23502') { // Not Null Violation
-                 return { success: false, message: "Erro: O usuário deve pertencer a pelo menos um ministério principal." };
+                return { success: false, message: "Permissão negada (RLS). Execute o SQL de correção de políticas no painel do Supabase." };
             }
             return { success: false, message: `Falha ao salvar: ${updateError.message}` };
         }
 
-        // Verificação se alguma linha foi realmente alterada (pega erros silenciosos de RLS)
         if (count === 0) {
-            return { success: false, message: "Falha na exclusão: Permissão insuficiente ou usuário não modificável." };
+            return { success: false, message: "Falha na exclusão: Permissão insuficiente (RLS) ou usuário não encontrado." };
         }
 
         return { success: true, message: "Acesso do membro revogado com sucesso." };
@@ -172,13 +164,13 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
     }
 };
 
+// ... (Rest of exports: updateUserProfile, updateProfileMinistry... keep unchanged)
 export const updateUserProfile = async (name: string, whatsapp: string, avatar_url: string | undefined, functions: string[] | undefined, birthDate: string | undefined, ministryId: string | undefined) => {
     if (isPreviewMode) return { success: true, message: "Perfil Demo Atualizado" };
     if (!supabase) return { success: false, message: "Erro conexão" };
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, message: "Não autenticado" };
     
-    // CORREÇÃO AQUI: Removido 'updated_at' para evitar erro caso a coluna não exista no banco
     const updates: any = { name, whatsapp };
     
     if (avatar_url !== undefined) updates.avatar_url = avatar_url;
@@ -295,7 +287,7 @@ export const fetchMinistryAvailability = async (ministryId: string): Promise<{ a
             }
 
             if (metadata.type !== 'GENERAL') {
-                // Se não for uma nota geral (que fica no dia 1), adiciona como registro de disponibilidade
+                // Se não for nota geral, é registro de disponibilidade (data POSITIVA)
                 if (!availability[name]) availability[name] = [];
                 availability[name].push(uiDateKey);
             }
@@ -334,14 +326,11 @@ export const saveMemberAvailability = async (
 
     try {
         const [y, m] = targetMonth.split('-').map(Number);
-        
-        // Define intervalo exato do mês: YYYY-MM-01 até YYYY-MM-LastDay
         const startDate = `${targetMonth}-01`;
         const lastDay = new Date(y, m, 0).getDate();
         const endDate = `${targetMonth}-${String(lastDay).padStart(2, '0')}`;
 
         // Deleta TODAS as entradas existentes para esse usuário nesse mês
-        // Isso garante que se o usuário desmarcar um dia (tornando-o indisponível), ele suma do banco.
         const { error: deleteError } = await supabase.from('availability')
             .delete()
             .eq('member_id', userId)
@@ -352,7 +341,7 @@ export const saveMemberAvailability = async (
 
         const rowsToInsert: any[] = [];
         
-        // 1. Processa Datas de Disponibilidade
+        // 1. Processa Datas de Disponibilidade (Positiva)
         const availableDates = dates.filter(d => d.startsWith(targetMonth));
         
         for (const uiDate of availableDates) {
@@ -364,7 +353,7 @@ export const saveMemberAvailability = async (
             
             rowsToInsert.push({
                 member_id: userId,
-                date: datePart, // YYYY-MM-DD
+                date: datePart, 
                 note: Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null,
                 status: 'available' 
             });
@@ -393,12 +382,12 @@ export const saveMemberAvailability = async (
                     text: generalText
                 });
             } else {
-                // Se não existe (usuário não pode dia 1, mas deixou nota), cria entrada apenas para a nota
+                // Se não existe, cria entrada apenas para a nota
                 rowsToInsert.push({
                     member_id: userId,
                     date: firstOfMonth,
                     note: JSON.stringify({ type: 'GENERAL', text: generalText }),
-                    status: 'available' // Mantém 'available' por constraint do banco, mas a lógica de leitura ignora TYPE=GENERAL
+                    status: 'available' 
                 });
             }
         }
@@ -414,7 +403,7 @@ export const saveMemberAvailability = async (
     }
 };
 
-// ... (rest of the file: fetchRepertoire, addToRepertoire, etc. - keep unchanged)
+// ... (Keep the rest of the file unchanged: fetchRepertoire, addToRepertoire, etc.)
 export const fetchRepertoire = async (ministryId: string): Promise<RepertoireItem[]> => {
     if (!supabase) return [];
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');

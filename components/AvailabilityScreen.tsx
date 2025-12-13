@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { AvailabilityMap, AvailabilityNotesMap, User } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
-import { CalendarCheck, CheckCircle2, Lock, Save, MessageSquare, Sun, Moon, ShieldCheck, Unlock, ThumbsUp } from 'lucide-react';
+import { CalendarCheck, Lock, Save, MessageSquare, Sun, Moon, ShieldCheck, Unlock, ThumbsUp, XCircle, Info } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface Props {
@@ -91,9 +91,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
       }
       
       const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
-      
-      // Verifica o estado atual deste dia
-      // Formatos no tempDates: "YYYY-MM-DD" (Full), "YYYY-MM-DD_M" (Manhã), "YYYY-MM-DD_N" (Noite)
       const existingEntry = tempDates.find(d => d.startsWith(dateStr));
 
       const dateObj = new Date(year, month - 1, day);
@@ -101,26 +98,26 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
       let newDates = [...tempDates];
 
-      // Remove qualquer entrada existente para este dia antes de adicionar a nova
+      // Se já existe algo para este dia, removemos primeiro para aplicar a nova lógica
       if (existingEntry) {
           newDates = newDates.filter(d => !d.startsWith(dateStr));
       }
 
-      // Lógica de Toggle (Disponibilidade Positiva)
+      // Lógica Positiva: Clicar ADICIONA disponibilidade
       if (isSunday) {
-          // Domingo: Vazio (Não posso) -> Full (Posso Tudo) -> Manhã (Só Manhã) -> Noite (Só Noite) -> Vazio
+          // Ciclo Domingo: Vazio -> Full -> Manhã -> Noite -> Vazio
           if (!existingEntry) {
-              newDates.push(dateStr); // Full Available
+              newDates.push(dateStr); // Disponível Full
           } else if (existingEntry === dateStr) {
-              newDates.push(`${dateStr}_M`); // Available Morning Only
+              newDates.push(`${dateStr}_M`); // Só Manhã
           } else if (existingEntry.endsWith('_M')) {
-              newDates.push(`${dateStr}_N`); // Available Night Only
+              newDates.push(`${dateStr}_N`); // Só Noite
           } 
-          // Se era Noite (_N), já foi removido no filtro acima, volta para Vazio (Indisponível)
+          // Se era Noite (_N), já foi removido no filtro acima, então fica Vazio (Indisponível)
       } else {
-          // Dias Normais: Vazio (Não posso) -> Full (Posso) -> Vazio
+          // Dias Normais: Vazio -> Full -> Vazio
           if (!existingEntry) {
-              newDates.push(dateStr); // Full Available
+              newDates.push(dateStr);
           }
       }
       
@@ -132,10 +129,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
       const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
       const found = tempDates.find(d => d.startsWith(dateStr));
       
-      if (!found) return 'NONE'; // Unavailable (Default)
-      if (found.endsWith('_M')) return 'MORNING'; // Available Morning
-      if (found.endsWith('_N')) return 'NIGHT';   // Available Night
-      return 'FULL'; // Available All Day
+      if (!found) return 'UNAVAILABLE'; 
+      if (found.endsWith('_M')) return 'MORNING'; 
+      if (found.endsWith('_N')) return 'NIGHT';   
+      return 'FULL'; 
   };
 
   const handleSave = async () => {
@@ -176,7 +173,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
               </div>
               <div>
                   <h2 className="font-bold text-zinc-800 dark:text-white">Disponibilidade</h2>
-                  <p className="text-xs text-zinc-500">Marque os dias que você <span className="font-bold text-green-600 dark:text-green-400">PODERÁ</span> servir.</p>
+                  <p className="text-xs text-zinc-500">Marque os dias que você <span className="font-bold text-green-600 dark:text-green-400">PODE</span> servir.</p>
               </div>
           </div>
 
@@ -244,21 +241,22 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
                   {days.map(day => {
                       const status = getDayStatus(day);
-                      // Default style (NONE/Unavailable) -> Grey/Faded
-                      let styles = "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-transparent";
+                      
+                      // Estilo Padrão (Indisponível/Cinza)
+                      let styles = "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-transparent opacity-60";
                       let icon = null;
 
                       if (status === 'FULL') {
-                          // Available All Day -> Green
-                          styles = "bg-green-500 text-white shadow-md ring-2 ring-green-400 ring-offset-1 dark:ring-offset-zinc-900 font-bold";
+                          // Verde (Disponível Total)
+                          styles = "bg-green-600 text-white shadow-md ring-2 ring-green-500 ring-offset-1 dark:ring-offset-zinc-900 font-bold opacity-100";
                           icon = <ThumbsUp size={12} className="absolute top-1 right-1 opacity-90"/>;
                       } else if (status === 'MORNING') {
-                          // Available Morning Only -> Yellow/Orange
-                          styles = "bg-yellow-400 text-yellow-900 shadow-md ring-2 ring-yellow-300 ring-offset-1 dark:ring-offset-zinc-900 font-bold";
+                          // Amarelo (Manhã)
+                          styles = "bg-yellow-400 text-yellow-900 shadow-md ring-2 ring-yellow-300 ring-offset-1 dark:ring-offset-zinc-900 font-bold opacity-100";
                           icon = <Sun size={12} className="absolute top-1 right-1 opacity-80"/>;
                       } else if (status === 'NIGHT') {
-                          // Available Night Only -> Blue/Indigo
-                          styles = "bg-blue-600 text-white shadow-md ring-2 ring-blue-500 ring-offset-1 dark:ring-offset-zinc-900 font-bold";
+                          // Azul (Noite)
+                          styles = "bg-blue-600 text-white shadow-md ring-2 ring-blue-500 ring-offset-1 dark:ring-offset-zinc-900 font-bold opacity-100";
                           icon = <Moon size={12} className="absolute top-1 right-1 opacity-90"/>;
                       }
 
@@ -267,7 +265,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                               key={day}
                               onClick={() => handleDayClick(day)}
                               className={`aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all active:scale-95 ${styles}`}
-                              title={status === 'FULL' ? 'Disponível o dia todo' : status === 'NONE' ? 'Indisponível' : status === 'MORNING' ? 'Disponível apenas Manhã' : 'Disponível apenas Noite'}
+                              title={status === 'FULL' ? 'Disponível o dia todo' : status === 'UNAVAILABLE' ? 'Indisponível' : status === 'MORNING' ? 'Disponível apenas Manhã' : 'Disponível apenas Noite'}
                           >
                               <span className="text-sm sm:text-base">{day}</span>
                               {icon}
@@ -276,10 +274,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
                   })}
               </div>
 
-              {/* Legend - Updated for Positive Availability */}
+              {/* Legend - Updated */}
               <div className="flex flex-wrap justify-center gap-4 text-[10px] text-zinc-500 uppercase font-bold tracking-wide mb-6">
-                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600"/> Indisponível</div>
-                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-green-500"/> Disponível</div>
+                  <div className="flex items-center gap-1 opacity-60"><div className="w-3 h-3 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600"/> Indisponível</div>
+                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-green-600"/> Disponível</div>
                   <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-yellow-400"/> Só Manhã</div>
                   <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-blue-600"/> Só Noite</div>
               </div>
