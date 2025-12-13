@@ -57,7 +57,48 @@ Deno.serve(async (req: Request) => {
         throw new Error("Variáveis de ambiente do Supabase (URL/KEY) não configuradas no Dashboard.");
     }
 
+    // Inicializa cliente com Service Role para poder validar o usuário e ler perfis/inscrições
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // --- SECURITY CHECK START ---
+    // Valida se o usuário que chamou a função tem permissão para o ministryId alvo
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+        return new Response(JSON.stringify({ success: false, message: 'Authorization header missing' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+
+    if (userError || !user) {
+        return new Response(JSON.stringify({ success: false, message: 'Invalid User Token' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // Normaliza ID do ministério alvo
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+
+    // Busca perfil do usuário para verificar permissões
+    const { data: callerProfile } = await supabase
+        .from('profiles')
+        .select('ministry_id, allowed_ministries, is_admin')
+        .eq('id', user.id)
+        .single();
+
+    if (!callerProfile) {
+        return new Response(JSON.stringify({ success: false, message: 'Profile not found' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // Verifica se o usuário é Admin, se pertence ao ministério principal ou se tem permissão secundária
+    const hasAccess = 
+        callerProfile.is_admin || 
+        callerProfile.ministry_id === cleanMid || 
+        (callerProfile.allowed_ministries && callerProfile.allowed_ministries.includes(cleanMid));
+
+    if (!hasAccess) {
+        console.warn(`Acesso negado: Usuário ${user.id} tentou enviar para ${cleanMid} sem permissão.`);
+        return new Response(JSON.stringify({ success: false, message: 'Forbidden: You do not have permission to send notifications to this ministry.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    // --- SECURITY CHECK END ---
 
     // 6. Configuração VAPID (Push Notifications) via Env Vars
     const publicKey = Deno.env.get('VAPID_PUBLIC_KEY');
@@ -90,9 +131,7 @@ Deno.serve(async (req: Request) => {
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 })
     }
 
-    // 7. Lógica de Envio
-    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-')
-
+    // 7. Lógica de Envio (Coleta de destinatários)
     const { data: profiles } = await supabase
         .from('profiles')
         .select('id')

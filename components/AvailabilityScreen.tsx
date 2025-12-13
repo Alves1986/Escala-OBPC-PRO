@@ -35,11 +35,16 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   const isAdmin = currentUser?.role === 'admin';
 
+  // Check if window is open
   const isWindowOpen = () => {
-      if (isAdmin) return true;
-      if (!availabilityWindow?.start || !availabilityWindow?.end) return true;
+      if (isAdmin) return true; // Admins always open
+      if (!availabilityWindow?.start || !availabilityWindow?.end) return true; // Default open if not set
+      
       const now = new Date();
-      return now >= new Date(availabilityWindow.start) && now <= new Date(availabilityWindow.end);
+      const start = new Date(availabilityWindow.start);
+      const end = new Date(availabilityWindow.end);
+      
+      return now >= start && now <= end;
   };
 
   const isEditable = isWindowOpen();
@@ -66,7 +71,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const handleNextMonth = () => onMonthChange(adjustMonth(currentMonth, 1));
 
   const handleDayClick = (day: number) => {
-      if (!isEditable) return;
+      if (!isEditable) {
+          addToast("O período de marcação de disponibilidade está encerrado.", "warning");
+          return;
+      }
       
       const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
       const existing = tempDates.find(d => d.startsWith(dateStr));
@@ -113,7 +121,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
       const notesToSave: Record<string, string> = {};
       if (generalNote.trim()) {
-          // Always use '00' for general notes
           notesToSave[`${currentMonth}-00`] = generalNote.trim();
       }
 
@@ -147,9 +154,12 @@ export const AvailabilityScreen: React.FC<Props> = ({
       </div>
 
       {!isEditable && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 p-4 rounded-xl flex items-center gap-3 text-red-700 dark:text-red-400">
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 p-4 rounded-xl flex items-center gap-3 text-amber-700 dark:text-amber-400 shadow-sm animate-pulse">
               <Lock size={20} />
-              <span className="text-sm font-bold">Período de edição encerrado. Contate o líder.</span>
+              <div>
+                  <span className="text-sm font-bold block">Período de Edição Encerrado</span>
+                  <span className="text-xs opacity-90">A agenda está fechada. Entre em contato com seu líder para alterações de emergência.</span>
+              </div>
           </div>
       )}
 
@@ -202,7 +212,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                               key={day}
                               onClick={() => handleDayClick(day)}
                               disabled={!isEditable}
-                              className={`aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all active:scale-95 ${styles} ${!isEditable ? 'opacity-60 cursor-not-allowed' : ''}`}
+                              className={`aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all active:scale-95 ${styles} ${!isEditable ? 'opacity-60 cursor-not-allowed grayscale-[0.3]' : ''}`}
                           >
                               <span className="text-sm sm:text-base font-bold">{day}</span>
                               {icon}
@@ -230,7 +240,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                       onChange={(e) => { setGeneralNote(e.target.value); setHasChanges(true); }}
                       disabled={!isEditable}
                       className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 text-sm text-zinc-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]"
-                      placeholder="Ex: Viajarei do dia 10 ao 20..."
+                      placeholder={isEditable ? "Ex: Viajarei do dia 10 ao 20..." : "Edição de observações encerrada."}
                   />
               </div>
 
