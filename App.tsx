@@ -1,4 +1,5 @@
 
+// ... existing imports ...
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, Calendar, CalendarCheck, RefreshCcw, Music, 
@@ -161,6 +162,12 @@ const InnerApp = () => {
   }, []);
 
   useEffect(() => {
+    // 1. Salvar preferência automaticamente
+    try {
+        localStorage.setItem('themeMode', themeMode);
+    } catch(e) {}
+
+    // 2. Aplicar tema
     const applyTheme = () => {
         let targetTheme: 'light' | 'dark' = 'light';
         if (themeMode === 'system') {
@@ -182,13 +189,9 @@ const InnerApp = () => {
 
   const handleSetThemeMode = (mode: ThemeMode) => setThemeMode(mode);
   
+  // Função mantida para compatibilidade, mas agora apenas confirma visualmente
   const handleSaveTheme = () => {
-      try {
-          localStorage.setItem('themeMode', themeMode);
-          addToast("Preferência de tema salva com sucesso!", "success");
-      } catch (e) {
-          addToast("Erro ao salvar preferência.", "warning");
-      }
+      addToast("Tema salvo automaticamente.", "info");
   };
 
   const toggleVisualTheme = () => {
@@ -530,6 +533,7 @@ const InnerApp = () => {
             </div>
         )}
 
+        {/* ... (Existing Tabs: calendar, schedule-editor, events, availability, swaps, ranking, repertoire) ... */}
         {currentTab === 'calendar' && (
             <div className="space-y-6 animate-fade-in">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
