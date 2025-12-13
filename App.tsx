@@ -472,7 +472,7 @@ const InnerApp = () => {
                         onToggleAdmin={async (email, currentStatus, name) => {
                             if (!email) return addToast("Usuário sem e-mail não pode ser admin.", "error");
                             const newStatus = !currentStatus;
-                            await Supabase.toggleAdminSQL(email, newStatus);
+                            await Supabase.toggleAdminSQL(email, newStatus, ministryId);
                             loadData();
                             addToast(`${name} agora é ${newStatus ? 'Admin' : 'Membro'}.`, 'success');
                         }}

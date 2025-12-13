@@ -12,8 +12,6 @@ import { saveOfflineData, loadOfflineData } from '../services/offlineService';
 
 export function useMinistryData(ministryId: string | null, currentMonth: string, currentUser: User | null) {
   const { addToast } = useToast();
-
-  // Loading State
   const [isLoading, setIsLoading] = useState(true);
 
   // Data States
@@ -31,7 +29,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   const [globalConflicts, setGlobalConflicts] = useState<GlobalConflictMap>({});
   const [roles, setRoles] = useState<Role[]>([]);
   const [ministryTitle, setMinistryTitle] = useState("");
-  // Availability Window State
   const [availabilityWindow, setAvailabilityWindow] = useState<{ start?: string, end?: string }>({});
 
   const refreshData = useCallback(async (useCache = true) => {
@@ -40,10 +37,9 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
         return;
     }
 
-    // Chave única para o cache baseada no ministério e mês atual
-    const CACHE_KEY = `offline_data_${ministryId}_${currentMonth}`;
+    // CORREÇÃO: Cache versionado para evitar erros de estrutura antiga
+    const CACHE_KEY = `offline_data_${ministryId}_${currentMonth}_v2`;
 
-    // Tentativa de carregar cache primeiro (Stale-While-Revalidate pattern) para UX instantânea
     let hasCache = false;
     if (useCache) {
         try {
@@ -68,8 +64,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
                 setRepertoire(cached.rep);
                 setGlobalConflicts(cached.conflicts);
                 hasCache = true;
-                
-                // Se tiver cache, remove o loading imediatamente para mostrar a UI
                 setIsLoading(false); 
             }
         } catch (e) {
@@ -78,17 +72,9 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     }
 
     try {
-        // Carregamento paralelo da Rede
         const [
-            settingsResult,
-            schedResult,
-            membersResult,
-            availResult,
-            notifsResult,
-            annResult,
-            swapsResult,
-            repResult,
-            conflictsResult
+            settingsResult, schedResult, membersResult, availResult,
+            notifsResult, annResult, swapsResult, repResult, conflictsResult
         ] = await Promise.allSettled([
             Supabase.fetchMinistrySettings(ministryId),
             Supabase.fetchMinistrySchedule(ministryId, currentMonth),
@@ -101,14 +87,9 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
             Supabase.fetchGlobalSchedules(currentMonth, ministryId)
         ]);
 
-        // Helper para extrair valor seguro e logar falhas silenciosamente
         const getValue = <T>(result: PromiseSettledResult<T>, fallback: T, label: string): T => {
-            if (result.status === 'fulfilled') {
-                return result.value;
-            } else {
-                console.warn(`Sync Warn (${label}):`, result.reason);
-                return fallback;
-            }
+            if (result.status === 'fulfilled') return result.value;
+            else { console.warn(`Sync Warn (${label}):`, result.reason); return fallback; }
         };
 
         const settings = getValue(settingsResult, { displayName: '', roles: [] }, 'Configurações');
@@ -121,26 +102,19 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
         const rep = getValue(repResult, [], 'Repertório');
         const conflicts = getValue(conflictsResult, {}, 'Conflitos Globais');
 
-        // Se houver falhas críticas de rede e não tiver cache, avisa.
         const anyFailure = [settingsResult, schedResult, membersResult].some(r => r.status === 'rejected');
-        
         if (anyFailure && !hasCache) {
             addToast("Conexão instável. Alguns dados podem não carregar.", 'warning');
         }
 
-        // 1. Atualização de estado em lote (Dados da Nuvem - Sobrescreve cache se diferente)
-        
         // --- LOGIC: Handle Roles Fallback ---
         let finalRoles = settings.roles;
-        
-        // SE as roles vierem vazias do banco, usa o padrão local para evitar tabela vazia
         if (!finalRoles || finalRoles.length === 0) {
             const cleanId = ministryId.trim().toLowerCase();
             finalRoles = DEFAULT_ROLES[cleanId] || DEFAULT_ROLES['default'] || [];
         }
         setRoles(finalRoles);
-        
-        // Update Title if present
+
         if (settings.displayName) {
             setMinistryTitle(settings.displayName);
         } else if (!ministryTitle && ministryId) {
@@ -155,40 +129,25 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
         setEvents(schedData.events);
         setSchedule(schedData.schedule);
         setAttendance(schedData.attendance);
-
         setMembersMap(membersData.memberMap);
         setPublicMembers(membersData.publicList);
-
         setAvailability(availData.availability);
         setAvailabilityNotes(availData.notes);
-
         setNotifications(notifs);
         setAnnouncements(ann);
-
         setSwapRequests(swaps);
         setRepertoire(rep);
-        
         setGlobalConflicts(conflicts);
 
-        // 2. Salvar no Cache Local Assíncrono (IndexedDB)
         saveOfflineData(CACHE_KEY, {
             timestamp: Date.now(),
-            settings: { ...settings, roles: finalRoles }, // Save computed roles to cache
-            schedData,
-            membersData,
-            availData,
-            notifs,
-            ann,
-            swaps,
-            rep,
-            conflicts
+            settings: { ...settings, roles: finalRoles },
+            schedData, membersData, availData, notifs, ann, swaps, rep, conflicts
         });
 
     } catch (error) {
         console.error("Erro Crítico Global ao carregar dados:", error);
-        if (!hasCache) {
-            addToast("Erro de conexão e sem dados locais.", "error");
-        }
+        if (!hasCache) addToast("Erro de conexão e sem dados locais.", "error");
     } finally {
         setIsLoading(false);
     }
@@ -201,23 +160,13 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   }, [refreshData]);
 
   return {
-    events, setEvents,
-    schedule, setSchedule,
-    attendance, setAttendance,
-    membersMap, setMembersMap,
-    publicMembers, setPublicMembers,
-    availability, setAvailability,
-    availabilityNotes, setAvailabilityNotes,
-    notifications, setNotifications,
-    announcements, setAnnouncements,
-    repertoire, setRepertoire,
-    swapRequests, setSwapRequests,
-    globalConflicts, setGlobalConflicts,
-    roles, setRoles,
-    ministryTitle, setMinistryTitle,
-    availabilityWindow,
-    setAvailabilityWindow, 
-    isLoading, 
-    refreshData
+    events, setEvents, schedule, setSchedule, attendance, setAttendance,
+    membersMap, setMembersMap, publicMembers, setPublicMembers,
+    availability, setAvailability, availabilityNotes, setAvailabilityNotes,
+    notifications, setNotifications, announcements, setAnnouncements,
+    repertoire, setRepertoire, swapRequests, setSwapRequests,
+    globalConflicts, setGlobalConflicts, roles, setRoles,
+    ministryTitle, setMinistryTitle, availabilityWindow, setAvailabilityWindow, 
+    isLoading, refreshData
   };
 }
