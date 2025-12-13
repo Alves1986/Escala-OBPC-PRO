@@ -337,7 +337,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                                   value={spotifyQuery} 
                                   onChange={e => setSpotifyQuery(e.target.value)}
                                   onKeyDown={e => e.key === 'Enter' && handleSpotifySearch()}
-                                  className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-green-500"
+                                  className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-green-500 text-zinc-900 dark:text-zinc-100"
                               />
                               <button 
                                   onClick={handleSpotifySearch}
@@ -388,7 +388,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                                   value={youtubeQuery} 
                                   onChange={e => setYoutubeQuery(e.target.value)}
                                   onKeyDown={e => e.key === 'Enter' && handleYouTubeSearch()}
-                                  className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-red-500"
+                                  className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-red-500 text-zinc-900 dark:text-zinc-100"
                               />
                               <button 
                                   onClick={handleYouTubeSearch}
@@ -437,7 +437,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                                   value={cifraQuery} 
                                   onChange={e => setCifraQuery(e.target.value)}
                                   onKeyDown={e => e.key === 'Enter' && handleCifraSearch()}
-                                  className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-orange-500"
+                                  className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-orange-500 text-zinc-900 dark:text-zinc-100"
                               />
                               <button 
                                   onClick={handleCifraSearch}
@@ -545,11 +545,11 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                       <div className="space-y-4 animate-fade-in">
                           <div>
                               <label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Título</label>
-                              <input type="text" placeholder="Ex: Todavia Me Alegrarei" value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"/>
+                              <input type="text" placeholder="Ex: Todavia Me Alegrarei" value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100"/>
                           </div>
                           <div>
                               <label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Link (URL)</label>
-                              <input type="text" placeholder="https://..." value={link} onChange={e => setLink(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"/>
+                              <input type="text" placeholder="https://..." value={link} onChange={e => setLink(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100"/>
                           </div>
                           <div className="flex justify-end">
                               <button onClick={() => handleAddToDraft()} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-lg transition-all active:scale-95 flex items-center justify-center gap-2">
@@ -574,7 +574,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                           type="date" 
                           value={date} 
                           onChange={e => handleDateChange(e.target.value)}
-                          className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-green-500 font-medium transition-all"
+                          className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-green-500 font-medium transition-all text-zinc-900 dark:text-zinc-100"
                       />
                   </div>
 

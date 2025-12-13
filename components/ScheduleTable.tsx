@@ -173,7 +173,7 @@ const MemberSelector = ({
                         <div className="p-2 border-b border-zinc-100 dark:border-zinc-700 sticky top-0 bg-white dark:bg-zinc-800 z-10">
                             <div className="relative">
                                 <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400"/>
-                                <input ref={searchInputRef} placeholder="Buscar membro..." value={search} onChange={e => setSearch(e.target.value)} className="w-full text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-8 p-2 focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
+                                <input ref={searchInputRef} placeholder="Buscar membro..." value={search} onChange={e => setSearch(e.target.value)} className="w-full text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-8 p-2 focus:ring-2 focus:ring-blue-500 outline-none transition-all text-zinc-900 dark:text-zinc-100" />
                             </div>
                         </div>
                         <div className="overflow-y-auto custom-scrollbar p-1 flex-1">

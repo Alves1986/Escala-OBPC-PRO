@@ -75,12 +75,12 @@ export const ToolsMenu: React.FC<Props> = ({
                     <select 
                       value={selectedMember} 
                       onChange={e => setSelectedMember(e.target.value)}
-                      className="w-full text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-600 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-600 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100"
                     >
                       <option value="">Selecione...</option>
                       {allMembers.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
-                    <button onClick={handleIndividual} className="bg-zinc-100 dark:bg-zinc-700 p-2.5 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-600 transition-colors border border-zinc-200 dark:border-zinc-600">
+                    <button onClick={handleIndividual} className="bg-zinc-100 dark:bg-zinc-700 p-2.5 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-600 transition-colors border border-zinc-200 dark:border-zinc-600 text-zinc-700 dark:text-zinc-200">
                       <FileText size={18} />
                     </button>
                   </div>

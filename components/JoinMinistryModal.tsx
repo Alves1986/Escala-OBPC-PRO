@@ -98,7 +98,7 @@ export const JoinMinistryModal: React.FC<Props> = ({ isOpen, onClose, onJoin, al
                             className={`flex items-center justify-between p-3 rounded-xl border text-left transition-all ${
                                 selectedMinistry === m.id
                                 ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-700 dark:text-blue-300 ring-1 ring-blue-500'
-                                : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:border-blue-300 dark:hover:border-zinc-600'
+                                : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 hover:border-blue-300 dark:hover:border-zinc-600'
                             }`}
                         >
                             <span className="flex items-center gap-2">
@@ -130,7 +130,7 @@ export const JoinMinistryModal: React.FC<Props> = ({ isOpen, onClose, onJoin, al
                                   className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 ${
                                       isSelected 
                                       ? 'bg-blue-600 text-white border-blue-500 shadow-md' 
-                                      : 'bg-zinc-50 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-zinc-400'
+                                      : 'bg-zinc-50 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:border-zinc-400 hover:text-zinc-900 dark:hover:text-white'
                                   }`}
                               >
                                   {role}

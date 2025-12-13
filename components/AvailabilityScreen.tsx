@@ -146,10 +146,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
               <select 
                   value={selectedMember} 
                   onChange={e => setSelectedMember(e.target.value)}
-                  className="w-full p-2 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm"
+                  className="w-full p-2.5 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white font-medium text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-colors"
               >
-                  <option value="">Selecione...</option>
-                  {allMembersList.map(m => <option key={m} value={m}>{m}</option>)}
+                  <option value="" className="text-zinc-500">Selecione...</option>
+                  {allMembersList.map(m => <option key={m} value={m} className="text-zinc-900 dark:text-zinc-100 bg-white dark:bg-zinc-800">{m}</option>)}
               </select>
           </div>
       )}
@@ -215,7 +215,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                       value={generalNote}
                       onChange={(e) => { setGeneralNote(e.target.value); setHasChanges(true); }}
                       disabled={!isEditable}
-                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]"
+                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 text-sm text-zinc-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]"
                       placeholder="Ex: Viajarei do dia 10 ao 20..."
                   />
               </div>

@@ -116,7 +116,7 @@ export const SettingsScreen: React.FC<Props> = ({
                                 type="text"
                                 value={tempTitle}
                                 onChange={(e) => setTempTitle(e.target.value)}
-                                className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100"
                                 placeholder="Ex: Equipe de Louvor"
                             />
                             <button 
@@ -142,7 +142,7 @@ export const SettingsScreen: React.FC<Props> = ({
                                     type="datetime-local"
                                     value={availStart}
                                     onChange={(e) => setAvailStart(e.target.value)}
-                                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-zinc-900 dark:text-zinc-100"
                                 />
                             </div>
                             <div>
@@ -153,7 +153,7 @@ export const SettingsScreen: React.FC<Props> = ({
                                     type="datetime-local"
                                     value={availEnd}
                                     onChange={(e) => setAvailEnd(e.target.value)}
-                                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-zinc-900 dark:text-zinc-100"
                                 />
                             </div>
                         </div>
