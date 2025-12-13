@@ -24,45 +24,111 @@ export const CalendarGrid: React.FC<Props> = ({ currentMonth, events, schedule, 
     return events.filter(e => e.iso.startsWith(dateStr));
   };
 
+  const getAssignedStats = (eventIso: string) => {
+      let assignedCount = 0;
+      roles.forEach(r => {
+          if (schedule[`${eventIso}_${r}`]) assignedCount++;
+      });
+      return { 
+          count: assignedCount, 
+          total: roles.length,
+          percent: roles.length > 0 ? (assignedCount / roles.length) * 100 : 0
+      };
+  };
+
   return (
-    <div className="bg-white dark:bg-zinc-800 rounded-2xl p-6 shadow-sm border border-zinc-200 dark:border-zinc-700">
-      <div className="grid grid-cols-7 gap-4 mb-4">
-        {['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'].map(d => (
-          <div key={d} className="text-center text-xs font-bold text-zinc-400 uppercase tracking-wider">{d}</div>
+    <div className="bg-white dark:bg-zinc-800 rounded-2xl p-2 md:p-6 shadow-sm border border-zinc-200 dark:border-zinc-700">
+      {/* Weekday Headers */}
+      <div className="grid grid-cols-7 mb-2">
+        {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(d => (
+          <div key={d} className="text-center text-[10px] md:text-xs font-bold text-zinc-400 uppercase tracking-wider py-1">{d}</div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-2 md:gap-4">
-        {/* Blanks rendered always to maintain grid structure on all devices */}
-        {blanks.map(i => <div key={`blank-${i}`} />)}
+      
+      {/* Grid */}
+      <div className="grid grid-cols-7 gap-1 md:gap-3 auto-rows-fr">
+        {blanks.map(i => <div key={`blank-${i}`} className="min-h-[80px] md:min-h-[120px]" />)}
         
         {days.map(day => {
           const dayEvents = getEventsForDay(day);
           const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
-          
-          // Use getLocalDateISOString for correct "Today" comparison respecting timezone
           const isToday = getLocalDateISOString() === dateStr;
           
           return (
-             <div key={day} className={`min-h-[100px] bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-zinc-100 dark:border-zinc-800 p-2 flex flex-col transition-all hover:border-zinc-300 dark:hover:border-zinc-600 ${isToday ? 'ring-2 ring-blue-500 bg-blue-50/10' : ''}`}>
-                <span className={`text-sm font-bold mb-1 ${isToday ? 'text-blue-500' : 'text-zinc-500'}`}>{day}</span>
-                <div className="flex-1 space-y-1.5">
-                  {dayEvents.map(evt => (
-                    <div 
-                        key={evt.iso} 
-                        onClick={() => onEventClick && onEventClick({ iso: evt.iso, title: evt.title, dateDisplay: evt.dateDisplay })}
-                        className="bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 p-1.5 rounded-lg text-[10px] border-l-2 border-blue-500 cursor-pointer transition-colors"
-                    >
-                       <div className="font-bold text-blue-700 dark:text-blue-300 truncate">{evt.title}</div>
-                       <div className="text-blue-600 dark:text-blue-400 opacity-80">{evt.iso.split('T')[1]}</div>
-                       {/* Mini dots indicator for assigned roles */}
-                       <div className="flex gap-0.5 mt-1 flex-wrap">
-                          {roles.map(r => {
-                             const assigned = schedule[`${evt.iso}_${r}`];
-                             return assigned ? <div key={r} className="w-1.5 h-1.5 rounded-full bg-blue-500/60" title={`${r}: ${assigned}`} /> : null;
-                          })}
-                       </div>
-                    </div>
-                  ))}
+             <div 
+                key={day} 
+                className={`relative min-h-[85px] md:min-h-[120px] bg-zinc-50 dark:bg-zinc-900/50 rounded-lg md:rounded-xl border p-1 md:p-2 flex flex-col transition-all
+                    ${isToday 
+                        ? 'border-blue-300 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-900/10 ring-1 ring-blue-400/30' 
+                        : 'border-zinc-100 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-600'
+                    }
+                `}
+             >
+                {/* Day Number */}
+                <span className={`text-[10px] md:text-sm font-bold mb-1 block text-center md:text-left
+                    ${isToday 
+                        ? 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 rounded-full w-5 h-5 md:w-auto md:h-auto flex items-center justify-center mx-auto md:mx-0' 
+                        : 'text-zinc-500'
+                    }`}
+                >
+                    {day}
+                </span>
+
+                {/* Events Container */}
+                <div className="flex-1 flex flex-col gap-1 md:gap-1.5 overflow-hidden">
+                  {dayEvents.map(evt => {
+                    const stats = getAssignedStats(evt.iso);
+                    const time = evt.iso.split('T')[1].slice(0, 5);
+                    const isFullyStaffed = stats.percent >= 100;
+
+                    return (
+                        <button 
+                            key={evt.iso} 
+                            onClick={() => onEventClick && onEventClick({ iso: evt.iso, title: evt.title, dateDisplay: evt.dateDisplay })}
+                            className="w-full text-left bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 rounded md:rounded-lg p-1 md:p-2 shadow-sm transition-all active:scale-95 overflow-hidden group"
+                        >
+                           {/* Mobile: Compact Time Pill */}
+                           <div className="md:hidden flex flex-col items-center justify-center gap-0.5">
+                                <div className={`text-[9px] font-black px-1.5 py-0.5 rounded-sm w-full text-center tracking-tight
+                                    ${isFullyStaffed 
+                                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
+                                        : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                    }`}>
+                                    {time}
+                                </div>
+                                
+                                {/* Tiny Dots for Staffing Status */}
+                                <div className="flex justify-center gap-0.5 h-1 w-full px-0.5">
+                                    {stats.count > 0 ? (
+                                        Array.from({ length: Math.min(stats.count, 4) }).map((_, i) => (
+                                            <div key={i} className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-600"></div>
+                                        ))
+                                    ) : (
+                                        <div className="w-1 h-1 rounded-full border border-zinc-300 dark:border-zinc-600"></div>
+                                    )}
+                                </div>
+                           </div>
+
+                           {/* Desktop: Detailed Card */}
+                           <div className="hidden md:block">
+                               <div className="flex justify-between items-center mb-1">
+                                   <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-900 px-1.5 rounded">{time}</span>
+                                   {isFullyStaffed && <div className="w-1.5 h-1.5 rounded-full bg-green-500" title="Equipe completa"></div>}
+                               </div>
+                               <div className="text-[11px] font-bold text-zinc-800 dark:text-zinc-200 truncate leading-tight mb-1" title={evt.title}>
+                                   {evt.title}
+                               </div>
+                               {/* Progress Bar */}
+                               <div className="h-1 w-full bg-zinc-100 dark:bg-zinc-900 rounded-full overflow-hidden">
+                                   <div 
+                                      className={`h-full rounded-full transition-all duration-500 ${isFullyStaffed ? 'bg-green-500' : 'bg-blue-500'}`}
+                                      style={{ width: `${stats.percent}%` }}
+                                   />
+                               </div>
+                           </div>
+                        </button>
+                    );
+                  })}
                 </div>
              </div>
           );
