@@ -1,4 +1,5 @@
 
+// ... existing imports
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
     SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, 
@@ -118,7 +119,7 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
         const msg = data?.message || "";
         // Detecta se a mensagem de erro é do sistema antigo de push
         if (msg.includes("inscrito") || msg.includes("dispositivo") || msg.includes("Ministry ID missing")) {
-             return { success: false, message: "ALERTA: O código da Edge Function no Supabase está desatualizado. Copie o novo código de 'supabase/functions/push-notification/index.ts' e faça o Deploy." };
+             return { success: false, message: "⚠️ O código do servidor (Supabase Edge Function) está desatualizado. Por favor, faça o deploy do novo código em supabase/functions/push-notification." };
         }
         return { success: false, message: msg || "Erro ao remover membro." };
     }
