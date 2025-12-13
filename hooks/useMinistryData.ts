@@ -12,6 +12,9 @@ import { saveOfflineData, loadOfflineData } from '../services/offlineService';
 export function useMinistryData(ministryId: string | null, currentMonth: string, currentUser: User | null) {
   const { addToast } = useToast();
 
+  // Loading State
+  const [isLoading, setIsLoading] = useState(true);
+
   // Data States
   const [events, setEvents] = useState<any[]>([]);
   const [schedule, setSchedule] = useState<ScheduleMap>({});
@@ -34,14 +37,48 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   const [errors, setErrors] = useState<string[]>([]);
 
   const refreshData = useCallback(async () => {
-    if (!currentUser || !ministryId) return;
+    if (!currentUser || !ministryId) {
+        setIsLoading(false);
+        return;
+    }
 
     // Chave única para o cache baseada no ministério e mês atual
     const CACHE_KEY = `offline_data_${ministryId}_${currentMonth}`;
 
+    // Tentativa de carregar cache primeiro (Stale-While-Revalidate pattern) para UX instantânea
+    let hasCache = false;
     try {
-        // Carregamento paralelo RESILIENTE (Partial Failure Tolerance)
-        // Se uma requisição falhar (ex: notificações), as outras continuam.
+        const cached: any = await loadOfflineData(CACHE_KEY);
+        if (cached) {
+            setMinistryTitle(cached.settings.displayName || ministryId.charAt(0).toUpperCase() + ministryId.slice(1));
+            setRoles(cached.settings.roles);
+            setAvailabilityWindow({
+                start: cached.settings.availabilityStart,
+                end: cached.settings.availabilityEnd
+            });
+            setEvents(cached.schedData.events);
+            setSchedule(cached.schedData.schedule);
+            setAttendance(cached.schedData.attendance);
+            setMembersMap(cached.membersData.memberMap);
+            setPublicMembers(cached.membersData.publicList);
+            setAvailability(cached.availData.availability);
+            setAvailabilityNotes(cached.availData.notes || {});
+            setNotifications(cached.notifs);
+            setAnnouncements(cached.ann);
+            setSwapRequests(cached.swaps);
+            setRepertoire(cached.rep);
+            setGlobalConflicts(cached.conflicts);
+            hasCache = true;
+            
+            // Se tiver cache, remove o loading imediatamente para mostrar a UI
+            setIsLoading(false); 
+        }
+    } catch (e) {
+        console.error("Erro leitura cache:", e);
+    }
+
+    try {
+        // Carregamento paralelo da Rede
         const [
             settingsResult,
             schedResult,
@@ -87,18 +124,15 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
         const rep = getValue(repResult, [], 'Repertório');
         const conflicts = getValue(conflictsResult, {}, 'Conflitos Globais');
 
-        // Atualiza estado de erros e notifica usuário se houver falhas
         setErrors(currentErrors);
-        if (currentErrors.length > 0) {
-            // Agrupa erros em uma única notificação para não poluir a tela
-            const errorMsg = currentErrors.length > 3 
-                ? `Erro ao carregar ${currentErrors.length} módulos. Verifique sua conexão.`
-                : `Erro ao carregar: ${currentErrors.join(', ')}.`;
-            
-            addToast(errorMsg, 'error');
+        
+        // Se houver erros críticos e não tiver cache, avisa. Se tiver cache, avisa discretamente.
+        if (currentErrors.length > 0 && !hasCache) {
+            const errorMsg = `Erro de conexão. Alguns dados podem estar desatualizados.`;
+            addToast(errorMsg, 'warning');
         }
 
-        // 1. Atualização de estado em lote (Dados da Nuvem)
+        // 1. Atualização de estado em lote (Dados da Nuvem - Sobrescreve cache se diferente)
         if (settings.displayName) {
             setMinistryTitle(settings.displayName || ministryId.charAt(0).toUpperCase() + ministryId.slice(1));
             setRoles(settings.roles);
@@ -142,50 +176,17 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
 
     } catch (error) {
         console.error("Erro Crítico Global ao carregar dados:", error);
-
-        // 3. Fallback: Tentar carregar do IndexedDB
-        try {
-            const cached: any = await loadOfflineData(CACHE_KEY);
-            
-            if (cached) {
-                setMinistryTitle(cached.settings.displayName || ministryId.charAt(0).toUpperCase() + ministryId.slice(1));
-                setRoles(cached.settings.roles);
-                setAvailabilityWindow({
-                    start: cached.settings.availabilityStart,
-                    end: cached.settings.availabilityEnd
-                });
-
-                setEvents(cached.schedData.events);
-                setSchedule(cached.schedData.schedule);
-                setAttendance(cached.schedData.attendance);
-
-                setMembersMap(cached.membersData.memberMap);
-                setPublicMembers(cached.membersData.publicList);
-
-                setAvailability(cached.availData.availability);
-                setAvailabilityNotes(cached.availData.notes || {});
-
-                setNotifications(cached.notifs);
-                setAnnouncements(cached.ann);
-
-                setSwapRequests(cached.swaps);
-                setRepertoire(cached.rep);
-                
-                setGlobalConflicts(cached.conflicts);
-
-                addToast("Modo Offline: Dados carregados do cache.", "warning");
-                return; 
-            }
-        } catch (e) {
-            console.error("Erro ao acessar cache offline:", e);
+        if (!hasCache) {
+            addToast("Erro de conexão e sem dados locais.", "error");
         }
-
-        addToast("Erro de conexão e sem dados locais.", "error");
+    } finally {
+        setIsLoading(false);
     }
 
   }, [currentUser, ministryId, currentMonth, addToast]);
 
   useEffect(() => {
+     setIsLoading(true);
      refreshData();
   }, [refreshData]);
 
@@ -206,6 +207,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     ministryTitle, setMinistryTitle,
     availabilityWindow,
     errors,
+    isLoading, // Exportando estado de carregamento
     refreshData
   };
 }

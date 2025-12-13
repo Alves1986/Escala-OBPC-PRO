@@ -1,5 +1,4 @@
 
-// ... existing imports ...
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, Calendar, CalendarCheck, RefreshCcw, Music, 
@@ -100,7 +99,8 @@ const InnerApp = () => {
     roles, 
     ministryTitle, setMinistryTitle,
     availabilityWindow,
-    refreshData: loadData
+    refreshData: loadData,
+    isLoading: loadingData // Recebe o status de carregamento dos dados
   } = useMinistryData(ministryId, currentMonth, currentUser);
 
   const [showInstallBanner, setShowInstallBanner] = useState(false);
@@ -126,6 +126,20 @@ const InnerApp = () => {
   });
   const [visualTheme, setVisualTheme] = useState<'light' | 'dark'>('light');
 
+  // Estado para controlar o LoadingScreen inicial com um tempo mínimo para evitar flickers
+  const [showInitialLoading, setShowInitialLoading] = useState(true);
+
+  useEffect(() => {
+      // Mantém a tela de carregamento por pelo menos 1.5s ou até os dados carregarem (o que demorar mais)
+      // Isso dá uma sensação de estabilidade "App Nativo"
+      if (!loadingAuth && !loadingData) {
+          const timer = setTimeout(() => {
+              setShowInitialLoading(false);
+          }, 800); // Pequeno delay artificial para suavidade
+          return () => clearTimeout(timer);
+      }
+  }, [loadingAuth, loadingData]);
+
   useEffect(() => {
       if (currentUser?.ministryId) {
           setMinistryId(currentUser.ministryId);
@@ -135,6 +149,7 @@ const InnerApp = () => {
   useEffect(() => {
       const handleFocus = () => {
           if (currentUser && ministryId) {
+              // Reload silencioso ao focar
               loadData();
           }
       };
@@ -161,35 +176,48 @@ const InnerApp = () => {
       return () => window.removeEventListener('pwa-ready', handlePwaReady);
   }, []);
 
+  // --- TEMA: Lógica Robusta ---
   useEffect(() => {
-    // 1. Salvar preferência automaticamente
+    // 1. Salvar preferência
     try {
         localStorage.setItem('themeMode', themeMode);
     } catch(e) {}
 
     // 2. Aplicar tema
     const applyTheme = () => {
+        const root = document.documentElement;
         let targetTheme: 'light' | 'dark' = 'light';
+        
         if (themeMode === 'system') {
-            const hour = new Date().getHours();
-            if (hour >= 6 && hour < 18) targetTheme = 'light';
-            else targetTheme = 'dark';
+            const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            targetTheme = systemDark ? 'dark' : 'light';
         } else {
             targetTheme = themeMode;
         }
+        
         setVisualTheme(targetTheme);
-        if (targetTheme === 'dark') document.documentElement.classList.add('dark');
-        else document.documentElement.classList.remove('dark');
+        
+        if (targetTheme === 'dark') {
+            root.classList.add('dark');
+        } else {
+            root.classList.remove('dark');
+        }
     };
+    
     applyTheme();
-    let interval: any;
-    if (themeMode === 'system') interval = setInterval(applyTheme, 60000);
-    return () => { if (interval) clearInterval(interval); };
+    
+    // Listener para mudanças no sistema se estiver em 'system'
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = () => {
+        if (themeMode === 'system') applyTheme();
+    };
+    
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
   }, [themeMode]);
 
   const handleSetThemeMode = (mode: ThemeMode) => setThemeMode(mode);
   
-  // Função mantida para compatibilidade, mas agora apenas confirma visualmente
   const handleSaveTheme = () => {
       addToast("Tema salvo automaticamente.", "info");
   };
@@ -400,8 +428,11 @@ const InnerApp = () => {
       }
   };
 
-  // --- LOADING STATE ---
-  if (loadingAuth) return <LoadingScreen />;
+  // --- LOADING STATES (Unified) ---
+  // Mostra LoadingScreen se estiver autenticando OU se for o carregamento inicial dos dados
+  // Se for apenas uma atualização de dados (background refresh), não bloqueia a tela.
+  if (loadingAuth || (currentUser && showInitialLoading)) return <LoadingScreen />;
+  
   if (!currentUser) return <LoginScreen isLoading={loadingAuth} />;
 
   const MAIN_NAV = [

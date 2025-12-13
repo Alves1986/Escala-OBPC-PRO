@@ -20,6 +20,22 @@
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Theme Pre-loader -->
+    <script>
+      (function() {
+        try {
+          var savedMode = localStorage.getItem('themeMode');
+          var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (savedMode === 'dark' || (savedMode === 'system' && systemDark) || (!savedMode && systemDark)) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
+
     <script>
       tailwind.config = {
         darkMode: 'class',
