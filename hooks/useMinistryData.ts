@@ -33,7 +33,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   // Availability Window State
   const [availabilityWindow, setAvailabilityWindow] = useState<{ start?: string, end?: string }>({});
 
-  const refreshData = useCallback(async () => {
+  const refreshData = useCallback(async (useCache = true) => {
     if (!currentUser || !ministryId) {
         setIsLoading(false);
         return;
@@ -44,34 +44,36 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
 
     // Tentativa de carregar cache primeiro (Stale-While-Revalidate pattern) para UX instantânea
     let hasCache = false;
-    try {
-        const cached: any = await loadOfflineData(CACHE_KEY);
-        if (cached) {
-            setMinistryTitle(cached.settings.displayName || ministryId.charAt(0).toUpperCase() + ministryId.slice(1));
-            setRoles(cached.settings.roles);
-            setAvailabilityWindow({
-                start: cached.settings.availabilityStart,
-                end: cached.settings.availabilityEnd
-            });
-            setEvents(cached.schedData.events);
-            setSchedule(cached.schedData.schedule);
-            setAttendance(cached.schedData.attendance);
-            setMembersMap(cached.membersData.memberMap);
-            setPublicMembers(cached.membersData.publicList);
-            setAvailability(cached.availData.availability);
-            setAvailabilityNotes(cached.availData.notes || {});
-            setNotifications(cached.notifs);
-            setAnnouncements(cached.ann);
-            setSwapRequests(cached.swaps);
-            setRepertoire(cached.rep);
-            setGlobalConflicts(cached.conflicts);
-            hasCache = true;
-            
-            // Se tiver cache, remove o loading imediatamente para mostrar a UI
-            setIsLoading(false); 
+    if (useCache) {
+        try {
+            const cached: any = await loadOfflineData(CACHE_KEY);
+            if (cached) {
+                setMinistryTitle(cached.settings.displayName || ministryId.charAt(0).toUpperCase() + ministryId.slice(1));
+                setRoles(cached.settings.roles);
+                setAvailabilityWindow({
+                    start: cached.settings.availabilityStart,
+                    end: cached.settings.availabilityEnd
+                });
+                setEvents(cached.schedData.events);
+                setSchedule(cached.schedData.schedule);
+                setAttendance(cached.schedData.attendance);
+                setMembersMap(cached.membersData.memberMap);
+                setPublicMembers(cached.membersData.publicList);
+                setAvailability(cached.availData.availability);
+                setAvailabilityNotes(cached.availData.notes || {});
+                setNotifications(cached.notifs);
+                setAnnouncements(cached.ann);
+                setSwapRequests(cached.swaps);
+                setRepertoire(cached.rep);
+                setGlobalConflicts(cached.conflicts);
+                hasCache = true;
+                
+                // Se tiver cache, remove o loading imediatamente para mostrar a UI
+                setIsLoading(false); 
+            }
+        } catch (e) {
+            console.error("Erro leitura cache:", e);
         }
-    } catch (e) {
-        console.error("Erro leitura cache:", e);
     }
 
     try {
@@ -180,7 +182,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
 
   useEffect(() => {
      setIsLoading(true);
-     refreshData();
+     refreshData(true);
   }, [refreshData]);
 
   return {

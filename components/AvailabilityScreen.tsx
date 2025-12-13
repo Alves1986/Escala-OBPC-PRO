@@ -35,47 +35,57 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   const isAdmin = currentUser?.role === 'admin';
 
-  // Verifica estado da janela com lógica defensiva
+  // --- LÓGICA DE JANELA DE DISPONIBILIDADE ---
   const getWindowState = () => {
-      // Se não houver configuração, assume aberto por padrão (default do sistema)
+      // 1. Se não houver configuração, aberto por padrão
       if (!availabilityWindow?.start && !availabilityWindow?.end) return 'OPEN';
       
       const startStr = availabilityWindow.start;
       const endStr = availabilityWindow.end;
 
-      // Se as datas forem o "Código de Bloqueio" (Epoch 1970)
-      if (startStr?.startsWith('1970') || endStr?.startsWith('1970')) return 'CLOSED';
+      // 2. Verifica "Código de Bloqueio" (Epoch 1970)
+      if (startStr?.includes('1970') || endStr?.includes('1970')) return 'CLOSED';
 
-      // Validação de datas
+      // 3. Validação de datas
       const start = new Date(startStr || '');
       const end = new Date(endStr || '');
       const now = new Date();
 
       if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-          return 'OPEN'; // Se data inválida, fallback para aberto para não travar
+          return 'OPEN'; // Falha segura: Aberto
       }
       
+      // 4. Comparação Temporal
       return (now >= start && now <= end) ? 'OPEN' : 'CLOSED';
   };
 
   const windowState = getWindowState();
-  // Se for admin, sempre pode editar. Se for membro, depende da janela.
   const isEditable = isAdmin || windowState === 'OPEN';
 
+  // Inicializa com o usuário atual se não for admin (ou se for admin, mas sem seleção ainda)
   useEffect(() => {
-    if (currentUser && currentUser.name) setSelectedMember(currentUser.name);
-  }, [currentUser]);
+    if (currentUser && currentUser.name && !isAdmin) {
+        setSelectedMember(currentUser.name);
+    } else if (isAdmin && !selectedMember && currentUser) {
+        // Admin começa vendo a si mesmo ou o primeiro da lista
+        setSelectedMember(currentUser.name);
+    }
+  }, [currentUser, isAdmin]);
 
-  // Load Data into Temp State
+  // Carrega dados do banco para o estado temporário (tempDates/generalNote)
   useEffect(() => {
     if (selectedMember) {
         const storedDates = availability[selectedMember] || [];
-        setTempDates(storedDates);
+        // Cria uma cópia para evitar mutação direta
+        setTempDates([...storedDates]);
         
         const genKey = `${selectedMember}_${currentMonth}-00`;
         setGeneralNote(availabilityNotes?.[genKey] || "");
         
         setHasChanges(false);
+    } else {
+        setTempDates([]);
+        setGeneralNote("");
     }
   }, [selectedMember, availability, availabilityNotes, currentMonth]);
 
@@ -84,60 +94,86 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   const handleDayClick = (day: number) => {
       if (!isEditable) {
-          addToast("O período de marcação de disponibilidade está encerrado.", "warning");
+          addToast("O período de marcação de disponibilidade está encerrado.", "error");
           return;
       }
       
       const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
-      const existing = tempDates.find(d => d.startsWith(dateStr));
+      
+      // Encontra se já existe alguma entrada para este dia (Full, Morning ou Night)
+      // O .find retorna a string completa ex: "2023-10-05" ou "2023-10-05_M"
+      const existingEntry = tempDates.find(d => d.startsWith(dateStr));
 
       const dateObj = new Date(year, month - 1, day);
       const isSunday = dateObj.getDay() === 0;
 
+      let newDates = [...tempDates];
+
+      // Remove a entrada existente para este dia (limpeza prévia)
+      if (existingEntry) {
+          newDates = newDates.filter(d => !d.startsWith(dateStr));
+      }
+
+      // Lógica de Toggle
       if (isSunday) {
-          if (!existing) {
-              setTempDates(prev => [...prev, dateStr]); 
-          } else if (existing === dateStr) {
-              setTempDates(prev => prev.map(d => d === dateStr ? `${dateStr}_M` : d));
-          } else if (existing.endsWith('_M')) {
-              setTempDates(prev => prev.map(d => d === existing ? `${dateStr}_N` : d));
-          } else {
-              setTempDates(prev => prev.filter(d => !d.startsWith(dateStr)));
-          }
+          // Domingo: Vazio -> Full -> Manhã -> Noite -> Vazio
+          if (!existingEntry) {
+              newDates.push(dateStr); // Full
+          } else if (existingEntry === dateStr) {
+              newDates.push(`${dateStr}_M`); // Manhã
+          } else if (existingEntry.endsWith('_M')) {
+              newDates.push(`${dateStr}_N`); // Noite
+          } 
+          // Se era Noite (_N), já foi removido no filtro acima, então fica vazio
       } else {
-          if (!existing) {
-              setTempDates(prev => [...prev, dateStr]);
-          } else {
-              setTempDates(prev => prev.filter(d => !d.startsWith(dateStr)));
+          // Dias Normais: Vazio -> Full -> Vazio
+          if (!existingEntry) {
+              newDates.push(dateStr); // Full (Unavailable)
           }
+          // Se já existia, foi removido, então fica vazio (Available)
       }
       
+      setTempDates(newDates);
       setHasChanges(true);
   };
 
   const getDayStatus = (day: number) => {
       const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
       const found = tempDates.find(d => d.startsWith(dateStr));
-      if (!found) return 'NONE';
-      if (found.endsWith('_M')) return 'MORNING';
-      if (found.endsWith('_N')) return 'NIGHT';
-      return 'FULL';
+      
+      if (!found) return 'NONE'; // Available
+      if (found.endsWith('_M')) return 'MORNING'; // Unavailable Morning
+      if (found.endsWith('_N')) return 'NIGHT';   // Unavailable Night
+      return 'FULL'; // Unavailable All Day
   };
 
   const handleSave = async () => {
       if (!selectedMember) return;
-      setIsSaving(true);
-
-      const notesToSave: Record<string, string> = {};
-      if (generalNote.trim()) {
-          notesToSave[`${currentMonth}-00`] = generalNote.trim();
+      if (!isEditable) {
+          addToast("Janela fechada. Não é possível salvar.", "error");
+          return;
       }
 
-      await onSaveAvailability(selectedMember, tempDates, notesToSave, currentMonth);
-      
-      setIsSaving(false);
-      setHasChanges(false);
-      addToast("Disponibilidade salva com sucesso!", "success");
+      setIsSaving(true);
+
+      try {
+          const notesToSave: Record<string, string> = {};
+          if (generalNote.trim()) {
+              // A chave da nota precisa seguir o padrão esperado pelo hook useMinistryData -> supabaseService
+              // O service espera: notes[`${targetMonth}-00`] = text
+              notesToSave[`${currentMonth}-00`] = generalNote.trim();
+          }
+
+          await onSaveAvailability(selectedMember, tempDates, notesToSave, currentMonth);
+          
+          setHasChanges(false);
+          addToast("Disponibilidade salva com sucesso!", "success");
+      } catch (error) {
+          console.error(error);
+          addToast("Erro ao salvar. Tente novamente.", "error");
+      } finally {
+          setIsSaving(false);
+      }
   };
 
   return (
@@ -151,7 +187,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
               </div>
               <div>
                   <h2 className="font-bold text-zinc-800 dark:text-white">Disponibilidade</h2>
-                  <p className="text-xs text-zinc-500">Informe quando você pode servir.</p>
+                  <p className="text-xs text-zinc-500">Informe quando você <span className="font-bold text-red-500">NÃO</span> pode servir.</p>
               </div>
           </div>
 
@@ -165,7 +201,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
       {/* FEEDBACK VISUAL DE STATUS DA JANELA */}
       {windowState === 'CLOSED' ? (
           isAdmin ? (
-              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 p-4 rounded-xl flex flex-col md:flex-row items-center gap-3 text-amber-700 dark:text-amber-400 shadow-sm">
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 p-4 rounded-xl flex flex-col md:flex-row items-center gap-3 text-amber-700 dark:text-amber-400 shadow-sm animate-slide-up">
                   <div className="flex items-center gap-3">
                     <Unlock size={20} />
                     <div>
@@ -175,18 +211,13 @@ export const AvailabilityScreen: React.FC<Props> = ({
                         <span className="text-xs opacity-90 block">Os membros não podem editar, mas você tem acesso total.</span>
                     </div>
                   </div>
-                  {/* Debug info apenas para Admin ter certeza das datas */}
-                  <div className="text-[9px] font-mono opacity-60 ml-auto border-l pl-3 border-amber-300 dark:border-amber-700">
-                      Start: {availabilityWindow?.start || 'N/A'}<br/>
-                      End: {availabilityWindow?.end || 'N/A'}
-                  </div>
               </div>
           ) : (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 p-4 rounded-xl flex items-center gap-3 text-red-700 dark:text-red-400 shadow-sm animate-pulse">
                   <Lock size={20} />
                   <div>
                       <span className="text-sm font-bold block">Período de Edição Encerrado</span>
-                      <span className="text-xs opacity-90">A agenda está fechada. Entre em contato com seu líder para alterações de emergência.</span>
+                      <span className="text-xs opacity-90">A agenda está fechada. Entre em contato com a liderança para alterações.</span>
                   </div>
               </div>
           )
@@ -210,10 +241,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
       )}
 
       {selectedMember ? (
-          <div className={`relative transition-opacity ${!isEditable ? 'opacity-80' : ''}`}>
+          <div className={`relative transition-opacity duration-300 ${!isEditable ? 'opacity-60 pointer-events-none grayscale-[0.5]' : ''}`}>
               
               {/* Calendar Grid */}
-              <div className="grid grid-cols-7 gap-2 sm:gap-3 mb-6">
+              <div className="grid grid-cols-7 gap-2 sm:gap-3 mb-6 select-none">
                   {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => (
                       <div key={i} className="text-center text-xs font-bold text-zinc-400 py-2">{d}</div>
                   ))}
@@ -228,22 +259,21 @@ export const AvailabilityScreen: React.FC<Props> = ({
                       let icon = null;
 
                       if (status === 'FULL') {
-                          styles = "bg-green-500 text-white shadow-md ring-2 ring-green-400 ring-offset-1 dark:ring-offset-zinc-900";
-                          icon = <CheckCircle2 size={12} className="absolute top-1 right-1 opacity-75"/>;
+                          styles = "bg-red-500 text-white shadow-md ring-2 ring-red-400 ring-offset-1 dark:ring-offset-zinc-900";
                       } else if (status === 'MORNING') {
                           styles = "bg-orange-400 text-white shadow-md ring-2 ring-orange-300 ring-offset-1 dark:ring-offset-zinc-900";
-                          icon = <Sun size={12} className="absolute top-1 right-1 opacity-75"/>;
+                          icon = <Sun size={12} className="absolute top-1 right-1 opacity-90"/>;
                       } else if (status === 'NIGHT') {
                           styles = "bg-indigo-500 text-white shadow-md ring-2 ring-indigo-400 ring-offset-1 dark:ring-offset-zinc-900";
-                          icon = <Moon size={12} className="absolute top-1 right-1 opacity-75"/>;
+                          icon = <Moon size={12} className="absolute top-1 right-1 opacity-90"/>;
                       }
 
                       return (
                           <button
                               key={day}
                               onClick={() => handleDayClick(day)}
-                              disabled={!isEditable}
-                              className={`aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all active:scale-95 ${styles} ${!isEditable ? 'opacity-50 cursor-not-allowed grayscale' : ''}`}
+                              className={`aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all active:scale-95 ${styles}`}
+                              title={status === 'FULL' ? 'Indisponível o dia todo' : status === 'NONE' ? 'Disponível' : `Indisponível: ${status}`}
                           >
                               <span className="text-sm sm:text-base font-bold">{day}</span>
                               {icon}
@@ -254,10 +284,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
               {/* Legend */}
               <div className="flex flex-wrap justify-center gap-4 text-[10px] text-zinc-500 uppercase font-bold tracking-wide mb-6">
-                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-green-500"/> Dia Todo</div>
-                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-orange-400"/> Manhã (Dom)</div>
-                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-indigo-500"/> Noite (Dom)</div>
-                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-zinc-200 dark:bg-zinc-700"/> Indisp.</div>
+                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600"/> Disponível</div>
+                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-red-500"/> Indisponível</div>
+                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-orange-400"/> Indisp. Manhã</div>
+                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-indigo-500"/> Indisp. Noite</div>
               </div>
 
               {/* Note Section */}
@@ -269,18 +299,18 @@ export const AvailabilityScreen: React.FC<Props> = ({
                   <textarea 
                       value={generalNote}
                       onChange={(e) => { setGeneralNote(e.target.value); setHasChanges(true); }}
-                      disabled={!isEditable}
                       className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 text-sm text-zinc-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]"
                       placeholder={isEditable ? "Ex: Viajarei do dia 10 ao 20..." : "Edição de observações encerrada."}
+                      disabled={!isEditable}
                   />
               </div>
 
               {/* Floating Save Button */}
-              <div className={`fixed bottom-6 right-6 left-6 md:left-auto flex justify-end z-50 transition-all duration-300 ${hasChanges ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0 pointer-events-none'}`}>
+              <div className={`fixed bottom-6 right-6 left-6 md:left-auto flex justify-end z-[90] transition-all duration-300 ${hasChanges ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0 pointer-events-none'}`}>
                   <button 
                       onClick={handleSave}
                       disabled={isSaving}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-full font-bold shadow-xl flex items-center gap-2 transition-transform hover:scale-105 active:scale-95 disabled:opacity-70"
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-full font-bold shadow-xl flex items-center gap-2 transition-transform hover:scale-105 active:scale-95 disabled:opacity-70 ring-2 ring-white dark:ring-zinc-900"
                   >
                       <Save size={20} className={isSaving ? "animate-spin" : ""} />
                       {isSaving ? "Salvando..." : "Salvar Alterações"}

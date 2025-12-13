@@ -1,4 +1,5 @@
 
+// ... imports
 import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { 
   LayoutDashboard, Calendar, CalendarCheck, RefreshCcw, Music, 
@@ -807,7 +808,7 @@ const InnerApp = () => {
                                                 const result = await Supabase.deleteMember(ministryId, member.id, member.name);
                                                 if (result.success) {
                                                     setPublicMembers(prev => prev.filter(m => m.id !== member.id));
-                                                    loadData();
+                                                    loadData(false); // Ignora cache para garantir que dados novos venham da rede
                                                     addToast(`${member.name} removido.`, "success");
                                                 } else {
                                                     addToast(`Erro: ${result.message}`, "error");

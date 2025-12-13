@@ -19,6 +19,7 @@ if (SUPABASE_URL && SUPABASE_KEY && !isPreviewMode) {
 
 export const getSupabase = () => supabase;
 
+// ... (other exports: logout, loginWithEmail, etc. - keep unchanged)
 export const logout = async () => {
     if (isPreviewMode) return;
     if (!supabase) return;
@@ -140,10 +141,10 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
             }
         }
 
-        // 4. Executa o Update
-        const { error: updateError } = await supabase
+        // 4. Executa o Update com VERIFICAÇÃO DE COUNT (Correção Crítica)
+        const { error: updateError, count } = await supabase
             .from('profiles')
-            .update(updates)
+            .update(updates, { count: 'exact' })
             .eq('id', memberId);
 
         if (updateError) {
@@ -156,6 +157,11 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
                  return { success: false, message: "Erro: O usuário deve pertencer a pelo menos um ministério principal." };
             }
             return { success: false, message: `Falha ao salvar: ${updateError.message}` };
+        }
+
+        // Verificação se alguma linha foi realmente alterada (pega erros silenciosos de RLS)
+        if (count === 0) {
+            return { success: false, message: "Falha na exclusão: Permissão insuficiente ou usuário não modificável." };
         }
 
         return { success: true, message: "Acesso do membro revogado com sucesso." };
@@ -288,8 +294,11 @@ export const fetchMinistryAvailability = async (ministryId: string): Promise<{ a
                 uiDateKey = `${dbDate}_N`;
             }
 
-            if (!availability[name]) availability[name] = [];
-            availability[name].push(uiDateKey);
+            if (metadata.type !== 'GENERAL') {
+                // Se não for uma nota geral (que fica no dia 1), adiciona como indisponibilidade
+                if (!availability[name]) availability[name] = [];
+                availability[name].push(uiDateKey);
+            }
 
             if (userNoteText) {
                 if (metadata.type === 'GENERAL') {
@@ -325,9 +334,14 @@ export const saveMemberAvailability = async (
 
     try {
         const [y, m] = targetMonth.split('-').map(Number);
+        
+        // Define intervalo exato do mês: YYYY-MM-01 até YYYY-MM-LastDay
         const startDate = `${targetMonth}-01`;
-        const endDate = new Date(y, m, 0).toISOString().split('T')[0];
+        const lastDay = new Date(y, m, 0).getDate();
+        const endDate = `${targetMonth}-${String(lastDay).padStart(2, '0')}`;
 
+        // Deleta TODAS as entradas existentes para esse usuário nesse mês
+        // Isso garante que se o usuário desmarcar um dia, ele suma do banco.
         const { error: deleteError } = await supabase.from('availability')
             .delete()
             .eq('member_id', userId)
@@ -336,49 +350,58 @@ export const saveMemberAvailability = async (
         
         if (deleteError) throw deleteError;
 
-        const relevantDates = dates.filter(d => d.startsWith(targetMonth));
+        const rowsToInsert: any[] = [];
         
-        const generalNoteKey = `${targetMonth}-00`;
-        if (notes && notes[generalNoteKey] && !relevantDates.some(d => d.includes('00'))) {
-             relevantDates.push(`${targetMonth}-00`);
+        // 1. Processa Datas de Indisponibilidade
+        const unavailableDates = dates.filter(d => d.startsWith(targetMonth));
+        
+        for (const uiDate of unavailableDates) {
+            const [datePart, suffix] = uiDate.split('_'); 
+            
+            let metadata: any = {};
+            if (suffix === 'M') metadata.period = 'M';
+            if (suffix === 'N') metadata.period = 'N';
+            
+            // Verifica se tem nota específica para este dia (ainda não implementado na UI, mas preparado no backend)
+            // const noteKey = datePart;
+            // if (notes && notes[noteKey]) metadata.text = notes[noteKey];
+
+            rowsToInsert.push({
+                member_id: userId,
+                date: datePart, // YYYY-MM-DD
+                note: Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null,
+                status: 'available' // Nome legado, significa "tem registro"
+            });
         }
 
-        const rowsToInsert: any[] = [];
-
-        for (const uiDate of relevantDates) {
-            const [datePart, suffix] = uiDate.split('_'); 
-            const [dy, dm, dd] = datePart.split('-');
-
-            let dbDate = datePart;
-            let metadata: any = {};
-
-            if (dd === '00') {
-                dbDate = `${dy}-${dm}-01`; 
-                metadata.type = 'GENERAL';
-                if (notes && notes[generalNoteKey]) metadata.text = notes[generalNoteKey];
-            } else {
-                if (suffix === 'M') metadata.period = 'M';
-                if (suffix === 'N') metadata.period = 'N';
-                
-                const noteKey = datePart;
-                if (notes && notes[noteKey]) metadata.text = notes[noteKey];
-            }
+        // 2. Processa Nota Geral do Mês
+        const generalNoteKey = `${targetMonth}-00`;
+        if (notes && notes[generalNoteKey]) {
+            const generalText = notes[generalNoteKey];
+            const firstOfMonth = `${targetMonth}-01`;
             
-            const existingIdx = rowsToInsert.findIndex(r => r.date === dbDate);
-            if (existingIdx >= 0) {
-                if (metadata.type !== 'GENERAL') {
-                    rowsToInsert[existingIdx] = { 
-                        member_id: userId, 
-                        date: dbDate, 
-                        note: JSON.stringify(metadata),
-                        status: 'available'
-                    };
-                }
+            // Verifica se já existe uma entrada para o dia 1 (indisponibilidade)
+            const existingEntryIndex = rowsToInsert.findIndex(r => r.date === firstOfMonth);
+            
+            if (existingEntryIndex >= 0) {
+                // Se já existe, atualiza o metadata existente
+                const existingRow = rowsToInsert[existingEntryIndex];
+                let existingMeta = {};
+                try {
+                    if (existingRow.note) existingMeta = JSON.parse(existingRow.note);
+                } catch(e) {}
+                
+                rowsToInsert[existingEntryIndex].note = JSON.stringify({
+                    ...existingMeta,
+                    type: 'GENERAL',
+                    text: generalText
+                });
             } else {
+                // Se não existe, cria uma nova entrada apenas para a nota
                 rowsToInsert.push({
                     member_id: userId,
-                    date: dbDate,
-                    note: JSON.stringify(metadata),
+                    date: firstOfMonth,
+                    note: JSON.stringify({ type: 'GENERAL', text: generalText }),
                     status: 'available'
                 });
             }
@@ -395,6 +418,7 @@ export const saveMemberAvailability = async (
     }
 };
 
+// ... (rest of the file: fetchRepertoire, addToRepertoire, etc. - keep unchanged)
 export const fetchRepertoire = async (ministryId: string): Promise<RepertoireItem[]> => {
     if (!supabase) return [];
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
