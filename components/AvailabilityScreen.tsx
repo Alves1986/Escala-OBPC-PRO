@@ -71,16 +71,30 @@ export const AvailabilityScreen: React.FC<Props> = ({
       const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
       const existing = tempDates.find(d => d.startsWith(dateStr));
 
-      // Cycle: None -> Full -> Morning -> Night -> None
-      if (!existing) {
-          setTempDates(prev => [...prev, dateStr]); // Full Day
-      } else if (existing === dateStr) {
-          setTempDates(prev => prev.map(d => d === dateStr ? `${dateStr}_M` : d)); // Morning
-      } else if (existing.endsWith('_M')) {
-          setTempDates(prev => prev.map(d => d === existing ? `${dateStr}_N` : d)); // Night
+      // Verifica se é Domingo
+      const dateObj = new Date(year, month - 1, day);
+      const isSunday = dateObj.getDay() === 0;
+
+      if (isSunday) {
+          // Lógica para Domingo: Ciclo Completo (Dia Todo -> Manhã -> Noite -> Nada)
+          if (!existing) {
+              setTempDates(prev => [...prev, dateStr]); // Full Day
+          } else if (existing === dateStr) {
+              setTempDates(prev => prev.map(d => d === dateStr ? `${dateStr}_M` : d)); // Morning
+          } else if (existing.endsWith('_M')) {
+              setTempDates(prev => prev.map(d => d === existing ? `${dateStr}_N` : d)); // Night
+          } else {
+              setTempDates(prev => prev.filter(d => !d.startsWith(dateStr))); // Remove
+          }
       } else {
-          setTempDates(prev => prev.filter(d => !d.startsWith(dateStr))); // Remove
+          // Lógica para outros dias: Alternar Simples (Dia Todo <-> Nada)
+          if (!existing) {
+              setTempDates(prev => [...prev, dateStr]); // Add Full
+          } else {
+              setTempDates(prev => prev.filter(d => !d.startsWith(dateStr))); // Remove
+          }
       }
+      
       setHasChanges(true);
   };
 
@@ -200,8 +214,8 @@ export const AvailabilityScreen: React.FC<Props> = ({
               {/* Legend */}
               <div className="flex flex-wrap justify-center gap-4 text-[10px] text-zinc-500 uppercase font-bold tracking-wide mb-6">
                   <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-green-500"/> Dia Todo</div>
-                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-orange-400"/> Manhã</div>
-                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-indigo-500"/> Noite</div>
+                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-orange-400"/> Manhã (Dom)</div>
+                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-indigo-500"/> Noite (Dom)</div>
                   <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-zinc-200 dark:bg-zinc-700"/> Indisp.</div>
               </div>
 
