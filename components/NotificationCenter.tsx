@@ -14,8 +14,19 @@ interface Props {
 
 export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId, onNotificationsUpdate, onNavigate }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const unreadCount = notifications.filter(n => !n.read).length;
   const { confirmAction } = useToast();
+
+  // Verifica se é admin para liberar o botão de deletar
+  React.useEffect(() => {
+      getSupabase()?.auth.getUser().then(({ data: { user } }) => {
+          if (user) {
+             getSupabase()?.from('profiles').select('is_admin').eq('id', user.id).single()
+                .then(({ data }) => setIsAdmin(!!data?.is_admin));
+          }
+      });
+  }, []);
 
   const handleMarkAllRead = async () => {
     if (!ministryId) return;
@@ -35,10 +46,11 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
   };
 
   const handleClearAll = async () => {
-      if (!ministryId) return;
+      if (!ministryId || !isAdmin) return;
+      
       confirmAction(
-          "Limpar Notificações",
-          "Tem certeza que deseja limpar todas as notificações? Esta ação é irreversível.",
+          "Excluir Histórico Global",
+          "CUIDADO: Isso apagará todas as notificações para TODOS os membros da equipe. Essa ação não pode ser desfeita.",
           async () => {
               await clearAllNotificationsSQL(ministryId);
               onNotificationsUpdate([]);
@@ -88,9 +100,9 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
                             <Check size={12}/> Ler
                         </button>
                     )}
-                    {notifications.length > 0 && (
-                        <button onClick={handleClearAll} className="text-[10px] text-red-500 hover:text-red-600 font-bold flex items-center gap-1" title="Limpar histórico">
-                            <Trash2 size={12}/> Limpar
+                    {isAdmin && notifications.length > 0 && (
+                        <button onClick={handleClearAll} className="text-[10px] text-red-500 hover:text-red-600 font-bold flex items-center gap-1" title="Apagar histórico global (Admin)">
+                            <Trash2 size={12}/> Limpar DB
                         </button>
                     )}
                  </div>

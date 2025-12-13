@@ -99,7 +99,7 @@ const InnerApp = () => {
     globalConflicts,
     roles, 
     ministryTitle, setMinistryTitle,
-    availabilityWindow, setAvailabilityWindow, // Destructure new setter
+    availabilityWindow, setAvailabilityWindow, 
     refreshData: loadData,
     isLoading: loadingData
   } = useMinistryData(ministryId, currentMonth, currentUser);
@@ -542,7 +542,7 @@ const InnerApp = () => {
             </div>
         )}
 
-        {/* ... (Existing Tabs) ... */}
+        {/* ... (Rest of the tabs) ... */}
         {currentTab === 'calendar' && (
             <div className="space-y-6 animate-fade-in">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -798,9 +798,13 @@ const InnerApp = () => {
                                             "Remover Membro",
                                             `Deseja remover ${member.name} da equipe? Isso removerá o acesso dele ao ministério atual.`,
                                             async () => {
-                                                await Supabase.deleteMember(ministryId, member.id, member.name);
-                                                loadData();
-                                                addToast(`${member.name} removido.`, "success");
+                                                const result = await Supabase.deleteMember(ministryId, member.id, member.name);
+                                                if (result.success) {
+                                                    loadData();
+                                                    addToast(`${member.name} removido.`, "success");
+                                                } else {
+                                                    addToast(`Erro: ${result.message}`, "error");
+                                                }
                                             }
                                         );
                                     }} className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors border bg-transparent border-zinc-700 text-zinc-500 hover:text-red-400 hover:border-red-900/50 hover:bg-red-900/10"><Trash2 size={16} /></button>
@@ -863,7 +867,6 @@ const InnerApp = () => {
                 onAnnounceUpdate={async () => { await Supabase.sendNotificationSQL(ministryId, { title: "Atualização de Sistema", message: "Uma nova versão do app está disponível. Recarregue a página para aplicar.", type: "warning" }); addToast("Notificação de atualização enviada.", "success"); }}
                 onEnableNotifications={handleEnableNotifications}
                 onSaveAvailabilityWindow={async (start, end) => { 
-                    // OPTIMISTIC UPDATE: Update local state immediately
                     setAvailabilityWindow({ start, end });
                     await Supabase.saveMinistrySettings(ministryId, undefined, undefined, start, end); 
                     loadData(); 
@@ -873,7 +876,6 @@ const InnerApp = () => {
             />
         )}
 
-        {/* ... modals ... */}
         <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ ...e, iso: e.iso }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, e); loadData(); }} onRemove={async (id) => { loadData(); }} />
         <AvailabilityModal 
             isOpen={isAvailModalOpen} 

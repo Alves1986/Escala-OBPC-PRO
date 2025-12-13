@@ -76,7 +76,15 @@ export const searchCifraClub = async (query: string): Promise<CifraClubResult[]>
 
         if (response.text) {
             const results = JSON.parse(response.text);
-            searchCache[cacheKey] = results; // Save to cache
+            
+            // Garbage Collection simples do Cache
+            // Se o cache ficar muito grande, deleta a entrada mais antiga (FIFO aproximado)
+            const keys = Object.keys(searchCache);
+            if (keys.length > 20) {
+                delete searchCache[keys[0]];
+            }
+            
+            searchCache[cacheKey] = results; 
             return results;
         }
         return [];

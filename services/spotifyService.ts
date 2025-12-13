@@ -92,7 +92,11 @@ export const handleLoginCallback = () => {
         const expiryTime = Date.now() + (Number(expiresIn) || 3600) * 1000;
         localStorage.setItem('spotify_token_expiry', expiryTime.toString());
 
-        window.history.replaceState(null, '', ' ');
+        // Limpa a URL de forma limpa, sem deixar espaços em branco
+        try {
+            window.history.replaceState(null, '', window.location.pathname);
+        } catch(e) {}
+        
         return token;
     }
     return null;

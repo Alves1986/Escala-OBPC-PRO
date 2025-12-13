@@ -32,9 +32,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   const [ministryTitle, setMinistryTitle] = useState("");
   // Availability Window State
   const [availabilityWindow, setAvailabilityWindow] = useState<{ start?: string, end?: string }>({});
-  
-  // Error State tracking
-  const [errors, setErrors] = useState<string[]>([]);
 
   const refreshData = useCallback(async () => {
     if (!currentUser || !ministryId) {
@@ -101,15 +98,12 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
             Supabase.fetchGlobalSchedules(currentMonth, ministryId)
         ]);
 
-        const currentErrors: string[] = [];
-
-        // Helper para extrair valor seguro e registrar erro se houver
+        // Helper para extrair valor seguro e logar falhas silenciosamente
         const getValue = <T>(result: PromiseSettledResult<T>, fallback: T, label: string): T => {
             if (result.status === 'fulfilled') {
                 return result.value;
             } else {
-                console.error(`Falha ao carregar ${label}:`, result.reason);
-                currentErrors.push(label);
+                console.warn(`Sync Warn (${label}):`, result.reason);
                 return fallback;
             }
         };
@@ -124,12 +118,11 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
         const rep = getValue(repResult, [], 'Repertório');
         const conflicts = getValue(conflictsResult, {}, 'Conflitos Globais');
 
-        setErrors(currentErrors);
+        // Se houver falhas críticas de rede e não tiver cache, avisa.
+        const anyFailure = [settingsResult, schedResult, membersResult].some(r => r.status === 'rejected');
         
-        // Se houver erros críticos e não tiver cache, avisa. Se tiver cache, avisa discretamente.
-        if (currentErrors.length > 0 && !hasCache) {
-            const errorMsg = `Erro de conexão. Alguns dados podem estar desatualizados.`;
-            addToast(errorMsg, 'warning');
+        if (anyFailure && !hasCache) {
+            addToast("Conexão instável. Alguns dados podem não carregar.", 'warning');
         }
 
         // 1. Atualização de estado em lote (Dados da Nuvem - Sobrescreve cache se diferente)
@@ -206,8 +199,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     roles, setRoles,
     ministryTitle, setMinistryTitle,
     availabilityWindow,
-    setAvailabilityWindow, // EXPOSED SETTER FOR OPTIMISTIC UPDATES
-    errors,
+    setAvailabilityWindow, 
     isLoading, 
     refreshData
   };

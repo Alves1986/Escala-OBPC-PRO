@@ -48,24 +48,22 @@ export const SettingsScreen: React.FC<Props> = ({
       } catch (e) { return false; }
   })();
 
-  // Helper para formatar ISO para input datetime-local (YYYY-MM-DDTHH:mm)
   const toLocalInput = (isoString?: string) => {
       if (!isoString) return "";
       
-      // Se a data for do ano 1970 (qualquer parte da string), considera bloqueado e retorna vazio
-      if (isoString.includes('1970-')) return "";
+      // Checagem robusta de 1970 (Bloqueio) independente de timezone
+      if (isoString.includes('1970')) return "";
+      const d = new Date(isoString);
+      if(d.getFullYear() === 1970 || d.getUTCFullYear() === 1970) return "";
       
       try {
           const date = new Date(isoString);
-          if(date.getFullYear() === 1970) return "";
-
           const offset = date.getTimezoneOffset() * 60000;
           const localTime = new Date(date.getTime() - offset);
           return localTime.toISOString().slice(0, 16);
       } catch (e) { return ""; }
   };
 
-  // Helper para converter input local de volta para ISO string UTC
   const fromLocalInput = (localString: string) => {
       if (!localString) return "";
       return new Date(localString).toISOString();
@@ -82,16 +80,14 @@ export const SettingsScreen: React.FC<Props> = ({
       if ('Notification' in window) setNotifPermission(Notification.permission);
   }, []);
 
-  // Verifica status atual da janela baseado nos inputs ou props
   const isWindowActive = () => {
       const dbStart = availabilityWindow?.start;
-      // Robust check for 1970 date in DB prop
-      const isDbBlocked = dbStart && (dbStart.includes('1970-') || new Date(dbStart).getFullYear() === 1970);
+      
+      // Checagem robusta de 1970 (Bloqueio)
+      const isDbBlocked = dbStart && (dbStart.includes('1970') || new Date(dbStart).getUTCFullYear() === 1970);
 
-      // Se as datas no banco forem de 1970, está FECHADO explicitamente, independente dos inputs estarem vazios
       if (isDbBlocked) return false;
 
-      // Se não houver datas definidas, o padrão é ABERTO
       if (!dbStart && !availabilityWindow?.end && !availStart && !availEnd) return true;
       
       const startIso = availStart ? fromLocalInput(availStart) : dbStart;
@@ -103,8 +99,7 @@ export const SettingsScreen: React.FC<Props> = ({
       const s = new Date(startIso);
       const e = new Date(endIso);
       
-      // Safety: If converted date is 1970, force inactive
-      if(s.getFullYear() === 1970) return false;
+      if(s.getUTCFullYear() === 1970) return false;
 
       return now >= s && now <= e;
   };
@@ -129,12 +124,9 @@ export const SettingsScreen: React.FC<Props> = ({
       let newEndStr = "";
 
       if (action === 'block') {
-          // Bloquear: Define data para o ano 1970 (Epoch).
-          // Isso garante que a janela esteja FECHADA independente de qualquer fuso horário mundial.
           newStartStr = "1970-01-01T00:00:00.000Z";
           newEndStr = "1970-01-01T00:00:00.000Z";
           
-          // Notificar encerramento
           await sendNotificationSQL(ministryId, {
               title: "🔒 Janela Fechada",
               message: "O período para enviar disponibilidade foi encerrado.",
@@ -144,7 +136,6 @@ export const SettingsScreen: React.FC<Props> = ({
           addToast("Janela bloqueada com sucesso.", "warning");
 
       } else {
-          // Abrir: Início agora (menos 1 min para margem), Fim +7 dias
           const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
           const startNow = new Date(now.getTime() - 60000); 
 
@@ -153,7 +144,6 @@ export const SettingsScreen: React.FC<Props> = ({
           
           addToast("Janela liberada por 7 dias.", "success");
 
-          // Notificar Abertura
           const endDateFormatted = nextWeek.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
           await sendNotificationSQL(ministryId, {
               title: "📅 Disponibilidade Liberada!",
@@ -163,10 +153,8 @@ export const SettingsScreen: React.FC<Props> = ({
           });
       }
 
-      // Call prop function (which now updates optimistically in App.tsx)
       await onSaveAvailabilityWindow(newStartStr, newEndStr);
       
-      // Also update local input state to reflect change immediately
       setAvailStart(toLocalInput(newStartStr));
       setAvailEnd(toLocalInput(newEndStr));
   };

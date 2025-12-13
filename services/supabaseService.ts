@@ -98,15 +98,43 @@ export const joinMinistry = async (newMinistryId: string, roles: string[]) => {
 };
 
 export const deleteMember = async (ministryId: string, memberId: string, memberName: string) => {
-    if (!supabase) return;
+    if (!supabase) return { success: false, message: "Erro de conexão" };
     try {
-        const { data: profile } = await supabase.from('profiles').select('allowed_ministries').eq('id', memberId).single();
-        if (profile) {
-            const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-            const newAllowed = (profile.allowed_ministries || []).filter((m: string) => m !== cleanMid);
-            await supabase.from('profiles').update({ allowed_ministries: newAllowed }).eq('id', memberId);
+        // 1. Busca o perfil atual
+        const { data: profile, error: fetchError } = await supabase.from('profiles').select('allowed_ministries, ministry_id').eq('id', memberId).single();
+        
+        if (fetchError || !profile) {
+            return { success: false, message: "Perfil não encontrado ou erro de permissão." };
         }
-    } catch (e) { console.error(e); }
+
+        const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+        
+        // 2. Filtra o ministério removido da lista
+        const currentAllowed = profile.allowed_ministries || [];
+        const newAllowed = currentAllowed.filter((m: string) => m !== cleanMid);
+
+        const updates: any = { allowed_ministries: newAllowed };
+
+        // 3. Se o usuário estava com este ministério ATIVO/SELECIONADO, precisamos mudar
+        // para evitar que ele fique preso em um ministério que não tem mais acesso.
+        if (profile.ministry_id === cleanMid) {
+            // Define como o primeiro disponível ou null se não sobrar nenhum
+            updates.ministry_id = newAllowed.length > 0 ? newAllowed[0] : null;
+        }
+
+        const { error: updateError } = await supabase.from('profiles').update(updates).eq('id', memberId);
+
+        if (updateError) {
+            console.error("Erro no update:", updateError);
+            return { success: false, message: "Falha ao atualizar perfil. Verifique suas permissões de Admin." };
+        }
+
+        return { success: true, message: "Membro removido com sucesso." };
+
+    } catch (e: any) { 
+        console.error(e); 
+        return { success: false, message: e.message || "Erro desconhecido ao excluir." };
+    }
 };
 
 export const updateUserProfile = async (name: string, whatsapp: string, avatar_url: string | undefined, functions: string[] | undefined, birthDate: string | undefined, ministryId: string | undefined) => {
