@@ -84,7 +84,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
                       href={googleCalUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-2 text-xs font-bold text-zinc-500 hover:text-blue-600 dark:text-zinc-400 dark:hover:text-blue-400 py-2 transition-colors"
+                      className="flex items-center justify-center gap-2 text-xs font-bold text-zinc-500 hover:text-teal-600 dark:text-zinc-400 dark:hover:text-teal-400 py-2 transition-colors"
                   >
                       <CalendarPlus size={14} /> Adicionar ao Google Agenda
                   </a>
@@ -141,9 +141,9 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
 
   return (
     <div className="relative mb-8 rounded-3xl overflow-hidden shadow-xl shadow-zinc-200/50 dark:shadow-black/50 border border-white/50 dark:border-zinc-700/50 bg-white dark:bg-zinc-800 group animate-slide-up">
-      {/* Hero Header with Mesh Gradient */}
+      {/* Hero Header with Mesh Gradient - System Colors (Teal/Emerald) */}
       <div className="relative p-8 h-48 flex flex-col justify-between overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 opacity-90 dark:opacity-80"></div>
+          <div className="absolute inset-0 bg-gradient-to-br from-teal-600 via-teal-700 to-emerald-800 opacity-100 dark:opacity-90"></div>
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
           
           <div className="relative z-10">
@@ -158,7 +158,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
                   {event.dateDisplay} <span className="w-1 h-1 bg-white/50 rounded-full"></span> {eventTime}
               </div>
               {eventIsToday && (
-                  <div className="bg-white text-indigo-600 text-xs font-black px-4 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 animate-pulse">
+                  <div className="bg-white text-teal-600 text-xs font-black px-4 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 animate-pulse">
                       <Clock size={14} /> É HOJE
                   </div>
               )}
@@ -189,7 +189,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
               return (
                 <div key={idx} className={`relative p-4 rounded-2xl border transition-all duration-300 ${
                     isMe 
-                    ? 'bg-white dark:bg-zinc-800 border-indigo-100 dark:border-indigo-900/50 shadow-lg shadow-indigo-100/50 dark:shadow-none ring-1 ring-indigo-500/20' 
+                    ? 'bg-white dark:bg-zinc-800 border-teal-100 dark:border-teal-900/50 shadow-lg shadow-teal-100/50 dark:shadow-none ring-1 ring-teal-500/20' 
                     : 'bg-zinc-50/50 dark:bg-zinc-900/30 border-zinc-100 dark:border-zinc-700/50 hover:bg-white dark:hover:bg-zinc-800'
                 }`}>
                   <div className="flex items-center gap-3.5">
@@ -202,7 +202,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
                     </div>
                     <div className="flex flex-col min-w-0">
                       <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide mb-0.5">{t.role}</span>
-                      <span className={`text-sm font-bold truncate ${isConfirmed ? 'text-zinc-800 dark:text-zinc-100' : 'text-zinc-500 dark:text-zinc-400'} ${isMe ? 'text-indigo-600 dark:text-indigo-400' : ''}`}>
+                      <span className={`text-sm font-bold truncate ${isConfirmed ? 'text-zinc-800 dark:text-zinc-100' : 'text-zinc-500 dark:text-zinc-400'} ${isMe ? 'text-teal-600 dark:text-teal-400' : ''}`}>
                         {t.name} {isMe && "(Você)"}
                       </span>
                     </div>
