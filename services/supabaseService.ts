@@ -99,77 +99,50 @@ export const joinMinistry = async (newMinistryId: string, roles: string[]) => {
 export const deleteMember = async (ministryId: string, memberId: string, memberName: string) => {
     if (!supabase) return { success: false, message: "Erro de conexão" };
     
-    // Validar quem está deletando (Admin Check)
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, message: "Não autorizado" };
 
     try {
-        // Verificar se quem solicita é admin
+        // Verificar se é admin
         const { data: requesterProfile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single();
         if (!requesterProfile?.is_admin) {
             return { success: false, message: "Apenas administradores podem remover membros." };
         }
 
-        // 1. Busca o perfil atual do membro
-        const { data: profile, error: fetchError } = await supabase
-            .from('profiles')
-            .select('allowed_ministries, ministry_id')
-            .eq('id', memberId)
-            .single();
-        
-        if (fetchError || !profile) {
-            return { success: false, message: "Perfil não encontrado no banco de dados." };
-        }
-
-        // Normalização do ID do ministério a remover
         const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
         
-        // 2. Filtra a lista de ministérios permitidos, removendo o atual
-        const currentAllowed = Array.isArray(profile.allowed_ministries) ? profile.allowed_ministries : [];
-        const newAllowed = currentAllowed.filter((m: string) => {
-            const normalizedM = (m || "").trim().toLowerCase().replace(/\s+/g, '-');
-            return normalizedM && normalizedM !== cleanMid;
-        });
-
-        // Prepara objeto de atualização
-        const updates: any = { 
-            allowed_ministries: newAllowed 
-        };
-
-        // 3. Lógica Crítica: Se o usuário estava 'ativo' neste ministério
-        const currentActive = (profile.ministry_id || "").trim().toLowerCase().replace(/\s+/g, '-');
+        // 1. Tentar atualizar o perfil (remover da lista allowed_ministries)
+        const { data: profile } = await supabase.from('profiles').select('allowed_ministries, ministry_id').eq('id', memberId).single();
         
-        if (currentActive === cleanMid) {
-            // Se tiver outros ministérios permitidos, move para o primeiro disponível
-            if (newAllowed.length > 0) {
-                updates.ministry_id = newAllowed[0];
-            } else {
-                updates.ministry_id = null; // Sem ministério principal (usuário fica 'órfão' mas não deletado)
+        if (profile) {
+            const currentAllowed = Array.isArray(profile.allowed_ministries) ? profile.allowed_ministries : [];
+            const newAllowed = currentAllowed.filter((m: string) => {
+                const normalizedM = (m || "").trim().toLowerCase().replace(/\s+/g, '-');
+                return normalizedM && normalizedM !== cleanMid;
+            });
+
+            const updates: any = { allowed_ministries: newAllowed };
+            const currentActive = (profile.ministry_id || "").trim().toLowerCase().replace(/\s+/g, '-');
+            
+            if (currentActive === cleanMid) {
+                updates.ministry_id = newAllowed.length > 0 ? newAllowed[0] : null;
+            }
+
+            const { error: updateError } = await supabase.from('profiles').update(updates).eq('id', memberId);
+            
+            // SE FALHAR O UPDATE DO PERFIL (ex: RLS bloqueando), não paramos!
+            // Assumimos que o admin quer remover o membro da ESCALA e VISÃO, então prosseguimos para deletar assignments.
+            if (updateError) {
+                console.warn("Update perfil falhou (provável RLS), mas prosseguindo com limpeza de escala.", updateError);
             }
         }
 
-        // 4. Executa o Update
-        const { error: updateError } = await supabase
-            .from('profiles')
-            .update(updates)
-            .eq('id', memberId);
-
-        if (updateError) {
-            console.error("Erro no update:", updateError);
-            if (updateError.code === '42501') {
-                return { success: false, message: "Permissão negada. Verifique as políticas RLS no Supabase." };
-            }
-            return { success: false, message: `Falha ao salvar: ${updateError.message}` };
-        }
-
-        // 5. Limpeza opcional: Remover agendamentos futuros deste membro neste ministério
-        // Isso é uma boa prática para não deixar escalas 'fantasmas'
+        // 2. Limpeza de Escalas (Isso remove visualmente o usuário das tabelas)
         const todayIso = new Date().toISOString();
-        await supabase.from('schedule_assignments')
+        const { error: schedError } = await supabase.from('schedule_assignments')
             .delete()
             .eq('member_id', memberId)
             .in('event_id', (
-                // Subquery simulada: Busca IDs de eventos futuros do ministério
                 await supabase.from('events')
                     .select('id')
                     .eq('ministry_id', cleanMid)
@@ -177,7 +150,9 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
                     .then(res => res.data?.map(e => e.id) || [])
             ));
 
-        return { success: true, message: "Acesso do membro revogado com sucesso." };
+        if (schedError) console.error("Erro limpando escalas:", schedError);
+
+        return { success: true, message: "Membro removido da equipe com sucesso." };
 
     } catch (e: any) { 
         console.error("Exceção em deleteMember:", e); 

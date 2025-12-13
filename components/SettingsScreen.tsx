@@ -28,18 +28,21 @@ export const SettingsScreen: React.FC<Props> = ({
   const [tempTitle, setTempTitle] = useState(initialTitle);
   const [availStart, setAvailStart] = useState("");
   const [availEnd, setAvailEnd] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
   
   const [legalDoc, setLegalDoc] = useState<LegalDocType>(null);
   const [isNotifLoading, setIsNotifLoading] = useState(false);
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
   const { addToast } = useToast();
 
-  const toLocalInput = (isoString?: string) => {
-      if (!isoString) return "";
-      if (isoString.includes('1970')) return "";
+  const isBlockedDate = (isoString?: string) => {
+      if (!isoString) return false;
       const d = new Date(isoString);
-      if(d.getFullYear() === 1970 || d.getUTCFullYear() === 1970) return "";
-      
+      return d.getFullYear() < 2000;
+  };
+
+  const toLocalInput = (isoString?: string) => {
+      if (!isoString || isBlockedDate(isoString)) return "";
       try {
           const date = new Date(isoString);
           const offset = date.getTimezoneOffset() * 60000;
@@ -66,13 +69,13 @@ export const SettingsScreen: React.FC<Props> = ({
 
   const isWindowActive = () => {
       const dbStart = availabilityWindow?.start;
-      const isDbBlocked = dbStart && (dbStart.includes('1970') || new Date(dbStart).getUTCFullYear() === 1970);
+      const dbEnd = availabilityWindow?.end;
 
-      if (isDbBlocked) return false;
-      if (!dbStart && !availabilityWindow?.end && !availStart && !availEnd) return true; // Default open if empty
+      if (isBlockedDate(dbStart) || isBlockedDate(dbEnd)) return false;
+      if (!dbStart && !dbEnd && !availStart && !availEnd) return true;
       
       const startIso = availStart ? fromLocalInput(availStart) : dbStart;
-      const endIso = availEnd ? fromLocalInput(availEnd) : availabilityWindow?.end;
+      const endIso = availEnd ? fromLocalInput(availEnd) : dbEnd;
 
       if (!startIso || !endIso) return true;
       
@@ -80,7 +83,7 @@ export const SettingsScreen: React.FC<Props> = ({
       const s = new Date(startIso);
       const e = new Date(endIso);
       
-      if(s.getUTCFullYear() === 1970) return false;
+      if (s.getFullYear() < 2000) return false;
 
       return now >= s && now <= e;
   };
@@ -89,75 +92,81 @@ export const SettingsScreen: React.FC<Props> = ({
 
   const handleSaveAdvanced = async () => {
       if (onSaveAvailabilityWindow) {
+          setIsProcessing(true);
           const startISO = fromLocalInput(availStart);
           const endISO = fromLocalInput(availEnd);
-          
           await onSaveAvailabilityWindow(startISO, endISO);
+          setIsProcessing(false);
           addToast("Período de disponibilidade atualizado!", "success");
       }
   };
 
   const handleQuickAction = async (action: 'block' | 'open') => {
       if (!onSaveAvailabilityWindow || !ministryId) return;
+      setIsProcessing(true);
       
       const now = new Date();
       let newStartStr = "";
       let newEndStr = "";
 
+      // Atualiza visualmente IMEDIATAMENTE (Optimistic UI)
       if (action === 'block') {
           newStartStr = "1970-01-01T00:00:00.000Z";
           newEndStr = "1970-01-01T00:00:00.000Z";
-          
-          await sendNotificationSQL(ministryId, {
-              title: "🔒 Janela Fechada",
-              message: "O período para enviar disponibilidade foi encerrado.",
-              type: "warning"
-          });
-          
-          addToast("Janela bloqueada com sucesso.", "warning");
-
+          setAvailStart("");
+          setAvailEnd("");
+          addToast("Bloqueando janela...", "info");
       } else {
           const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
           const startNow = new Date(now.getTime() - 60000); 
-
           newStartStr = startNow.toISOString();
           newEndStr = nextWeek.toISOString();
-          
-          addToast("Janela liberada por 7 dias.", "success");
-
-          const endDateFormatted = nextWeek.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-          await sendNotificationSQL(ministryId, {
-              title: "📅 Disponibilidade Liberada!",
-              message: `A agenda está aberta até ${endDateFormatted}. Marque seus dias agora!`,
-              type: "success",
-              actionLink: "availability"
-          });
+          setAvailStart(toLocalInput(newStartStr));
+          setAvailEnd(toLocalInput(newEndStr));
+          addToast("Liberando janela...", "info");
       }
 
-      await onSaveAvailabilityWindow(newStartStr, newEndStr);
-      
-      setAvailStart(toLocalInput(newStartStr));
-      setAvailEnd(toLocalInput(newEndStr));
+      // Executa no background
+      try {
+          await onSaveAvailabilityWindow(newStartStr, newEndStr);
+          
+          if (action === 'open') {
+              const endDateFormatted = new Date(newEndStr).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+              await sendNotificationSQL(ministryId, {
+                  title: "📅 Disponibilidade Liberada!",
+                  message: `A agenda está aberta até ${endDateFormatted}. Marque seus dias agora!`,
+                  type: "success",
+                  actionLink: "availability"
+              });
+          } else {
+              await sendNotificationSQL(ministryId, {
+                  title: "🔒 Janela Fechada",
+                  message: "O período para enviar disponibilidade foi encerrado.",
+                  type: "warning"
+              });
+          }
+          addToast(action === 'open' ? "Janela liberada com sucesso!" : "Janela bloqueada com sucesso!", "success");
+      } catch (e) {
+          addToast("Erro ao salvar no banco. Verifique sua conexão.", "error");
+      } finally {
+          setIsProcessing(false);
+      }
   };
 
   const handleNotificationClick = async () => {
-      if (!onEnableNotifications) return;
-      if (notifPermission === 'denied') {
-          alert("As notificações estão bloqueadas no seu navegador. Acesse as configurações do site para desbloquear.");
-          return;
-      }
+    if (onEnableNotifications) {
       setIsNotifLoading(true);
-      try {
-          await onEnableNotifications();
-          setNotifPermission(Notification.permission);
-      } catch (e) { console.error(e); }
-      finally { setIsNotifLoading(false); }
+      await onEnableNotifications();
+      if ('Notification' in window) {
+        setNotifPermission(Notification.permission);
+      }
+      setIsNotifLoading(false);
+    }
   };
 
   return (
     <div className="space-y-8 animate-fade-in max-w-4xl mx-auto pb-24">
       
-      {/* Header */}
       <div className="border-b border-zinc-200 dark:border-zinc-700 pb-4">
         <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
           <Settings className="text-zinc-500"/> Configurações
@@ -175,19 +184,18 @@ export const SettingsScreen: React.FC<Props> = ({
                 ? 'bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800' 
                 : 'bg-gradient-to-br from-zinc-700 via-zinc-800 to-black'
           }`}>
-              {/* Pattern Overlay */}
               <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.3) 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
               
               <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                   <div className="flex items-center gap-5">
                       <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-2xl border border-white/20 backdrop-blur-md transition-all duration-500 ${status ? 'bg-emerald-500/30' : 'bg-red-500/20'}`}>
-                          {status ? <Unlock size={32} className="text-emerald-100"/> : <Lock size={32} className="text-red-100"/>}
+                          {isProcessing ? <Loader2 size={32} className="text-white animate-spin"/> : status ? <Unlock size={32} className="text-emerald-100"/> : <Lock size={32} className="text-red-100"/>}
                       </div>
                       <div>
                           <div className="flex items-center gap-3 mb-1">
                               <h3 className="text-white font-bold text-2xl tracking-tight">Janela de Disponibilidade</h3>
                               <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border shadow-sm ${status ? 'bg-emerald-400 text-emerald-950 border-emerald-300' : 'bg-red-500 text-white border-red-400'}`}>
-                                  {status ? 'Aberta' : 'Fechada'}
+                                  {status ? 'ABERTA' : 'FECHADA'}
                               </span>
                           </div>
                           <p className="text-white/80 text-sm font-medium">
@@ -209,13 +217,13 @@ export const SettingsScreen: React.FC<Props> = ({
                       </label>
                       
                       {status && (
-                          <span className="text-[10px] font-bold text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded">
+                          <span className="text-[10px] font-bold text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded animate-fade-in">
                               Edição Manual Ativa
                           </span>
                       )}
                   </div>
                   
-                  <div className={`flex flex-col md:flex-row items-stretch md:items-center gap-0 bg-zinc-50 dark:bg-zinc-900/50 rounded-2xl border border-zinc-200 dark:border-zinc-700 p-2 shadow-inner transition-opacity ${!status ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+                  <div className={`flex flex-col md:flex-row items-stretch md:items-center gap-0 bg-zinc-50 dark:bg-zinc-900/50 rounded-2xl border border-zinc-200 dark:border-zinc-700 p-2 shadow-inner transition-all duration-500 ${!status ? 'opacity-50 pointer-events-none grayscale' : 'opacity-100'}`}>
                       <div className="flex-1 relative group p-2">
                           <label className="text-[10px] font-bold text-zinc-400 uppercase block mb-1">Abertura</label>
                           <input 
@@ -243,9 +251,10 @@ export const SettingsScreen: React.FC<Props> = ({
                       <div className="mt-3 flex justify-end">
                           <button 
                               onClick={handleSaveAdvanced}
-                              className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1"
+                              disabled={isProcessing}
+                              className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 disabled:opacity-50"
                           >
-                              <Save size={14}/> Salvar Datas Manuais
+                              <Save size={14}/> {isProcessing ? 'Salvando...' : 'Salvar Datas Manuais'}
                           </button>
                       </div>
                   )}
@@ -256,7 +265,7 @@ export const SettingsScreen: React.FC<Props> = ({
                   <button 
                       onClick={() => handleQuickAction('open')}
                       className={`relative overflow-hidden group flex items-center justify-between p-4 rounded-xl border transition-all duration-300 ${status ? 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700 opacity-50 cursor-not-allowed' : 'bg-white dark:bg-zinc-800 border-emerald-200 dark:border-emerald-900 hover:border-emerald-500 hover:shadow-lg hover:shadow-emerald-500/10'}`}
-                      disabled={status}
+                      disabled={status || isProcessing}
                   >
                       <div className="flex items-center gap-3 relative z-10">
                           <div className={`p-3 rounded-full ${status ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-400' : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform'}`}>
@@ -264,7 +273,7 @@ export const SettingsScreen: React.FC<Props> = ({
                           </div>
                           <div className="text-left">
                               <span className={`block font-bold text-sm ${status ? 'text-zinc-400' : 'text-zinc-800 dark:text-white'}`}>Liberar Acesso</span>
-                              <span className="text-[10px] text-zinc-500 block">Abre por 7 dias e notifica a equipe</span>
+                              <span className="text-[10px] text-zinc-500 block">Abre por 7 dias e notifica</span>
                           </div>
                       </div>
                   </button>
@@ -272,7 +281,7 @@ export const SettingsScreen: React.FC<Props> = ({
                   <button 
                       onClick={() => handleQuickAction('block')}
                       className={`relative overflow-hidden group flex items-center justify-between p-4 rounded-xl border transition-all duration-300 ${!status ? 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700 opacity-50 cursor-not-allowed' : 'bg-white dark:bg-zinc-800 border-red-200 dark:border-red-900 hover:border-red-500 hover:shadow-lg hover:shadow-red-500/10'}`}
-                      disabled={!status}
+                      disabled={!status || isProcessing}
                   >
                       <div className="flex items-center gap-3 relative z-10">
                           <div className={`p-3 rounded-full ${!status ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 group-hover:scale-110 transition-transform'}`}>
@@ -315,11 +324,6 @@ export const SettingsScreen: React.FC<Props> = ({
                         </button>
                     ))}
                 </div>
-                {onSaveTheme && (
-                    <button onClick={onSaveTheme} className="text-[10px] text-blue-600 dark:text-blue-400 font-bold hover:underline mt-2 block w-full text-right">
-                        Salvar Preferência
-                    </button>
-                )}
             </div>
 
             {isAdmin && (
@@ -357,7 +361,7 @@ export const SettingsScreen: React.FC<Props> = ({
                 <div>
                     <h4 className="font-bold text-sm text-zinc-800 dark:text-zinc-200">Notificações Push</h4>
                     <p className="text-xs text-zinc-500">
-                        {notifPermission === 'granted' ? 'Ativas e configuradas.' : 'Permita para receber avisos importantes.'}
+                        {notifPermission === 'granted' ? 'Ativas e configuradas.' : 'Permita para receber avisos.'}
                     </p>
                 </div>
             </div>
@@ -367,7 +371,7 @@ export const SettingsScreen: React.FC<Props> = ({
                     disabled={isNotifLoading}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-2 shadow-md active:scale-95"
                 >
-                    {isNotifLoading ? <Loader2 size={14} className="animate-spin"/> : 'Ativar Agora'}
+                    {isNotifLoading ? <Loader2 size={14} className="animate-spin"/> : 'Ativar'}
                 </button>
             )}
             {notifPermission === 'granted' && <div className="bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 p-2 rounded-full"><Check size={18} /></div>}
