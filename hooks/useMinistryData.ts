@@ -206,8 +206,9 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     roles, setRoles,
     ministryTitle, setMinistryTitle,
     availabilityWindow,
+    setAvailabilityWindow, // EXPOSED SETTER FOR OPTIMISTIC UPDATES
     errors,
-    isLoading, // Exportando estado de carregamento
+    isLoading, 
     refreshData
   };
 }

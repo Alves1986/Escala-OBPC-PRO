@@ -51,10 +51,14 @@ export const SettingsScreen: React.FC<Props> = ({
   // Helper para formatar ISO para input datetime-local (YYYY-MM-DDTHH:mm)
   const toLocalInput = (isoString?: string) => {
       if (!isoString) return "";
-      // Se a data for muito antiga (bloqueio), mostramos vazio ou uma data simbólica no input para não bugar a UI
-      if (isoString.startsWith('1970')) return "";
+      
+      // Se a data for do ano 1970 (qualquer parte da string), considera bloqueado e retorna vazio
+      if (isoString.includes('1970-')) return "";
+      
       try {
           const date = new Date(isoString);
+          if(date.getFullYear() === 1970) return "";
+
           const offset = date.getTimezoneOffset() * 60000;
           const localTime = new Date(date.getTime() - offset);
           return localTime.toISOString().slice(0, 16);
@@ -81,16 +85,17 @@ export const SettingsScreen: React.FC<Props> = ({
   // Verifica status atual da janela baseado nos inputs ou props
   const isWindowActive = () => {
       const dbStart = availabilityWindow?.start;
-      const dbEnd = availabilityWindow?.end;
+      // Robust check for 1970 date in DB prop
+      const isDbBlocked = dbStart && (dbStart.includes('1970-') || new Date(dbStart).getFullYear() === 1970);
 
-      // Se as datas no banco forem de 1970, está FECHADO explicitamente
-      if (dbStart && dbStart.startsWith('1970')) return false;
+      // Se as datas no banco forem de 1970, está FECHADO explicitamente, independente dos inputs estarem vazios
+      if (isDbBlocked) return false;
 
       // Se não houver datas definidas, o padrão é ABERTO
-      if (!dbStart && !dbEnd && !availStart && !availEnd) return true;
+      if (!dbStart && !availabilityWindow?.end && !availStart && !availEnd) return true;
       
       const startIso = availStart ? fromLocalInput(availStart) : dbStart;
-      const endIso = availEnd ? fromLocalInput(availEnd) : dbEnd;
+      const endIso = availEnd ? fromLocalInput(availEnd) : availabilityWindow?.end;
 
       if (!startIso || !endIso) return true;
       
@@ -98,8 +103,13 @@ export const SettingsScreen: React.FC<Props> = ({
       const s = new Date(startIso);
       const e = new Date(endIso);
       
+      // Safety: If converted date is 1970, force inactive
+      if(s.getFullYear() === 1970) return false;
+
       return now >= s && now <= e;
   };
+
+  const status = isWindowActive();
 
   const handleSaveAdvanced = async () => {
       if (onSaveAvailabilityWindow) {
@@ -153,9 +163,10 @@ export const SettingsScreen: React.FC<Props> = ({
           });
       }
 
+      // Call prop function (which now updates optimistically in App.tsx)
       await onSaveAvailabilityWindow(newStartStr, newEndStr);
       
-      // Atualiza inputs visuais
+      // Also update local input state to reflect change immediately
       setAvailStart(toLocalInput(newStartStr));
       setAvailEnd(toLocalInput(newEndStr));
   };
@@ -173,8 +184,6 @@ export const SettingsScreen: React.FC<Props> = ({
       } catch (e) { console.error(e); }
       finally { setIsNotifLoading(false); }
   };
-
-  const status = isWindowActive();
 
   return (
     <div className="space-y-8 animate-fade-in max-w-4xl mx-auto pb-10">
@@ -227,14 +236,16 @@ export const SettingsScreen: React.FC<Props> = ({
                       <CalendarClock size={14}/> Configuração de Período
                   </label>
                   
-                  <div className="flex flex-col md:flex-row items-stretch md:items-center gap-0 bg-zinc-50 dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 p-1 shadow-inner">
+                  <div className={`flex flex-col md:flex-row items-stretch md:items-center gap-0 bg-zinc-50 dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 p-1 shadow-inner ${!status ? 'opacity-70' : ''}`}>
                       <div className="flex-1 relative group">
                           <label className="absolute left-4 top-2 text-[10px] font-bold text-zinc-400 uppercase">Abertura</label>
                           <input 
                               type="datetime-local" 
                               value={availStart} 
                               onChange={e => setAvailStart(e.target.value)} 
-                              className="w-full bg-transparent border-none rounded-xl pt-6 pb-2 px-4 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:bg-white dark:focus:bg-zinc-800 transition-colors"
+                              placeholder={!status ? "Bloqueado" : ""}
+                              disabled={!status && !availStart} // Disable if currently locked and empty
+                              className="w-full bg-transparent border-none rounded-xl pt-6 pb-2 px-4 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:bg-white dark:focus:bg-zinc-800 transition-colors placeholder:text-red-400 disabled:cursor-not-allowed"
                           />
                       </div>
 
@@ -246,18 +257,26 @@ export const SettingsScreen: React.FC<Props> = ({
                           <input 
                               type="datetime-local" 
                               value={availEnd} 
-                              onChange={e => setAvailEnd(e.target.value)} 
-                              className="w-full bg-transparent border-none rounded-xl pt-6 pb-2 px-4 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:bg-white dark:focus:bg-zinc-800 transition-colors text-right md:text-left"
+                              onChange={e => setAvailEnd(e.target.value)}
+                              placeholder={!status ? "Bloqueado" : ""}
+                              disabled={!status && !availEnd} 
+                              className="w-full bg-transparent border-none rounded-xl pt-6 pb-2 px-4 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:bg-white dark:focus:bg-zinc-800 transition-colors text-right md:text-left placeholder:text-red-400 disabled:cursor-not-allowed"
                           />
                       </div>
                   </div>
+                  {!status && (
+                      <p className="text-[10px] text-red-400 mt-2 text-center">
+                          A janela está bloqueada. Clique em "Liberar por 7 Dias" para reabrir.
+                      </p>
+                  )}
               </div>
 
               {/* Actions Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <button 
                       onClick={handleSaveAdvanced}
-                      className="flex items-center justify-center gap-2 w-full py-4 bg-zinc-100 dark:bg-zinc-700/50 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-xl font-bold text-sm transition-all border border-transparent hover:border-zinc-300 dark:hover:border-zinc-600"
+                      disabled={!status} // Disable save if blocked, force user to use "Open"
+                      className="flex items-center justify-center gap-2 w-full py-4 bg-zinc-100 dark:bg-zinc-700/50 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-xl font-bold text-sm transition-all border border-transparent hover:border-zinc-300 dark:hover:border-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                       <Save size={18} />
                       Salvar Alterações
@@ -285,7 +304,7 @@ export const SettingsScreen: React.FC<Props> = ({
       </div>
       )}
 
-      {/* Restante da UI (Aparência, Integrações, etc) mantida igual */}
+      {/* Restante da UI (Aparência, Integrações, etc) */}
       <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
         <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
             <Monitor size={16}/> Aparência

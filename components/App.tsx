@@ -10,6 +10,7 @@ import {
 import { ToastProvider, useToast } from './components/Toast';
 import { LoginScreen } from './components/LoginScreen';
 import { SetupScreen } from './components/SetupScreen';
+import { LoadingScreen } from './components/LoadingScreen';
 import { DashboardLayout } from './components/DashboardLayout';
 import { NextEventCard } from './components/NextEventCard';
 import { BirthdayCard } from './components/BirthdayCard';
@@ -98,8 +99,9 @@ const InnerApp = () => {
     globalConflicts,
     roles, 
     ministryTitle, setMinistryTitle,
-    availabilityWindow,
-    refreshData: loadData
+    availabilityWindow, setAvailabilityWindow, // Destructure new setter
+    refreshData: loadData,
+    isLoading: loadingData
   } = useMinistryData(ministryId, currentMonth, currentUser);
 
   const [showInstallBanner, setShowInstallBanner] = useState(false);
@@ -124,6 +126,16 @@ const InnerApp = () => {
       }
   });
   const [visualTheme, setVisualTheme] = useState<'light' | 'dark'>('light');
+  const [showInitialLoading, setShowInitialLoading] = useState(true);
+
+  useEffect(() => {
+      if (!loadingAuth && !loadingData) {
+          const timer = setTimeout(() => {
+              setShowInitialLoading(false);
+          }, 800);
+          return () => clearTimeout(timer);
+      }
+  }, [loadingAuth, loadingData]);
 
   useEffect(() => {
       if (currentUser?.ministryId) {
@@ -356,41 +368,49 @@ const InnerApp = () => {
   };
 
   const handleAiAutoFill = async () => {
+      const runAi = async () => {
+          addToast("Gerando escala inteligente com Gemini... aguarde.", "info");
+          try {
+              const generatedSchedule = await generateScheduleWithAI({
+                  events: events.map(e => ({ iso: e.iso, title: e.title })),
+                  members: publicMembers,
+                  availability,
+                  availabilityNotes,
+                  roles,
+                  ministryId
+              });
+
+              setSchedule(generatedSchedule);
+              await Supabase.saveScheduleBulk(ministryId, generatedSchedule, true);
+              
+              addToast("Escala gerada com sucesso!", "success");
+
+              // Notificar Equipe
+              await Supabase.sendNotificationSQL(ministryId, { 
+                  title: "Escala Disponível", 
+                  message: `A escala de ${getMonthName(currentMonth)} foi gerada com IA e está disponível.`, 
+                  type: 'info', 
+                  actionLink: 'calendar' 
+              });
+
+          } catch (e: any) {
+              addToast(`Erro: ${e.message}`, "error");
+          }
+      };
+
       if (Object.keys(schedule).length > 0) {
-          if (!confirm("A escala já possui itens preenchidos. Deseja sobrescrever usando Inteligência Artificial?")) return;
-      }
-
-      addToast("Gerando escala inteligente com Gemini... aguarde.", "info");
-
-      try {
-          const generatedSchedule = await generateScheduleWithAI({
-              events: events.map(e => ({ iso: e.iso, title: e.title })),
-              members: publicMembers,
-              availability,
-              availabilityNotes,
-              roles,
-              ministryId
-          });
-
-          setSchedule(generatedSchedule);
-          await Supabase.saveScheduleBulk(ministryId, generatedSchedule, true);
-          
-          addToast("Escala gerada com sucesso!", "success");
-
-          // Notificar Equipe
-          await Supabase.sendNotificationSQL(ministryId, { 
-              title: "Escala Disponível", 
-              message: `A escala de ${getMonthName(currentMonth)} foi gerada com IA e está disponível.`, 
-              type: 'info', 
-              actionLink: 'calendar' 
-          });
-
-      } catch (e: any) {
-          addToast(`Erro: ${e.message}`, "error");
+          confirmAction(
+              "Sobrescrever Escala?", 
+              "A escala já possui itens preenchidos. Deseja sobrescrever usando Inteligência Artificial?", 
+              runAi
+          );
+      } else {
+          runAi();
       }
   };
 
-  if (loadingAuth) return <div className="flex h-screen items-center justify-center bg-zinc-950 text-white">Carregando...</div>;
+  if (loadingAuth || (currentUser && showInitialLoading)) return <LoadingScreen />;
+  
   if (!currentUser) return <LoginScreen isLoading={loadingAuth} />;
 
   const MAIN_NAV = [
@@ -428,7 +448,7 @@ const InnerApp = () => {
         currentTab={currentTab}
         onTabChange={setCurrentTab}
         mainNavItems={MAIN_NAV}
-        managementNavItems={MANAGEMENT_NAV}
+        managementNavItems={isAdmin ? MANAGEMENT_NAV : []}
         notifications={notifications}
         onNotificationsUpdate={setNotifications}
         onInstall={handleInstallApp}
@@ -522,7 +542,7 @@ const InnerApp = () => {
             </div>
         )}
 
-        {/* ... (Existing Tabs: calendar, schedule-editor, events, availability, swaps, ranking, repertoire) ... */}
+        {/* ... (Existing Tabs) ... */}
         {currentTab === 'calendar' && (
             <div className="space-y-6 animate-fade-in">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -572,14 +592,18 @@ const InnerApp = () => {
                             onExportFull={() => {}} 
                             onWhatsApp={() => {}} 
                             onClearMonth={() => {
-                                if(confirm("Limpar toda a escala deste mês?")) {
-                                    Supabase.clearScheduleForMonth(ministryId, currentMonth).then(loadData);
-                                }
+                                confirmAction(
+                                    "Limpar Escala",
+                                    "Deseja limpar toda a escala deste mês? Essa ação não pode ser desfeita.",
+                                    () => Supabase.clearScheduleForMonth(ministryId, currentMonth).then(loadData)
+                                );
                             }}
                             onResetEvents={() => {
-                                if(confirm("Restaurar eventos padrão? (Isso removerá eventos duplicados)")) {
-                                    Supabase.resetToDefaultEvents(ministryId, currentMonth).then(loadData);
-                                }
+                                confirmAction(
+                                    "Restaurar Padrão",
+                                    "Deseja restaurar os eventos padrão? Isso removerá eventos duplicados ou manuais.",
+                                    () => Supabase.resetToDefaultEvents(ministryId, currentMonth).then(loadData)
+                                );
                             }}
                             onAiAutoFill={handleAiAutoFill}
                             onSyncCalendar={handleSyncCalendar}
@@ -626,10 +650,14 @@ const InnerApp = () => {
                     onCellChange={handleCellChange}
                     onAttendanceToggle={handleAttendanceToggle}
                     onDeleteEvent={async (iso, title) => {
-                         if(confirm(`Remover o evento "${title}"?`)) {
-                             await Supabase.deleteMinistryEvent(ministryId, iso.split('T')[0] + 'T' + iso.split('T')[1]);
-                             loadData();
-                         }
+                         confirmAction(
+                             "Remover Evento",
+                             `Deseja realmente remover o evento "${title}"? Todos os agendamentos serão perdidos.`,
+                             async () => {
+                                 await Supabase.deleteMinistryEvent(ministryId, iso.split('T')[0] + 'T' + iso.split('T')[1]);
+                                 loadData();
+                             }
+                         );
                     }}
                     onEditEvent={(event) => setEventDetailsModal({ isOpen: true, event })}
                     memberStats={(() => {
@@ -642,7 +670,7 @@ const InnerApp = () => {
                     })()}
                     ministryId={ministryId}
                     readOnly={false}
-                    onlineUsers={onlineUsers} // New prop
+                    onlineUsers={onlineUsers}
                 />
             </div>
         )}
@@ -677,6 +705,7 @@ const InnerApp = () => {
             />
         )}
 
+        {/* ... rest of the tabs ... */}
         {currentTab === 'swaps' && (
             <SwapRequestsScreen 
                 schedule={schedule}
@@ -726,7 +755,6 @@ const InnerApp = () => {
             <div className="space-y-8">
                 <AlertsManager 
                     onSend={async (title, message, type, exp) => {
-                            // Fix: Added actionLink so notification opens announcements tab
                             await Supabase.sendNotificationSQL(ministryId, { title, message, type, actionLink: 'announcements' });
                             await Supabase.createAnnouncementSQL(ministryId, { title, message, type, expirationDate: exp }, currentUser.name);
                             loadData();
@@ -754,7 +782,6 @@ const InnerApp = () => {
                                 <div className="flex gap-4">
                                     <div className="relative">
                                         {member.avatar_url ? <img src={member.avatar_url} alt={member.name} className="w-14 h-14 rounded-full object-cover border-2 border-zinc-700 shadow-sm" /> : <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold border-2 border-zinc-700 shadow-sm">{member.name.charAt(0).toUpperCase()}</div>}
-                                        {/* ONLINE INDICATOR */}
                                         {isOnline && (
                                             <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-[#18181b] animate-pulse" title="Online Agora"></div>
                                         )}
@@ -766,7 +793,17 @@ const InnerApp = () => {
                                 </div>
                                 <div className="flex items-center gap-2">
                                      <button onClick={async () => { if (member.email) { const newStatus = !member.isAdmin; await Supabase.toggleAdminSQL(member.email, newStatus); loadData(); addToast(`${member.name} agora é ${newStatus ? 'Admin' : 'Membro'}.`, 'success'); } else { addToast("Este usuário não possui e-mail para ser admin.", "error"); } }} className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors border ${member.isAdmin ? 'bg-zinc-800 border-zinc-600 text-white hover:bg-zinc-700' : 'bg-transparent border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-500'}`} title={member.isAdmin ? "Remover Admin" : "Tornar Admin"}><ShieldCheck size={16} fill={member.isAdmin ? "currentColor" : "none"} /></button>
-                                    <button onClick={async () => { if(confirm(`Remover ${member.name} da equipe?`)) { await Supabase.deleteMember(ministryId, member.id, member.name); loadData(); addToast(`${member.name} removido.`, "success"); } }} className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors border bg-transparent border-zinc-700 text-zinc-500 hover:text-red-400 hover:border-red-900/50 hover:bg-red-900/10"><Trash2 size={16} /></button>
+                                    <button onClick={async () => { 
+                                        confirmAction(
+                                            "Remover Membro",
+                                            `Deseja remover ${member.name} da equipe? Isso removerá o acesso dele ao ministério atual.`,
+                                            async () => {
+                                                await Supabase.deleteMember(ministryId, member.id, member.name);
+                                                loadData();
+                                                addToast(`${member.name} removido.`, "success");
+                                            }
+                                        );
+                                    }} className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors border bg-transparent border-zinc-700 text-zinc-500 hover:text-red-400 hover:border-red-900/50 hover:bg-red-900/10"><Trash2 size={16} /></button>
                                 </div>
                             </div>
                             <div className="flex flex-wrap gap-2">
@@ -826,6 +863,8 @@ const InnerApp = () => {
                 onAnnounceUpdate={async () => { await Supabase.sendNotificationSQL(ministryId, { title: "Atualização de Sistema", message: "Uma nova versão do app está disponível. Recarregue a página para aplicar.", type: "warning" }); addToast("Notificação de atualização enviada.", "success"); }}
                 onEnableNotifications={handleEnableNotifications}
                 onSaveAvailabilityWindow={async (start, end) => { 
+                    // OPTIMISTIC UPDATE: Update local state immediately
+                    setAvailabilityWindow({ start, end });
                     await Supabase.saveMinistrySettings(ministryId, undefined, undefined, start, end); 
                     loadData(); 
                 }}
@@ -834,6 +873,7 @@ const InnerApp = () => {
             />
         )}
 
+        {/* ... modals ... */}
         <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ ...e, iso: e.iso }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, e); loadData(); }} onRemove={async (id) => { loadData(); }} />
         <AvailabilityModal 
             isOpen={isAvailModalOpen} 
