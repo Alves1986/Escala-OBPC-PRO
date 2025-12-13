@@ -404,14 +404,14 @@ const InnerApp = () => {
     { id: 'settings', label: 'Configurações', icon: <Settings size={20}/> },
   ];
 
-  const MANAGEMENT_NAV = [
+  const MANAGEMENT_NAV ={isAdmin ? MANAGEMENT_NAV : [
     { id: 'schedule-editor', label: 'Editor de Escala', icon: <Edit size={20}/> },
     { id: 'repertoire-manager', label: 'Gerenciar Repertório', icon: <ListMusic size={20}/> },
     { id: 'report', label: 'Relat. Disponibilidade', icon: <FileBarChart size={20}/> },
     { id: 'events', label: 'Eventos', icon: <CalendarDays size={20}/> },
     { id: 'send-announcements', label: 'Enviar Avisos', icon: <Send size={20}/> },
     { id: 'members', label: 'Membros & Equipe', icon: <Users size={20}/> },
-  ];
+  ]};
 
   const isAdmin = currentUser.role === 'admin';
 
