@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { AvailabilityMap, AvailabilityNotesMap, User } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
-import { CalendarCheck, Lock, Save, MessageSquare, Sun, Moon, ShieldCheck, Unlock, ThumbsUp, XCircle, Info } from 'lucide-react';
+import { CalendarCheck, Lock, Save, MessageSquare, Sun, Moon, ShieldCheck, Unlock, ThumbsUp, Check } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface Props {
@@ -98,24 +98,28 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
       let newDates = [...tempDates];
 
-      // Se já existe algo para este dia, removemos primeiro para aplicar a nova lógica
+      // Remove qualquer estado anterior para este dia
       if (existingEntry) {
           newDates = newDates.filter(d => !d.startsWith(dateStr));
       }
 
-      // Lógica Positiva: Clicar ADICIONA disponibilidade
+      // LÓGICA DE CICLO:
+      // Se não tinha nada (Indisponível) -> Vira Full (Verde)
+      // Se era Full -> Vira Manhã (Amarelo) (Só Domingo)
+      // Se era Manhã -> Vira Noite (Azul) (Só Domingo)
+      // Se era Noite -> Vira Vazio (Indisponível)
+
       if (isSunday) {
-          // Ciclo Domingo: Vazio -> Full -> Manhã -> Noite -> Vazio
           if (!existingEntry) {
-              newDates.push(dateStr); // Disponível Full
+              newDates.push(dateStr); // Full Available
           } else if (existingEntry === dateStr) {
-              newDates.push(`${dateStr}_M`); // Só Manhã
+              newDates.push(`${dateStr}_M`); // Morning Only
           } else if (existingEntry.endsWith('_M')) {
-              newDates.push(`${dateStr}_N`); // Só Noite
+              newDates.push(`${dateStr}_N`); // Night Only
           } 
-          // Se era Noite (_N), já foi removido no filtro acima, então fica Vazio (Indisponível)
+          // Se era Night (_N), já foi removido no filtro acima, então volta a ser vazio (Indisponível)
       } else {
-          // Dias Normais: Vazio -> Full -> Vazio
+          // Dias Normais: Toggle Simples (Vazio <-> Full)
           if (!existingEntry) {
               newDates.push(dateStr);
           }
@@ -163,24 +167,24 @@ export const AvailabilityScreen: React.FC<Props> = ({
   };
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-4xl mx-auto pb-20">
+    <div className="space-y-6 animate-fade-in max-w-4xl mx-auto pb-24">
       
       {/* Header Controls */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
-          <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg">
-                  <CalendarCheck size={20} />
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-zinc-800 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+          <div className="flex items-center gap-4">
+              <div className="p-3 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-xl">
+                  <CalendarCheck size={24} />
               </div>
               <div>
-                  <h2 className="font-bold text-zinc-800 dark:text-white">Disponibilidade</h2>
-                  <p className="text-xs text-zinc-500">Marque os dias que você <span className="font-bold text-green-600 dark:text-green-400">PODE</span> servir.</p>
+                  <h2 className="text-lg font-bold text-zinc-800 dark:text-white leading-tight">Disponibilidade</h2>
+                  <p className="text-sm text-zinc-500">Toque nos dias em que você <span className="font-bold text-emerald-600 dark:text-emerald-400">PODE</span> servir.</p>
               </div>
           </div>
 
-          <div className="flex items-center gap-4 bg-zinc-50 dark:bg-zinc-900 p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700">
-                <button onClick={handlePrevMonth} className="p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-md transition-colors shadow-sm">←</button>
-                <span className="text-sm font-bold text-zinc-800 dark:text-zinc-100 min-w-[100px] text-center capitalize">{getMonthName(currentMonth)}</span>
-                <button onClick={handleNextMonth} className="p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-md transition-colors shadow-sm">→</button>
+          <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-900 p-1.5 rounded-xl border border-zinc-200 dark:border-zinc-700">
+                <button onClick={handlePrevMonth} className="p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white">←</button>
+                <span className="text-sm font-bold text-zinc-800 dark:text-zinc-100 min-w-[120px] text-center capitalize select-none">{getMonthName(currentMonth)}</span>
+                <button onClick={handleNextMonth} className="p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white">→</button>
           </div>
       </div>
 
@@ -218,7 +222,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
               <select 
                   value={selectedMember} 
                   onChange={e => setSelectedMember(e.target.value)}
-                  className="w-full p-2.5 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white font-medium text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-colors"
+                  className="w-full p-2.5 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white font-medium text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-colors"
               >
                   <option value="" className="text-zinc-500">Selecione...</option>
                   {allMembersList.map(m => <option key={m} value={m} className="text-zinc-900 dark:text-zinc-100 bg-white dark:bg-zinc-800">{m}</option>)}
@@ -229,8 +233,16 @@ export const AvailabilityScreen: React.FC<Props> = ({
       {selectedMember ? (
           <div className={`relative transition-opacity duration-300 ${!isEditable ? 'opacity-60 pointer-events-none grayscale-[0.5]' : ''}`}>
               
+              {/* Legend - Updated */}
+              <div className="flex flex-wrap justify-center gap-4 text-[10px] text-zinc-500 uppercase font-bold tracking-wide mb-6 bg-white dark:bg-zinc-800 p-3 rounded-full border border-zinc-100 dark:border-zinc-700 shadow-sm w-fit mx-auto">
+                  <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600"/> Indisponível</div>
+                  <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"/> Disponível</div>
+                  <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-amber-400 shadow-sm shadow-amber-400/50"/> Só Manhã</div>
+                  <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-indigo-500 shadow-sm shadow-indigo-500/50"/> Só Noite</div>
+              </div>
+
               {/* Calendar Grid */}
-              <div className="grid grid-cols-7 gap-2 sm:gap-3 mb-6 select-none">
+              <div className="grid grid-cols-7 gap-2 sm:gap-3 mb-8 select-none">
                   {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => (
                       <div key={i} className="text-center text-xs font-bold text-zinc-400 py-2">{d}</div>
                   ))}
@@ -242,76 +254,72 @@ export const AvailabilityScreen: React.FC<Props> = ({
                   {days.map(day => {
                       const status = getDayStatus(day);
                       
-                      // Estilo Padrão (Indisponível/Cinza)
-                      let styles = "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-transparent opacity-60";
+                      // Estilos Base (Unavailable/Cinza)
+                      let styles = "bg-white dark:bg-zinc-800 text-zinc-400 border border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600";
                       let icon = null;
+                      let shadow = "shadow-sm";
 
                       if (status === 'FULL') {
                           // Verde (Disponível Total)
-                          styles = "bg-green-600 text-white shadow-md ring-2 ring-green-500 ring-offset-1 dark:ring-offset-zinc-900 font-bold opacity-100";
-                          icon = <ThumbsUp size={12} className="absolute top-1 right-1 opacity-90"/>;
+                          styles = "bg-emerald-500 text-white border-emerald-600 font-bold ring-2 ring-emerald-200 dark:ring-emerald-900";
+                          shadow = "shadow-lg shadow-emerald-500/30 transform scale-105 z-10";
+                          icon = <ThumbsUp size={14} className="absolute top-1 right-1 opacity-90 stroke-[3]"/>;
                       } else if (status === 'MORNING') {
                           // Amarelo (Manhã)
-                          styles = "bg-yellow-400 text-yellow-900 shadow-md ring-2 ring-yellow-300 ring-offset-1 dark:ring-offset-zinc-900 font-bold opacity-100";
-                          icon = <Sun size={12} className="absolute top-1 right-1 opacity-80"/>;
+                          styles = "bg-amber-400 text-amber-950 border-amber-500 font-bold ring-2 ring-amber-200 dark:ring-amber-900";
+                          shadow = "shadow-lg shadow-amber-400/30 transform scale-105 z-10";
+                          icon = <Sun size={14} className="absolute top-1 right-1 opacity-80 stroke-[2.5]"/>;
                       } else if (status === 'NIGHT') {
                           // Azul (Noite)
-                          styles = "bg-blue-600 text-white shadow-md ring-2 ring-blue-500 ring-offset-1 dark:ring-offset-zinc-900 font-bold opacity-100";
-                          icon = <Moon size={12} className="absolute top-1 right-1 opacity-90"/>;
+                          styles = "bg-indigo-500 text-white border-indigo-600 font-bold ring-2 ring-indigo-200 dark:ring-indigo-900";
+                          shadow = "shadow-lg shadow-indigo-500/30 transform scale-105 z-10";
+                          icon = <Moon size={14} className="absolute top-1 right-1 opacity-90 stroke-[2.5]"/>;
                       }
 
                       return (
                           <button
                               key={day}
                               onClick={() => handleDayClick(day)}
-                              className={`aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all active:scale-95 ${styles}`}
+                              className={`aspect-square rounded-2xl flex flex-col items-center justify-center relative transition-all duration-200 ${styles} ${shadow}`}
                               title={status === 'FULL' ? 'Disponível o dia todo' : status === 'UNAVAILABLE' ? 'Indisponível' : status === 'MORNING' ? 'Disponível apenas Manhã' : 'Disponível apenas Noite'}
                           >
-                              <span className="text-sm sm:text-base">{day}</span>
+                              <span className="text-sm sm:text-lg">{day}</span>
                               {icon}
                           </button>
                       );
                   })}
               </div>
 
-              {/* Legend - Updated */}
-              <div className="flex flex-wrap justify-center gap-4 text-[10px] text-zinc-500 uppercase font-bold tracking-wide mb-6">
-                  <div className="flex items-center gap-1 opacity-60"><div className="w-3 h-3 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600"/> Indisponível</div>
-                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-green-600"/> Disponível</div>
-                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-yellow-400"/> Só Manhã</div>
-                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-blue-600"/> Só Noite</div>
-              </div>
-
               {/* Note Section */}
-              <div className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm mb-20">
-                  <div className="flex items-center gap-2 mb-2 text-zinc-500">
-                      <MessageSquare size={16} />
-                      <span className="text-xs font-bold uppercase">Observações do Mês</span>
+              <div className="bg-white dark:bg-zinc-800 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm mb-24">
+                  <div className="flex items-center gap-2 mb-3 text-zinc-500">
+                      <MessageSquare size={18} className="text-emerald-500" />
+                      <span className="text-xs font-bold uppercase tracking-wider">Observações do Mês</span>
                   </div>
                   <textarea 
                       value={generalNote}
                       onChange={(e) => { setGeneralNote(e.target.value); setHasChanges(true); }}
-                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 text-sm text-zinc-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-green-500 min-h-[80px]"
+                      className="w-full bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 text-sm text-zinc-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] transition-all"
                       placeholder={isEditable ? "Ex: Chego atrasado no dia 15..." : "Edição de observações encerrada."}
                       disabled={!isEditable}
                   />
               </div>
 
               {/* Floating Save Button */}
-              <div className={`fixed bottom-6 right-6 left-6 md:left-auto flex justify-end z-[90] transition-all duration-300 ${hasChanges ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0 pointer-events-none'}`}>
+              <div className={`fixed bottom-6 right-6 left-6 md:left-auto flex justify-end z-[90] transition-all duration-500 ease-out ${hasChanges ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0 pointer-events-none'}`}>
                   <button 
                       onClick={handleSave}
                       disabled={isSaving}
-                      className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-full font-bold shadow-xl flex items-center gap-2 transition-transform hover:scale-105 active:scale-95 disabled:opacity-70 ring-2 ring-white dark:ring-zinc-900"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-full font-bold shadow-2xl shadow-emerald-900/30 flex items-center gap-3 transition-transform hover:scale-105 active:scale-95 disabled:opacity-70 ring-4 ring-white dark:ring-zinc-900"
                   >
-                      <Save size={20} className={isSaving ? "animate-spin" : ""} />
+                      {isSaving ? <span className="animate-spin text-white block w-5 h-5 border-2 border-white/30 border-t-white rounded-full"></span> : <Check size={24} strokeWidth={3} />}
                       {isSaving ? "Salvando..." : "Confirmar Disponibilidade"}
                   </button>
               </div>
           </div>
       ) : (
-          <div className="text-center py-10 text-zinc-400 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
-              Selecione um membro para editar.
+          <div className="text-center py-12 text-zinc-400 bg-zinc-50 dark:bg-zinc-900/30 rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800">
+              <p className="text-sm">Selecione um membro acima para começar a editar.</p>
           </div>
       )}
     </div>

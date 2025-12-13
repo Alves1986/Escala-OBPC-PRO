@@ -331,6 +331,7 @@ export const saveMemberAvailability = async (
         const endDate = `${targetMonth}-${String(lastDay).padStart(2, '0')}`;
 
         // Deleta TODAS as entradas existentes para esse usuário nesse mês
+        // Isso é crucial: Se o usuário remove um dia da lista, ele deve ser deletado do banco.
         const { error: deleteError } = await supabase.from('availability')
             .delete()
             .eq('member_id', userId)
@@ -369,7 +370,7 @@ export const saveMemberAvailability = async (
             const existingEntryIndex = rowsToInsert.findIndex(r => r.date === firstOfMonth);
             
             if (existingEntryIndex >= 0) {
-                // Se já existe (usuário marcou que pode dia 1), atualiza o metadata existente
+                // Se já existe, atualiza metadata
                 const existingRow = rowsToInsert[existingEntryIndex];
                 let existingMeta = {};
                 try {
