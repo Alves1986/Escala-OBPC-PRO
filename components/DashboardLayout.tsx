@@ -1,6 +1,5 @@
-
 import React, { ReactNode, useState } from 'react';
-import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle } from 'lucide-react';
+import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings } from 'lucide-react';
 import { User, AppNotification } from '../types';
 import { NotificationCenter } from './NotificationCenter';
 
@@ -76,22 +75,24 @@ export const DashboardLayout: React.FC<Props> = ({
       <button
         key={item.id}
         onClick={() => { onTabChange(item.id); setSidebarOpen(false); }}
-        className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-300 group relative overflow-hidden ${
+        className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-300 group relative overflow-hidden mb-1 ${
           isActive 
-            ? 'text-white shadow-lg shadow-teal-500/30' 
-            : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-white'
+            ? 'text-white shadow-lg shadow-teal-500/20' 
+            : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80 hover:text-zinc-900 dark:hover:text-white'
         }`}
       >
         {/* Active Background Gradient */}
         {isActive && (
-            <div className="absolute inset-0 bg-gradient-to-r from-teal-600 to-emerald-600 z-0" />
+            <div className="absolute inset-0 bg-gradient-to-r from-teal-600 to-emerald-600 z-0 opacity-100" />
         )}
         
-        <span className={`relative z-10 transition-colors ${isActive ? 'text-white' : 'text-zinc-500 dark:text-zinc-500 group-hover:text-zinc-800 dark:group-hover:text-white'}`}>
+        <span className={`relative z-10 transition-colors duration-300 ${isActive ? 'text-white' : 'text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-200'}`}>
           {item.icon}
         </span>
         <span className="flex-1 text-left relative z-10">{item.label}</span>
-        {isActive && <ChevronRight size={14} className="opacity-70 relative z-10" />}
+        {isActive && (
+            <span className="relative z-10 w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+        )}
       </button>
     );
   };
@@ -99,11 +100,11 @@ export const DashboardLayout: React.FC<Props> = ({
   const renderUserAvatar = () => {
     if (currentUser?.avatar_url) {
       return (
-        <img src={currentUser.avatar_url} alt={currentUser.name} className="w-10 h-10 rounded-full object-cover border-2 border-white dark:border-zinc-700 shadow-sm" />
+        <img src={currentUser.avatar_url} alt={currentUser.name} className="w-10 h-10 rounded-full object-cover border-2 border-white dark:border-zinc-700 shadow-sm transition-transform group-hover:scale-105" />
       );
     }
     return (
-      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white font-bold text-sm shadow-md border-2 border-white dark:border-zinc-700">
+      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white font-bold text-sm shadow-md border-2 border-white dark:border-zinc-700 transition-transform group-hover:scale-105">
          {currentUser?.name.charAt(0).toUpperCase()}
       </div>
     );
@@ -125,16 +126,16 @@ export const DashboardLayout: React.FC<Props> = ({
   const hasMultipleMinistries = currentUser?.allowedMinistries && currentUser.allowedMinistries.length > 1;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-transparent font-sans">
+    <div className="flex h-screen overflow-hidden bg-transparent font-sans text-zinc-900 dark:text-zinc-100">
       
       {/* Mobile Backdrop */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden transition-opacity duration-300" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] lg:hidden transition-opacity duration-300" onClick={() => setSidebarOpen(false)} />
       )}
 
       {/* Sidebar Navigation - Glassmorphism */}
       <aside 
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-xl border-r border-zinc-200/50 dark:border-zinc-800/50 transform transition-transform duration-300 ease-cubic lg:translate-x-0 lg:static lg:inset-0 flex flex-col shadow-2xl lg:shadow-none ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white/95 dark:bg-[#0c0c0e]/95 backdrop-blur-xl border-r border-zinc-200/60 dark:border-zinc-800/60 transform transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] lg:translate-x-0 lg:static lg:inset-0 flex flex-col shadow-2xl lg:shadow-none ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         
         {/* Header */}
@@ -143,7 +144,7 @@ export const DashboardLayout: React.FC<Props> = ({
                {imgError ? (
                  <div className="w-10 h-10 rounded-xl bg-teal-600 flex items-center justify-center text-white shadow-lg shadow-teal-900/20"><Layout size={20} /></div>
                ) : (
-                 <img src="/icon.png?v=2" alt="Logo" className="w-11 h-11 rounded-2xl shadow-md" onError={() => setImgError(true)} />
+                 <img src="/icon.png?v=2" alt="Logo" className="w-11 h-11 rounded-2xl shadow-md ring-1 ring-zinc-900/5 dark:ring-white/10" onError={() => setImgError(true)} />
                )}
                
                <div className="flex-1 min-w-0">
@@ -163,9 +164,9 @@ export const DashboardLayout: React.FC<Props> = ({
            {/* Dropdown Menu */}
            {ministryMenuOpen && (
                <>
-                   <div className="fixed inset-0 z-30" onClick={() => setMinistryMenuOpen(false)} />
-                   <div className="absolute top-24 left-4 right-4 bg-white dark:bg-zinc-800 rounded-2xl shadow-xl border border-zinc-200/50 dark:border-zinc-700/50 z-40 overflow-hidden animate-fade-in ring-1 ring-black/5">
-                       <p className="px-4 py-2.5 text-[10px] font-bold text-zinc-400 uppercase bg-zinc-50 dark:bg-zinc-900/50">Trocar Ministério</p>
+                   <div className="fixed inset-0 z-30 cursor-default" onClick={() => setMinistryMenuOpen(false)} />
+                   <div className="absolute top-24 left-4 right-4 bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-100 dark:border-zinc-800 z-40 overflow-hidden animate-slide-up ring-1 ring-black/5">
+                       <p className="px-4 py-2.5 text-[10px] font-bold text-zinc-400 uppercase bg-zinc-50 dark:bg-zinc-800/50 tracking-wider">Trocar Ministério</p>
                        {currentUser?.allowedMinistries?.map(mid => {
                            const isCurrent = currentUser.ministryId === mid;
                            return (
@@ -175,7 +176,7 @@ export const DashboardLayout: React.FC<Props> = ({
                                        if (onSwitchMinistry) onSwitchMinistry(mid);
                                        setMinistryMenuOpen(false);
                                    }}
-                                   className={`w-full text-left px-4 py-3 text-sm flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-700/50 transition-colors ${isCurrent ? 'bg-teal-50/50 dark:bg-teal-900/10 text-teal-600 dark:text-teal-400 font-bold' : 'text-zinc-700 dark:text-zinc-300'}`}
+                                   className={`w-full text-left px-4 py-3 text-sm flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors ${isCurrent ? 'bg-teal-50/50 dark:bg-teal-900/10 text-teal-600 dark:text-teal-400 font-bold' : 'text-zinc-600 dark:text-zinc-300'}`}
                                >
                                    {getMinistryLabel(mid)}
                                    {isCurrent && <Check size={16} className="text-teal-500" />}
@@ -189,7 +190,7 @@ export const DashboardLayout: React.FC<Props> = ({
                                    setMinistryMenuOpen(false);
                                    onOpenJoinMinistry();
                                }}
-                               className="w-full text-left px-4 py-3 text-sm flex items-center gap-2 text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20 border-t border-zinc-100 dark:border-zinc-700 font-bold transition-colors"
+                               className="w-full text-left px-4 py-3 text-sm flex items-center gap-2 text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20 border-t border-zinc-100 dark:border-zinc-800 font-bold transition-colors"
                            >
                                <PlusCircle size={16} /> Entrar em outro Ministério
                            </button>
@@ -200,141 +201,126 @@ export const DashboardLayout: React.FC<Props> = ({
         </div>
 
         {/* Navigation */}
-        <div className="flex-1 overflow-y-auto py-6 px-4 custom-scrollbar space-y-8">
-          
-          <div className="space-y-1">
-            <p className="px-4 text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest mb-2">Menu Principal</p>
-            {mainNavItems.map(renderNavButton)}
+        <div className="flex-1 overflow-y-auto py-6 px-4 custom-scrollbar">
+          <p className="px-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-3">Menu Principal</p>
+          <div className="space-y-1 mb-8">
+            {mainNavItems.map(item => renderNavButton(item))}
           </div>
 
-          {currentUser?.role === 'admin' && (
-            <div className="space-y-1">
-              <p className="px-4 text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest mb-2">Gestão</p>
-              {managementNavItems.map(renderNavButton)}
-            </div>
+          {managementNavItems.length > 0 && (
+            <>
+                <p className="px-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-3">Gerenciamento</p>
+                <div className="space-y-1 mb-8">
+                    {managementNavItems.map(item => renderNavButton(item))}
+                </div>
+            </>
           )}
-
         </div>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/50 dark:bg-zinc-900/30 space-y-3 shrink-0">
-           
-           {!isStandalone && onInstall && (
-             <button 
-               onClick={onInstall}
-               className="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-zinc-100 dark:text-zinc-900 shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 transition-all text-xs font-bold mb-2"
-             >
-               <Download size={16} /> Instalar Aplicativo
-             </button>
-           )}
-
-           {currentUser && (
-             <button 
-               onClick={() => { onTabChange('profile'); setSidebarOpen(false); }}
-               className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 group ${
-                 currentTab === 'profile' 
-                   ? 'bg-white dark:bg-zinc-800 border-teal-500/50 shadow-md ring-1 ring-teal-500/20' 
-                   : 'bg-white dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700/50 hover:border-zinc-300 dark:hover:border-zinc-600'
-               }`}
-             >
+        {/* Footer Profile */}
+        <div className="p-4 border-t border-zinc-200/50 dark:border-zinc-800/50 bg-zinc-50/50 dark:bg-zinc-900/30">
+            <button 
+                onClick={() => onTabChange('profile')}
+                className="flex items-center gap-3 w-full p-2 rounded-xl hover:bg-white dark:hover:bg-zinc-800 transition-colors group"
+            >
                 {renderUserAvatar()}
                 <div className="flex-1 min-w-0 text-left">
-                   <p className="text-sm font-bold text-zinc-800 dark:text-white truncate group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">{currentUser.name}</p>
-                   <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">{currentUser.role === 'admin' ? 'Administrador' : 'Membro'}</p>
+                    <p className="text-sm font-bold text-zinc-800 dark:text-white truncate">{currentUser?.name}</p>
+                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">{currentUser?.email}</p>
                 </div>
-             </button>
-           )}
-
-           <div className="grid grid-cols-2 gap-2">
-              <button onClick={toggleTheme} className="flex items-center justify-center gap-2 p-2 rounded-lg bg-zinc-200/50 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-zinc-600 dark:text-zinc-400">
-                 {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-                 <span className="text-[10px] font-bold">{theme === 'dark' ? 'Claro' : 'Escuro'}</span>
-              </button>
-              
-              <button onClick={onLogout} className="flex items-center justify-center gap-2 p-2 rounded-lg bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-red-600 dark:text-red-400">
-                 <LogOut size={16} />
-                 <span className="text-[10px] font-bold">Sair</span>
-              </button>
-           </div>
-
-           <div className="flex items-center justify-between px-1 pt-1 opacity-70 hover:opacity-100 transition-opacity">
-              <div className={`flex items-center gap-1.5 text-[10px] font-medium ${isConnected ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-500'}`}>
-                 <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-red-500'} animate-pulse`} />
-                 {isConnected ? 'Sistema Online' : 'Offline'}
-              </div>
-              
-              <button onClick={handleHardReload} className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-teal-500 transition-colors">
-                  <RefreshCw size={10} className={isUpdating ? 'animate-spin' : ''} />
-                  v2.2 Pro
-              </button>
-           </div>
+                <div className="p-2 text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-200">
+                    <Settings size={16} />
+                </div>
+            </button>
+            <div className="flex gap-2 mt-3">
+                <button 
+                    onClick={onLogout} 
+                    className="flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold text-zinc-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                >
+                    <LogOut size={14} /> Sair
+                </button>
+                <button
+                    onClick={toggleTheme}
+                    className="flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+                >
+                    {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />} Tema
+                </button>
+            </div>
+            
+            {onInstall && !isStandalone && (
+                <button 
+                    onClick={onInstall}
+                    className="w-full mt-3 flex items-center justify-center gap-2 py-2.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl text-xs font-bold shadow-md hover:opacity-90 transition-opacity"
+                >
+                    <Download size={14} /> Instalar App
+                </button>
+            )}
+            
+            {isUpdating && (
+                <div className="mt-2 text-center text-[10px] text-zinc-400 flex items-center justify-center gap-1 animate-pulse">
+                    <RefreshCw size={10} className="animate-spin" /> Atualizando...
+                </div>
+            )}
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+      <main className={`flex-1 flex flex-col min-w-0 bg-transparent transition-all duration-300 overflow-hidden`}>
+        
         {/* Mobile Header - Glassmorphism */}
-        <header className="flex items-center justify-between h-16 px-4 border-b border-zinc-200/50 dark:border-zinc-800/50 lg:hidden bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md sticky top-0 z-30 transition-all">
-           <div className="flex items-center gap-3">
-              <button onClick={() => setSidebarOpen(true)} className="p-2 -ml-2 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors">
-                  <Menu size={24} />
-              </button>
-              <div className="flex flex-col leading-tight">
-                  <span className="font-bold text-zinc-900 dark:text-zinc-100 text-sm truncate max-w-[200px]">{title}</span>
-                  {hasMultipleMinistries && <span className="text-[10px] text-teal-600 font-semibold">Toque no Menu</span>}
-              </div>
-           </div>
-           
-           <div className="flex items-center gap-3">
-               {!isStandalone && onInstall && (
-                 <button onClick={onInstall} className="p-2 text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/20 rounded-xl animate-pulse active:scale-95 transition-transform" title="Instalar App">
-                    <Download size={20} />
-                 </button>
-               )}
-
-               {currentUser && (
-                 <NotificationCenter 
+        <header className="lg:hidden h-16 px-4 flex items-center justify-between sticky top-0 z-30 bg-white/80 dark:bg-[#09090b]/80 backdrop-blur-md border-b border-zinc-200/50 dark:border-zinc-800/50">
+            <div className="flex items-center gap-3">
+                <button onClick={() => setSidebarOpen(true)} className="p-2 -ml-2 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg active:scale-95 transition-all">
+                    <Menu size={24} />
+                </button>
+                <h1 className="font-bold text-lg text-zinc-900 dark:text-white truncate max-w-[180px]">{title}</h1>
+            </div>
+            <div className="flex items-center gap-3">
+                <NotificationCenter 
                     notifications={notifications} 
-                    ministryId={currentUser.ministryId || null} 
+                    ministryId={currentUser?.ministryId || null} 
                     onNotificationsUpdate={onNotificationsUpdate} 
-                    onNavigate={onTabChange}
-                 />
-               )}
-               
-               {currentUser && (
-                <button onClick={() => onTabChange('profile')} className="flex items-center justify-center">
+                    onNavigate={(tab) => onTabChange(tab)}
+                />
+                <button onClick={() => onTabChange('profile')}>
                     {renderMobileAvatar()}
                 </button>
-               )}
-           </div>
+            </div>
         </header>
 
-        {/* Desktop Top Bar */}
-        <div className="hidden lg:flex justify-end items-center px-8 py-4 sticky top-0 z-30 bg-transparent pointer-events-none">
-             {/* Notification Center is pointer-events-auto inside a pointer-events-none container to let clicks pass through the header area if empty */}
-             <div className="pointer-events-auto flex items-center gap-4 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md p-2 rounded-full shadow-sm border border-zinc-200/50 dark:border-zinc-800/50">
-               {currentUser && (
+        {/* Desktop Top Bar - Glassmorphism */}
+        <header className="hidden lg:flex h-16 px-8 items-center justify-between sticky top-0 z-30 bg-white/60 dark:bg-[#09090b]/60 backdrop-blur-xl border-b border-zinc-200/30 dark:border-zinc-800/30">
+             <div className="flex items-center gap-2 text-sm text-zinc-500">
+                 <span className="font-medium">Painel</span>
+                 <ChevronRight size={14} />
+                 <span className="text-zinc-900 dark:text-white font-bold capitalize">{currentTab.replace('-', ' ')}</span>
+             </div>
+             
+             <div className="flex items-center gap-4">
                  <NotificationCenter 
                     notifications={notifications} 
-                    ministryId={currentUser.ministryId || null} 
-                    onNotificationsUpdate={onNotificationsUpdate} 
-                    onNavigate={onTabChange}
+                    ministryId={currentUser?.ministryId || null} 
+                    onNotificationsUpdate={onNotificationsUpdate}
+                    onNavigate={(tab) => onTabChange(tab)}
                  />
-               )}
-               {currentUser && (
-                   <button onClick={() => onTabChange('profile')} className="flex items-center pr-1">
-                       {renderMobileAvatar()}
-                   </button>
-               )}
+                 <div className="h-6 w-px bg-zinc-200 dark:bg-zinc-800"></div>
+                 <button 
+                    onClick={handleHardReload} 
+                    className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors"
+                    title="Recarregar Sistema"
+                 >
+                    <RefreshCw size={18} className={isUpdating ? "animate-spin" : ""} />
+                 </button>
              </div>
-        </div>
+        </header>
 
-        <main className="flex-1 overflow-y-auto p-4 lg:p-8 custom-scrollbar relative scroll-smooth">
-          <div className="max-w-7xl mx-auto pb-20 lg:pb-10">
-             {children}
-          </div>
-        </main>
-      </div>
+        {/* Content Scroll Area */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-8 custom-scrollbar">
+            <div className="max-w-7xl mx-auto w-full">
+                {children}
+            </div>
+        </div>
+      </main>
     </div>
   );
 };

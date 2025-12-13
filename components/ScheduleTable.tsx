@@ -1,8 +1,8 @@
 
-import React, { useMemo, useCallback, useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis, GlobalConflictMap, TeamMemberProfile } from '../types';
-import { CheckCircle2, AlertTriangle, Trash2, Edit, Clock, User, ChevronDown, ChevronLeft, ChevronRight, X, Search, AlertOctagon, XCircle, Info } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Trash2, Edit, Clock, User, ChevronDown, ChevronLeft, ChevronRight, X, Search, AlertOctagon, XCircle } from 'lucide-react';
 
 interface Props {
   events: { iso: string; dateDisplay: string; title: string }[];
@@ -22,13 +22,29 @@ interface Props {
   memberStats: Record<string, number>;
   ministryId: string | null;
   readOnly?: boolean; 
-  onlineUsers?: string[]; // Added onlineUsers prop
+  onlineUsers?: string[];
 }
 
+// Helper para verificar disponibilidade O(1) usando o Set pré-calculado
+const checkIsAvailable = (lookupSet: Set<string>, member: string, eventIso: string): boolean => {
+    const datePart = eventIso.slice(0, 10); // YYYY-MM-DD
+    const hour = parseInt(eventIso.slice(11, 13), 10); // HH
+
+    // 1. Verifica disponibilidade total no dia
+    if (lookupSet.has(`${member}_${datePart}`)) return true;
+
+    // 2. Verifica períodos específicos (Manhã < 13h, Noite >= 13h)
+    const isMorning = hour < 13;
+    if (isMorning && lookupSet.has(`${member}_${datePart}_M`)) return true;
+    if (!isMorning && lookupSet.has(`${member}_${datePart}_N`)) return true;
+
+    return false;
+};
+
 const MemberSelector = ({ 
-    value, onChange, options, memberProfiles = [], memberStats, hasError, hasWarning, eventIso, availability, warningMsg, label, onlineUsers = []
+    value, onChange, options, memberProfiles = [], memberStats, hasError, hasWarning, eventIso, availabilityLookup, warningMsg, label, onlineUsers = []
 }: { 
-    value: string; onChange: (val: string) => void; options: string[]; memberProfiles?: TeamMemberProfile[]; memberStats: Record<string, number>; hasError: boolean; hasWarning: boolean; eventIso: string; availability: AvailabilityMap; warningMsg?: string; label?: string; onlineUsers?: string[];
+    value: string; onChange: (val: string) => void; options: string[]; memberProfiles?: TeamMemberProfile[]; memberStats: Record<string, number>; hasError: boolean; hasWarning: boolean; eventIso: string; availabilityLookup: Set<string>; warningMsg?: string; label?: string; onlineUsers?: string[];
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState("");
@@ -77,27 +93,18 @@ const MemberSelector = ({
 
     const getInitials = (name: string) => name ? name.charAt(0).toUpperCase() : '?';
 
-    const checkAvailability = (member: string) => {
-        const [datePart, timePart] = eventIso.split('T');
-        const availableDates = availability[member];
-        if (!availableDates || availableDates.length === 0) return false;
-        if (availableDates.includes(datePart)) return true;
-        const hasMorning = availableDates.includes(`${datePart}_M`);
-        const hasNight = availableDates.includes(`${datePart}_N`);
-        const eventHour = parseInt(timePart.split(':')[0], 10);
-        const isMorningEvent = eventHour < 13;
-        if (isMorningEvent && hasMorning) return true;
-        if (!isMorningEvent && hasNight) return true;
-        return false;
-    };
-
-    const filteredOptions = options.filter(opt => opt.toLowerCase().includes(search.toLowerCase())).sort((a, b) => {
-        const availA = checkAvailability(a);
-        const availB = checkAvailability(b);
-        if (availA && !availB) return -1;
-        if (!availA && availB) return 1;
-        return 0;
-    });
+    // Otimizado: Ordenação e filtragem usando o Set
+    const filteredOptions = useMemo(() => {
+        return options
+            .filter(opt => opt.toLowerCase().includes(search.toLowerCase()))
+            .sort((a, b) => {
+                const availA = checkIsAvailable(availabilityLookup, a, eventIso);
+                const availB = checkIsAvailable(availabilityLookup, b, eventIso);
+                if (availA && !availB) return -1;
+                if (!availA && availB) return 1;
+                return 0;
+            });
+    }, [options, search, availabilityLookup, eventIso]);
 
     return (
         <div className="relative w-full" ref={triggerRef}>
@@ -183,8 +190,8 @@ const MemberSelector = ({
                             {filteredOptions.map((opt, idx) => {
                                 const profile = memberProfiles?.find(p => p.name === opt);
                                 const count = memberStats[opt] || 0;
-                                const isAvailable = checkAvailability(opt);
-                                const prevIsAvailable = idx > 0 ? checkAvailability(filteredOptions[idx-1]) : true;
+                                const isAvailable = checkIsAvailable(availabilityLookup, opt, eventIso);
+                                const prevIsAvailable = idx > 0 ? checkIsAvailable(availabilityLookup, filteredOptions[idx-1], eventIso) : true;
                                 const showSeparator = !isAvailable && prevIsAvailable;
                                 const isOnline = profile ? onlineUsers.includes(profile.id) : false;
 
@@ -223,21 +230,8 @@ const MemberSelector = ({
     );
 };
 
-const ScheduleRow = React.memo(({ event, columns, schedule, attendance, availability, members, memberProfiles, scheduleIssues, globalConflicts, onCellChange, onAttendanceToggle, onDeleteEvent, onEditEvent, memberStats, readOnly, onlineUsers }: any) => {
-    const isUnavailable = useCallback((member: string, isoDateStr: string) => {
-        const [datePart, timePart] = isoDateStr.split('T');
-        const availableDates = availability[member];
-        if (!availableDates || availableDates.length === 0) return true;
-        if (availableDates.includes(datePart)) return false; 
-        const hasMorning = availableDates.includes(`${datePart}_M`);
-        const hasNight = availableDates.includes(`${datePart}_N`);
-        const eventHour = parseInt(timePart.split(':')[0], 10);
-        const isMorningEvent = eventHour < 13;
-        if (isMorningEvent && hasMorning) return false; 
-        if (!isMorningEvent && hasNight) return false; 
-        return true; 
-    }, [availability]);
-
+const ScheduleRow = React.memo(({ event, columns, schedule, attendance, availabilityLookup, members, memberProfiles, scheduleIssues, globalConflicts, onCellChange, onAttendanceToggle, onDeleteEvent, onEditEvent, memberStats, readOnly, onlineUsers }: any) => {
+    
     const time = event.iso.split('T')[1];
 
     return (
@@ -264,7 +258,10 @@ const ScheduleRow = React.memo(({ event, columns, schedule, attendance, availabi
                 const currentValue = schedule[key] || "";
                 const roleMembers = members[col.realRole] || [];
                 const isConfirmed = attendance[key];
-                const hasLocalConflict = currentValue && isUnavailable(currentValue, event.iso);
+                
+                // Optimized check using the passed Set
+                const hasLocalConflict = currentValue && !checkIsAvailable(availabilityLookup, currentValue, event.iso);
+                
                 let globalConflictMsg = "";
                 let hasGlobalConflict = false;
                 if (currentValue && !readOnly) {
@@ -288,7 +285,19 @@ const ScheduleRow = React.memo(({ event, columns, schedule, attendance, availabi
                                 </div>
                             ) : (
                                 <div className="flex-1">
-                                    <MemberSelector value={currentValue} onChange={(val) => onCellChange(key, val)} options={roleMembers} memberProfiles={memberProfiles} memberStats={memberStats} hasError={hasLocalConflict} hasWarning={hasGlobalConflict} warningMsg={globalConflictMsg} eventIso={event.iso} availability={availability} onlineUsers={onlineUsers}/>
+                                    <MemberSelector 
+                                        value={currentValue} 
+                                        onChange={(val) => onCellChange(key, val)} 
+                                        options={roleMembers} 
+                                        memberProfiles={memberProfiles} 
+                                        memberStats={memberStats} 
+                                        hasError={hasLocalConflict} 
+                                        hasWarning={hasGlobalConflict} 
+                                        warningMsg={globalConflictMsg} 
+                                        eventIso={event.iso} 
+                                        availabilityLookup={availabilityLookup} 
+                                        onlineUsers={onlineUsers}
+                                    />
                                     {hasLocalConflict && <div className="text-[10px] text-red-500 mt-1 flex items-center gap-1 font-medium animate-pulse"><AlertOctagon size={10} /> Indisponível</div>}
                                     {hasGlobalConflict && <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1 font-bold" title={globalConflictMsg}><AlertTriangle size={10} /> Em outro ministério</div>}
                                 </div>
@@ -303,7 +312,7 @@ const ScheduleRow = React.memo(({ event, columns, schedule, attendance, availabi
         </tr>
     );
 }, (prev, next) => {
-    if (prev.readOnly !== next.readOnly || prev.memberStats !== next.memberStats || prev.event.iso !== next.event.iso || prev.memberProfiles !== next.memberProfiles || prev.globalConflicts !== next.globalConflicts || prev.onlineUsers !== next.onlineUsers) return false;
+    if (prev.readOnly !== next.readOnly || prev.memberStats !== next.memberStats || prev.event.iso !== next.event.iso || prev.memberProfiles !== next.memberProfiles || prev.globalConflicts !== next.globalConflicts || prev.onlineUsers !== next.onlineUsers || prev.availabilityLookup !== next.availabilityLookup) return false;
     const keys = next.columns.map((c: any) => `${next.event.iso}_${c.keySuffix}`);
     return !keys.some((k: string) => prev.schedule[k] !== next.schedule[k] || prev.attendance[k] !== next.attendance[k]);
 });
@@ -312,6 +321,17 @@ export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, sched
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
+
+  // OTIMIZAÇÃO: Pré-cálculo da disponibilidade em um Set para acesso O(1)
+  const availabilityLookup = useMemo(() => {
+      const set = new Set<string>();
+      Object.entries(availability).forEach(([member, dates]) => {
+          (dates as string[]).forEach((date) => {
+              set.add(`${member}_${date}`);
+          });
+      });
+      return set;
+  }, [availability]);
 
   const columns = useMemo(() => {
       return roles.flatMap(role => {
@@ -322,19 +342,19 @@ export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, sched
       });
   }, [roles, ministryId]);
 
-  const checkScroll = useCallback(() => {
+  const checkScroll = () => {
     if (scrollContainerRef.current) {
       const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current;
       setShowLeftArrow(scrollLeft > 10); 
       setShowRightArrow(Math.ceil(scrollLeft + clientWidth) < scrollWidth - 10);
     }
-  }, []);
+  };
 
   useEffect(() => {
     const timer = setTimeout(checkScroll, 100);
     window.addEventListener('resize', checkScroll);
     return () => { clearTimeout(timer); window.removeEventListener('resize', checkScroll); };
-  }, [checkScroll, columns, events]);
+  }, [columns, events]);
 
   const scroll = (direction: 'left' | 'right') => {
     if (scrollContainerRef.current) {
@@ -342,20 +362,6 @@ export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, sched
         const scrollAmount = clientWidth * 0.6;
         scrollContainerRef.current.scrollBy({ left: direction === 'left' ? -scrollAmount : scrollAmount, behavior: 'smooth' });
     }
-  };
-
-  const isUnavailable = (member: string, isoDateStr: string) => {
-        const [datePart, timePart] = isoDateStr.split('T');
-        const availableDates = availability[member];
-        if (!availableDates || availableDates.length === 0) return true;
-        if (availableDates.includes(datePart)) return false; 
-        const hasMorning = availableDates.includes(`${datePart}_M`);
-        const hasNight = availableDates.includes(`${datePart}_N`);
-        const eventHour = parseInt(timePart.split(':')[0], 10);
-        const isMorningEvent = eventHour < 13;
-        if (isMorningEvent && hasMorning) return false; 
-        if (!isMorningEvent && hasNight) return false; 
-        return true; 
   };
 
   return (
@@ -373,7 +379,27 @@ export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, sched
                 </tr>
               </thead>
               <tbody>
-                {events.length === 0 ? <tr><td colSpan={columns.length + 1} className="p-12 text-center text-zinc-400">Nenhum evento para este mês.</td></tr> : events.map((event) => <ScheduleRow key={event.iso} event={event} columns={columns} schedule={schedule} attendance={attendance} availability={availability} members={members} memberProfiles={memberProfiles} scheduleIssues={scheduleIssues} globalConflicts={globalConflicts} onCellChange={onCellChange} onAttendanceToggle={onAttendanceToggle} onDeleteEvent={onDeleteEvent} onEditEvent={onEditEvent} memberStats={memberStats} readOnly={readOnly} onlineUsers={onlineUsers} />)}
+                {events.length === 0 ? <tr><td colSpan={columns.length + 1} className="p-12 text-center text-zinc-400">Nenhum evento para este mês.</td></tr> : events.map((event) => (
+                    <ScheduleRow 
+                        key={event.iso} 
+                        event={event} 
+                        columns={columns} 
+                        schedule={schedule} 
+                        attendance={attendance} 
+                        availabilityLookup={availabilityLookup} 
+                        members={members} 
+                        memberProfiles={memberProfiles} 
+                        scheduleIssues={scheduleIssues} 
+                        globalConflicts={globalConflicts} 
+                        onCellChange={onCellChange} 
+                        onAttendanceToggle={onAttendanceToggle} 
+                        onDeleteEvent={onDeleteEvent} 
+                        onEditEvent={onEditEvent} 
+                        memberStats={memberStats} 
+                        readOnly={readOnly} 
+                        onlineUsers={onlineUsers} 
+                    />
+                ))}
               </tbody>
             </table>
           </div>
@@ -398,7 +424,10 @@ export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, sched
                           const currentValue = schedule[key] || "";
                           const roleMembers = members[col.realRole] || [];
                           const isConfirmed = attendance[key];
-                          const hasLocalConflict = currentValue && isUnavailable(currentValue, event.iso);
+                          
+                          // Optimized Check
+                          const hasLocalConflict = currentValue && !checkIsAvailable(availabilityLookup, currentValue, event.iso);
+                          
                           let globalConflictMsg = "";
                           let hasGlobalConflict = false;
                           if (currentValue && !readOnly) {
@@ -414,7 +443,22 @@ export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, sched
                                   <div className="flex-1">
                                       <span className="text-[10px] uppercase font-bold text-zinc-400 mb-1 block tracking-wider">{col.displayRole}</span>
                                       <div className="flex items-center gap-2">
-                                          <div className="flex-1"><MemberSelector value={currentValue} onChange={(val) => onCellChange(key, val)} options={roleMembers} memberProfiles={memberProfiles} memberStats={memberStats} hasError={hasLocalConflict} hasWarning={hasGlobalConflict} warningMsg={globalConflictMsg} eventIso={event.iso} availability={availability} label={`Selecionar ${col.displayRole}`} onlineUsers={onlineUsers} /></div>
+                                          <div className="flex-1">
+                                              <MemberSelector 
+                                                value={currentValue} 
+                                                onChange={(val) => onCellChange(key, val)} 
+                                                options={roleMembers} 
+                                                memberProfiles={memberProfiles} 
+                                                memberStats={memberStats} 
+                                                hasError={hasLocalConflict} 
+                                                hasWarning={hasGlobalConflict} 
+                                                warningMsg={globalConflictMsg} 
+                                                eventIso={event.iso} 
+                                                availabilityLookup={availabilityLookup} 
+                                                label={`Selecionar ${col.displayRole}`} 
+                                                onlineUsers={onlineUsers} 
+                                              />
+                                          </div>
                                           {currentValue && <button onClick={() => onAttendanceToggle(key)} className={`p-2.5 rounded-lg transition-colors border ${isConfirmed ? 'text-green-600 bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' : 'text-zinc-300 bg-zinc-50 border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700'}`}><CheckCircle2 size={18} /></button>}
                                       </div>
                                       {hasLocalConflict && <p className="text-[10px] text-red-500 mt-1 flex items-center gap-1 font-medium"><AlertOctagon size={10}/> Indisponível</p>}

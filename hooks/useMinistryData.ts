@@ -29,6 +29,9 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   const [ministryTitle, setMinistryTitle] = useState("");
   // Availability Window State
   const [availabilityWindow, setAvailabilityWindow] = useState<{ start?: string, end?: string }>({});
+  
+  // Error State tracking
+  const [errors, setErrors] = useState<string[]>([]);
 
   const refreshData = useCallback(async () => {
     if (!currentUser || !ministryId) return;
@@ -39,7 +42,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     try {
         // Carregamento paralelo RESILIENTE (Partial Failure Tolerance)
         // Se uma requisição falhar (ex: notificações), as outras continuam.
-        // Isso impede a Tela Branca da Morte se uma tabela do Supabase travar.
         const [
             settingsResult,
             schedResult,
@@ -62,20 +64,39 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
             Supabase.fetchGlobalSchedules(currentMonth, ministryId)
         ]);
 
-        // Helper para extrair valor seguro de Promise.allSettled
-        const getValue = <T>(result: PromiseSettledResult<T>, fallback: T): T => {
-            return result.status === 'fulfilled' ? result.value : fallback;
+        const currentErrors: string[] = [];
+
+        // Helper para extrair valor seguro e registrar erro se houver
+        const getValue = <T>(result: PromiseSettledResult<T>, fallback: T, label: string): T => {
+            if (result.status === 'fulfilled') {
+                return result.value;
+            } else {
+                console.error(`Falha ao carregar ${label}:`, result.reason);
+                currentErrors.push(label);
+                return fallback;
+            }
         };
 
-        const settings = getValue(settingsResult, { displayName: '', roles: [] });
-        const schedData = getValue(schedResult, { events: [], schedule: {}, attendance: {} });
-        const membersData = getValue(membersResult, { memberMap: {}, publicList: [] });
-        const availData = getValue(availResult, { availability: {}, notes: {} }); // Updated to receive notes
-        const notifs = getValue(notifsResult, []);
-        const ann = getValue(annResult, []);
-        const swaps = getValue(swapsResult, []);
-        const rep = getValue(repResult, []);
-        const conflicts = getValue(conflictsResult, {});
+        const settings = getValue(settingsResult, { displayName: '', roles: [] }, 'Configurações');
+        const schedData = getValue(schedResult, { events: [], schedule: {}, attendance: {} }, 'Escala');
+        const membersData = getValue(membersResult, { memberMap: {}, publicList: [] }, 'Membros');
+        const availData = getValue(availResult, { availability: {}, notes: {} }, 'Disponibilidade');
+        const notifs = getValue(notifsResult, [], 'Notificações');
+        const ann = getValue(annResult, [], 'Avisos');
+        const swaps = getValue(swapsResult, [], 'Trocas');
+        const rep = getValue(repResult, [], 'Repertório');
+        const conflicts = getValue(conflictsResult, {}, 'Conflitos Globais');
+
+        // Atualiza estado de erros e notifica usuário se houver falhas
+        setErrors(currentErrors);
+        if (currentErrors.length > 0) {
+            // Agrupa erros em uma única notificação para não poluir a tela
+            const errorMsg = currentErrors.length > 3 
+                ? `Erro ao carregar ${currentErrors.length} módulos. Verifique sua conexão.`
+                : `Erro ao carregar: ${currentErrors.join(', ')}.`;
+            
+            addToast(errorMsg, 'error');
+        }
 
         // 1. Atualização de estado em lote (Dados da Nuvem)
         if (settings.displayName) {
@@ -184,6 +205,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     roles, setRoles,
     ministryTitle, setMinistryTitle,
     availabilityWindow,
+    errors,
     refreshData
   };
 }

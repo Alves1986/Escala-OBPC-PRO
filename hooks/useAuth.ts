@@ -74,20 +74,11 @@ export function useAuth() {
             if (profile) {
                 const userMinistry = profile.ministry_id || 'midia';
                 
-                let isUserAdmin = profile.is_admin;
-                // Hardcode admin check (mantendo lógica original)
-                if (user.email === 'cassia.andinho@gmail.com') {
-                    isUserAdmin = true;
-                    if (!profile.is_admin) {
-                         Supabase.toggleAdminSQL(user.email, true).catch(console.error);
-                    }
-                }
-
                 setCurrentUser({
                     id: profile.id,
                     name: profile.name,
                     email: profile.email,
-                    role: isUserAdmin ? 'admin' : 'member',
+                    role: profile.is_admin ? 'admin' : 'member',
                     ministryId: userMinistry,
                     allowedMinistries: profile.allowed_ministries || [userMinistry],
                     avatar_url: profile.avatar_url,

@@ -42,6 +42,7 @@
               'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
               'fade-in': 'fadeIn 0.3s ease-out',
               'wave': 'wave 2.5s infinite',
+              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
             },
             keyframes: {
               slideUp: {
@@ -68,25 +69,48 @@
       }
     </script>
     <style>
+      :root {
+        --bg-noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
+      }
+
       body { 
-        @apply text-zinc-900 dark:text-zinc-100 transition-colors duration-300;
-        /* Premium Gradient Background */
-        background-image: radial-gradient(ellipse at top right, rgba(20, 184, 166, 0.15), transparent 50%),
-                          radial-gradient(ellipse at bottom left, rgba(99, 102, 241, 0.15), transparent 50%);
-        background-color: #f8fafc; /* zinc-50 equivalent */
+        @apply text-zinc-900 dark:text-zinc-100 transition-colors duration-300 antialiased;
+        background-color: #f8fafc;
+        background-image: 
+          radial-gradient(circle at 15% 50%, rgba(20, 184, 166, 0.08), transparent 25%), 
+          radial-gradient(circle at 85% 30%, rgba(99, 102, 241, 0.08), transparent 25%);
         background-attachment: fixed;
       }
+
+      /* Noise Texture Overlay for texture */
+      body::before {
+        content: "";
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background-image: var(--bg-noise);
+        pointer-events: none;
+        z-index: -1;
+        opacity: 0.4;
+      }
+
       .dark body {
-        background-image: radial-gradient(ellipse at top right, rgba(20, 184, 166, 0.1), transparent 40%),
-                          radial-gradient(ellipse at bottom left, rgba(99, 102, 241, 0.1), transparent 40%);
-        background-color: #09090b; /* zinc-950 */
+        background-color: #09090b;
+        background-image: 
+          radial-gradient(circle at 15% 50%, rgba(20, 184, 166, 0.05), transparent 25%), 
+          radial-gradient(circle at 85% 30%, rgba(99, 102, 241, 0.05), transparent 25%);
+      }
+
+      /* Custom Selection Color */
+      ::selection {
+        background-color: #0d9488; /* Brand 600 */
+        color: white;
       }
 
       /* Refined Scrollbar */
       ::-webkit-scrollbar { width: 6px; height: 6px; }
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { 
-        @apply bg-zinc-300/50 dark:bg-zinc-700/50 rounded-full hover:bg-zinc-400 dark:hover:bg-zinc-600 transition-colors; 
+        @apply bg-zinc-300 dark:bg-zinc-700 rounded-full hover:bg-zinc-400 dark:hover:bg-zinc-600 transition-colors; 
       }
     </style>
   <script type="importmap">
@@ -115,7 +139,6 @@
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     window.deferredPrompt = e;
-    // Dispara evento customizado para o React saber que o prompt chegou
     window.dispatchEvent(new Event('pwa-ready'));
   });
 </script>
@@ -126,7 +149,6 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          // Registro usando caminho absoluto para a raiz
           navigator.serviceWorker.register('/sw.js', { scope: '/' })
             .then(registration => {
               console.log('SW registrado com sucesso:', registration.scope);

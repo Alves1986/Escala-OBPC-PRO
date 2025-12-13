@@ -42,7 +42,6 @@ export const getClientCredentialsToken = async (ministryId: string): Promise<str
     if (!clientId || !clientSecret) return null;
 
     try {
-        // CORREÇÃO: URL OFICIAL DO SPOTIFY
         const response = await fetch('https://accounts.spotify.com/api/token', {
             method: 'POST',
             headers: {
@@ -77,7 +76,6 @@ export const getLoginUrl = (ministryId: string) => {
         "playlist-read-collaborative"
     ].join(" ");
 
-    // CORREÇÃO: URL OFICIAL DE AUTORIZAÇÃO
     return `https://accounts.spotify.com/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&response_type=token&show_dialog=true`;
 };
 
@@ -123,7 +121,6 @@ const getUserToken = () => {
 
 // --- 3. FUNÇÕES DE DADOS ---
 const fetchSpotify = async (endpoint: string, token: string) => {
-    // CORREÇÃO: URL OFICIAL DA API
     const res = await fetch(`https://api.spotify.com/v1${endpoint}`, {
         headers: { 'Authorization': `Bearer ${token}` }
     });
