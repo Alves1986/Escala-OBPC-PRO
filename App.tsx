@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, Suspense } from 'react';
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
@@ -47,6 +48,7 @@ const SettingsScreen = React.lazy(() => import('./components/SettingsScreen').th
 const ProfileScreen = React.lazy(() => import('./components/ProfileScreen').then(module => ({ default: module.ProfileScreen })));
 const EventsScreen = React.lazy(() => import('./components/EventsScreen').then(module => ({ default: module.EventsScreen })));
 const RankingScreen = React.lazy(() => import('./components/RankingScreen').then(module => ({ default: module.RankingScreen })));
+const MembersScreen = React.lazy(() => import('./components/MembersScreen').then(module => ({ default: module.MembersScreen })));
 
 // Loading Spinner para Lazy Components
 const LoadingFallback = () => (
@@ -449,7 +451,38 @@ const InnerApp = () => {
                 {currentTab === 'report' && isAdmin && <AvailabilityReportScreen availability={availability} registeredMembers={publicMembers} membersMap={membersMap} currentMonth={currentMonth} onMonthChange={setCurrentMonth} availableRoles={roles} onRefresh={async () => { await loadData(); }} />}
                 {currentTab === 'profile' && <ProfileScreen user={currentUser} onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { const res = await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId); if (res.success) { addToast(res.message, "success"); if (currentUser) { setCurrentUser({ ...currentUser, name, whatsapp, avatar_url: avatar || currentUser.avatar_url, functions: funcs, birthDate: bdate }); } loadData(); } else { addToast(res.message, "error"); }}} availableRoles={roles} />}
                 {currentTab === 'settings' && <SettingsScreen initialTitle={ministryTitle} ministryId={ministryId} themeMode={themeMode} onSetThemeMode={handleSetThemeMode} onSaveTheme={handleSaveTheme} onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, newTitle); setMinistryTitle(newTitle); addToast("Nome do ministério atualizado!", "success"); }} onAnnounceUpdate={async () => { await Supabase.sendNotificationSQL(ministryId, { title: "Atualização de Sistema", message: "Uma nova versão do app está disponível. Recarregue a página para aplicar.", type: "warning" }); addToast("Notificação de atualização enviada.", "success"); }} onEnableNotifications={handleEnableNotifications} onSaveAvailabilityWindow={async (start, end) => { setAvailabilityWindow({ start, end }); await Supabase.saveMinistrySettings(ministryId, undefined, undefined, start, end); loadData(); }} availabilityWindow={availabilityWindow} isAdmin={isAdmin} />}
-                {currentTab === 'members' && isAdmin && <div className="p-8 text-center text-zinc-400">Implementação de Membros aqui... (Use o componente de Membros existente)</div>}
+                
+                {/* --- MEMBERS TAB FIX --- */}
+                {currentTab === 'members' && isAdmin && (
+                    <MembersScreen 
+                        members={publicMembers} 
+                        onlineUsers={onlineUsers} 
+                        currentUser={currentUser}
+                        onToggleAdmin={async (email, currentStatus, name) => {
+                            if (!email) return addToast("Usuário sem e-mail não pode ser admin.", "error");
+                            const newStatus = !currentStatus;
+                            await Supabase.toggleAdminSQL(email, newStatus);
+                            loadData();
+                            addToast(`${name} agora é ${newStatus ? 'Admin' : 'Membro'}.`, 'success');
+                        }}
+                        onRemoveMember={async (id, name) => {
+                            confirmAction(
+                                "Remover Membro",
+                                `Deseja remover ${name} da equipe? Isso removerá o acesso dele ao ministério atual.`,
+                                async () => {
+                                    const result = await Supabase.deleteMember(ministryId, id, name);
+                                    if (result.success) {
+                                        setPublicMembers(prev => prev.filter(m => m.id !== id));
+                                        loadData(false);
+                                        addToast(`${name} removido.`, "success");
+                                    } else {
+                                        addToast(`Erro: ${result.message}`, "error");
+                                    }
+                                }
+                            );
+                        }}
+                    />
+                )}
             </Suspense>
 
             {/* Modals & Global UI */}
