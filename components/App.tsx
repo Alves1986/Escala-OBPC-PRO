@@ -35,6 +35,7 @@ import { useMinistryData } from './hooks/useMinistryData';
 import { useOnlinePresence } from './hooks/useOnlinePresence';
 
 // --- Lazy Load Heavy Components ---
+// Code Splitting: These components are only fetched when the user navigates to their specific tab.
 const ScheduleTable = React.lazy(() => import('./components/ScheduleTable').then(module => ({ default: module.ScheduleTable })));
 const CalendarGrid = React.lazy(() => import('./components/CalendarGrid').then(module => ({ default: module.CalendarGrid })));
 const AvailabilityScreen = React.lazy(() => import('./components/AvailabilityScreen').then(module => ({ default: module.AvailabilityScreen })));
@@ -48,6 +49,7 @@ const ProfileScreen = React.lazy(() => import('./components/ProfileScreen').then
 const EventsScreen = React.lazy(() => import('./components/EventsScreen').then(module => ({ default: module.EventsScreen })));
 const RankingScreen = React.lazy(() => import('./components/RankingScreen').then(module => ({ default: module.RankingScreen })));
 
+// Fallback visual enquanto o módulo é baixado
 const LoadingFallback = () => (
   <div className="flex flex-col items-center justify-center h-[60vh] text-zinc-400 animate-fade-in">
     <Loader2 size={48} className="animate-spin mb-4 text-teal-500" />
@@ -97,7 +99,7 @@ const InnerApp = () => {
     schedule, setSchedule,
     attendance, setAttendance,
     membersMap, 
-    publicMembers, 
+    publicMembers, setPublicMembers,
     availability, setAvailability,
     availabilityNotes, 
     notifications, setNotifications,
@@ -804,6 +806,7 @@ const InnerApp = () => {
                                             async () => {
                                                 const result = await Supabase.deleteMember(ministryId, member.id, member.name);
                                                 if (result.success) {
+                                                    setPublicMembers(prev => prev.filter(m => m.id !== member.id));
                                                     loadData();
                                                     addToast(`${member.name} removido.`, "success");
                                                 } else {
