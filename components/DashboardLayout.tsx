@@ -1,8 +1,9 @@
 
-import React, { ReactNode, useState } from 'react';
+import React, { ReactNode, useState, useRef } from 'react';
 import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck } from 'lucide-react';
 import { User, AppNotification } from '../types';
 import { NotificationCenter } from './NotificationCenter';
+import { useClickOutside } from '../hooks/useClickOutside';
 
 interface NavItem {
   id: string;
@@ -49,6 +50,11 @@ export const DashboardLayout: React.FC<Props> = ({
   const [imgError, setImgError] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [ministryMenuOpen, setMinistryMenuOpen] = useState(false);
+  const ministryMenuRef = useRef<HTMLDivElement>(null);
+
+  useClickOutside(ministryMenuRef, () => {
+    if (ministryMenuOpen) setMinistryMenuOpen(false);
+  });
 
   const handleHardReload = async () => {
     setIsUpdating(true);
@@ -136,7 +142,7 @@ export const DashboardLayout: React.FC<Props> = ({
                   {imgError ? <Layout size={20} /> : <img src="/icon.png?v=2" alt="Logo" className="w-full h-full object-cover rounded-xl opacity-90" onError={() => setImgError(true)} />}
                </div>
                
-               <div className="flex-1 min-w-0">
+               <div className="flex-1 min-w-0 relative" ref={ministryMenuRef}>
                  <button 
                     onClick={() => setMinistryMenuOpen(!ministryMenuOpen)}
                     className="flex items-center gap-1.5 w-full group cursor-pointer hover:opacity-80 transition-opacity"
@@ -148,16 +154,10 @@ export const DashboardLayout: React.FC<Props> = ({
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
                     <span className="text-[10px] text-zinc-400 font-semibold tracking-wide uppercase">Online</span>
                  </div>
-               </div>
-               
-               <button onClick={() => setSidebarOpen(false)} className="lg:hidden ml-auto p-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"><X size={20}/></button>
-           </div>
 
-           {/* Dropdown Menu - Ministry Switcher */}
-           {ministryMenuOpen && (
-               <>
-                   <div className="fixed inset-0 z-30 cursor-default" onClick={() => setMinistryMenuOpen(false)} />
-                   <div className="absolute top-20 left-4 right-4 bg-white dark:bg-zinc-900 rounded-xl shadow-xl border border-zinc-100 dark:border-zinc-800 z-40 overflow-hidden animate-slide-up ring-1 ring-black/5 divide-y divide-zinc-100 dark:divide-zinc-800">
+                 {/* Dropdown Menu - Ministry Switcher */}
+                 {ministryMenuOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-zinc-900 rounded-xl shadow-xl border border-zinc-100 dark:border-zinc-800 z-50 overflow-hidden animate-slide-up ring-1 ring-black/5 divide-y divide-zinc-100 dark:divide-zinc-800 min-w-[200px]">
                        <p className="px-4 py-2 text-[10px] font-bold text-zinc-400 uppercase bg-zinc-50 dark:bg-zinc-900/50 tracking-wider">Trocar Ministério</p>
                        {currentUser?.allowedMinistries?.map(mid => {
                            const isCurrent = currentUser.ministryId === mid;
@@ -188,8 +188,11 @@ export const DashboardLayout: React.FC<Props> = ({
                            </button>
                        )}
                    </div>
-               </>
-           )}
+                 )}
+               </div>
+               
+               <button onClick={() => setSidebarOpen(false)} className="lg:hidden ml-auto p-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"><X size={20}/></button>
+           </div>
         </div>
 
         {/* Navigation */}

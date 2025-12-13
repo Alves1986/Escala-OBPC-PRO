@@ -1,9 +1,10 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Bell, Check, Trash2, Info, AlertTriangle, CheckCircle, AlertOctagon, ExternalLink } from 'lucide-react';
 import { AppNotification } from '../types';
 import { markNotificationsReadSQL, clearAllNotificationsSQL, getSupabase } from '../services/supabaseService';
 import { useToast } from './Toast';
+import { useClickOutside } from '../hooks/useClickOutside';
 
 interface Props {
   notifications: AppNotification[];
@@ -15,8 +16,14 @@ interface Props {
 export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId, onNotificationsUpdate, onNavigate }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  
   const unreadCount = notifications.filter(n => !n.read).length;
   const { confirmAction } = useToast();
+
+  useClickOutside(dropdownRef, () => {
+    if (isOpen) setIsOpen(false);
+  });
 
   // Verifica se é admin para liberar o botão de deletar
   React.useEffect(() => {
@@ -75,10 +82,10 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
   };
 
   return (
-    <div className="relative">
+    <div className="relative" ref={dropdownRef}>
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+        className={`relative p-2 rounded-full transition-colors ${isOpen ? 'bg-zinc-100 dark:bg-zinc-800' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
       >
         <Bell size={20} className="text-zinc-600 dark:text-zinc-300" />
         {unreadCount > 0 && (
@@ -89,65 +96,62 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
       </button>
 
       {isOpen && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-zinc-800 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-700 z-50 overflow-hidden animate-fade-in">
-             <div className="p-3 border-b border-zinc-100 dark:border-zinc-700 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900/50">
-                 <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Notificações</h3>
-                 <div className="flex items-center gap-3">
-                    {unreadCount > 0 && (
-                        <button onClick={handleMarkAllRead} className="text-[10px] text-blue-600 hover:text-blue-500 font-bold flex items-center gap-1" title="Marcar todas como lidas">
-                            <Check size={12}/> Ler
-                        </button>
-                    )}
-                    {isAdmin && notifications.length > 0 && (
-                        <button onClick={handleClearAll} className="text-[10px] text-red-500 hover:text-red-600 font-bold flex items-center gap-1" title="Apagar histórico global (Admin)">
-                            <Trash2 size={12}/> Limpar DB
-                        </button>
-                    )}
-                 </div>
-             </div>
-             
-             <div className="max-h-80 overflow-y-auto custom-scrollbar">
-                 {notifications.length === 0 ? (
-                     <div className="p-8 text-center text-zinc-400 text-sm">
-                         <Bell size={24} className="mx-auto mb-2 opacity-20"/>
-                         Nenhuma notificação.
-                     </div>
-                 ) : (
-                     <div className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
-                         {notifications.map(n => (
-                             <div 
-                                key={n.id} 
-                                onClick={() => handleNotificationClick(n)}
-                                className={`p-4 transition-colors relative group ${!n.read ? 'bg-blue-50/50 dark:bg-blue-900/10' : 'hover:bg-zinc-50 dark:hover:bg-zinc-700/30'} ${n.actionLink ? 'cursor-pointer' : ''}`}
-                             >
-                                 <div className="flex gap-3">
-                                     <div className="mt-1 shrink-0">{getIcon(n.type)}</div>
-                                     <div className="flex-1">
-                                         <div className="flex justify-between items-start">
-                                            <h4 className={`text-sm ${!n.read ? 'font-bold text-zinc-800 dark:text-zinc-100' : 'font-medium text-zinc-600 dark:text-zinc-400'}`}>
-                                                {n.title}
-                                            </h4>
-                                            {n.actionLink && (
-                                                <ExternalLink size={12} className="text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                            )}
-                                         </div>
-                                         <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
-                                             {n.message}
-                                         </p>
-                                         <span className="text-[10px] text-zinc-400 mt-2 block">
-                                             {new Date(n.timestamp).toLocaleString('pt-BR')}
-                                         </span>
-                                     </div>
-                                 </div>
-                             </div>
-                         ))}
-                     </div>
-                 )}
-             </div>
-          </div>
-        </>
+        <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-zinc-800 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-700 z-50 overflow-hidden animate-slide-up">
+            <div className="p-3 border-b border-zinc-100 dark:border-zinc-700 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900/50">
+                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Notificações</h3>
+                <div className="flex items-center gap-3">
+                {unreadCount > 0 && (
+                    <button onClick={handleMarkAllRead} className="text-[10px] text-blue-600 hover:text-blue-500 font-bold flex items-center gap-1" title="Marcar todas como lidas">
+                        <Check size={12}/> Ler
+                    </button>
+                )}
+                {isAdmin && notifications.length > 0 && (
+                    <button onClick={handleClearAll} className="text-[10px] text-red-500 hover:text-red-600 font-bold flex items-center gap-1" title="Apagar histórico global (Admin)">
+                        <Trash2 size={12}/> Limpar DB
+                    </button>
+                )}
+                </div>
+            </div>
+            
+            <div className="max-h-80 overflow-y-auto custom-scrollbar">
+                {notifications.length === 0 ? (
+                    <div className="p-8 text-center text-zinc-400 text-sm">
+                        <Bell size={24} className="mx-auto mb-2 opacity-20"/>
+                        Nenhuma notificação.
+                    </div>
+                ) : (
+                    <div className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
+                        {notifications.map(n => (
+                            <div 
+                            key={n.id} 
+                            onClick={() => handleNotificationClick(n)}
+                            className={`p-4 transition-colors relative group ${!n.read ? 'bg-blue-50/50 dark:bg-blue-900/10' : 'hover:bg-zinc-50 dark:hover:bg-zinc-700/30'} ${n.actionLink ? 'cursor-pointer' : ''}`}
+                            >
+                                <div className="flex gap-3">
+                                    <div className="mt-1 shrink-0">{getIcon(n.type)}</div>
+                                    <div className="flex-1">
+                                        <div className="flex justify-between items-start">
+                                        <h4 className={`text-sm ${!n.read ? 'font-bold text-zinc-800 dark:text-zinc-100' : 'font-medium text-zinc-600 dark:text-zinc-400'}`}>
+                                            {n.title}
+                                        </h4>
+                                        {n.actionLink && (
+                                            <ExternalLink size={12} className="text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        )}
+                                        </div>
+                                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                                            {n.message}
+                                        </p>
+                                        <span className="text-[10px] text-zinc-400 mt-2 block">
+                                            {new Date(n.timestamp).toLocaleString('pt-BR')}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
       )}
     </div>
   );

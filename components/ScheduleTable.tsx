@@ -3,6 +3,7 @@ import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis, GlobalConflictMap, TeamMemberProfile } from '../types';
 import { CheckCircle2, AlertTriangle, Trash2, Edit, Clock, User, ChevronDown, ChevronLeft, ChevronRight, X, Search, AlertOctagon, XCircle, Settings } from 'lucide-react';
+import { useClickOutside } from '../hooks/useClickOutside';
 
 interface Props {
   events: { iso: string; dateDisplay: string; title: string }[];
@@ -41,7 +42,13 @@ const SelectorDropdown = ({
 }: any) => {
     const [search, setSearch] = useState("");
     const searchInputRef = useRef<HTMLInputElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+    // Apply click outside logic to the PORTAL content
+    useClickOutside(dropdownRef, () => {
+        onClose();
+    });
 
     useEffect(() => {
         setTimeout(() => searchInputRef.current?.focus(), 50);
@@ -65,6 +72,7 @@ const SelectorDropdown = ({
         <>
             {isMobile && <div className="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-sm transition-opacity" onClick={onClose} />}
             <div 
+                ref={dropdownRef}
                 id="member-selector-portal"
                 className={`fixed z-[9999] bg-white dark:bg-zinc-800 flex flex-col overflow-hidden animate-fade-in
                     ${isMobile 
