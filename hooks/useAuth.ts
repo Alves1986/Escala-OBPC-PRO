@@ -42,35 +42,49 @@ export function useAuth() {
         }
 
         try {
-            // Tenta buscar o perfil
-            let { data: profile } = await sb.from('profiles').select('*').eq('id', user.id).single();
+            // Tenta buscar o perfil existente
+            let { data: profile, error: fetchError } = await sb.from('profiles').select('*').eq('id', user.id).single();
             
-            // Se o perfil não existir (ex: primeiro login Google), cria um na hora.
-            if (!profile) {
-                console.log("Perfil não encontrado, criando novo para:", user.email);
+            // LÓGICA DE AUTO-CORREÇÃO (SELF-HEALING)
+            // Se o usuário logou (Auth), mas não tem perfil (Profile) devido a erro anterior ou falta de trigger:
+            if (!profile || fetchError) {
+                console.log("Perfil não encontrado no banco público. Tentando criar automaticamente...", user.email);
                 
                 const defaultMinistry = 'midia';
+                // Extrai metadados ou usa fallbacks seguros
+                const metaName = user.user_metadata?.full_name || user.user_metadata?.name;
+                const emailName = user.email?.split('@')[0];
+                const displayName = metaName || emailName || 'Novo Membro';
+
                 const newProfile = {
                     id: user.id,
                     email: user.email,
-                    name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Novo Membro',
-                    avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture,
+                    name: displayName,
+                    avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || '',
                     ministry_id: defaultMinistry,
                     allowed_ministries: [defaultMinistry],
                     role: 'member',
                     created_at: new Date().toISOString()
                 };
 
-                const { error: insertError } = await sb.from('profiles').insert(newProfile);
+                // Tenta inserir na tabela profiles manualmente
+                const { data: insertedProfile, error: insertError } = await sb
+                    .from('profiles')
+                    .upsert(newProfile)
+                    .select()
+                    .single();
                 
-                if (!insertError) {
-                    profile = newProfile;
+                if (insertError) {
+                    console.error("Falha crítica ao criar perfil automático:", insertError.message);
+                    // Em último caso, usa o objeto em memória para não travar o app do usuário
+                    profile = newProfile; 
                 } else {
-                    console.error("Falha ao criar perfil automático:", insertError);
-                    profile = newProfile; // Fallback visual
+                    console.log("Perfil criado com sucesso via Self-Healing!");
+                    profile = insertedProfile;
                 }
             }
 
+            // Define o usuário no estado da aplicação
             if (profile) {
                 const userMinistry = profile.ministry_id || 'midia';
                 
@@ -88,7 +102,7 @@ export function useAuth() {
                 });
             }
         } catch (e) {
-            console.error("Erro ao carregar perfil:", e);
+            console.error("Erro geral na autenticação:", e);
         } finally {
             setLoadingAuth(false);
         }
@@ -102,7 +116,7 @@ export function useAuth() {
     // 2. Listen for changes
     const { data: { subscription } } = sb.auth.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-            setLoadingAuth(true); 
+            if (event === 'SIGNED_IN') setLoadingAuth(true);
             handleUserSession(session);
         } else if (event === 'SIGNED_OUT') {
             setCurrentUser(null);

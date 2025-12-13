@@ -114,11 +114,15 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
     if (!supabase) return { success: false, message: "Erro conexão" };
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, message: "Não autenticado" };
-    const updates: any = { name, whatsapp, updated_at: new Date().toISOString() };
+    
+    // CORREÇÃO AQUI: Removido 'updated_at' para evitar erro caso a coluna não exista no banco
+    const updates: any = { name, whatsapp };
+    
     if (avatar_url !== undefined) updates.avatar_url = avatar_url;
     if (functions !== undefined) updates.functions = functions;
     if (birthDate !== undefined) updates.birth_date = birthDate;
     if (ministryId) updates.ministry_id = ministryId;
+    
     const { error } = await supabase.from('profiles').update(updates).eq('id', user.id);
     if (error) return { success: false, message: error.message };
     return { success: true, message: "Perfil atualizado!" };
