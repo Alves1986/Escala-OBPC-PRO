@@ -50,8 +50,8 @@ const prepareMinifiedContext = (context: AIContext) => {
     .map(m => {
       const rawAvail = context.availability[m.name] || [];
       
-      // Critical check for NEW Block Tag
-      const isBlocked = rawAvail.some(d => d.startsWith(monthPrefix) && d.includes('WHOLE_MONTH_BLOCKED'));
+      // Critical check for NEW Block Tag (Updated to _BLK)
+      const isBlocked = rawAvail.some(d => d.startsWith(monthPrefix) && (d.includes('BLK') || d.includes('BLOCKED')));
       
       if (isBlocked) {
           return {
@@ -67,8 +67,10 @@ const prepareMinifiedContext = (context: AIContext) => {
         .map(d => {
             const [date, suffix] = d.split('_');
             const day = parseInt(date.split('-')[2], 10);
-            return suffix ? `${day}(${suffix})` : `${day}`;
-        });
+            return { day, suffix };
+        })
+        .filter(x => x.day > 0 && x.day <= 31) // Exclude markers 00 and 99
+        .map(x => x.suffix ? `${x.day}(${x.suffix})` : `${x.day}`);
 
       // Extract notes for this member for this month
       const notes: Record<string, string> = {};

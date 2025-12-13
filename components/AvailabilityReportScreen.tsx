@@ -72,17 +72,19 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
           dates = availability[availKey] || [];
       }
 
-      // Nova lógica de detecção de bloqueio total (prioridade máxima)
-      const isBlocked = dates.some(d => d.startsWith(currentMonth) && d.includes('WHOLE_MONTH_BLOCKED'));
+      // Detecção de bloqueio usando a nova tag curta '_BLK' (ou legada 'BLOCKED_MONTH')
+      // Verifica se existe alguma data que contém o marcador para este mês
+      const isBlocked = dates.some(d => d.startsWith(currentMonth) && (d.includes('BLK') || d.includes('BLOCKED')));
 
       const monthDates = dates
-        .filter(d => d.startsWith(currentMonth) && !d.includes('BLOCKED'))
+        .filter(d => d.startsWith(currentMonth) && !d.includes('BLK') && !d.includes('BLOCKED'))
         .map(d => {
             const parts = d.split('_');
             const dayNum = parseInt(d.split('-')[2]);
             const type = parts.length > 1 ? parts[1] : 'BOTH';
             return { day: dayNum, type };
         })
+        .filter(x => x.day > 0 && x.day <= 31) // Exclui dias '00' (notas) e '99' (placeholders)
         .sort((a, b) => a.day - b.day);
 
       return {

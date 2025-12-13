@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { AvailabilityMap, AvailabilityNotesMap, User } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
-import { User as UserIcon, CalendarCheck, ChevronDown, Save, CheckCircle2, Sun, Moon, X, Ban, Lock, MessageSquare } from 'lucide-react';
+import { User as UserIcon, CalendarCheck, ChevronDown, Save, CheckCircle2, Sun, Moon, X, Ban, Lock, MessageSquare, AlertCircle } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface Props {
@@ -18,8 +18,8 @@ interface Props {
   availabilityWindow?: { start?: string, end?: string };
 }
 
-// Constante global para a tag de bloqueio
-const BLOCK_TAG = 'WHOLE_MONTH_BLOCKED';
+// TAG SEGURA CURTA: Usamos '99_BLK' para evitar limites de caracteres em colunas VARCHAR
+const BLOCK_TAG_SUFFIX = '99_BLK'; 
 
 // Modal simplificado APENAS para Domingos (Seleção de Período)
 const SundaySelectionModal = ({ isOpen, onClose, onSave, onDelete, currentDateDisplay, initialType }: { 
@@ -122,21 +122,22 @@ export const AvailabilityScreen: React.FC<Props> = ({
     onMonthChange(adjustMonth(currentMonth, 1));
   };
 
-  // Verifica se o mês atual tem a tag de bloqueio exclusiva
-  const isMonthBlocked = tempDates.some(d => d.startsWith(currentMonth) && d.includes(BLOCK_TAG));
+  // Verifica se o mês atual está bloqueado.
+  const currentBlockTag = `${currentMonth}-${BLOCK_TAG_SUFFIX}`;
+  const isMonthBlocked = tempDates.includes(currentBlockTag);
 
   const handleToggleBlockMonth = () => {
       if (!isEditable) return;
 
       if (isMonthBlocked) {
-          // Desbloquear: Remove a tag de bloqueio, mantendo datas de outros meses
-          setTempDates(prev => prev.filter(d => !d.includes(BLOCK_TAG) || !d.startsWith(currentMonth)));
+          // DESBLOQUEAR
+          setTempDates(prev => prev.filter(d => d !== currentBlockTag));
       } else {
-          // Bloquear: Remove TODAS as datas deste mês e adiciona APENAS a tag de bloqueio
-          // Isso garante integridade: não existem dias selecionados E bloqueio ao mesmo tempo
-          const datesOtherMonths = tempDates.filter(d => !d.startsWith(currentMonth));
-          const blockTag = `${currentMonth}-01_${BLOCK_TAG}`; 
-          setTempDates([...datesOtherMonths, blockTag]);
+          // BLOQUEAR: Remove dias do mês e adiciona tag de bloqueio
+          setTempDates(prev => {
+              const otherMonths = prev.filter(d => !d.startsWith(currentMonth));
+              return [...otherMonths, currentBlockTag];
+          });
       }
       setHasChanges(true);
   };
@@ -190,13 +191,28 @@ export const AvailabilityScreen: React.FC<Props> = ({
       if (!selectedMember) return;
 
       const notesToSave: Record<string, string> = {};
-      if (generalNote.trim()) {
-          notesToSave[`${currentMonth}-00`] = generalNote.trim();
+      const noteContent = generalNote.trim();
+      let datesToSave = [...tempDates];
+
+      if (noteContent) {
+          if (isMonthBlocked) {
+              // Se bloqueado, vincula a nota à tag de bloqueio (dia 99)
+              notesToSave[`${currentMonth}-99`] = noteContent;
+          } else {
+              // Se disponível, vincula à nota geral (dia 00)
+              notesToSave[`${currentMonth}-00`] = noteContent;
+              
+              // Garante que o dia 00 exista na lista para que a nota seja salva
+              if (!datesToSave.includes(`${currentMonth}-00`)) {
+                  datesToSave.push(`${currentMonth}-00`);
+              }
+          }
       }
 
-      // Garante que o estado seja enviado corretamente
-      await onSaveAvailability(selectedMember, tempDates, notesToSave);
+      // Envia o estado atual para salvar.
+      await onSaveAvailability(selectedMember, datesToSave, notesToSave);
       
+      setTempDates(datesToSave);
       setHasChanges(false);
       
       if (isMonthBlocked) {
@@ -212,7 +228,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   const getDayStatus = (day: number) => {
       const dateStrBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
-      const entry = tempDates.find(d => d.startsWith(dateStrBase));
+      const entry = tempDates.find(d => d.startsWith(dateStrBase) && !d.includes('_BLK'));
       
       if (!entry) return null;
       let status = 'BOTH';
@@ -275,31 +291,38 @@ export const AvailabilityScreen: React.FC<Props> = ({
             </div>
         )}
 
+        {/* STATUS CARD / BLOCK TOGGLE */}
         {selectedMember && isEditable && (
-            <div className={`p-4 rounded-xl border flex items-center justify-between transition-all ${
+            <div className={`p-5 rounded-xl border flex flex-col md:flex-row items-center justify-between gap-4 transition-all duration-300 ${
                 isMonthBlocked 
-                ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-900/30' 
-                : 'bg-zinc-50 dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-700'
+                ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-900/30 shadow-md ring-1 ring-red-100 dark:ring-red-900/20' 
+                : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 shadow-sm'
             }`}>
-                <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-full ${isMonthBlocked ? 'bg-red-100 text-red-600' : 'bg-zinc-200 text-zinc-500'}`}>
-                        {isMonthBlocked ? <Ban size={20}/> : <CalendarCheck size={20}/>}
+                <div className="flex items-center gap-4 w-full md:w-auto">
+                    <div className={`p-3 rounded-full shrink-0 ${isMonthBlocked ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                        {isMonthBlocked ? <Ban size={24}/> : <CalendarCheck size={24}/>}
                     </div>
                     <div>
-                        <p className={`text-sm font-bold ${isMonthBlocked ? 'text-red-700 dark:text-red-400' : 'text-zinc-700 dark:text-zinc-300'}`}>
-                            {isMonthBlocked ? 'Indisponível este Mês' : 'Disponível para Escala'}
+                        <p className={`text-base font-bold ${isMonthBlocked ? 'text-red-700 dark:text-red-400' : 'text-zinc-800 dark:text-white'}`}>
+                            {isMonthBlocked ? 'Mês Bloqueado (Indisponível)' : 'Disponível para Escala'}
+                        </p>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                            {isMonthBlocked 
+                                ? 'Você não será incluído em nenhuma escala deste mês.' 
+                                : 'Selecione os dias abaixo ou bloqueie o mês inteiro.'}
                         </p>
                     </div>
                 </div>
+                
                 <button 
                     onClick={handleToggleBlockMonth}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
+                    className={`w-full md:w-auto px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2 ${
                         isMonthBlocked 
-                        ? 'bg-white text-red-600 border border-red-200 hover:bg-red-50' 
-                        : 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-300'
+                        ? 'bg-white text-red-600 border border-red-200 hover:bg-red-50 hover:border-red-300' 
+                        : 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-300 dark:hover:bg-red-900/30 border border-transparent'
                     }`}
                 >
-                    {isMonthBlocked ? 'Desbloquear' : 'Marcar Indisponível'}
+                    {isMonthBlocked ? <><CheckCircle2 size={16}/> Desbloquear Mês</> : <><Ban size={16}/> Marcar Mês Indisponível</>}
                 </button>
             </div>
         )}
@@ -307,13 +330,19 @@ export const AvailabilityScreen: React.FC<Props> = ({
         {selectedMember ? (
           <div className="animate-slide-up pb-32 relative">
             
+            {/* Overlay visual quando bloqueado */}
             {isMonthBlocked && (
-                <div className="absolute inset-0 z-20 bg-zinc-50/90 dark:bg-zinc-900/90 backdrop-blur-[2px] rounded-xl flex flex-col items-center justify-center text-center border-2 border-dashed border-red-300 dark:border-red-900/50 transition-opacity">
-                    <div className="bg-white dark:bg-zinc-800 p-6 rounded-full shadow-xl mb-4 animate-bounce">
-                        <Lock size={32} className="text-red-500"/>
+                <div className="absolute inset-0 z-20 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-[2px] rounded-2xl flex flex-col items-center justify-center text-center border-2 border-dashed border-red-300 dark:border-red-900/50 transition-opacity">
+                    <div className="bg-red-50 dark:bg-zinc-800 p-6 rounded-full shadow-xl mb-4 border border-red-100 dark:border-red-900/30">
+                        <Lock size={40} className="text-red-500"/>
                     </div>
-                    <h3 className="text-xl font-bold text-zinc-800 dark:text-zinc-100">Mês Bloqueado</h3>
-                    <p className="text-sm text-zinc-500 mt-2">Você sinalizou indisponibilidade total.</p>
+                    <h3 className="text-2xl font-bold text-zinc-800 dark:text-zinc-100 mb-2">Mês Indisponível</h3>
+                    <p className="text-sm text-zinc-500 max-w-xs mx-auto">
+                        Você sinalizou que não pode participar em nenhuma data de {getMonthName(currentMonth)}.
+                    </p>
+                    <button onClick={handleToggleBlockMonth} className="mt-6 text-sm font-bold text-blue-600 hover:underline">
+                        Quero desbloquear e selecionar dias
+                    </button>
                 </div>
             )}
 
@@ -323,7 +352,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                 ))}
             </div>
 
-            <div className={`grid grid-cols-4 sm:grid-cols-7 gap-2 sm:gap-3 transition-opacity duration-300 ${isMonthBlocked || !isEditable ? 'opacity-50' : 'opacity-100'}`}>
+            <div className={`grid grid-cols-4 sm:grid-cols-7 gap-2 sm:gap-3 transition-opacity duration-300 ${isMonthBlocked || !isEditable ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
                 {Array.from({ length: new Date(year, month - 1, 1).getDay() }).map((_, i) => (
                     <div key={`empty-${i}`} className="hidden sm:block" />
                 ))}
@@ -368,7 +397,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                 })}
             </div>
             
-            <div className="mt-8 bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+            <div className="mt-8 bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm relative z-30">
                 <div className="flex items-center gap-2 mb-2 text-zinc-500 dark:text-zinc-400">
                     <MessageSquare size={16} />
                     <label className="text-xs font-bold uppercase">Observações Gerais</label>
@@ -376,8 +405,8 @@ export const AvailabilityScreen: React.FC<Props> = ({
                 <textarea 
                     value={generalNote}
                     onChange={(e) => { setGeneralNote(e.target.value); setHasChanges(true); }}
-                    disabled={!isEditable || isMonthBlocked}
-                    placeholder="Ex: Chego atrasado nas quartas; Estarei de férias do dia 10 ao 20..."
+                    disabled={!isEditable}
+                    placeholder={isMonthBlocked ? "Motivo da indisponibilidade (opcional)..." : "Ex: Chego atrasado nas quartas; Estarei de férias do dia 10 ao 20..."}
                     className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px] resize-none disabled:opacity-50"
                 />
             </div>
