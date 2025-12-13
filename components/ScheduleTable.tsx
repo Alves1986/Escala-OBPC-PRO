@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis, GlobalConflictMap, TeamMemberProfile } from '../types';
-import { CheckCircle2, AlertTriangle, Trash2, Edit, Clock, User, ChevronDown, ChevronLeft, ChevronRight, X, Search, AlertOctagon, XCircle } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Trash2, Edit, Clock, User, ChevronDown, ChevronLeft, ChevronRight, X, Search, AlertOctagon, XCircle, Settings } from 'lucide-react';
 
 interface Props {
   events: { iso: string; dateDisplay: string; title: string }[];
@@ -36,7 +36,6 @@ const checkIsAvailable = (lookupSet: Set<string>, member: string, eventIso: stri
 };
 
 // Componente isolado para a lista do dropdown (Renderizado apenas quando aberto)
-// Isso evita calcular a ordenação/filtro para 300 células invisíveis.
 const SelectorDropdown = ({ 
     options, onClose, onChange, position, memberProfiles, memberStats, availabilityLookup, eventIso, onlineUsers, label, value
 }: any) => {
@@ -188,6 +187,7 @@ const MemberSelector = ({
                 <ChevronDown size={14} className={`text-zinc-400 shrink-0 ml-1 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </div>
 
+            {/* Icons and Dropdown ... */}
             {hasWarning && (
                 <div className="absolute -top-2 -right-2 z-20 group/warn">
                     <div className="bg-amber-500 text-white p-1 rounded-full shadow-md border-2 border-white dark:border-zinc-800 cursor-help">
@@ -402,8 +402,11 @@ export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, sched
           </div>
       </div>
 
+      {/* Mobile View */}
       <div className="md:hidden space-y-4 pb-24">
-          {events.length === 0 ? <div className="bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-700 p-8 text-center text-zinc-500">Nenhum evento para este mês.</div> : events.map((event) => (
+          {events.length === 0 ? (
+              <div className="bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-700 p-8 text-center text-zinc-500">Nenhum evento para este mês.</div>
+          ) : events.map((event) => (
               <div key={event.iso} className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm overflow-hidden animate-slide-up">
                   <div className="bg-zinc-50 dark:bg-zinc-900/50 p-4 border-b border-zinc-100 dark:border-zinc-700 flex justify-between items-start">
                       <div className="flex-1 min-w-0">
@@ -415,55 +418,66 @@ export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, sched
                       </div>
                       {!readOnly && <div className="flex gap-1 ml-2"><button onClick={() => onEditEvent(event)} className="p-2 text-blue-500 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 transition-colors"><Edit size={16}/></button><button onClick={() => onDeleteEvent(event.iso, event.title)} className="p-2 text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 transition-colors"><Trash2 size={16}/></button></div>}
                   </div>
-                  <div className="p-4 space-y-4">
-                      {columns.map(col => {
-                          const key = `${event.iso}_${col.keySuffix}`;
-                          const currentValue = schedule[key] || "";
-                          const roleMembers = members[col.realRole] || [];
-                          const isConfirmed = attendance[key];
-                          
-                          const hasLocalConflict = currentValue && !checkIsAvailable(availabilityLookup, currentValue, event.iso);
-                          
-                          let globalConflictMsg = "";
-                          let hasGlobalConflict = false;
-                          if (currentValue && !readOnly) {
-                              const normalized = currentValue.trim().toLowerCase();
-                              const conflicts = globalConflicts[normalized];
-                              if (conflicts) {
-                                  const conflict = conflicts.find((c: any) => c.eventIso === event.iso);
-                                  if (conflict) { hasGlobalConflict = true; globalConflictMsg = `Conflito: ${currentValue} em ${conflict.ministryId.toUpperCase()}`; }
+                  
+                  {columns.length === 0 ? (
+                      <div className="p-6 text-center">
+                          <p className="text-sm text-zinc-400 italic mb-2">Nenhuma função configurada.</p>
+                          <div className="flex items-center justify-center gap-2 text-xs text-zinc-500 bg-zinc-100 dark:bg-zinc-900 p-2 rounded-lg">
+                              <Settings size={14}/>
+                              <span>Vá em <strong>Funções</strong> para configurar.</span>
+                          </div>
+                      </div>
+                  ) : (
+                      <div className="p-4 space-y-4">
+                          {columns.map(col => {
+                              const key = `${event.iso}_${col.keySuffix}`;
+                              const currentValue = schedule[key] || "";
+                              const roleMembers = members[col.realRole] || [];
+                              const isConfirmed = attendance[key];
+                              
+                              const hasLocalConflict = currentValue && !checkIsAvailable(availabilityLookup, currentValue, event.iso);
+                              
+                              let globalConflictMsg = "";
+                              let hasGlobalConflict = false;
+                              if (currentValue && !readOnly) {
+                                  const normalized = currentValue.trim().toLowerCase();
+                                  const conflicts = globalConflicts[normalized];
+                                  if (conflicts) {
+                                      const conflict = conflicts.find((c: any) => c.eventIso === event.iso);
+                                      if (conflict) { hasGlobalConflict = true; globalConflictMsg = `Conflito: ${currentValue} em ${conflict.ministryId.toUpperCase()}`; }
+                                  }
                               }
-                          }
-                          return (
-                              <div key={key} className="flex items-start gap-3">
-                                  <div className="flex-1">
-                                      <span className="text-[10px] uppercase font-bold text-zinc-400 mb-1 block tracking-wider">{col.displayRole}</span>
-                                      <div className="flex items-center gap-2">
-                                          <div className="flex-1">
-                                              <MemberSelector 
-                                                value={currentValue} 
-                                                onChange={(val) => onCellChange(key, val)} 
-                                                options={roleMembers} 
-                                                memberProfiles={memberProfiles} 
-                                                memberStats={memberStats} 
-                                                hasError={hasLocalConflict} 
-                                                hasWarning={hasGlobalConflict} 
-                                                warningMsg={globalConflictMsg} 
-                                                eventIso={event.iso} 
-                                                availabilityLookup={availabilityLookup} 
-                                                label={`Selecionar ${col.displayRole}`} 
-                                                onlineUsers={onlineUsers} 
-                                              />
+                              return (
+                                  <div key={key} className="flex items-start gap-3">
+                                      <div className="flex-1">
+                                          <span className="text-[10px] uppercase font-bold text-zinc-400 mb-1 block tracking-wider">{col.displayRole}</span>
+                                          <div className="flex items-center gap-2">
+                                              <div className="flex-1">
+                                                  <MemberSelector 
+                                                    value={currentValue} 
+                                                    onChange={(val) => onCellChange(key, val)} 
+                                                    options={roleMembers} 
+                                                    memberProfiles={memberProfiles} 
+                                                    memberStats={memberStats} 
+                                                    hasError={hasLocalConflict} 
+                                                    hasWarning={hasGlobalConflict} 
+                                                    warningMsg={globalConflictMsg} 
+                                                    eventIso={event.iso} 
+                                                    availabilityLookup={availabilityLookup} 
+                                                    label={`Selecionar ${col.displayRole}`} 
+                                                    onlineUsers={onlineUsers} 
+                                                  />
+                                              </div>
+                                              {currentValue && <button onClick={() => onAttendanceToggle(key)} className={`p-2.5 rounded-lg transition-colors border ${isConfirmed ? 'text-green-600 bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' : 'text-zinc-300 bg-zinc-50 border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700'}`}><CheckCircle2 size={18} /></button>}
                                           </div>
-                                          {currentValue && <button onClick={() => onAttendanceToggle(key)} className={`p-2.5 rounded-lg transition-colors border ${isConfirmed ? 'text-green-600 bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' : 'text-zinc-300 bg-zinc-50 border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700'}`}><CheckCircle2 size={18} /></button>}
+                                          {hasLocalConflict && <p className="text-[10px] text-red-500 mt-1 flex items-center gap-1 font-medium"><AlertOctagon size={10}/> Indisponível</p>}
+                                          {hasGlobalConflict && <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1 font-bold animate-pulse"><AlertTriangle size={10}/> {globalConflictMsg}</div>}
                                       </div>
-                                      {hasLocalConflict && <p className="text-[10px] text-red-500 mt-1 flex items-center gap-1 font-medium"><AlertOctagon size={10}/> Indisponível</p>}
-                                      {hasGlobalConflict && <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1 font-bold animate-pulse"><AlertTriangle size={10}/> {globalConflictMsg}</div>}
                                   </div>
-                              </div>
-                          )
-                      })}
-                  </div>
+                              )
+                          })}
+                      </div>
+                  )}
               </div>
           ))}
       </div>

@@ -4,7 +4,8 @@ import * as Supabase from '../services/supabaseService';
 import { 
   User, ScheduleMap, AttendanceMap, AvailabilityMap, 
   AppNotification, Announcement, SwapRequest, RepertoireItem, 
-  TeamMemberProfile, MemberMap, Role, GlobalConflictMap, AvailabilityNotesMap 
+  TeamMemberProfile, MemberMap, Role, GlobalConflictMap, AvailabilityNotesMap,
+  DEFAULT_ROLES 
 } from '../types';
 import { useToast } from '../components/Toast';
 import { saveOfflineData, loadOfflineData } from '../services/offlineService';
@@ -128,14 +129,26 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
         }
 
         // 1. Atualização de estado em lote (Dados da Nuvem - Sobrescreve cache se diferente)
-        if (settings.displayName) {
-            setMinistryTitle(settings.displayName || ministryId.charAt(0).toUpperCase() + ministryId.slice(1));
-            setRoles(settings.roles);
-            setAvailabilityWindow({
-                start: settings.availabilityStart,
-                end: settings.availabilityEnd
-            });
+        
+        // --- LOGIC: Handle Roles Fallback ---
+        let finalRoles = settings.roles;
+        if (!finalRoles || finalRoles.length === 0) {
+            const cleanId = ministryId.trim().toLowerCase();
+            finalRoles = DEFAULT_ROLES[cleanId] || DEFAULT_ROLES['default'] || [];
         }
+        setRoles(finalRoles);
+        
+        // Update Title if present
+        if (settings.displayName) {
+            setMinistryTitle(settings.displayName);
+        } else if (!ministryTitle && ministryId) {
+            setMinistryTitle(ministryId.charAt(0).toUpperCase() + ministryId.slice(1));
+        }
+
+        setAvailabilityWindow({
+            start: settings.availabilityStart,
+            end: settings.availabilityEnd
+        });
 
         setEvents(schedData.events);
         setSchedule(schedData.schedule);
@@ -158,7 +171,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
         // 2. Salvar no Cache Local Assíncrono (IndexedDB)
         saveOfflineData(CACHE_KEY, {
             timestamp: Date.now(),
-            settings,
+            settings: { ...settings, roles: finalRoles }, // Save computed roles to cache
             schedData,
             membersData,
             availData,
