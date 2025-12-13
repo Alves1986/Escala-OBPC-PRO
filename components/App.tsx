@@ -44,6 +44,7 @@ import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from './utils/pushUtils';
 // Novos Hooks
 import { useAuth } from './hooks/useAuth';
 import { useMinistryData } from './hooks/useMinistryData';
+import { useOnlinePresence } from './hooks/useOnlinePresence';
 
 const InnerApp = () => {
   // --- CONFIG CHECK ---
@@ -53,6 +54,9 @@ const InnerApp = () => {
 
   // --- CUSTOM HOOKS ---
   const { currentUser, setCurrentUser, loadingAuth } = useAuth();
+  
+  // Realtime Online Presence
+  const onlineUsers = useOnlinePresence(currentUser?.id, currentUser?.name);
   
   const [ministryId, setMinistryId] = useState<string>('midia');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -638,6 +642,7 @@ const InnerApp = () => {
                     })()}
                     ministryId={ministryId}
                     readOnly={false}
+                    onlineUsers={onlineUsers} // New prop
                 />
             </div>
         )}
@@ -741,11 +746,19 @@ const InnerApp = () => {
                     </div>
                  </div>
                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {publicMembers.map(member => (
+                    {publicMembers.map(member => {
+                        const isOnline = onlineUsers.includes(member.id);
+                        return (
                         <div key={member.id} className="bg-[#18181b] rounded-2xl border border-zinc-800 p-5 flex flex-col gap-4 relative group shadow-sm transition-all hover:border-zinc-700">
                             <div className="flex justify-between items-start">
                                 <div className="flex gap-4">
-                                    {member.avatar_url ? <img src={member.avatar_url} alt={member.name} className="w-14 h-14 rounded-full object-cover border-2 border-zinc-700 shadow-sm" /> : <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold border-2 border-zinc-700 shadow-sm">{member.name.charAt(0).toUpperCase()}</div>}
+                                    <div className="relative">
+                                        {member.avatar_url ? <img src={member.avatar_url} alt={member.name} className="w-14 h-14 rounded-full object-cover border-2 border-zinc-700 shadow-sm" /> : <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold border-2 border-zinc-700 shadow-sm">{member.name.charAt(0).toUpperCase()}</div>}
+                                        {/* ONLINE INDICATOR */}
+                                        {isOnline && (
+                                            <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-[#18181b] animate-pulse" title="Online Agora"></div>
+                                        )}
+                                    </div>
                                     <div>
                                         <h3 className="font-bold text-lg text-zinc-100 truncate max-w-[150px]" title={member.name}>{member.name}</h3>
                                         <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mt-0.5">{member.isAdmin ? 'Administrador' : 'Membro'}</span>
@@ -766,7 +779,7 @@ const InnerApp = () => {
                                 {member.birthDate && <div className="flex items-center gap-3 text-zinc-400 group/item hover:text-zinc-300 transition-colors"><Gift size={16} className="text-zinc-600 group-hover/item:text-zinc-400 transition-colors shrink-0"/><span className="truncate">{new Date(member.birthDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}</span></div>}
                             </div>
                         </div>
-                    ))}
+                    );})}
                  </div>
              </div>
         )}
