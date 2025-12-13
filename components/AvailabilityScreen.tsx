@@ -35,22 +35,31 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   const isAdmin = currentUser?.role === 'admin';
 
-  // Verifica estado da janela independente do papel do usuário
+  // Verifica estado da janela com lógica defensiva
   const getWindowState = () => {
       // Se não houver configuração, assume aberto por padrão (default do sistema)
       if (!availabilityWindow?.start && !availabilityWindow?.end) return 'OPEN';
       
-      // Se houver config mas estiver inválida/vazia, bloqueia por segurança
-      if (!availabilityWindow?.start || !availabilityWindow?.end) return 'CLOSED';
+      const startStr = availabilityWindow.start;
+      const endStr = availabilityWindow.end;
 
+      // Se as datas forem o "Código de Bloqueio" (Epoch 1970)
+      if (startStr?.startsWith('1970') || endStr?.startsWith('1970')) return 'CLOSED';
+
+      // Validação de datas
+      const start = new Date(startStr || '');
+      const end = new Date(endStr || '');
       const now = new Date();
-      const start = new Date(availabilityWindow.start);
-      const end = new Date(availabilityWindow.end);
+
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+          return 'OPEN'; // Se data inválida, fallback para aberto para não travar
+      }
       
       return (now >= start && now <= end) ? 'OPEN' : 'CLOSED';
   };
 
   const windowState = getWindowState();
+  // Se for admin, sempre pode editar. Se for membro, depende da janela.
   const isEditable = isAdmin || windowState === 'OPEN';
 
   useEffect(() => {
@@ -63,7 +72,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
         const storedDates = availability[selectedMember] || [];
         setTempDates(storedDates);
         
-        // Note key format: Name_YYYY-MM-00 (General)
         const genKey = `${selectedMember}_${currentMonth}-00`;
         setGeneralNote(availabilityNotes?.[genKey] || "");
         
@@ -83,27 +91,24 @@ export const AvailabilityScreen: React.FC<Props> = ({
       const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
       const existing = tempDates.find(d => d.startsWith(dateStr));
 
-      // Verifica se é Domingo
       const dateObj = new Date(year, month - 1, day);
       const isSunday = dateObj.getDay() === 0;
 
       if (isSunday) {
-          // Lógica para Domingo: Ciclo Completo (Dia Todo -> Manhã -> Noite -> Nada)
           if (!existing) {
-              setTempDates(prev => [...prev, dateStr]); // Full Day
+              setTempDates(prev => [...prev, dateStr]); 
           } else if (existing === dateStr) {
-              setTempDates(prev => prev.map(d => d === dateStr ? `${dateStr}_M` : d)); // Morning
+              setTempDates(prev => prev.map(d => d === dateStr ? `${dateStr}_M` : d));
           } else if (existing.endsWith('_M')) {
-              setTempDates(prev => prev.map(d => d === existing ? `${dateStr}_N` : d)); // Night
+              setTempDates(prev => prev.map(d => d === existing ? `${dateStr}_N` : d));
           } else {
-              setTempDates(prev => prev.filter(d => !d.startsWith(dateStr))); // Remove
+              setTempDates(prev => prev.filter(d => !d.startsWith(dateStr)));
           }
       } else {
-          // Lógica para outros dias: Alternar Simples (Dia Todo <-> Nada)
           if (!existing) {
-              setTempDates(prev => [...prev, dateStr]); // Add Full
+              setTempDates(prev => [...prev, dateStr]);
           } else {
-              setTempDates(prev => prev.filter(d => !d.startsWith(dateStr))); // Remove
+              setTempDates(prev => prev.filter(d => !d.startsWith(dateStr)));
           }
       }
       
@@ -160,13 +165,20 @@ export const AvailabilityScreen: React.FC<Props> = ({
       {/* FEEDBACK VISUAL DE STATUS DA JANELA */}
       {windowState === 'CLOSED' ? (
           isAdmin ? (
-              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 p-4 rounded-xl flex items-center gap-3 text-amber-700 dark:text-amber-400 shadow-sm">
-                  <Unlock size={20} />
-                  <div>
-                      <span className="text-sm font-bold flex items-center gap-2">
-                          Janela Fechada <span className="bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-white px-1.5 py-0.5 rounded text-[10px] uppercase">Modo Admin</span>
-                      </span>
-                      <span className="text-xs opacity-90">A janela está fechada para membros, mas você tem permissão para editar.</span>
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 p-4 rounded-xl flex flex-col md:flex-row items-center gap-3 text-amber-700 dark:text-amber-400 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <Unlock size={20} />
+                    <div>
+                        <span className="text-sm font-bold flex items-center gap-2">
+                            Janela Fechada <span className="bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-white px-1.5 py-0.5 rounded text-[10px] uppercase">Modo Admin</span>
+                        </span>
+                        <span className="text-xs opacity-90 block">Os membros não podem editar, mas você tem acesso total.</span>
+                    </div>
+                  </div>
+                  {/* Debug info apenas para Admin ter certeza das datas */}
+                  <div className="text-[9px] font-mono opacity-60 ml-auto border-l pl-3 border-amber-300 dark:border-amber-700">
+                      Start: {availabilityWindow?.start || 'N/A'}<br/>
+                      End: {availabilityWindow?.end || 'N/A'}
                   </div>
               </div>
           ) : (
@@ -198,7 +210,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
       )}
 
       {selectedMember ? (
-          <div className="relative">
+          <div className={`relative transition-opacity ${!isEditable ? 'opacity-80' : ''}`}>
               
               {/* Calendar Grid */}
               <div className="grid grid-cols-7 gap-2 sm:gap-3 mb-6">
@@ -231,7 +243,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                               key={day}
                               onClick={() => handleDayClick(day)}
                               disabled={!isEditable}
-                              className={`aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all active:scale-95 ${styles} ${!isEditable ? 'opacity-60 cursor-not-allowed grayscale-[0.3]' : ''}`}
+                              className={`aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all active:scale-95 ${styles} ${!isEditable ? 'opacity-50 cursor-not-allowed grayscale' : ''}`}
                           >
                               <span className="text-sm sm:text-base font-bold">{day}</span>
                               {icon}
