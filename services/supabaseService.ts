@@ -100,39 +100,60 @@ export const joinMinistry = async (newMinistryId: string, roles: string[]) => {
 export const deleteMember = async (ministryId: string, memberId: string, memberName: string) => {
     if (!supabase) return { success: false, message: "Erro de conexão" };
     try {
-        // 1. Busca o perfil atual
-        const { data: profile, error: fetchError } = await supabase.from('profiles').select('allowed_ministries, ministry_id').eq('id', memberId).single();
+        // 1. Busca o perfil atual para garantir que temos os dados mais recentes
+        const { data: profile, error: fetchError } = await supabase
+            .from('profiles')
+            .select('allowed_ministries, ministry_id')
+            .eq('id', memberId)
+            .single();
         
         if (fetchError || !profile) {
+            console.error("Erro ao buscar perfil:", fetchError);
             return { success: false, message: "Perfil não encontrado ou erro de permissão." };
         }
 
+        // Normaliza o ID do ministério atual para comparação
         const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
         
-        // 2. Filtra o ministério removido da lista
-        const currentAllowed = profile.allowed_ministries || [];
-        const newAllowed = currentAllowed.filter((m: string) => m !== cleanMid);
+        // 2. Filtra o ministério removido da lista (Case Insensitive e Robustez)
+        const currentAllowed = Array.isArray(profile.allowed_ministries) ? profile.allowed_ministries : [];
+        
+        const newAllowed = currentAllowed.filter((m: string) => {
+            // Normaliza cada item do array para comparar
+            const normalizedM = (m || "").trim().toLowerCase().replace(/\s+/g, '-');
+            return normalizedM !== cleanMid;
+        });
+
+        // Se o tamanho não mudou, talvez o usuário não estivesse na lista (mas estava no ministry_id)
+        // Prosseguimos mesmo assim para limpar o ministry_id se necessário.
 
         const updates: any = { allowed_ministries: newAllowed };
 
         // 3. Se o usuário estava com este ministério ATIVO/SELECIONADO, precisamos mudar
-        // para evitar que ele fique preso em um ministério que não tem mais acesso.
-        if (profile.ministry_id === cleanMid) {
+        // Normaliza também o ministry_id do banco
+        const currentActive = (profile.ministry_id || "").trim().toLowerCase().replace(/\s+/g, '-');
+        
+        if (currentActive === cleanMid) {
             // Define como o primeiro disponível ou null se não sobrar nenhum
             updates.ministry_id = newAllowed.length > 0 ? newAllowed[0] : null;
         }
 
+        // 4. Executa o Update
         const { error: updateError } = await supabase.from('profiles').update(updates).eq('id', memberId);
 
         if (updateError) {
             console.error("Erro no update:", updateError);
-            return { success: false, message: "Falha ao atualizar perfil. Verifique suas permissões de Admin." };
+            // Mensagem amigável para erro de RLS
+            if (updateError.code === '42501' || updateError.message.includes('policy')) {
+                return { success: false, message: "Permissão negada. Apenas o próprio usuário ou Super Admins podem alterar perfis." };
+            }
+            return { success: false, message: `Falha ao salvar: ${updateError.message}` };
         }
 
-        return { success: true, message: "Membro removido com sucesso." };
+        return { success: true, message: "Acesso do membro revogado com sucesso." };
 
     } catch (e: any) { 
-        console.error(e); 
+        console.error("Exceção em deleteMember:", e); 
         return { success: false, message: e.message || "Erro desconhecido ao excluir." };
     }
 };
