@@ -132,6 +132,8 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
         
         // --- LOGIC: Handle Roles Fallback ---
         let finalRoles = settings.roles;
+        
+        // SE as roles vierem vazias do banco, usa o padrão local para evitar tabela vazia
         if (!finalRoles || finalRoles.length === 0) {
             const cleanId = ministryId.trim().toLowerCase();
             finalRoles = DEFAULT_ROLES[cleanId] || DEFAULT_ROLES['default'] || [];

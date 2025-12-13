@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { 
-  LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
+  LayoutDashboard, Calendar, CalendarCheck, RefreshCcw, Music, 
   Megaphone, Settings, FileBarChart, CalendarDays,
   Users, Edit, Send, ListMusic, Clock, ArrowLeft, ArrowRight,
   Calendar as CalendarIcon, Trophy, Loader2, ShieldAlert
@@ -59,7 +59,8 @@ const LoadingFallback = () => (
 );
 
 const InnerApp = () => {
-  if (!SUPABASE_URL || !SUPABASE_KEY) return <SetupScreen />;
+  // --- STATE & HOOKS (Must be called unconditionally) ---
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   const { currentUser, setCurrentUser, loadingAuth } = useAuth();
   const onlineUsers = useOnlinePresence(currentUser?.id, currentUser?.name);
@@ -76,14 +77,6 @@ const InnerApp = () => {
       }
       return 'dashboard';
   });
-
-  // Atualiza a aba se vier do callback do Spotify
-  useEffect(() => {
-      if (window.location.hash && window.location.hash.includes('access_token') && currentUser) {
-          const target = currentUser.role === 'admin' ? 'repertoire-manager' : 'repertoire';
-          if (currentTab !== target) setCurrentTab(target);
-      }
-  }, [currentUser]);
 
   const { 
     events, setEvents, schedule, setSchedule, attendance, setAttendance,
@@ -112,6 +105,16 @@ const InnerApp = () => {
   });
   const [visualTheme, setVisualTheme] = useState<'light' | 'dark'>('light');
   const [showInitialLoading, setShowInitialLoading] = useState(true);
+
+  // --- EFFECTS ---
+
+  // Atualiza a aba se vier do callback do Spotify
+  useEffect(() => {
+      if (window.location.hash && window.location.hash.includes('access_token') && currentUser) {
+          const target = currentUser.role === 'admin' ? 'repertoire-manager' : 'repertoire';
+          if (currentTab !== target) setCurrentTab(target);
+      }
+  }, [currentUser]);
 
   // Smooth Loading Transition
   useEffect(() => {
@@ -166,6 +169,8 @@ const InnerApp = () => {
     if (themeMode === 'system') interval = setInterval(applyTheme, 60000);
     return () => { if (interval) clearInterval(interval); };
   }, [themeMode]);
+
+  // --- HANDLERS ---
 
   const handleSetThemeMode = (mode: ThemeMode) => setThemeMode(mode);
   
@@ -317,6 +322,13 @@ const InnerApp = () => {
       else runAi();
   };
 
+  // --- RENDER ---
+
+  // 1. CONFIG CHECK (Moved after hooks to avoid React Error #310)
+  if ((!SUPABASE_URL || !SUPABASE_KEY) && !isDemoMode) {
+      return <SetupScreen onEnterDemo={() => setIsDemoMode(true)} />;
+  }
+
   if (loadingAuth || (currentUser && showInitialLoading)) return <LoadingScreen />;
   if (!currentUser) return <LoginScreen isLoading={loadingAuth} />;
 
@@ -427,7 +439,7 @@ const InnerApp = () => {
                         <div className="flex flex-col md:flex-row justify-between items-end gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-6">
                             <div><h2 className="text-3xl font-bold text-zinc-800 dark:text-white flex items-center gap-3"><Edit className="text-blue-600 dark:text-blue-500" size={32} /> Editor de Escala</h2><p className="text-zinc-500 dark:text-zinc-400 mt-2">Gerencie a escala oficial de {getMonthName(currentMonth)}.</p></div>
                             <div className="flex items-center gap-3">
-                                <ToolsMenu onExportIndividual={() => {}} onExportFull={() => {}} onWhatsApp={() => {}} onClearMonth={() => confirmAction("Limpar?", "Limpar toda a escala do mês?", () => Supabase.clearScheduleForMonth(ministryId, currentMonth).then(loadData))} onResetEvents={() => confirmAction("Restaurar?", "Restaurar eventos padrão?", () => Supabase.resetToDefaultEvents(ministryId, currentMonth).then(loadData))} onAiAutoFill={handleAiAutoFill} onSyncCalendar={handleSyncCalendar} allMembers={publicMembers.map(m => m.name)} />
+                                <ToolsMenu onExportIndividual={() => {}} onExportFull={() => {}} onWhatsApp={() => {}} onClearMonth={() => confirmAction("Limpar?", "Limpar toda a escala do mês?", () => Supabase.clearScheduleForMonth(ministryId, currentMonth).then(() => loadData()))} onResetEvents={() => confirmAction("Restaurar?", "Restaurar eventos padrão?", () => Supabase.resetToDefaultEvents(ministryId, currentMonth).then(() => loadData()))} onAiAutoFill={handleAiAutoFill} onSyncCalendar={handleSyncCalendar} allMembers={publicMembers.map(m => m.name)} />
                                 <div className="flex items-center gap-2 bg-zinc-900 dark:bg-zinc-800 p-1.5 rounded-lg border border-zinc-700 shadow-sm text-white"><button onClick={() => setCurrentMonth(adjustMonth(currentMonth, -1))} className="p-2 hover:bg-zinc-700 rounded-md"><ArrowLeft size={16}/></button><span className="text-sm font-bold min-w-[80px] text-center">{currentMonth}</span><button onClick={() => setCurrentMonth(adjustMonth(currentMonth, 1))} className="p-2 hover:bg-zinc-700 rounded-md"><ArrowRight size={16}/></button></div>
                             </div>
                         </div>
@@ -446,13 +458,12 @@ const InnerApp = () => {
                 {currentTab === 'swaps' && <SwapRequestsScreen schedule={schedule} currentUser={currentUser} requests={swapRequests} visibleEvents={events} onCreateRequest={async (role, iso, title) => { const success = await Supabase.createSwapRequestSQL(ministryId, { id: '', ministryId, requesterName: currentUser.name, requesterId: currentUser.id, role, eventIso: iso, eventTitle: title, status: 'pending', createdAt: new Date().toISOString() }); if(success) { addToast("Solicitação criada!", "success"); loadData(); }}} onAcceptRequest={async (reqId) => { const result = await Supabase.performSwapSQL(ministryId, reqId, currentUser.name, currentUser.id!); if(result.success) { addToast(result.message, "success"); loadData(); } else { addToast(result.message, "error"); }}} />}
                 {currentTab === 'ranking' && <RankingScreen ministryId={ministryId} currentUser={currentUser} />}
                 {(currentTab === 'repertoire' || (currentTab === 'repertoire-manager' && isAdmin)) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { await loadData(); }} currentUser={currentUser} mode={currentTab === 'repertoire-manager' ? 'manage' : 'view'} ministryId={ministryId} />}
-                {currentTab === 'announcements' && <AnnouncementsScreen announcements={announcements} currentUser={currentUser} onMarkRead={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'read').then(loadData)} onToggleLike={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'like').then(loadData)} />}
+                {currentTab === 'announcements' && <AnnouncementsScreen announcements={announcements} currentUser={currentUser} onMarkRead={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'read').then(() => loadData())} onToggleLike={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'like').then(() => loadData())} />}
                 {currentTab === 'send-announcements' && isAdmin && <AlertsManager onSend={async (title, message, type, exp) => { await Supabase.sendNotificationSQL(ministryId, { title, message, type, actionLink: 'announcements' }); await Supabase.createAnnouncementSQL(ministryId, { title, message, type, expirationDate: exp }, currentUser.name); loadData(); }} />}
                 {currentTab === 'report' && isAdmin && <AvailabilityReportScreen availability={availability} registeredMembers={publicMembers} membersMap={membersMap} currentMonth={currentMonth} onMonthChange={setCurrentMonth} availableRoles={roles} onRefresh={async () => { await loadData(); }} />}
                 {currentTab === 'profile' && <ProfileScreen user={currentUser} onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { const res = await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId); if (res.success) { addToast(res.message, "success"); if (currentUser) { setCurrentUser({ ...currentUser, name, whatsapp, avatar_url: avatar || currentUser.avatar_url, functions: funcs, birthDate: bdate }); } loadData(); } else { addToast(res.message, "error"); }}} availableRoles={roles} />}
                 {currentTab === 'settings' && <SettingsScreen initialTitle={ministryTitle} ministryId={ministryId} themeMode={themeMode} onSetThemeMode={handleSetThemeMode} onSaveTheme={handleSaveTheme} onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, newTitle); setMinistryTitle(newTitle); addToast("Nome do ministério atualizado!", "success"); }} onAnnounceUpdate={async () => { await Supabase.sendNotificationSQL(ministryId, { title: "Atualização de Sistema", message: "Uma nova versão do app está disponível. Recarregue a página para aplicar.", type: "warning" }); addToast("Notificação de atualização enviada.", "success"); }} onEnableNotifications={handleEnableNotifications} onSaveAvailabilityWindow={async (start, end) => { setAvailabilityWindow({ start, end }); await Supabase.saveMinistrySettings(ministryId, undefined, undefined, start, end); loadData(); }} availabilityWindow={availabilityWindow} isAdmin={isAdmin} />}
                 
-                {/* --- MEMBERS TAB FIX --- */}
                 {currentTab === 'members' && isAdmin && (
                     <MembersScreen 
                         members={publicMembers} 
@@ -502,8 +513,6 @@ const InnerApp = () => {
 
 export default function App() {
   return (
-    <ToastProvider>
-      <InnerApp />
-    </ToastProvider>
+    <ToastProvider children={<InnerApp />} />
   );
 }

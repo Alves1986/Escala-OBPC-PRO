@@ -9,33 +9,71 @@ import {
     RankingEntry, AvailabilityNotesMap, CustomEvent
 } from '../types';
 
-const isPreviewMode = SUPABASE_URL === 'https://preview.mode';
-
 let supabase: SupabaseClient | null = null;
 
-if (SUPABASE_URL && SUPABASE_KEY && !isPreviewMode) {
+if (SUPABASE_URL && SUPABASE_KEY) {
   supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 }
 
 export const getSupabase = () => supabase;
 
+// --- MOCK DATA HELPERS ---
+const mockNames = ["Ana Silva", "Carlos Oliveira", "Beatriz Santos", "Daniel Costa", "Elena Souza", "Fernando Lima", "Gabriela Rocha", "Hugo Alves"];
+const mockRoles = ["Mídia", "Louvor", "Recepção", "Infantil"];
+const getMockUser = () => ({
+    id: 'demo-user',
+    email: 'demo@obpc.com',
+    name: 'Visitante Demo',
+    role: 'admin',
+    ministryId: 'midia',
+    allowedMinistries: ['midia', 'louvor'],
+    avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+    functions: ['Projeção', 'Transmissão']
+});
+
+const generateMockEvents = (monthIso: string) => {
+    const [y, m] = monthIso.split('-').map(Number);
+    const events = [];
+    const daysInMonth = new Date(y, m, 0).getDate();
+    
+    // Create events for Sundays (Culto da Família) and Wednesdays (Culto de Doutrina)
+    for (let d = 1; d <= daysInMonth; d++) {
+        const date = new Date(y, m - 1, d);
+        const dayOfWeek = date.getDay();
+        
+        if (dayOfWeek === 0) { // Domingo
+            events.push({
+                id: `evt-${d}`,
+                title: "Culto da Família",
+                date_time: `${monthIso}-${String(d).padStart(2, '0')}T18:00:00`
+            });
+        } else if (dayOfWeek === 3) { // Quarta
+            events.push({
+                id: `evt-${d}`,
+                title: "Culto de Doutrina",
+                date_time: `${monthIso}-${String(d).padStart(2, '0')}T19:30:00`
+            });
+        }
+    }
+    return events;
+};
+
+// --- AUTH MOCKS ---
+
 export const logout = async () => {
-    if (isPreviewMode) return;
     if (!supabase) return;
     await supabase.auth.signOut();
 };
 
 export const loginWithEmail = async (email: string, password: string) => {
-    if (isPreviewMode) return { success: true };
-    if (!supabase) return { success: false, message: "Erro de conexão" };
+    if (!supabase) return { success: true, data: { user: getMockUser() } };
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { success: false, message: error.message };
     return { success: true, data };
 };
 
 export const loginWithGoogle = async () => {
-    if (isPreviewMode) return { success: true };
-    if (!supabase) return { success: false, message: "Erro de conexão" };
+    if (!supabase) return { success: true, data: { user: getMockUser() } };
     const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: window.location.origin }
@@ -45,8 +83,7 @@ export const loginWithGoogle = async () => {
 };
 
 export const registerWithEmail = async (email: string, password: string, name: string, ministries: string[], phone?: string, roles?: string[]) => {
-    if (isPreviewMode) return { success: true, message: "Registro simulado (Demo)" };
-    if (!supabase) return { success: false, message: "Erro de conexão" };
+    if (!supabase) return { success: true, message: "Registro simulado (Demo)" };
     const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } });
     if (error) return { success: false, message: error.message };
     if (data.user) {
@@ -61,16 +98,354 @@ export const registerWithEmail = async (email: string, password: string, name: s
 };
 
 export const sendPasswordResetEmail = async (email: string) => {
-    if (isPreviewMode) return { success: true, message: "Email enviado" };
-    if (!supabase) return { success: false, message: "Erro conexão" };
+    if (!supabase) return { success: true, message: "Email enviado (Simulado)" };
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/?reset=true' });
     if (error) return { success: false, message: error.message };
     return { success: true, message: "Link enviado." };
 };
 
+// --- DATA MOCKS ---
+
+export const fetchMinistrySettings = async (ministryId: string): Promise<MinistrySettings> => {
+    if (!supabase) return { 
+        displayName: 'Mídia & Comunicação (Demo)', 
+        roles: ["Projeção", "Transmissão", "Câmera 1", "Câmera 2", "Fotografia", "Storys"],
+        availabilityStart: new Date().toISOString(),
+        availabilityEnd: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    };
+    const { data } = await supabase.from('ministry_settings').select('*').eq('ministry_id', ministryId).single();
+    if (data?.spotify_client_id) localStorage.setItem(`spotify_cid_${ministryId}`, data.spotify_client_id);
+    if (data?.spotify_client_secret) localStorage.setItem(`spotify_sec_${ministryId}`, data.spotify_client_secret);
+    return {
+        displayName: data?.display_name || '',
+        roles: data?.roles || [],
+        availabilityStart: data?.availability_start,
+        availabilityEnd: data?.availability_end,
+        spotifyClientId: data?.spotify_client_id,
+        spotifyClientSecret: data?.spotify_client_secret
+    };
+};
+
+export const fetchMinistrySchedule = async (ministryId: string, month: string): Promise<{ events: any[], schedule: ScheduleMap, attendance: AttendanceMap }> => {
+    if (!supabase) {
+        const mockEvents = generateMockEvents(month);
+        const sched: ScheduleMap = {};
+        const att: AttendanceMap = {};
+        
+        mockEvents.forEach(evt => {
+            const iso = evt.date_time.slice(0, 16);
+            sched[`${iso}_Projeção`] = "Ana Silva";
+            sched[`${iso}_Transmissão`] = "Carlos Oliveira";
+            if (Math.random() > 0.5) att[`${iso}_Projeção`] = true;
+        });
+
+        const formattedEvents = mockEvents.map(e => ({
+            id: e.id,
+            title: e.title,
+            date: e.date_time.slice(0, 10),
+            time: e.date_time.slice(11, 16),
+            iso: e.date_time.slice(0, 16),
+            dateDisplay: e.date_time.slice(0, 10).split('-').reverse().join('/')
+        }));
+
+        return { events: formattedEvents, schedule: sched, attendance: att };
+    }
+    
+    const startDate = `${month}-01T00:00:00`;
+    const [y, m] = month.split('-').map(Number);
+    const nextMonth = new Date(y, m, 1).toISOString();
+
+    const { data: eventsData } = await supabase.from('events')
+        .select('*')
+        .eq('ministry_id', ministryId)
+        .gte('date_time', startDate)
+        .lt('date_time', nextMonth)
+        .order('date_time');
+
+    const eventIds = eventsData?.map((e: any) => e.id) || [];
+    
+    const { data: assignmentsData } = await supabase.from('schedule_assignments')
+        .select('*, profiles:member_id(name)')
+        .in('event_id', eventIds);
+
+    const schedule: ScheduleMap = {};
+    const attendance: AttendanceMap = {};
+
+    assignmentsData?.forEach((assign: any) => {
+        const event = eventsData?.find((e: any) => e.id === assign.event_id);
+        if (event && assign.profiles?.name) {
+            const key = `${event.date_time.slice(0, 16)}_${assign.role}`;
+            schedule[key] = assign.profiles.name;
+            if (assign.confirmed) attendance[key] = true;
+        }
+    });
+
+    const events = eventsData?.map((e: any) => ({
+        id: e.id,
+        title: e.title,
+        date: e.date_time.slice(0, 10),
+        time: e.date_time.slice(11, 16),
+        iso: e.date_time.slice(0, 16),
+        dateDisplay: e.date_time.slice(0, 10).split('-').reverse().join('/')
+    })) || [];
+
+    return { events, schedule, attendance };
+};
+
+export const fetchMinistryMembers = async (ministryId: string): Promise<{ memberMap: MemberMap, publicList: TeamMemberProfile[] }> => {
+    if (!supabase) {
+        const publicList: TeamMemberProfile[] = mockNames.map((name, idx) => ({
+            id: `mock-member-${idx}`,
+            name: name,
+            avatar_url: `https://i.pravatar.cc/150?u=${idx}`,
+            roles: idx % 2 === 0 ? ['Projeção', 'Câmera'] : ['Transmissão', 'Fotografia'],
+            email: `${name.toLowerCase().replace(' ', '.')}@demo.com`,
+            isAdmin: idx === 0
+        }));
+        
+        const memberMap: MemberMap = {};
+        publicList.forEach(m => {
+            m.roles?.forEach(r => {
+                if(!memberMap[r]) memberMap[r] = [];
+                memberMap[r].push(m.name);
+            });
+        });
+
+        return { memberMap, publicList };
+    }
+    
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+    const { data: members } = await supabase.from('profiles')
+        .select('*')
+        .or(`ministry_id.eq.${cleanMid},allowed_ministries.cs.{${cleanMid}}`)
+        .order('name');
+
+    const memberMap: MemberMap = {};
+    const publicList: TeamMemberProfile[] = [];
+
+    members?.forEach((m: any) => {
+        const profile: TeamMemberProfile = {
+            id: m.id,
+            name: m.name,
+            avatar_url: m.avatar_url,
+            roles: m.functions,
+            email: m.email,
+            whatsapp: m.whatsapp,
+            birthDate: m.birth_date,
+            isAdmin: m.is_admin
+        };
+        publicList.push(profile);
+
+        m.functions?.forEach((role: string) => {
+            if (!memberMap[role]) memberMap[role] = [];
+            memberMap[role].push(m.name);
+        });
+        
+        // Also add to a 'default' or ALL list if needed
+        if (!memberMap['Membro']) memberMap['Membro'] = [];
+        memberMap['Membro'].push(m.name);
+    });
+
+    return { memberMap, publicList };
+};
+
+export const fetchNotificationsSQL = async (ministryId: string, userId: string): Promise<AppNotification[]> => {
+    if (!supabase) {
+        return [
+            { id: '1', title: "Bem-vindo ao Demo", message: "Explore todas as funcionalidades do sistema.", type: "success", timestamp: new Date().toISOString(), read: false },
+            { id: '2', title: "Escala Liberada", message: "A escala de Domingo já está disponível.", type: "info", timestamp: new Date(Date.now() - 86400000).toISOString(), read: true, actionLink: "calendar" }
+        ];
+    }
+    
+    const { data } = await supabase.from('notifications')
+        .select('*')
+        .eq('ministry_id', ministryId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+    const { data: readData } = await supabase.from('notification_reads')
+        .select('notification_id')
+        .eq('user_id', userId);
+        
+    const readIds = new Set(readData?.map((r: any) => r.notification_id));
+
+    return (data || []).map((n: any) => ({
+        id: n.id,
+        title: n.title,
+        message: n.message,
+        type: n.type,
+        timestamp: n.created_at,
+        actionLink: n.action_link,
+        read: readIds.has(n.id)
+    }));
+};
+
+export const fetchAnnouncementsSQL = async (ministryId: string): Promise<Announcement[]> => {
+    if (!supabase) {
+        return [
+            { 
+                id: '1', title: "Ensaio Geral", message: "Sexta-feira às 20h. Todos convocados!", type: "warning", timestamp: new Date().toISOString(), author: "Liderança", readBy: [], likedBy: [] 
+            },
+            { 
+                id: '2', title: "Nova Playlist", message: "Repertório atualizado no Spotify.", type: "info", timestamp: new Date().toISOString(), author: "Mídia", readBy: [], likedBy: [] 
+            }
+        ];
+    }
+    const today = new Date().toISOString();
+    
+    const { data } = await supabase.from('announcements')
+        .select(`*, announcement_interactions(user_id, interaction_type, profiles(name))`)
+        .eq('ministry_id', ministryId)
+        .gte('expiration_date', today)
+        .order('created_at', { ascending: false });
+
+    return (data || []).map((a: any) => {
+        const reads: any[] = [];
+        const likes: any[] = [];
+        a.announcement_interactions?.forEach((i: any) => {
+            if (i.interaction_type === 'read') reads.push({ userId: i.user_id, name: i.profiles?.name, timestamp: '' });
+            if (i.interaction_type === 'like') likes.push({ userId: i.user_id, name: i.profiles?.name, timestamp: '' });
+        });
+        return {
+            id: a.id,
+            title: a.title,
+            message: a.message,
+            type: a.type,
+            timestamp: a.created_at,
+            author: a.author_name || 'Liderança',
+            expirationDate: a.expiration_date,
+            readBy: reads,
+            likedBy: likes
+        };
+    });
+};
+
+export const fetchSwapRequests = async (ministryId: string): Promise<SwapRequest[]> => {
+    if (!supabase) return [];
+    const { data } = await supabase.from('swap_requests')
+        .select('*')
+        .eq('ministry_id', ministryId)
+        .order('created_at', { ascending: false });
+    
+    return (data || []).map((r: any) => ({
+        id: r.id,
+        ministryId: r.ministry_id,
+        requesterName: r.requester_name,
+        requesterId: r.requester_id,
+        role: r.role,
+        eventIso: r.event_iso,
+        eventTitle: r.event_title,
+        status: r.status,
+        createdAt: r.created_at,
+        takenByName: r.taken_by_name
+    }));
+};
+
+export const fetchRepertoire = async (ministryId: string): Promise<RepertoireItem[]> => {
+    if (!supabase) {
+        const nextSunday = new Date();
+        nextSunday.setDate(nextSunday.getDate() + (7 - nextSunday.getDay()));
+        const dateStr = nextSunday.toISOString().slice(0, 10);
+        return [
+            { id: '1', title: "Bondade de Deus", link: "https://spotify.com", date: dateStr, addedBy: "Líder", createdAt: new Date().toISOString() },
+            { id: '2', title: "Ruja o Leão", link: "https://youtube.com", date: dateStr, addedBy: "Líder", createdAt: new Date().toISOString() }
+        ];
+    }
+    const { data } = await supabase.from('repertoire')
+        .select('*')
+        .eq('ministry_id', ministryId)
+        .order('event_date', { ascending: true });
+        
+    return (data || []).map((r: any) => ({
+        id: r.id,
+        title: r.title,
+        link: r.link,
+        date: r.event_date,
+        addedBy: r.added_by,
+        createdAt: r.created_at
+    }));
+};
+
+// --- WRITE OPS (MOCK) ---
+
+export const saveScheduleAssignment = async (ministryId: string, key: string, memberName: string) => {
+    if (!supabase) return true; // Mock success
+    const [eventIso, role] = key.split(/_(.+)/); 
+    if (!eventIso || !role) return false;
+
+    // Find event ID first
+    const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', eventIso).single();
+    if (!event) return false;
+
+    if (!memberName) {
+        // Delete assignment
+        await supabase.from('schedule_assignments').delete().eq('event_id', event.id).eq('role', role);
+        return true;
+    }
+
+    // Find member ID
+    const { data: member } = await supabase.from('profiles').select('id').eq('name', memberName).single();
+    if (!member) return false;
+
+    const { error } = await supabase.from('schedule_assignments').upsert({
+        event_id: event.id,
+        member_id: member.id,
+        role: role,
+        confirmed: false
+    }, { onConflict: 'event_id,role' });
+
+    return !error;
+};
+
+export const toggleAssignmentConfirmation = async (ministryId: string, key: string) => {
+    if (!supabase) return true;
+    const [eventIso, role] = key.split(/_(.+)/);
+    const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', eventIso).single();
+    if (!event) return false;
+
+    const { data: current } = await supabase.from('schedule_assignments').select('confirmed').eq('event_id', event.id).eq('role', role).single();
+    if (!current) return false;
+
+    const { error } = await supabase.from('schedule_assignments').update({ confirmed: !current.confirmed }).eq('event_id', event.id).eq('role', role);
+    return !error;
+};
+
+export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap, overwrite: boolean) => {
+    if (!supabase) return;
+    for (const [key, memberName] of Object.entries(schedule)) {
+        if (memberName) {
+            await saveScheduleAssignment(ministryId, key, memberName);
+        }
+    }
+};
+
+export const sendNotificationSQL = async (ministryId: string, notification: Partial<AppNotification>) => {
+    if (!supabase) return;
+    const { error } = await supabase.from('notifications').insert({
+        ministry_id: ministryId,
+        title: notification.title,
+        message: notification.message,
+        type: notification.type,
+        action_link: notification.actionLink
+    });
+    
+    if (!error) {
+        try {
+            supabase.functions.invoke('push-notification', { 
+                body: { 
+                    ministryId, 
+                    title: notification.title, 
+                    message: notification.message,
+                    type: notification.type,
+                    actionLink: notification.actionLink
+                } 
+            });
+        } catch (e) {}
+    }
+};
+
 export const joinMinistry = async (newMinistryId: string, roles: string[]) => {
-    if (isPreviewMode) return { success: true, message: "Sucesso Demo" };
-    if (!supabase) return { success: false, message: "Erro conexão" };
+    if (!supabase) return { success: true, message: "Sucesso Demo" };
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, message: "Usuário não autenticado" };
     const cleanNewMid = newMinistryId.trim().toLowerCase().replace(/\s+/g, '-');
@@ -89,65 +464,36 @@ export const joinMinistry = async (newMinistryId: string, roles: string[]) => {
             type: 'success', 
             action_link: 'members' 
         });
-        try { supabase.functions.invoke('push-notification', { body: { ministryId: cleanNewMid, title: "Novo Membro", message: msg, type: 'success' } }); } catch (e) {}
-
+        
         return { success: true, message: `Bem-vindo ao ministério ${cleanNewMid}!` };
     } catch (e: any) { return { success: false, message: e.message }; }
 };
 
 export const deleteMember = async (ministryId: string, memberId: string, memberName: string) => {
-    if (!supabase) return { success: false, message: "Erro de conexão" };
+    if (!supabase) return { success: true, message: "Membro removido (Demo)" };
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, message: "Não autorizado" };
 
-    // Tenta via Edge Function (Bypass RLS)
     const { data, error } = await supabase.functions.invoke('push-notification', {
-        body: {
-            action: 'delete_member',
-            ministryId,
-            memberId
-        }
+        body: { action: 'delete_member', ministryId, memberId }
     });
 
-    if (error) {
-        console.error("Edge Function Error:", error);
-        return { success: false, message: "Falha ao conectar com servidor." };
-    }
-
-    if (!data || !data.success) {
-        const msg = data?.message || "";
-        // Detecta se a mensagem de erro é do sistema antigo de push
-        if (msg.includes("inscrito") || msg.includes("dispositivo") || msg.includes("Ministry ID missing")) {
-             return { success: false, message: "⚠️ O código do servidor (Supabase Edge Function) está desatualizado. Por favor, faça o deploy do novo código em supabase/functions/push-notification." };
-        }
-        return { success: false, message: msg || "Erro ao remover membro." };
-    }
-
+    if (error || !data?.success) return { success: false, message: data?.message || "Erro ao remover membro." };
     return { success: true, message: "Membro removido da equipe com sucesso." };
 };
 
 export const toggleAdminSQL = async (email: string, isAdmin: boolean, ministryId: string = 'midia') => {
     if (!supabase) return;
-    
-    await supabase.functions.invoke('push-notification', {
-        body: {
-            action: 'toggle_admin',
-            targetEmail: email,
-            status: isAdmin,
-            ministryId
-        }
-    });
+    await supabase.functions.invoke('push-notification', { body: { action: 'toggle_admin', targetEmail: email, status: isAdmin, ministryId } });
 };
 
 export const updateUserProfile = async (name: string, whatsapp: string, avatar_url: string | undefined, functions: string[] | undefined, birthDate: string | undefined, ministryId: string | undefined) => {
-    if (isPreviewMode) return { success: true, message: "Perfil Demo Atualizado" };
-    if (!supabase) return { success: false, message: "Erro conexão" };
+    if (!supabase) return { success: true, message: "Perfil Demo Atualizado" };
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, message: "Não autenticado" };
     
     const updates: any = { name, whatsapp };
-    
     if (avatar_url !== undefined) updates.avatar_url = avatar_url;
     if (functions !== undefined) updates.functions = functions;
     if (birthDate !== undefined) updates.birth_date = birthDate;
@@ -188,7 +534,15 @@ export const fetchGlobalSchedules = async (monthIso: string, currentMinistryId: 
 };
 
 export const fetchRankingData = async (ministryId: string): Promise<RankingEntry[]> => {
-    if (!supabase) return [];
+    if (!supabase) {
+        return mockNames.map((name, idx) => ({
+            memberId: `mock-${idx}`,
+            name: name,
+            avatar_url: `https://i.pravatar.cc/150?u=${idx}`,
+            points: 1000 - (idx * 50),
+            stats: { confirmedEvents: 10 - idx, missedEvents: 0, swapsRequested: 0, announcementsRead: 5, announcementsLiked: 2 }
+        }));
+    }
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     try {
         const { data: members } = await supabase.from('profiles').select('id, name, avatar_url').or(`ministry_id.eq.${cleanMid},allowed_ministries.cs.{${cleanMid}}`);
@@ -211,8 +565,7 @@ export const fetchRankingData = async (ministryId: string): Promise<RankingEntry
 };
 
 export const fetchMinistryAvailability = async (ministryId: string): Promise<{ availability: AvailabilityMap, notes: AvailabilityNotesMap }> => {
-    if (isPreviewMode) return { availability: {}, notes: {} };
-    if (!supabase || !ministryId) return { availability: {}, notes: {} };
+    if (!supabase) return { availability: {}, notes: {} };
     
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
 
@@ -284,19 +637,11 @@ export const fetchMinistryAvailability = async (ministryId: string): Promise<{ a
 };
 
 export const saveMemberAvailability = async (
-    userId: string, 
-    memberName: string, 
-    dates: string[], 
-    targetMonth: string, 
-    notes?: Record<string, string>
+    userId: string, memberName: string, dates: string[], targetMonth: string, notes?: Record<string, string>
 ) => {
-    if (isPreviewMode) return;
     if (!supabase) return;
     
-    if (!targetMonth || targetMonth.length !== 7) {
-        console.error("Mês alvo inválido:", targetMonth);
-        return;
-    }
+    if (!targetMonth || targetMonth.length !== 7) return;
 
     try {
         const [y, m] = targetMonth.split('-').map(Number);
@@ -313,12 +658,10 @@ export const saveMemberAvailability = async (
         if (deleteError) throw deleteError;
 
         const rowsToInsert: any[] = [];
-        
         const availableDates = dates.filter(d => d.startsWith(targetMonth));
         
         for (const uiDate of availableDates) {
             const [datePart, suffix] = uiDate.split('_'); 
-            
             let metadata: any = {};
             if (suffix === 'M') metadata.period = 'M';
             if (suffix === 'N') metadata.period = 'N';
@@ -335,7 +678,6 @@ export const saveMemberAvailability = async (
         if (notes && notes[generalNoteKey]) {
             const generalText = notes[generalNoteKey];
             const firstOfMonth = `${targetMonth}-01`;
-            
             rowsToInsert.push({
                 member_id: userId,
                 date: firstOfMonth,
@@ -354,276 +696,6 @@ export const saveMemberAvailability = async (
     }
 };
 
-export const fetchMinistrySettings = async (ministryId: string): Promise<MinistrySettings> => {
-    if (!supabase) return { displayName: '', roles: [] };
-    const { data } = await supabase.from('ministry_settings').select('*').eq('ministry_id', ministryId).single();
-    if (data?.spotify_client_id) localStorage.setItem(`spotify_cid_${ministryId}`, data.spotify_client_id);
-    if (data?.spotify_client_secret) localStorage.setItem(`spotify_sec_${ministryId}`, data.spotify_client_secret);
-    return {
-        displayName: data?.display_name || '',
-        roles: data?.roles || [],
-        availabilityStart: data?.availability_start,
-        availabilityEnd: data?.availability_end,
-        spotifyClientId: data?.spotify_client_id,
-        spotifyClientSecret: data?.spotify_client_secret
-    };
-};
-
-export const fetchMinistrySchedule = async (ministryId: string, month: string): Promise<{ events: any[], schedule: ScheduleMap, attendance: AttendanceMap }> => {
-    if (!supabase) return { events: [], schedule: {}, attendance: {} };
-    
-    const startDate = `${month}-01T00:00:00`;
-    const [y, m] = month.split('-').map(Number);
-    const nextMonth = new Date(y, m, 1).toISOString();
-
-    const { data: eventsData } = await supabase.from('events')
-        .select('*')
-        .eq('ministry_id', ministryId)
-        .gte('date_time', startDate)
-        .lt('date_time', nextMonth)
-        .order('date_time');
-
-    const eventIds = eventsData?.map((e: any) => e.id) || [];
-    
-    const { data: assignmentsData } = await supabase.from('schedule_assignments')
-        .select('*, profiles:member_id(name)')
-        .in('event_id', eventIds);
-
-    const schedule: ScheduleMap = {};
-    const attendance: AttendanceMap = {};
-
-    assignmentsData?.forEach((assign: any) => {
-        const event = eventsData?.find((e: any) => e.id === assign.event_id);
-        if (event && assign.profiles?.name) {
-            const key = `${event.date_time.slice(0, 16)}_${assign.role}`;
-            schedule[key] = assign.profiles.name;
-            if (assign.confirmed) attendance[key] = true;
-        }
-    });
-
-    const events = eventsData?.map((e: any) => ({
-        id: e.id,
-        title: e.title,
-        date: e.date_time.slice(0, 10),
-        time: e.date_time.slice(11, 16),
-        iso: e.date_time.slice(0, 16),
-        dateDisplay: e.date_time.slice(0, 10).split('-').reverse().join('/')
-    })) || [];
-
-    return { events, schedule, attendance };
-};
-
-export const fetchMinistryMembers = async (ministryId: string): Promise<{ memberMap: MemberMap, publicList: TeamMemberProfile[] }> => {
-    if (!supabase) return { memberMap: {}, publicList: [] };
-    
-    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-    const { data: members } = await supabase.from('profiles')
-        .select('*')
-        .or(`ministry_id.eq.${cleanMid},allowed_ministries.cs.{${cleanMid}}`)
-        .order('name');
-
-    const memberMap: MemberMap = {};
-    const publicList: TeamMemberProfile[] = [];
-
-    members?.forEach((m: any) => {
-        const profile: TeamMemberProfile = {
-            id: m.id,
-            name: m.name,
-            avatar_url: m.avatar_url,
-            roles: m.functions,
-            email: m.email,
-            whatsapp: m.whatsapp,
-            birthDate: m.birth_date,
-            isAdmin: m.is_admin
-        };
-        publicList.push(profile);
-
-        m.functions?.forEach((role: string) => {
-            if (!memberMap[role]) memberMap[role] = [];
-            memberMap[role].push(m.name);
-        });
-        
-        // Also add to a 'default' or ALL list if needed
-        if (!memberMap['Membro']) memberMap['Membro'] = [];
-        memberMap['Membro'].push(m.name);
-    });
-
-    return { memberMap, publicList };
-};
-
-export const fetchNotificationsSQL = async (ministryId: string, userId: string): Promise<AppNotification[]> => {
-    if (!supabase) return [];
-    
-    const { data } = await supabase.from('notifications')
-        .select('*')
-        .eq('ministry_id', ministryId)
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-    const { data: readData } = await supabase.from('notification_reads')
-        .select('notification_id')
-        .eq('user_id', userId);
-        
-    const readIds = new Set(readData?.map((r: any) => r.notification_id));
-
-    return (data || []).map((n: any) => ({
-        id: n.id,
-        title: n.title,
-        message: n.message,
-        type: n.type,
-        timestamp: n.created_at,
-        actionLink: n.action_link,
-        read: readIds.has(n.id)
-    }));
-};
-
-export const fetchAnnouncementsSQL = async (ministryId: string): Promise<Announcement[]> => {
-    if (!supabase) return [];
-    const today = new Date().toISOString();
-    
-    const { data } = await supabase.from('announcements')
-        .select(`*, announcement_interactions(user_id, interaction_type, profiles(name))`)
-        .eq('ministry_id', ministryId)
-        .gte('expiration_date', today)
-        .order('created_at', { ascending: false });
-
-    return (data || []).map((a: any) => {
-        const reads: any[] = [];
-        const likes: any[] = [];
-        a.announcement_interactions?.forEach((i: any) => {
-            if (i.interaction_type === 'read') reads.push({ userId: i.user_id, name: i.profiles?.name, timestamp: '' });
-            if (i.interaction_type === 'like') likes.push({ userId: i.user_id, name: i.profiles?.name, timestamp: '' });
-        });
-        return {
-            id: a.id,
-            title: a.title,
-            message: a.message,
-            type: a.type,
-            timestamp: a.created_at,
-            author: a.author_name || 'Liderança',
-            expirationDate: a.expiration_date,
-            readBy: reads,
-            likedBy: likes
-        };
-    });
-};
-
-export const fetchSwapRequests = async (ministryId: string): Promise<SwapRequest[]> => {
-    if (!supabase) return [];
-    const { data } = await supabase.from('swap_requests')
-        .select('*')
-        .eq('ministry_id', ministryId)
-        .order('created_at', { ascending: false });
-    
-    return (data || []).map((r: any) => ({
-        id: r.id,
-        ministryId: r.ministry_id,
-        requesterName: r.requester_name,
-        requesterId: r.requester_id,
-        role: r.role,
-        eventIso: r.event_iso,
-        eventTitle: r.event_title,
-        status: r.status,
-        createdAt: r.created_at,
-        takenByName: r.taken_by_name
-    }));
-};
-
-export const fetchRepertoire = async (ministryId: string): Promise<RepertoireItem[]> => {
-    if (!supabase) return [];
-    const { data } = await supabase.from('repertoire')
-        .select('*')
-        .eq('ministry_id', ministryId)
-        .order('event_date', { ascending: true });
-        
-    return (data || []).map((r: any) => ({
-        id: r.id,
-        title: r.title,
-        link: r.link,
-        date: r.event_date,
-        addedBy: r.added_by,
-        createdAt: r.created_at
-    }));
-};
-
-export const saveScheduleAssignment = async (ministryId: string, key: string, memberName: string) => {
-    if (!supabase) return false;
-    const [eventIso, role] = key.split(/_(.+)/); 
-    if (!eventIso || !role) return false;
-
-    // Find event ID first
-    const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', eventIso).single();
-    if (!event) return false;
-
-    if (!memberName) {
-        // Delete assignment
-        await supabase.from('schedule_assignments').delete().eq('event_id', event.id).eq('role', role);
-        return true;
-    }
-
-    // Find member ID
-    const { data: member } = await supabase.from('profiles').select('id').eq('name', memberName).single();
-    if (!member) return false;
-
-    const { error } = await supabase.from('schedule_assignments').upsert({
-        event_id: event.id,
-        member_id: member.id,
-        role: role,
-        confirmed: false
-    }, { onConflict: 'event_id,role' });
-
-    return !error;
-};
-
-export const toggleAssignmentConfirmation = async (ministryId: string, key: string) => {
-    if (!supabase) return false;
-    const [eventIso, role] = key.split(/_(.+)/);
-    const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', eventIso).single();
-    if (!event) return false;
-
-    const { data: current } = await supabase.from('schedule_assignments').select('confirmed').eq('event_id', event.id).eq('role', role).single();
-    if (!current) return false;
-
-    const { error } = await supabase.from('schedule_assignments').update({ confirmed: !current.confirmed }).eq('event_id', event.id).eq('role', role);
-    return !error;
-};
-
-export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap, overwrite: boolean) => {
-    if (!supabase) return;
-    
-    // This is complex because we need event IDs and member IDs.
-    // For simplicity, we iterate (not efficient but safe)
-    for (const [key, memberName] of Object.entries(schedule)) {
-        if (memberName) {
-            await saveScheduleAssignment(ministryId, key, memberName);
-        }
-    }
-};
-
-export const sendNotificationSQL = async (ministryId: string, notification: Partial<AppNotification>) => {
-    if (!supabase) return;
-    const { error } = await supabase.from('notifications').insert({
-        ministry_id: ministryId,
-        title: notification.title,
-        message: notification.message,
-        type: notification.type,
-        action_link: notification.actionLink
-    });
-    
-    // Trigger Edge Function for Push
-    if (!error) {
-        supabase.functions.invoke('push-notification', { 
-            body: { 
-                ministryId, 
-                title: notification.title, 
-                message: notification.message,
-                type: notification.type,
-                actionLink: notification.actionLink
-            } 
-        });
-    }
-};
-
 export const createMinistryEvent = async (ministryId: string, event: Partial<CustomEvent>) => {
     if (!supabase || !event.date || !event.time) return;
     const dateTime = `${event.date}T${event.time}`;
@@ -636,26 +708,12 @@ export const createMinistryEvent = async (ministryId: string, event: Partial<Cus
 
 export const deleteMinistryEvent = async (ministryId: string, isoDate: string) => {
     if (!supabase) return;
-    // We assume ISO string matches exactly for simplicity or we delete by ID if we had it
     await supabase.from('events').delete().eq('ministry_id', ministryId).eq('date_time', isoDate);
 };
 
 export const updateMinistryEvent = async (ministryId: string, oldIso: string, newTitle: string, newIso: string, applyToAll: boolean) => {
     if (!supabase) return;
-    
-    if (applyToAll) {
-        // Update title for similar events in same month?
-        // This logic depends on specific requirements. Implementing simple single update for now.
-        const { error } = await supabase.from('events')
-            .update({ title: newTitle, date_time: newIso })
-            .eq('ministry_id', ministryId)
-            .eq('date_time', oldIso);
-    } else {
-        await supabase.from('events')
-            .update({ title: newTitle, date_time: newIso })
-            .eq('ministry_id', ministryId)
-            .eq('date_time', oldIso);
-    }
+    await supabase.from('events').update({ title: newTitle, date_time: newIso }).eq('ministry_id', ministryId).eq('date_time', oldIso);
 };
 
 export const clearScheduleForMonth = async (ministryId: string, month: string) => {
@@ -673,15 +731,11 @@ export const clearScheduleForMonth = async (ministryId: string, month: string) =
 };
 
 export const resetToDefaultEvents = async (ministryId: string, month: string) => {
-    // This would require a "default events" configuration per ministry
-    // For now, we can just clear manually created events that don't match a pattern?
-    // Or maybe just clear assignments.
-    // Implementing as clear schedule for now as logic is custom.
     await clearScheduleForMonth(ministryId, month);
 };
 
 export const createSwapRequestSQL = async (ministryId: string, request: SwapRequest) => {
-    if (!supabase) return false;
+    if (!supabase) return true; // Mock
     const { error } = await supabase.from('swap_requests').insert({
         ministry_id: ministryId,
         requester_id: request.requesterId,
@@ -695,14 +749,11 @@ export const createSwapRequestSQL = async (ministryId: string, request: SwapRequ
 };
 
 export const performSwapSQL = async (ministryId: string, reqId: string, takerName: string, takerId: string) => {
-    if (!supabase) return { success: false, message: "Erro conexão" };
+    if (!supabase) return { success: true, message: "Troca (Demo) Realizada" };
     
-    // Transaction-like logic needed
-    // 1. Get request
     const { data: req } = await supabase.from('swap_requests').select('*').eq('id', reqId).single();
     if (!req || req.status !== 'pending') return { success: false, message: "Solicitação inválida" };
 
-    // 2. Update assignment
     const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', req.event_iso).single();
     if (!event) return { success: false, message: "Evento não encontrado" };
 
@@ -710,14 +761,12 @@ export const performSwapSQL = async (ministryId: string, reqId: string, takerNam
         .update({ member_id: takerId, confirmed: false })
         .eq('event_id', event.id)
         .eq('role', req.role)
-        .eq('member_id', req.requester_id); // Ensure we are swapping the right person
+        .eq('member_id', req.requester_id);
 
     if (assignError) return { success: false, message: "Erro ao atualizar escala" };
 
-    // 3. Update request status
     await supabase.from('swap_requests').update({ status: 'completed', taken_by_name: takerName }).eq('id', reqId);
 
-    // 4. Notify requester
     await sendNotificationSQL(ministryId, {
         title: "Troca Aceita",
         message: `${takerName} assumiu sua escala de ${req.event_title}.`,
@@ -729,12 +778,9 @@ export const performSwapSQL = async (ministryId: string, reqId: string, takerNam
 
 export const interactAnnouncementSQL = async (announcementId: string, userId: string, userName: string, type: 'read' | 'like') => {
     if (!supabase) return;
-    
     if (type === 'read') {
-        // Insert only if not exists
         await supabase.from('announcement_interactions').insert({ announcement_id: announcementId, user_id: userId, interaction_type: 'read' }).select();
     } else {
-        // Toggle like
         const { data } = await supabase.from('announcement_interactions').select('id').eq('announcement_id', announcementId).eq('user_id', userId).eq('interaction_type', 'like');
         if (data && data.length > 0) {
             await supabase.from('announcement_interactions').delete().eq('id', data[0].id);
@@ -781,7 +827,7 @@ export const clearAllNotificationsSQL = async (ministryId: string) => {
 };
 
 export const addToRepertoire = async (ministryId: string, item: { title: string, link: string, date: string, addedBy: string }) => {
-    if (!supabase) return false;
+    if (!supabase) return true;
     const { error } = await supabase.from('repertoire').insert({
         ministry_id: ministryId,
         title: item.title,
