@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { AvailabilityMap, AvailabilityNotesMap, User } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
-import { CalendarCheck, CheckCircle2, Lock, Save, MessageSquare, Sun, Moon } from 'lucide-react';
+import { CalendarCheck, CheckCircle2, Lock, Save, MessageSquare, Sun, Moon, ShieldCheck, Unlock } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface Props {
@@ -35,19 +35,23 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   const isAdmin = currentUser?.role === 'admin';
 
-  // Check if window is open
-  const isWindowOpen = () => {
-      if (isAdmin) return true; // Admins always open
-      if (!availabilityWindow?.start || !availabilityWindow?.end) return true; // Default open if not set
+  // Verifica estado da janela independente do papel do usuário
+  const getWindowState = () => {
+      // Se não houver configuração, assume aberto por padrão (default do sistema)
+      if (!availabilityWindow?.start && !availabilityWindow?.end) return 'OPEN';
       
+      // Se houver config mas estiver inválida/vazia, bloqueia por segurança
+      if (!availabilityWindow?.start || !availabilityWindow?.end) return 'CLOSED';
+
       const now = new Date();
       const start = new Date(availabilityWindow.start);
       const end = new Date(availabilityWindow.end);
       
-      return now >= start && now <= end;
+      return (now >= start && now <= end) ? 'OPEN' : 'CLOSED';
   };
 
-  const isEditable = isWindowOpen();
+  const windowState = getWindowState();
+  const isEditable = isAdmin || windowState === 'OPEN';
 
   useEffect(() => {
     if (currentUser && currentUser.name) setSelectedMember(currentUser.name);
@@ -153,20 +157,35 @@ export const AvailabilityScreen: React.FC<Props> = ({
           </div>
       </div>
 
-      {!isEditable && (
-          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 p-4 rounded-xl flex items-center gap-3 text-amber-700 dark:text-amber-400 shadow-sm animate-pulse">
-              <Lock size={20} />
-              <div>
-                  <span className="text-sm font-bold block">Período de Edição Encerrado</span>
-                  <span className="text-xs opacity-90">A agenda está fechada. Entre em contato com seu líder para alterações de emergência.</span>
+      {/* FEEDBACK VISUAL DE STATUS DA JANELA */}
+      {windowState === 'CLOSED' ? (
+          isAdmin ? (
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 p-4 rounded-xl flex items-center gap-3 text-amber-700 dark:text-amber-400 shadow-sm">
+                  <Unlock size={20} />
+                  <div>
+                      <span className="text-sm font-bold flex items-center gap-2">
+                          Janela Fechada <span className="bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-white px-1.5 py-0.5 rounded text-[10px] uppercase">Modo Admin</span>
+                      </span>
+                      <span className="text-xs opacity-90">A janela está fechada para membros, mas você tem permissão para editar.</span>
+                  </div>
               </div>
-          </div>
-      )}
+          ) : (
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 p-4 rounded-xl flex items-center gap-3 text-red-700 dark:text-red-400 shadow-sm animate-pulse">
+                  <Lock size={20} />
+                  <div>
+                      <span className="text-sm font-bold block">Período de Edição Encerrado</span>
+                      <span className="text-xs opacity-90">A agenda está fechada. Entre em contato com seu líder para alterações de emergência.</span>
+                  </div>
+              </div>
+          )
+      ) : null}
 
       {/* Admin User Selector */}
       {isAdmin && (
           <div className="p-4 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-700">
-              <label className="text-xs font-bold text-zinc-500 uppercase block mb-2">Editando como:</label>
+              <label className="text-xs font-bold text-zinc-500 uppercase block mb-2 flex items-center gap-1">
+                  <ShieldCheck size={14} className="text-teal-500"/> Editando como:
+              </label>
               <select 
                   value={selectedMember} 
                   onChange={e => setSelectedMember(e.target.value)}

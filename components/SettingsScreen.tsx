@@ -78,12 +78,18 @@ export const SettingsScreen: React.FC<Props> = ({
 
   // Verifica status atual da janela baseado nos inputs ou props
   const isWindowActive = () => {
-      const s = availStart ? new Date(availStart) : (availabilityWindow?.start ? new Date(availabilityWindow.start) : null);
-      const e = availEnd ? new Date(availEnd) : (availabilityWindow?.end ? new Date(availabilityWindow.end) : null);
+      // Se não houver datas definidas, consideramos aberta por padrão (ou fechada, dependendo da regra de negócio, aqui assumimos aberta se undefined)
+      if (!availabilityWindow?.start && !availabilityWindow?.end) return true;
       
-      if (!s || !e) return true; 
+      const startIso = availStart ? fromLocalInput(availStart) : availabilityWindow?.start;
+      const endIso = availEnd ? fromLocalInput(availEnd) : availabilityWindow?.end;
+
+      if (!startIso || !endIso) return true;
       
       const now = new Date();
+      const s = new Date(startIso);
+      const e = new Date(endIso);
+      
       return now >= s && now <= e;
   };
 
@@ -105,12 +111,20 @@ export const SettingsScreen: React.FC<Props> = ({
       let newEndStr = "";
 
       if (action === 'block') {
-          // Bloquear: Define o Fim para o passado
-          const past = new Date(now.getTime() - 60000); 
-          newStartStr = availStart ? fromLocalInput(availStart) : new Date(now.getTime() - 86400000).toISOString();
-          newEndStr = past.toISOString();
+          // Bloquear: Define Início e Fim para ONTEM. 
+          // Isso garante matematicamente que AGORA > FIM, fechando a janela independente de fuso horário.
+          const yesterdayStart = new Date(now);
+          yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+          yesterdayStart.setHours(0, 0, 0, 0);
+
+          const yesterdayEnd = new Date(now);
+          yesterdayEnd.setDate(yesterdayEnd.getDate() - 1);
+          yesterdayEnd.setHours(23, 59, 59, 999);
+
+          newStartStr = yesterdayStart.toISOString();
+          newEndStr = yesterdayEnd.toISOString();
           
-          addToast("Janela bloqueada.", "warning");
+          addToast("Janela bloqueada com sucesso.", "warning");
           
           // Notificar encerramento (Opcional, pode ser 'chato' se abusado)
           await sendNotificationSQL(ministryId, {
@@ -122,7 +136,11 @@ export const SettingsScreen: React.FC<Props> = ({
       } else {
           // Abrir: Início agora, Fim +7 dias
           const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-          newStartStr = now.toISOString();
+          
+          // Ajuste fino para garantir que o 'agora' esteja dentro
+          const startNow = new Date(now.getTime() - 60000); // 1 minuto atrás para evitar delay
+
+          newStartStr = startNow.toISOString();
           newEndStr = nextWeek.toISOString();
           
           addToast("Janela liberada por 7 dias.", "success");
@@ -138,6 +156,7 @@ export const SettingsScreen: React.FC<Props> = ({
       }
 
       await onSaveAvailabilityWindow(newStartStr, newEndStr);
+      // Atualiza inputs visuais imediatamente
       setAvailStart(toLocalInput(newStartStr));
       setAvailEnd(toLocalInput(newEndStr));
   };
