@@ -100,7 +100,7 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, message: "Não autorizado" };
 
-    // --- FIX: USE EDGE FUNCTION TO BYPASS RLS ---
+    // Tenta via Edge Function (Bypass RLS)
     const { data, error } = await supabase.functions.invoke('push-notification', {
         body: {
             action: 'delete_member',
@@ -111,11 +111,16 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
 
     if (error) {
         console.error("Edge Function Error:", error);
-        return { success: false, message: "Falha ao se comunicar com o servidor." };
+        return { success: false, message: "Falha ao conectar com servidor." };
     }
 
     if (!data || !data.success) {
-        return { success: false, message: data?.message || "Erro desconhecido ao remover membro." };
+        const msg = data?.message || "";
+        // Detecta se a mensagem de erro é do sistema antigo de push
+        if (msg.includes("inscrito") || msg.includes("dispositivo") || msg.includes("Ministry ID missing")) {
+             return { success: false, message: "ALERTA: O código da Edge Function no Supabase está desatualizado. Copie o novo código de 'supabase/functions/push-notification/index.ts' e faça o Deploy." };
+        }
+        return { success: false, message: msg || "Erro ao remover membro." };
     }
 
     return { success: true, message: "Membro removido da equipe com sucesso." };
@@ -124,13 +129,12 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
 export const toggleAdminSQL = async (email: string, isAdmin: boolean, ministryId: string = 'midia') => {
     if (!supabase) return;
     
-    // --- FIX: USE EDGE FUNCTION TO BYPASS RLS ---
     await supabase.functions.invoke('push-notification', {
         body: {
             action: 'toggle_admin',
             targetEmail: email,
             status: isAdmin,
-            ministryId // Required for context check
+            ministryId
         }
     });
 };
