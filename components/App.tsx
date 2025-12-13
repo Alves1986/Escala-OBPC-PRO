@@ -372,6 +372,15 @@ const InnerApp = () => {
           await Supabase.saveScheduleBulk(ministryId, generatedSchedule, true);
           
           addToast("Escala gerada com sucesso!", "success");
+
+          // Notificar Equipe
+          await Supabase.sendNotificationSQL(ministryId, { 
+              title: "Escala Disponível", 
+              message: `A escala de ${getMonthName(currentMonth)} foi gerada com IA e está disponível.`, 
+              type: 'info', 
+              actionLink: 'calendar' 
+          });
+
       } catch (e: any) {
           addToast(`Erro: ${e.message}`, "error");
       }
@@ -509,6 +518,7 @@ const InnerApp = () => {
             </div>
         )}
 
+        {/* ... (Existing Tabs: calendar, schedule-editor, events, availability, swaps, ranking, repertoire) ... */}
         {currentTab === 'calendar' && (
             <div className="space-y-6 animate-fade-in">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -662,7 +672,6 @@ const InnerApp = () => {
             />
         )}
 
-        {/* ... (Other Tabs) ... */}
         {currentTab === 'swaps' && (
             <SwapRequestsScreen 
                 schedule={schedule}
@@ -712,7 +721,8 @@ const InnerApp = () => {
             <div className="space-y-8">
                 <AlertsManager 
                     onSend={async (title, message, type, exp) => {
-                            await Supabase.sendNotificationSQL(ministryId, { title, message, type });
+                            // Fix: Added actionLink so notification opens announcements tab
+                            await Supabase.sendNotificationSQL(ministryId, { title, message, type, actionLink: 'announcements' });
                             await Supabase.createAnnouncementSQL(ministryId, { title, message, type, expirationDate: exp }, currentUser.name);
                             loadData();
                     }}
@@ -820,7 +830,6 @@ const InnerApp = () => {
             onUpdate={async (member, dates) => { 
                 const p = publicMembers.find(pm => pm.name === member); 
                 if (p) { 
-                    // Use new signature for robust saving, passing currentMonth
                     await Supabase.saveMemberAvailability(p.id, member, dates, currentMonth, {}); 
                     loadData(); 
                 } 

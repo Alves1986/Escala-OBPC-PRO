@@ -1,5 +1,5 @@
 
-// ... existing imports ...
+// ... imports
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
     SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, 
@@ -19,7 +19,6 @@ if (SUPABASE_URL && SUPABASE_KEY && !isPreviewMode) {
 
 export const getSupabase = () => supabase;
 
-// ... (Auth functions remain unchanged) ...
 export const logout = async () => {
     if (isPreviewMode) return;
     if (!supabase) return;
@@ -76,11 +75,24 @@ export const joinMinistry = async (newMinistryId: string, roles: string[]) => {
     if (!user) return { success: false, message: "Usuário não autenticado" };
     const cleanNewMid = newMinistryId.trim().toLowerCase().replace(/\s+/g, '-');
     try {
-        const { data: profile } = await supabase.from('profiles').select('allowed_ministries, functions').eq('id', user.id).single();
+        const { data: profile } = await supabase.from('profiles').select('name, allowed_ministries, functions').eq('id', user.id).single();
         if (!profile) return { success: false, message: "Perfil não encontrado" };
         const newAllowed = [...(profile.allowed_ministries || []), cleanNewMid];
         const newFunctions = [...new Set([...(profile.functions || []), ...roles])];
         await supabase.from('profiles').update({ allowed_ministries: newAllowed, functions: newFunctions }).eq('id', user.id);
+        
+        // --- NEW: NOTIFY TEAM ---
+        const msg = `${profile.name} entrou na equipe! 🎉`;
+        await supabase.from('notifications').insert({ 
+            ministry_id: cleanNewMid, 
+            title: "Novo Membro", 
+            message: msg, 
+            type: 'success', 
+            action_link: 'members' 
+        });
+        try { supabase.functions.invoke('push-notification', { body: { ministryId: cleanNewMid, title: "Novo Membro", message: msg, type: 'success' } }); } catch (e) {}
+        // -----------------------
+
         return { success: true, message: `Bem-vindo ao ministério ${cleanNewMid}!` };
     } catch (e: any) { return { success: false, message: e.message }; }
 };
@@ -117,7 +129,6 @@ export const updateProfileMinistry = async (userId: string, ministryId: string) 
     await supabase.from('profiles').update({ ministry_id: ministryId }).eq('id', userId);
 };
 
-// ... (Other standard functions) ...
 export const fetchGlobalSchedules = async (monthIso: string, currentMinistryId: string): Promise<GlobalConflictMap> => {
     if (!supabase || !monthIso) return {};
     const cleanMid = currentMinistryId.trim().toLowerCase().replace(/\s+/g, '-');
@@ -165,10 +176,6 @@ export const fetchRankingData = async (ministryId: string): Promise<RankingEntry
     } catch (e) { return []; }
 };
 
-// ============================================================================
-// LÓGICA DE DISPONIBILIDADE (LIMPA - SEM BLOQUEIO)
-// ============================================================================
-
 export const fetchMinistryAvailability = async (ministryId: string): Promise<{ availability: AvailabilityMap, notes: AvailabilityNotesMap }> => {
     if (isPreviewMode) return { availability: {}, notes: {} };
     if (!supabase || !ministryId) return { availability: {}, notes: {} };
@@ -214,7 +221,6 @@ export const fetchMinistryAvailability = async (ministryId: string): Promise<{ a
 
             let uiDateKey = dbDate;
 
-            // Handle metadata specific types
             if (metadata.period === 'M') {
                 uiDateKey = `${dbDate}_M`;
             } else if (metadata.period === 'N') {
@@ -241,10 +247,6 @@ export const fetchMinistryAvailability = async (ministryId: string): Promise<{ a
     }
 };
 
-/**
- * Salva a disponibilidade focando EXPLICITAMENTE em um mês alvo.
- * (Versão Simplificada: Sem bloqueio de mês)
- */
 export const saveMemberAvailability = async (
     userId: string, 
     memberName: string, 
@@ -265,22 +267,16 @@ export const saveMemberAvailability = async (
         const startDate = `${targetMonth}-01`;
         const endDate = new Date(y, m, 0).toISOString().split('T')[0];
 
-        // 1. Limpa TODOS os dados deste mês para este usuário
         const { error: deleteError } = await supabase.from('availability')
             .delete()
             .eq('member_id', userId)
             .gte('date', startDate)
             .lte('date', endDate);
         
-        if (deleteError) {
-            console.error("Erro ao limpar dados antigos:", JSON.stringify(deleteError, null, 2));
-            throw deleteError;
-        }
+        if (deleteError) throw deleteError;
 
-        // 2. Processa os dias selecionados
         const relevantDates = dates.filter(d => d.startsWith(targetMonth));
         
-        // Adiciona registro de "Nota Geral" (dia 00) se houver nota mas nenhum dia selecionado
         const generalNoteKey = `${targetMonth}-00`;
         if (notes && notes[generalNoteKey] && !relevantDates.some(d => d.includes('00'))) {
              relevantDates.push(`${targetMonth}-00`);
@@ -296,12 +292,10 @@ export const saveMemberAvailability = async (
             let metadata: any = {};
 
             if (dd === '00') {
-                // Nota Geral
                 dbDate = `${dy}-${dm}-01`; 
                 metadata.type = 'GENERAL';
                 if (notes && notes[generalNoteKey]) metadata.text = notes[generalNoteKey];
             } else {
-                // Dia Específico
                 if (suffix === 'M') metadata.period = 'M';
                 if (suffix === 'N') metadata.period = 'N';
                 
@@ -309,7 +303,6 @@ export const saveMemberAvailability = async (
                 if (notes && notes[noteKey]) metadata.text = notes[noteKey];
             }
             
-            // Evita duplicidade no dia 01
             const existingIdx = rowsToInsert.findIndex(r => r.date === dbDate);
             if (existingIdx >= 0) {
                 if (metadata.type !== 'GENERAL') {
@@ -317,7 +310,7 @@ export const saveMemberAvailability = async (
                         member_id: userId, 
                         date: dbDate, 
                         note: JSON.stringify(metadata),
-                        status: 'available' // Assuming 'status' column exists based on error log
+                        status: 'available'
                     };
                 }
             } else {
@@ -325,17 +318,14 @@ export const saveMemberAvailability = async (
                     member_id: userId,
                     date: dbDate,
                     note: JSON.stringify(metadata),
-                    status: 'available' // Assuming 'status' column exists based on error log
+                    status: 'available'
                 });
             }
         }
 
         if (rowsToInsert.length > 0) {
             const { error: insertError } = await supabase.from('availability').insert(rowsToInsert);
-            if (insertError) {
-                console.error("Erro ao inserir dias:", JSON.stringify(insertError, null, 2));
-                throw insertError;
-            }
+            if (insertError) throw insertError;
         }
 
     } catch (e: any) {
@@ -344,7 +334,6 @@ export const saveMemberAvailability = async (
     }
 };
 
-// ... (Rest of file remains unchanged) ...
 export const fetchRepertoire = async (ministryId: string): Promise<RepertoireItem[]> => {
     if (!supabase) return [];
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
@@ -692,8 +681,6 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
 
 export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap, strict: boolean) => {
     if (!supabase) return false;
-    // Simplificado: Chama saveScheduleAssignment para cada item (menos performático mas seguro)
-    // Para produção real, usar upsert em lote seria melhor
     for (const [key, val] of Object.entries(schedule)) {
         await saveScheduleAssignment(ministryId, key, val);
     }
