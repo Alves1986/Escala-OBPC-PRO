@@ -91,7 +91,7 @@ export const AlertsManager: React.FC<Props> = ({ onSend }) => {
                         value={title}
                         onChange={e => setTitle(e.target.value)}
                         placeholder="Ex: Ensaio Cancelado"
-                        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-orange-500"
+                        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-orange-500 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
                     />
                 </div>
 
@@ -128,12 +128,12 @@ export const AlertsManager: React.FC<Props> = ({ onSend }) => {
                         <select 
                             value={durationDays} 
                             onChange={e => setDurationDays(Number(e.target.value))}
-                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg py-3 pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-orange-500"
+                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg py-3 pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-orange-500 text-zinc-900 dark:text-zinc-100"
                         >
-                            <option value={3}>3 dias</option>
-                            <option value={7}>7 dias (1 Semana)</option>
-                            <option value={15}>15 dias</option>
-                            <option value={30}>30 dias (1 Mês)</option>
+                            <option value={3} className="bg-white dark:bg-zinc-900">3 dias</option>
+                            <option value={7} className="bg-white dark:bg-zinc-900">7 dias (1 Semana)</option>
+                            <option value={15} className="bg-white dark:bg-zinc-900">15 dias</option>
+                            <option value={30} className="bg-white dark:bg-zinc-900">30 dias (1 Mês)</option>
                         </select>
                     </div>
                     <p className="text-[10px] text-zinc-400 mt-1">O aviso será removido automaticamente dos painéis após este período.</p>
@@ -154,7 +154,7 @@ export const AlertsManager: React.FC<Props> = ({ onSend }) => {
                             onChange={e => setMessage(e.target.value)}
                             placeholder="Digite o rascunho aqui e use a IA para melhorar..."
                             rows={4}
-                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-orange-500 resize-none pr-8"
+                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-orange-500 resize-none pr-8 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
                         />
                         {isPolishing && (
                             <div className="absolute right-3 bottom-3">
