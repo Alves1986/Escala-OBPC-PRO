@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Music, Plus, Trash2, ExternalLink, Calendar, Settings, ListMusic, Loader2, Search, Youtube, Link, ArrowLeft, X, PlayCircle, Save, FileText } from 'lucide-react';
 import { RepertoireItem, User } from '../types';
 import { useToast } from './Toast';
@@ -23,11 +23,12 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   // UI State
   const [activeTab, setActiveTab] = useState<'manual' | 'spotify' | 'playlists' | 'youtube' | 'cifra'>('spotify');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const dateInputRef = useRef<HTMLInputElement>(null);
   
-  // Staging / Draft State (Novas músicas aguardando envio)
+  // Staging / Draft State
   const [draftItems, setDraftItems] = useState<{title: string, link: string}[]>([]);
 
-  // Persist Date in LocalStorage to survive redirects
+  // Persist Date
   const [date, setDate] = useState(() => {
       if (typeof window !== 'undefined') {
           return localStorage.getItem('repertoire_draft_date') || "";
@@ -47,42 +48,32 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   const [playlistTracks, setPlaylistTracks] = useState<any[]>([]);
   const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
 
-  // Search State (Spotify)
+  // Search State
   const [spotifyQuery, setSpotifyQuery] = useState("");
   const [spotifyResults, setSpotifyResults] = useState<any[]>([]);
   const [spotifyLoading, setSpotifyLoading] = useState(false);
 
-  // Search State (YouTube)
   const [youtubeQuery, setYoutubeQuery] = useState("");
   const [youtubeResults, setYoutubeResults] = useState<any[]>([]);
   const [youtubeLoading, setYoutubeLoading] = useState(false);
 
-  // Search State (Cifra Club)
   const [cifraQuery, setCifraQuery] = useState("");
   const [cifraResults, setCifraResults] = useState<any[]>([]);
   const [cifraLoading, setCifraLoading] = useState(false);
 
-  // Init - Verifica login e persistência
+  // Init
   useEffect(() => {
-      // 1. Verifica token do hash (Redirecionamento) com prioridade máxima
       const tokenFromHash = handleLoginCallback();
-      
       if (tokenFromHash) {
           setIsSpotifyLoggedIn(true);
           setActiveTab('playlists');
           addToast("Spotify conectado com sucesso!", "success");
       } else if (isUserLoggedIn()) {
-          // 2. Verifica token armazenado se não veio do hash
           setIsSpotifyLoggedIn(true);
       }
-
-      // Se estiver logado, carrega perfil
-      if (isUserLoggedIn()) {
-          loadUserProfile();
-      }
+      if (isUserLoggedIn()) loadUserProfile();
   }, []);
 
-  // Update date persistence
   const handleDateChange = (val: string) => {
       setDate(val);
       localStorage.setItem('repertoire_draft_date', val);
@@ -98,15 +89,10 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
           addToast("Erro: ID do ministério não encontrado.", "error");
           return;
       }
-      // Salva estado antes de ir
       if(date) localStorage.setItem('repertoire_draft_date', date);
-      
       const url = getLoginUrl(ministryId);
-      if (url) {
-          window.location.href = url;
-      } else {
-          addToast("Client ID não configurado! Vá em Configurações > Integração Spotify e salve o ID.", "error");
-      }
+      if (url) window.location.href = url;
+      else addToast("Client ID não configurado! Vá em Configurações > Integração Spotify e salve o ID.", "error");
   };
 
   const handleLoadPlaylists = async () => {
@@ -130,10 +116,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       const results = await searchSpotifyTracks(spotifyQuery, ministryId);
       setSpotifyResults(results);
       setSpotifyLoading(false);
-      
-      if (results.length === 0) {
-          addToast("Nenhum resultado no Spotify.", "warning");
-      }
+      if (results.length === 0) addToast("Nenhum resultado no Spotify.", "warning");
   };
 
   const handleYouTubeSearch = async () => {
@@ -142,10 +125,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       const results = await searchYouTubeVideos(youtubeQuery);
       setYoutubeResults(results);
       setYoutubeLoading(false);
-      
-      if (results.length === 0) {
-          addToast("Nenhum vídeo encontrado. Verifique a API Key em Configurações.", "warning");
-      }
+      if (results.length === 0) addToast("Nenhum vídeo encontrado. Verifique a API Key em Configurações.", "warning");
   };
 
   const handleCifraSearch = async () => {
@@ -154,13 +134,9 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       const results = await searchCifraClub(cifraQuery);
       setCifraResults(results);
       setCifraLoading(false);
-      
-      if (results.length === 0) {
-          addToast("Nenhuma cifra encontrada.", "warning");
-      }
+      if (results.length === 0) addToast("Nenhuma cifra encontrada.", "warning");
   };
 
-  // Adiciona ao RASCUNHO (Staging) em vez de salvar direto
   const handleAddToDraft = (overrideTitle?: string, overrideLink?: string) => {
     const finalTitle = overrideTitle || title;
     const finalLink = overrideLink || link;
@@ -170,20 +146,13 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
         return;
     }
 
-    // Verifica duplicação no rascunho
     if (draftItems.some(i => i.title === finalTitle)) {
         addToast("Essa música já está na lista de envio.", "warning");
         return;
     }
 
     setDraftItems(prev => [...prev, { title: finalTitle, link: finalLink }]);
-    
-    // Limpa campos manuais se foi usado
-    if (!overrideTitle) {
-        setTitle("");
-        setLink("");
-    }
-    
+    if (!overrideTitle) { setTitle(""); setLink(""); }
     addToast("Adicionado à lista de seleção!", "success");
   };
 
@@ -191,16 +160,12 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       setDraftItems(prev => prev.filter((_, i) => i !== idx));
   };
 
-  // Salva o lote de músicas no banco e ENVIA NOTIFICAÇÃO
   const handleCommitDraft = async () => {
     if (!date) {
         addToast("Selecione a Data do Culto antes de salvar!", "warning");
-        const dateInput = document.getElementById('date-input');
-        if (dateInput) {
-            dateInput.focus();
-            dateInput.classList.add('ring-4', 'ring-red-500');
-            setTimeout(() => dateInput.classList.remove('ring-4', 'ring-red-500'), 2000);
-        }
+        dateInputRef.current?.focus();
+        dateInputRef.current?.classList.add('ring-4', 'ring-red-500');
+        setTimeout(() => dateInputRef.current?.classList.remove('ring-4', 'ring-red-500'), 2000);
         return;
     }
 
@@ -212,7 +177,6 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     setIsSubmitting(true);
     let successCount = 0;
 
-    // Loop para salvar
     for (const item of draftItems) {
         const success = await addToRepertoire(currentUser.ministryId, {
             title: item.title,
@@ -225,13 +189,10 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
 
     if (successCount > 0) {
         if (onItemAdd) onItemAdd(`${successCount} músicas`);
-        await setRepertoire([]); // Recarrega lista
-        setDraftItems([]); // Limpa rascunho
-        
-        // Notificação Local
+        await setRepertoire([]); 
+        setDraftItems([]); 
         addToast(`${successCount} músicas salvas no repertório!`, "success");
 
-        // Notificação Geral para a Equipe
         if (ministryId) {
             const dateFormatted = date.split('-').reverse().join('/');
             await sendNotificationSQL(ministryId, {
@@ -241,18 +202,16 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                 actionLink: 'repertoire'
             });
         }
-
     } else {
         addToast("Erro ao salvar músicas.", "error");
     }
-    
     setIsSubmitting(false);
   };
 
   const handleDelete = (id: string) => {
       confirmAction("Excluir Item", "Tem certeza que deseja remover este item do repertório?", async () => {
           await deleteFromRepertoire(id);
-          await setRepertoire([]); // Trigger reload
+          await setRepertoire([]); 
           addToast("Item removido.", "success");
       });
   };
@@ -265,7 +224,6 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   }, {} as Record<string, RepertoireItem[]>);
 
   const sortedDates = Object.keys(groupedRepertoire).sort((a, b) => b.localeCompare(a));
-
   const isLouvor = ministryId === 'louvor';
 
   return (
@@ -277,419 +235,111 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
             {mode === 'manage' ? 'Gerenciar Repertório' : 'Repertório Musical'}
           </h2>
           <p className="text-zinc-500 text-sm mt-1">
-            {mode === 'manage' 
-                ? 'Selecione as músicas e envie para o repertório do culto.' 
-                : 'Lista de louvores para os próximos cultos.'}
+            {mode === 'manage' ? 'Selecione as músicas e envie para o repertório do culto.' : 'Lista de louvores para os próximos cultos.'}
           </p>
         </div>
       </div>
 
       {mode === 'manage' && (
           <div className="flex flex-col lg:flex-row gap-6">
-              
-              {/* COLUNA DA ESQUERDA: BUSCA E SELEÇÃO */}
               <div className="flex-1 bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-fade-in">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
-                      <div className="flex items-center gap-2">
-                          <div className="bg-indigo-500 text-white p-1.5 rounded-lg shadow-sm">
-                              <Music size={16}/> 
-                          </div>
-                          <div>
-                              <h3 className="text-sm font-bold text-zinc-800 dark:text-white">Buscar Músicas</h3>
-                          </div>
-                      </div>
-                  </div>
-
-                  {/* Tabs */}
                   <div className="flex gap-2 mb-4 border-b border-zinc-100 dark:border-zinc-700 pb-1 overflow-x-auto">
-                      <button onClick={() => setActiveTab('spotify')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'spotify' ? 'text-green-600 border-green-500 bg-green-50 dark:bg-green-900/10' : 'text-zinc-500 border-transparent'}`}>
-                          <Search size={14}/> Spotify
-                      </button>
-                      
-                      <button onClick={() => setActiveTab('youtube')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'youtube' ? 'text-red-600 border-red-500 bg-red-50 dark:bg-red-900/10' : 'text-zinc-500 border-transparent'}`}>
-                          <Youtube size={14}/> YouTube
-                      </button>
-
-                      {isLouvor && (
-                          <button onClick={() => setActiveTab('cifra')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'cifra' ? 'text-orange-600 border-orange-500 bg-orange-50 dark:bg-orange-900/10' : 'text-zinc-500 border-transparent'}`}>
-                              <FileText size={14}/> Cifras
-                          </button>
-                      )}
-
-                      {isSpotifyLoggedIn && (
-                          <button onClick={() => { setActiveTab('playlists'); if(userPlaylists.length === 0) handleLoadPlaylists(); }} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'playlists' ? 'text-green-600 border-green-500 bg-green-50 dark:bg-green-900/10' : 'text-zinc-500 border-transparent'}`}>
-                              <ListMusic size={14}/> Playlists
-                          </button>
-                      )}
-                      
-                      <button onClick={() => setActiveTab('manual')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'manual' ? 'text-blue-600 border-blue-500 bg-blue-50 dark:bg-blue-900/10' : 'text-zinc-500 border-transparent'}`}>
-                          <Link size={14}/> Link Manual
-                      </button>
+                      <button onClick={() => setActiveTab('spotify')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'spotify' ? 'text-green-600 border-green-500 bg-green-50 dark:bg-green-900/10' : 'text-zinc-500 border-transparent'}`}><Search size={14}/> Spotify</button>
+                      <button onClick={() => setActiveTab('youtube')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'youtube' ? 'text-red-600 border-red-500 bg-red-50 dark:bg-red-900/10' : 'text-zinc-500 border-transparent'}`}><Youtube size={14}/> YouTube</button>
+                      {isLouvor && <button onClick={() => setActiveTab('cifra')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'cifra' ? 'text-orange-600 border-orange-500 bg-orange-50 dark:bg-orange-900/10' : 'text-zinc-500 border-transparent'}`}><FileText size={14}/> Cifras</button>}
+                      {isSpotifyLoggedIn && <button onClick={() => { setActiveTab('playlists'); if(userPlaylists.length === 0) handleLoadPlaylists(); }} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'playlists' ? 'text-green-600 border-green-500 bg-green-50 dark:bg-green-900/10' : 'text-zinc-500 border-transparent'}`}><ListMusic size={14}/> Playlists</button>}
+                      <button onClick={() => setActiveTab('manual')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'manual' ? 'text-blue-600 border-blue-500 bg-blue-50 dark:bg-blue-900/10' : 'text-zinc-500 border-transparent'}`}><Link size={14}/> Link Manual</button>
                   </div>
 
-                  {/* === SPOTIFY SEARCH === */}
                   {activeTab === 'spotify' && (
                       <div className="space-y-4 animate-fade-in">
                           <div className="flex gap-2">
-                              <input 
-                                  type="text" 
-                                  placeholder="Digite música ou artista..."
-                                  value={spotifyQuery} 
-                                  onChange={e => setSpotifyQuery(e.target.value)}
-                                  onKeyDown={e => e.key === 'Enter' && handleSpotifySearch()}
-                                  className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-green-500 text-zinc-900 dark:text-zinc-100"
-                              />
-                              <button 
-                                  onClick={handleSpotifySearch}
-                                  disabled={spotifyLoading}
-                                  className="bg-green-600 hover:bg-green-700 text-white px-4 rounded-lg font-bold flex items-center justify-center disabled:opacity-50"
-                              >
-                                  {spotifyLoading ? <Loader2 className="animate-spin" size={18}/> : <Search size={18}/>}
-                              </button>
+                              <input type="text" placeholder="Digite música ou artista..." value={spotifyQuery} onChange={e => setSpotifyQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSpotifySearch()} className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-green-500 text-zinc-900 dark:text-zinc-100" />
+                              <button onClick={handleSpotifySearch} disabled={spotifyLoading} className="bg-green-600 hover:bg-green-700 text-white px-4 rounded-lg font-bold flex items-center justify-center disabled:opacity-50">{spotifyLoading ? <Loader2 className="animate-spin" size={18}/> : <Search size={18}/>}</button>
                           </div>
-
-                          {spotifyResults.length > 0 && (
-                              <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2 border border-zinc-100 dark:border-zinc-700 rounded-xl p-2 bg-zinc-50 dark:bg-zinc-900/30">
-                                  {spotifyResults.map(track => (
-                                      <div key={track.id} className="flex items-center justify-between p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors group">
-                                          <div className="flex items-center gap-3 overflow-hidden">
-                                              <img src={track.album.images[2]?.url || track.album.images[0]?.url} className="w-10 h-10 rounded shadow-sm shrink-0" alt="Album" />
-                                              <div className="min-w-0">
-                                                  <p className="font-bold text-sm text-zinc-800 dark:text-white line-clamp-1">{track.name}</p>
-                                                  <p className="text-xs text-zinc-500 truncate">{track.artists[0].name}</p>
-                                              </div>
-                                          </div>
-                                          <button 
-                                              onClick={() => handleAddToDraft(`${track.name} - ${track.artists[0].name}`, track.external_urls.spotify)}
-                                              className="shrink-0 text-xs px-3 py-1.5 rounded-full font-bold transition-colors bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-800 flex items-center gap-1"
-                                          >
-                                              <Plus size={14}/> Add
-                                          </button>
-                                      </div>
-                                  ))}
-                              </div>
-                          )}
-                          {!isSpotifyLoggedIn && (
-                              <div className="p-3 bg-green-50 dark:bg-green-900/10 rounded-lg text-xs text-green-800 dark:text-green-300 flex justify-between items-center">
-                                  <span>Conecte sua conta para acessar playlists.</span>
-                                  <button onClick={handleSpotifyLogin} className="font-bold underline hover:text-green-600">Conectar Spotify</button>
-                              </div>
-                          )}
+                          {spotifyResults.length > 0 && <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2 border border-zinc-100 dark:border-zinc-700 rounded-xl p-2 bg-zinc-50 dark:bg-zinc-900/30">{spotifyResults.map(track => (<div key={track.id} className="flex items-center justify-between p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors group"><div className="flex items-center gap-3 overflow-hidden"><img src={track.album.images[2]?.url || track.album.images[0]?.url} className="w-10 h-10 rounded shadow-sm shrink-0" /><div className="min-w-0"><p className="font-bold text-sm text-zinc-800 dark:text-white line-clamp-1">{track.name}</p><p className="text-xs text-zinc-500 truncate">{track.artists[0].name}</p></div></div><button onClick={() => handleAddToDraft(`${track.name} - ${track.artists[0].name}`, track.external_urls.spotify)} className="shrink-0 text-xs px-3 py-1.5 rounded-full font-bold transition-colors bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-800 flex items-center gap-1"><Plus size={14}/> Add</button></div>))}</div>}
+                          {!isSpotifyLoggedIn && <div className="p-3 bg-green-50 dark:bg-green-900/10 rounded-lg text-xs text-green-800 dark:text-green-300 flex justify-between items-center"><span>Conecte sua conta para acessar playlists.</span><button onClick={handleSpotifyLogin} className="font-bold underline hover:text-green-600">Conectar Spotify</button></div>}
                       </div>
                   )}
 
-                  {/* === YOUTUBE SEARCH === */}
                   {activeTab === 'youtube' && (
                       <div className="space-y-4 animate-fade-in">
                           <div className="flex gap-2">
-                              <input 
-                                  type="text" 
-                                  placeholder="Buscar vídeo no YouTube..."
-                                  value={youtubeQuery} 
-                                  onChange={e => setYoutubeQuery(e.target.value)}
-                                  onKeyDown={e => e.key === 'Enter' && handleYouTubeSearch()}
-                                  className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-red-500 text-zinc-900 dark:text-zinc-100"
-                              />
-                              <button 
-                                  onClick={handleYouTubeSearch}
-                                  disabled={youtubeLoading}
-                                  className="bg-red-600 hover:bg-red-700 text-white px-4 rounded-lg font-bold flex items-center justify-center disabled:opacity-50"
-                              >
-                                  {youtubeLoading ? <Loader2 className="animate-spin" size={18}/> : <Search size={18}/>}
-                              </button>
+                              <input type="text" placeholder="Buscar vídeo no YouTube..." value={youtubeQuery} onChange={e => setYoutubeQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleYouTubeSearch()} className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-red-500 text-zinc-900 dark:text-zinc-100" />
+                              <button onClick={handleYouTubeSearch} disabled={youtubeLoading} className="bg-red-600 hover:bg-red-700 text-white px-4 rounded-lg font-bold flex items-center justify-center disabled:opacity-50">{youtubeLoading ? <Loader2 className="animate-spin" size={18}/> : <Search size={18}/>}</button>
                           </div>
-
-                          {youtubeResults.length > 0 && (
-                              <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2 border border-zinc-100 dark:border-zinc-700 rounded-xl p-2 bg-zinc-50 dark:bg-zinc-900/30">
-                                  {youtubeResults.map(video => (
-                                      <div key={video.id} className="flex items-center justify-between p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors group">
-                                          <div className="flex items-center gap-3 overflow-hidden w-full">
-                                              <img src={video.thumbnail} className="w-16 h-10 object-cover rounded shadow-sm shrink-0" alt="Thumb" />
-                                              <div className="min-w-0 flex-1">
-                                                  <p className="font-bold text-sm text-zinc-800 dark:text-white line-clamp-1" title={video.title}>{video.title}</p>
-                                                  <p className="text-xs text-zinc-500 truncate">{video.channelTitle}</p>
-                                              </div>
-                                          </div>
-                                          <button 
-                                              onClick={() => handleAddToDraft(video.title, video.link)}
-                                              className="shrink-0 text-xs px-3 py-1.5 rounded-full font-bold transition-colors bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-800 flex items-center gap-1 ml-2"
-                                          >
-                                              <Plus size={14}/> Add
-                                          </button>
-                                      </div>
-                                  ))}
-                              </div>
-                          )}
+                          {youtubeResults.length > 0 && <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2 border border-zinc-100 dark:border-zinc-700 rounded-xl p-2 bg-zinc-50 dark:bg-zinc-900/30">{youtubeResults.map(video => (<div key={video.id} className="flex items-center justify-between p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors group"><div className="flex items-center gap-3 overflow-hidden w-full"><img src={video.thumbnail} className="w-16 h-10 object-cover rounded shadow-sm shrink-0" /><div className="min-w-0 flex-1"><p className="font-bold text-sm text-zinc-800 dark:text-white line-clamp-1" title={video.title}>{video.title}</p><p className="text-xs text-zinc-500 truncate">{video.channelTitle}</p></div></div><button onClick={() => handleAddToDraft(video.title, video.link)} className="shrink-0 text-xs px-3 py-1.5 rounded-full font-bold transition-colors bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-800 flex items-center gap-1 ml-2"><Plus size={14}/> Add</button></div>))}</div>}
                       </div>
                   )}
 
-                  {/* === CIFRA CLUB SEARCH === */}
                   {activeTab === 'cifra' && isLouvor && (
                       <div className="space-y-4 animate-fade-in">
-                          <div className="bg-orange-50 dark:bg-orange-900/20 p-3 rounded-lg border border-orange-100 dark:border-orange-800/30 mb-2 flex items-center gap-2">
-                              <FileText className="text-orange-500" size={16} />
-                              <p className="text-xs text-orange-700 dark:text-orange-300">Integração exclusiva para Louvor. Encontre tons e cifras.</p>
-                          </div>
                           <div className="flex gap-2">
-                              <input 
-                                  type="text" 
-                                  placeholder="Música ou Artista no Cifra Club..."
-                                  value={cifraQuery} 
-                                  onChange={e => setCifraQuery(e.target.value)}
-                                  onKeyDown={e => e.key === 'Enter' && handleCifraSearch()}
-                                  className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-orange-500 text-zinc-900 dark:text-zinc-100"
-                              />
-                              <button 
-                                  onClick={handleCifraSearch}
-                                  disabled={cifraLoading}
-                                  className="bg-orange-500 hover:bg-orange-600 text-white px-4 rounded-lg font-bold flex items-center justify-center disabled:opacity-50"
-                              >
-                                  {cifraLoading ? <Loader2 className="animate-spin" size={18}/> : <Search size={18}/>}
-                              </button>
+                              <input type="text" placeholder="Música ou Artista..." value={cifraQuery} onChange={e => setCifraQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleCifraSearch()} className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-orange-500 text-zinc-900 dark:text-zinc-100" />
+                              <button onClick={handleCifraSearch} disabled={cifraLoading} className="bg-orange-500 hover:bg-orange-600 text-white px-4 rounded-lg font-bold flex items-center justify-center disabled:opacity-50">{cifraLoading ? <Loader2 className="animate-spin" size={18}/> : <Search size={18}/>}</button>
                           </div>
-
-                          {cifraResults.length > 0 && (
-                              <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2 border border-zinc-100 dark:border-zinc-700 rounded-xl p-2 bg-zinc-50 dark:bg-zinc-900/30">
-                                  {cifraResults.map((result, idx) => (
-                                      <div key={idx} className="flex items-center justify-between p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors group">
-                                          <div className="flex items-center gap-3 w-full overflow-hidden">
-                                              <div className="w-10 h-10 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 flex items-center justify-center shrink-0">
-                                                  <span className="font-bold text-xs">{result.key || '?'}</span>
-                                              </div>
-                                              <div className="min-w-0 flex-1">
-                                                  <p className="font-bold text-sm text-zinc-800 dark:text-white line-clamp-1">{result.title}</p>
-                                                  <p className="text-xs text-zinc-500 truncate">{result.artist}</p>
-                                              </div>
-                                          </div>
-                                          <div className="flex items-center gap-2">
-                                              <a href={result.url} target="_blank" rel="noopener noreferrer" className="p-2 text-zinc-400 hover:text-orange-500 transition-colors" title="Abrir Cifra"><ExternalLink size={16}/></a>
-                                              <button 
-                                                  onClick={() => handleAddToDraft(result.title + (result.key ? ` (${result.key})` : ''), result.url)}
-                                                  className="shrink-0 text-xs px-3 py-1.5 rounded-full font-bold transition-colors bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-800 flex items-center gap-1 ml-1"
-                                              >
-                                                  <Plus size={14}/> Add
-                                              </button>
-                                          </div>
-                                      </div>
-                                  ))}
-                              </div>
-                          )}
+                          {cifraResults.length > 0 && <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2 border border-zinc-100 dark:border-zinc-700 rounded-xl p-2 bg-zinc-50 dark:bg-zinc-900/30">{cifraResults.map((result, idx) => (<div key={idx} className="flex items-center justify-between p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors group"><div className="flex items-center gap-3 w-full overflow-hidden"><div className="w-10 h-10 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 flex items-center justify-center shrink-0"><span className="font-bold text-xs">{result.key || '?'}</span></div><div className="min-w-0 flex-1"><p className="font-bold text-sm text-zinc-800 dark:text-white line-clamp-1">{result.title}</p><p className="text-xs text-zinc-500 truncate">{result.artist}</p></div></div><button onClick={() => handleAddToDraft(result.title + (result.key ? ` (${result.key})` : ''), result.url)} className="shrink-0 text-xs px-3 py-1.5 rounded-full font-bold transition-colors bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-800 flex items-center gap-1 ml-1"><Plus size={14}/> Add</button></div>))}</div>}
                       </div>
                   )}
 
-                  {/* === PLAYLISTS TAB === */}
                   {activeTab === 'playlists' && isSpotifyLoggedIn && (
                       <div className="animate-fade-in">
                           {selectedPlaylist ? (
                               <div className="space-y-3">
-                                  <button onClick={() => setSelectedPlaylist(null)} className="flex items-center gap-2 text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300 mb-2">
-                                      <ArrowLeft size={14}/> Voltar para Playlists
-                                  </button>
-                                  <div className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-lg mb-2">
-                                      {selectedPlaylist.images?.[0] && <img src={selectedPlaylist.images[0].url} className="w-12 h-12 rounded shadow-sm" />}
-                                      <div>
-                                          <h4 className="font-bold text-sm text-zinc-800 dark:text-white">{selectedPlaylist.name}</h4>
-                                          <p className="text-xs text-zinc-500">{playlistTracks.length} músicas</p>
-                                      </div>
-                                  </div>
-                                  
-                                  {isLoadingPlaylists ? (
-                                      <div className="py-8 text-center"><Loader2 className="animate-spin mx-auto text-green-500" /></div>
-                                  ) : (
-                                      <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-1">
-                                          {playlistTracks.map((track, idx) => (
-                                              <div key={idx} className="flex items-center justify-between p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg group">
-                                                  <div className="flex-1 min-w-0 pr-2">
-                                                      <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate">{track.name}</p>
-                                                      <p className="text-xs text-zinc-500 truncate">{track.artists[0].name}</p>
-                                                  </div>
-                                                  <button 
-                                                      onClick={() => handleAddToDraft(`${track.name} - ${track.artists[0].name}`, track.external_urls.spotify)}
-                                                      className="text-[10px] font-bold px-2 py-1 rounded transition-colors bg-zinc-200 dark:bg-zinc-700 hover:bg-green-500 hover:text-white"
-                                                  >
-                                                      <Plus size={12}/>
-                                                  </button>
-                                              </div>
-                                          ))}
-                                      </div>
-                                  )}
+                                  <button onClick={() => setSelectedPlaylist(null)} className="flex items-center gap-2 text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300 mb-2"><ArrowLeft size={14}/> Voltar</button>
+                                  {isLoadingPlaylists ? <div className="py-8 text-center"><Loader2 className="animate-spin mx-auto text-green-500" /></div> : <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-1">{playlistTracks.map((track, idx) => (<div key={idx} className="flex items-center justify-between p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg group"><div className="flex-1 min-w-0 pr-2"><p className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate">{track.name}</p><p className="text-xs text-zinc-500 truncate">{track.artists[0].name}</p></div><button onClick={() => handleAddToDraft(`${track.name} - ${track.artists[0].name}`, track.external_urls.spotify)} className="text-[10px] font-bold px-2 py-1 rounded transition-colors bg-zinc-200 dark:bg-zinc-700 hover:bg-green-500 hover:text-white"><Plus size={12}/></button></div>))}</div>}
                               </div>
                           ) : (
                               <div>
-                                  {isLoadingPlaylists ? (
-                                      <div className="py-10 text-center"><Loader2 className="animate-spin mx-auto text-green-500"/></div>
-                                  ) : userPlaylists.length === 0 ? (
-                                      <div className="text-center py-8 text-zinc-400 text-sm">Nenhuma playlist encontrada.</div>
-                                  ) : (
-                                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-80 overflow-y-auto custom-scrollbar">
-                                          {userPlaylists.map(pl => (
-                                              <button 
-                                                  key={pl.id}
-                                                  onClick={() => handleOpenPlaylist(pl)}
-                                                  className="flex flex-col items-start p-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-colors text-left group"
-                                              >
-                                                  <img src={pl.images?.[0]?.url || '/icon.png'} className="w-full aspect-square object-cover rounded-lg mb-2 shadow-sm group-hover:shadow-md transition-shadow bg-zinc-200" />
-                                                  <span className="font-bold text-xs text-zinc-800 dark:text-zinc-200 line-clamp-1 w-full">{pl.name}</span>
-                                                  <span className="text-[10px] text-zinc-500">{pl.tracks.total} músicas</span>
-                                              </button>
-                                          ))}
-                                      </div>
-                                  )}
+                                  {isLoadingPlaylists ? <div className="py-10 text-center"><Loader2 className="animate-spin mx-auto text-green-500"/></div> : <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-80 overflow-y-auto custom-scrollbar">{userPlaylists.map(pl => (<button key={pl.id} onClick={() => handleOpenPlaylist(pl)} className="flex flex-col items-start p-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-colors text-left group"><img src={pl.images?.[0]?.url || '/icon.png'} className="w-full aspect-square object-cover rounded-lg mb-2 shadow-sm bg-zinc-200" /><span className="font-bold text-xs text-zinc-800 dark:text-zinc-200 line-clamp-1 w-full">{pl.name}</span></button>))}</div>}
                               </div>
                           )}
                       </div>
                   )}
 
-                  {/* === MANUAL TAB === */}
                   {activeTab === 'manual' && (
                       <div className="space-y-4 animate-fade-in">
-                          <div>
-                              <label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Título</label>
-                              <input type="text" placeholder="Ex: Todavia Me Alegrarei" value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100"/>
-                          </div>
-                          <div>
-                              <label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Link (URL)</label>
-                              <input type="text" placeholder="https://..." value={link} onChange={e => setLink(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100"/>
-                          </div>
-                          <div className="flex justify-end">
-                              <button onClick={() => handleAddToDraft()} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-lg transition-all active:scale-95 flex items-center justify-center gap-2">
-                                  <Plus size={16}/> Adicionar
-                              </button>
-                          </div>
+                          <div><label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Título</label><input type="text" placeholder="Ex: Todavia Me Alegrarei" value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100"/></div>
+                          <div><label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Link (URL)</label><input type="text" placeholder="https://..." value={link} onChange={e => setLink(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100"/></div>
+                          <div className="flex justify-end"><button onClick={() => handleAddToDraft()} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-lg transition-all active:scale-95 flex items-center justify-center gap-2"><Plus size={16}/> Adicionar</button></div>
                       </div>
                   )}
               </div>
 
-              {/* COLUNA DA DIREITA: RASCUNHO (STAGING) */}
               <div className="w-full lg:w-80 bg-zinc-50 dark:bg-zinc-900 p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 h-fit sticky top-4">
-                  <h3 className="text-xs font-bold text-zinc-500 uppercase mb-4 flex items-center gap-2">
-                      <ListMusic size={14}/> Músicas Selecionadas
-                  </h3>
-
-                  {/* Seletor de Data */}
-                  <div className="mb-4">
-                      <label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Data do Culto</label>
-                      <input 
-                          id="date-input"
-                          type="date" 
-                          value={date} 
-                          onChange={e => handleDateChange(e.target.value)}
-                          className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-green-500 font-medium transition-all text-zinc-900 dark:text-zinc-100"
-                      />
-                  </div>
-
-                  {draftItems.length === 0 ? (
-                      <div className="py-8 text-center text-zinc-400 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg">
-                          <p className="text-xs">Nenhuma música selecionada.</p>
-                      </div>
-                  ) : (
-                      <div className="space-y-2 mb-4">
-                          {draftItems.map((item, idx) => (
-                              <div key={idx} className="flex justify-between items-center bg-white dark:bg-zinc-800 p-2 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm animate-slide-up">
-                                  <span className="text-xs font-bold text-zinc-700 dark:text-zinc-200 truncate flex-1 pr-2">{item.title}</span>
-                                  <button onClick={() => handleRemoveFromDraft(idx)} className="text-red-400 hover:text-red-500 p-1">
-                                      <X size={14}/>
-                                  </button>
-                              </div>
-                          ))}
-                      </div>
-                  )}
-
-                  <button 
-                      onClick={handleCommitDraft}
-                      disabled={isSubmitting || draftItems.length === 0}
-                      className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-green-600/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                      {isSubmitting ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>}
-                      {isSubmitting ? 'Salvando...' : 'Salvar no Culto'}
-                  </button>
+                  <h3 className="text-xs font-bold text-zinc-500 uppercase mb-4 flex items-center gap-2"><ListMusic size={14}/> Músicas Selecionadas</h3>
+                  <div className="mb-4"><label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Data do Culto</label><input ref={dateInputRef} type="date" value={date} onChange={e => handleDateChange(e.target.value)} className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-green-500 font-medium transition-all text-zinc-900 dark:text-zinc-100"/></div>
+                  {draftItems.length === 0 ? <div className="py-8 text-center text-zinc-400 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg"><p className="text-xs">Nenhuma música selecionada.</p></div> : <div className="space-y-2 mb-4">{draftItems.map((item, idx) => (<div key={idx} className="flex justify-between items-center bg-white dark:bg-zinc-800 p-2 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm animate-slide-up"><span className="text-xs font-bold text-zinc-700 dark:text-zinc-200 truncate flex-1 pr-2">{item.title}</span><button onClick={() => handleRemoveFromDraft(idx)} className="text-red-400 hover:text-red-500 p-1"><X size={14}/></button></div>))}</div>}
+                  <button onClick={handleCommitDraft} disabled={isSubmitting || draftItems.length === 0} className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-green-600/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">{isSubmitting ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>}{isSubmitting ? 'Salvando...' : 'Salvar no Culto'}</button>
               </div>
           </div>
       )}
 
-      {/* LISTA DE REPERTÓRIO (LIST VIEW EM VEZ DE CARDS) */}
       <div className="space-y-8 mt-8">
-          {sortedDates.length === 0 ? (
-              <div className="text-center py-12 text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
-                  <Music className="mx-auto mb-3 opacity-20" size={48}/>
-                  <p>Nenhum louvor cadastrado ainda.</p>
-              </div>
-          ) : (
-              sortedDates.map(dateKey => {
-                  const [y, m, d] = dateKey.split('-');
-                  const formattedDate = `${d}/${m}/${y}`;
-                  
-                  return (
-                      <div key={dateKey} className="animate-slide-up">
-                          <div className="flex items-center gap-2 mb-3 px-1 border-b border-zinc-100 dark:border-zinc-700 pb-2">
-                              <div className="bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 p-1.5 rounded-lg">
-                                  <Calendar size={16} />
-                              </div>
-                              <h3 className="font-bold text-zinc-700 dark:text-zinc-200 text-lg">Culto {formattedDate}</h3>
-                          </div>
-                          
-                          {/* LIST VIEW */}
-                          <div className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden shadow-sm">
-                              {groupedRepertoire[dateKey].map((item, idx) => {
-                                  const isSpotify = item.link.includes('spotify');
-                                  const isYouTube = item.link.includes('youtu');
-                                  const isCifra = item.link.includes('cifraclub');
-                                  
-                                  return (
-                                      <div key={item.id} className={`flex items-center justify-between p-3 sm:p-4 hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors group ${idx !== groupedRepertoire[dateKey].length - 1 ? 'border-b border-zinc-100 dark:border-zinc-700/50' : ''}`}>
-                                          <div className="flex items-center gap-3 sm:gap-4 overflow-hidden">
-                                              <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
-                                                  isSpotify ? 'bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400' : 
-                                                  isYouTube ? 'bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400' : 
-                                                  isCifra ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400' :
-                                                  'bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'
-                                              }`}>
-                                                  {isYouTube ? <Youtube size={20}/> : isCifra ? <FileText size={20}/> : <Music size={20} />}
-                                              </div>
-                                              <div className="min-w-0">
-                                                  <h4 className="font-bold text-sm text-zinc-800 dark:text-white truncate pr-2">{item.title}</h4>
-                                                  <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${
-                                                          isSpotify ? 'bg-green-50 text-green-700 dark:bg-green-900/30' : 
-                                                          isYouTube ? 'bg-red-50 text-red-700 dark:bg-red-900/30' : 
-                                                          isCifra ? 'bg-orange-50 text-orange-700 dark:bg-orange-900/30' :
-                                                          'bg-blue-50 text-blue-700 dark:bg-blue-900/30'
-                                                      }`}>
-                                                          {isSpotify ? 'Spotify' : isYouTube ? 'YouTube' : isCifra ? 'Cifra' : 'Link'}
-                                                      </span>
-                                                      <span className="hidden sm:inline">• Adicionado por {item.addedBy.split(' ')[0]}</span>
-                                                  </div>
-                                              </div>
-                                          </div>
-
-                                          <div className="flex items-center gap-2 shrink-0">
-                                              <a 
-                                                  href={item.link} 
-                                                  target="_blank" 
-                                                  rel="noopener noreferrer"
-                                                  className="p-2 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                                                  title="Abrir Link"
-                                              >
-                                                  <ExternalLink size={18} />
-                                              </a>
-                                              {mode === 'manage' && (
-                                                  <button 
-                                                      onClick={() => handleDelete(item.id)} 
-                                                      className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                                      title="Excluir"
-                                                  >
-                                                      <Trash2 size={18} />
-                                                  </button>
-                                              )}
-                                          </div>
+          {sortedDates.length === 0 ? <div className="text-center py-12 text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800"><Music className="mx-auto mb-3 opacity-20" size={48}/><p>Nenhum louvor cadastrado ainda.</p></div> : sortedDates.map(dateKey => {
+              const [y, m, d] = dateKey.split('-');
+              return (
+                  <div key={dateKey} className="animate-slide-up">
+                      <div className="flex items-center gap-2 mb-3 px-1 border-b border-zinc-100 dark:border-zinc-700 pb-2"><div className="bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 p-1.5 rounded-lg"><Calendar size={16} /></div><h3 className="font-bold text-zinc-700 dark:text-zinc-200 text-lg">Culto {d}/{m}/{y}</h3></div>
+                      <div className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden shadow-sm">
+                          {groupedRepertoire[dateKey].map((item, idx) => (
+                              <div key={item.id} className={`flex items-center justify-between p-3 sm:p-4 hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors group ${idx !== groupedRepertoire[dateKey].length - 1 ? 'border-b border-zinc-100 dark:border-zinc-700/50' : ''}`}>
+                                  <div className="flex items-center gap-3 sm:gap-4 overflow-hidden">
+                                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${item.link.includes('spotify') ? 'bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400' : item.link.includes('youtu') ? 'bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'}`}>
+                                          {item.link.includes('youtu') ? <Youtube size={20}/> : item.link.includes('cifra') ? <FileText size={20}/> : <Music size={20} />}
                                       </div>
-                                  );
-                              })}
-                          </div>
+                                      <div className="min-w-0"><h4 className="font-bold text-sm text-zinc-800 dark:text-white truncate pr-2">{item.title}</h4><div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400"><span className="hidden sm:inline">• Adicionado por {item.addedBy.split(' ')[0]}</span></div></div>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                      <a href={item.link} target="_blank" rel="noopener noreferrer" className="p-2 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"><ExternalLink size={18} /></a>
+                                      {mode === 'manage' && <button onClick={() => handleDelete(item.id)} className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"><Trash2 size={18} /></button>}
+                                  </div>
+                              </div>
+                          ))}
                       </div>
-                  );
-              })
-          )}
+                  </div>
+              );
+          })}
       </div>
     </div>
   );

@@ -1,23 +1,25 @@
+
 import React, { useState } from 'react';
 import { Bell, Check, Trash2, Info, AlertTriangle, CheckCircle, AlertOctagon, ExternalLink } from 'lucide-react';
 import { AppNotification } from '../types';
 import { markNotificationsReadSQL, clearAllNotificationsSQL, getSupabase } from '../services/supabaseService';
+import { useToast } from './Toast';
 
 interface Props {
   notifications: AppNotification[];
   ministryId: string | null;
   onNotificationsUpdate: (updated: AppNotification[]) => void;
-  onNavigate?: (tabId: string) => void; // Nova prop para navegação
+  onNavigate?: (tabId: string) => void;
 }
 
 export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId, onNotificationsUpdate, onNavigate }) => {
   const [isOpen, setIsOpen] = useState(false);
   const unreadCount = notifications.filter(n => !n.read).length;
+  const { confirmAction } = useToast();
 
   const handleMarkAllRead = async () => {
     if (!ministryId) return;
     
-    // Attempt to get user ID since it is required by SQL service but not passed in props
     const supabase = getSupabase();
     if (!supabase) return;
     const { data: { user } } = await supabase.auth.getUser();
@@ -28,23 +30,26 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
     
     await markNotificationsReadSQL(unreadIds, user.id);
     
-    // Optimistic update
     const updated = notifications.map(n => ({...n, read: true}));
     onNotificationsUpdate(updated);
   };
 
   const handleClearAll = async () => {
       if (!ministryId) return;
-      if (confirm("Tem certeza que deseja limpar todas as notificações?")) {
-          await clearAllNotificationsSQL(ministryId);
-          onNotificationsUpdate([]); // Limpa localmente
-      }
+      confirmAction(
+          "Limpar Notificações",
+          "Tem certeza que deseja limpar todas as notificações? Esta ação é irreversível.",
+          async () => {
+              await clearAllNotificationsSQL(ministryId);
+              onNotificationsUpdate([]);
+          }
+      );
   };
 
   const handleNotificationClick = (notification: AppNotification) => {
       if (notification.actionLink && onNavigate) {
           onNavigate(notification.actionLink);
-          setIsOpen(false); // Fecha o menu após navegar
+          setIsOpen(false);
       }
   };
 

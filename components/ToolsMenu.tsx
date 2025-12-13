@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { Share2, FileText, Trash, ChevronDown, FileDown, RotateCcw, Sparkles, X, Calendar } from 'lucide-react';
+import { useToast } from './Toast';
 
 interface Props {
   onExportIndividual: (member: string) => void;
@@ -25,9 +26,13 @@ export const ToolsMenu: React.FC<Props> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState("");
+  const { addToast } = useToast();
 
   const handleIndividual = () => {
-    if (!selectedMember) return alert("Selecione um membro primeiro");
+    if (!selectedMember) {
+        addToast("Selecione um membro primeiro", "warning");
+        return;
+    }
     onExportIndividual(selectedMember);
   };
 
@@ -43,24 +48,17 @@ export const ToolsMenu: React.FC<Props> = ({
 
         {isOpen && (
           <>
-            {/* Backdrop (Escuro atrás do menu) - Fecha ao clicar */}
             <div 
                 className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm transition-opacity" 
                 onClick={() => setIsOpen(false)} 
             />
 
-            {/* Menu Container Responsive */}
             <div className={`
                 fixed md:absolute z-[70] bg-white dark:bg-zinc-800 overflow-hidden animate-fade-in
-                
-                /* Mobile Styles: Bottom Sheet fixa em baixo */
                 bottom-0 left-0 right-0 w-full rounded-t-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.3)] border-t border-zinc-200 dark:border-zinc-700
-                
-                /* Desktop Styles: Dropdown flutuante à direita */
                 md:bottom-auto md:left-auto md:right-0 md:top-full md:mt-2 md:w-72 md:rounded-xl md:shadow-xl md:border
             `}>
               
-              {/* Header Mobile (Apenas visível em telas pequenas) */}
               <div className="flex md:hidden justify-between items-center p-4 border-b border-zinc-100 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50">
                   <span className="font-bold text-zinc-800 dark:text-white">Ferramentas de Escala</span>
                   <button onClick={() => setIsOpen(false)} className="p-1 bg-zinc-200 dark:bg-zinc-700 rounded-full text-zinc-500">
@@ -86,7 +84,6 @@ export const ToolsMenu: React.FC<Props> = ({
                   </div>
                 </div>
 
-                {/* AI Option */}
                 {onAiAutoFill && (
                   <button 
                     onClick={() => { setIsOpen(false); onAiAutoFill(); }} 
@@ -96,7 +93,6 @@ export const ToolsMenu: React.FC<Props> = ({
                   </button>
                 )}
 
-                {/* Google Calendar Sync */}
                 {onSyncCalendar && (
                   <button 
                     onClick={() => { setIsOpen(false); onSyncCalendar(); }}
@@ -125,7 +121,6 @@ export const ToolsMenu: React.FC<Props> = ({
                 </button>
               </div>
               
-              {/* Espaço extra no mobile para segurança contra barra de navegação do iPhone */}
               <div className="h-6 md:hidden"></div>
             </div>
           </>

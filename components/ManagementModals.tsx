@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { CustomEvent, AvailabilityMap, AuditLogEntry, Role } from '../types';
 import { X, Plus, Trash2, Calendar, ShieldAlert, Undo2 } from 'lucide-react';
+import { useToast } from './Toast';
 
 interface ModalProps {
   isOpen: boolean;
@@ -137,6 +138,7 @@ export const RolesModal = ({ isOpen, onClose, roles, onUpdate }: {
   isOpen: boolean; onClose: () => void; roles: Role[]; onUpdate: (r: Role[]) => void;
 }) => {
   const [newRole, setNewRole] = useState("");
+  const { confirmAction } = useToast();
   
   const add = () => {
     if (newRole && !roles.includes(newRole)) {
@@ -146,9 +148,11 @@ export const RolesModal = ({ isOpen, onClose, roles, onUpdate }: {
   };
 
   const remove = (r: string) => {
-    if (confirm("Remover esta função? Isso pode afetar escalas existentes.")) {
-      onUpdate(roles.filter(role => role !== r));
-    }
+    confirmAction(
+      "Remover Função",
+      "Deseja realmente remover esta função? Isso pode afetar escalas existentes que a utilizam.",
+      () => onUpdate(roles.filter(role => role !== r))
+    );
   };
 
   return (

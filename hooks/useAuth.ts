@@ -42,19 +42,17 @@ export function useAuth() {
         }
 
         try {
-            // Tenta buscar o perfil existente
-            let { data: profile, error: fetchError } = await sb.from('profiles').select('*').eq('id', user.id).single();
+            // Busca segura do perfil
+            let { data: profile, error: fetchError } = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle();
             
-            // LÓGICA DE AUTO-CORREÇÃO (SELF-HEALING)
-            // Se o usuário logou (Auth), mas não tem perfil (Profile) devido a erro anterior ou falta de trigger:
+            // LÓGICA DE AUTO-CORREÇÃO (SELF-HEALING) ROBUSTA
             if (!profile || fetchError) {
-                console.log("Perfil não encontrado no banco público. Tentando criar automaticamente...", user.email);
+                console.warn("Perfil ausente ou erro de schema. Tentando recriar perfil básico.", user.email);
                 
                 const defaultMinistry = 'midia';
-                // Extrai metadados ou usa fallbacks seguros
                 const metaName = user.user_metadata?.full_name || user.user_metadata?.name;
                 const emailName = user.email?.split('@')[0];
-                const displayName = metaName || emailName || 'Novo Membro';
+                const displayName = metaName || emailName || 'Membro';
 
                 const newProfile = {
                     id: user.id,
@@ -64,7 +62,7 @@ export function useAuth() {
                     ministry_id: defaultMinistry,
                     allowed_ministries: [defaultMinistry],
                     role: 'member',
-                    created_at: new Date().toISOString()
+                    // Não enviamos created_at aqui se o banco tiver default now() para evitar erro de coluna
                 };
 
                 // Tenta inserir na tabela profiles manualmente
@@ -76,33 +74,38 @@ export function useAuth() {
                 
                 if (insertError) {
                     console.error("Falha crítica ao criar perfil automático:", insertError.message);
-                    // Em último caso, usa o objeto em memória para não travar o app do usuário
-                    profile = newProfile; 
+                    // Fallback de emergência: Objeto em memória para não travar o app
+                    profile = { ...newProfile, is_admin: false }; 
                 } else {
-                    console.log("Perfil criado com sucesso via Self-Healing!");
+                    console.log("Perfil restaurado com sucesso.");
                     profile = insertedProfile;
                 }
             }
 
-            // Define o usuário no estado da aplicação
+            // Normalização de dados para evitar undefined
             if (profile) {
                 const userMinistry = profile.ministry_id || 'midia';
-                
+                const safeAllowed = Array.isArray(profile.allowed_ministries) ? profile.allowed_ministries : [userMinistry];
+                const safeFunctions = Array.isArray(profile.functions) ? profile.functions : [];
+
                 setCurrentUser({
                     id: profile.id,
-                    name: profile.name,
-                    email: profile.email,
+                    name: profile.name || 'Usuário',
+                    email: profile.email || user.email,
                     role: profile.is_admin ? 'admin' : 'member',
                     ministryId: userMinistry,
-                    allowedMinistries: profile.allowed_ministries || [userMinistry],
+                    allowedMinistries: safeAllowed,
                     avatar_url: profile.avatar_url,
                     whatsapp: profile.whatsapp,
                     birthDate: profile.birth_date,
-                    functions: profile.functions || []
+                    functions: safeFunctions
                 });
             }
         } catch (e) {
             console.error("Erro geral na autenticação:", e);
+            // Em caso de erro catastrófico, desloga para tentar limpar o estado
+            await sb.auth.signOut();
+            setCurrentUser(null);
         } finally {
             setLoadingAuth(false);
         }

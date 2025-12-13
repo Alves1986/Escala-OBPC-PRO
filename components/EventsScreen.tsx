@@ -1,7 +1,9 @@
+
 import React, { useState, useMemo } from 'react';
 import { Plus, Trash2, CalendarDays, Clock } from 'lucide-react';
 import { CustomEvent } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
+import { useToast } from './Toast';
 
 interface Props {
   customEvents: CustomEvent[];
@@ -16,6 +18,7 @@ export const EventsScreen: React.FC<Props> = ({ customEvents, onCreateEvent, onD
   const [newTime, setNewTime] = useState("19:30");
   const [newTitle, setNewTitle] = useState("");
   const [loading, setLoading] = useState(false);
+  const { confirmAction } = useToast();
 
   const handlePrevMonth = () => {
     onMonthChange(adjustMonth(currentMonth, -1));
@@ -35,19 +38,15 @@ export const EventsScreen: React.FC<Props> = ({ customEvents, onCreateEvent, onD
   };
 
   const handleDelete = async (identifier: string) => {
-      if (confirm("Deseja realmente excluir este evento?")) {
+      confirmAction("Excluir Evento", "Deseja realmente excluir este evento?", async () => {
           setLoading(true);
           await onDeleteEvent(identifier); 
           setLoading(false);
-      }
+      });
   };
 
-  // Filtragem e Ordenação Local para garantir consistência visual
   const displayedEvents = useMemo(() => {
       if (!customEvents || !Array.isArray(customEvents)) return [];
-      
-      // Confiamos que o componente pai (App.tsx) já filtra os eventos pelo mês corrente
-      // via chamada de API. Apenas ordenamos aqui.
       return [...customEvents].sort((a, b) => {
             const dateA = a.iso || `${a.date}T${a.time}`;
             const dateB = b.iso || `${b.date}T${b.time}`;
