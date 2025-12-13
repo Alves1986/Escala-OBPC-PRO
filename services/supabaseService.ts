@@ -100,61 +100,39 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, message: "Não autorizado" };
 
-    try {
-        const { data: requesterProfile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single();
-        if (!requesterProfile?.is_admin) {
-            return { success: false, message: "Permissão negada. Apenas administradores podem remover membros." };
+    // --- FIX: USE EDGE FUNCTION TO BYPASS RLS ---
+    const { data, error } = await supabase.functions.invoke('push-notification', {
+        body: {
+            action: 'delete_member',
+            ministryId,
+            memberId
         }
+    });
 
-        const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
-        
-        const { data: profile, error: fetchError } = await supabase.from('profiles').select('allowed_ministries, ministry_id').eq('id', memberId).single();
-        
-        if (fetchError) {
-             console.error("Erro ao buscar perfil alvo:", fetchError);
-             return { success: false, message: "Erro ao localizar membro no banco de dados." };
-        }
-
-        if (profile) {
-            const currentAllowed = Array.isArray(profile.allowed_ministries) ? profile.allowed_ministries : [];
-            const newAllowed = currentAllowed.filter((m: string) => {
-                const normalizedM = (m || "").trim().toLowerCase().replace(/\s+/g, '-');
-                return normalizedM && normalizedM !== cleanMid;
-            });
-
-            const updates: any = { allowed_ministries: newAllowed };
-            const currentActive = (profile.ministry_id || "").trim().toLowerCase().replace(/\s+/g, '-');
-            
-            if (currentActive === cleanMid) {
-                updates.ministry_id = newAllowed.length > 0 ? newAllowed[0] : null;
-            }
-
-            const { error: updateError } = await supabase.from('profiles').update(updates).eq('id', memberId);
-            
-            if (updateError) {
-                console.error("Erro RLS ao atualizar perfil:", updateError);
-                return { success: false, message: "Erro de permissão ao atualizar perfil do membro. Verifique se você é Admin." };
-            }
-        }
-
-        const todayIso = new Date().toISOString();
-        await supabase.from('schedule_assignments')
-            .delete()
-            .eq('member_id', memberId)
-            .in('event_id', (
-                await supabase.from('events')
-                    .select('id')
-                    .eq('ministry_id', cleanMid)
-                    .gte('date_time', todayIso)
-                    .then(res => res.data?.map(e => e.id) || [])
-            ));
-
-        return { success: true, message: "Membro removido da equipe com sucesso." };
-
-    } catch (e: any) { 
-        console.error("Exceção em deleteMember:", e); 
-        return { success: false, message: e.message || "Erro desconhecido ao excluir." };
+    if (error) {
+        console.error("Edge Function Error:", error);
+        return { success: false, message: "Falha ao se comunicar com o servidor." };
     }
+
+    if (!data || !data.success) {
+        return { success: false, message: data?.message || "Erro desconhecido ao remover membro." };
+    }
+
+    return { success: true, message: "Membro removido da equipe com sucesso." };
+};
+
+export const toggleAdminSQL = async (email: string, isAdmin: boolean, ministryId: string = 'midia') => {
+    if (!supabase) return;
+    
+    // --- FIX: USE EDGE FUNCTION TO BYPASS RLS ---
+    await supabase.functions.invoke('push-notification', {
+        body: {
+            action: 'toggle_admin',
+            targetEmail: email,
+            status: isAdmin,
+            ministryId // Required for context check
+        }
+    });
 };
 
 export const updateUserProfile = async (name: string, whatsapp: string, avatar_url: string | undefined, functions: string[] | undefined, birthDate: string | undefined, ministryId: string | undefined) => {
@@ -828,9 +806,4 @@ export const saveSubscriptionSQL = async (ministryId: string, subscription: Push
         p256dh,
         auth
     }, { onConflict: 'endpoint' });
-};
-
-export const toggleAdminSQL = async (email: string, isAdmin: boolean) => {
-    if (!supabase) return;
-    await supabase.from('profiles').update({ is_admin: isAdmin }).eq('email', email);
 };

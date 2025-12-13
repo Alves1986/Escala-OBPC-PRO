@@ -49,6 +49,7 @@ const SettingsScreen = React.lazy(() => import('./components/SettingsScreen').th
 const ProfileScreen = React.lazy(() => import('./components/ProfileScreen').then(module => ({ default: module.ProfileScreen })));
 const EventsScreen = React.lazy(() => import('./components/EventsScreen').then(module => ({ default: module.EventsScreen })));
 const RankingScreen = React.lazy(() => import('./components/RankingScreen').then(module => ({ default: module.RankingScreen })));
+const MembersScreen = React.lazy(() => import('./components/MembersScreen').then(module => ({ default: module.MembersScreen })));
 
 // Fallback visual enquanto o módulo é baixado
 const LoadingFallback = () => (
@@ -771,66 +772,35 @@ const InnerApp = () => {
         )}
 
         {currentTab === 'members' && isAdmin && (
-             <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
-                 <div className="border-b border-zinc-200 dark:border-zinc-700 pb-4 flex justify-between items-center">
-                    <div>
-                        <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                            <Users className="text-indigo-500"/> Membros & Equipe
-                        </h2>
-                        <p className="text-zinc-500 text-sm mt-1">Gerencie os integrantes, funções e permissões de acesso.</p>
-                    </div>
-                 </div>
-                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {publicMembers.map(member => {
-                        const isOnline = onlineUsers.includes(member.id);
-                        return (
-                        <div key={member.id} className="bg-[#18181b] rounded-2xl border border-zinc-800 p-5 flex flex-col gap-4 relative group shadow-sm transition-all hover:border-zinc-700">
-                            <div className="flex justify-between items-start">
-                                <div className="flex gap-4">
-                                    <div className="relative">
-                                        {member.avatar_url ? <img src={member.avatar_url} alt={member.name} className="w-14 h-14 rounded-full object-cover border-2 border-zinc-700 shadow-sm" /> : <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold border-2 border-zinc-700 shadow-sm">{member.name.charAt(0).toUpperCase()}</div>}
-                                        {isOnline && (
-                                            <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-[#18181b] animate-pulse" title="Online Agora"></div>
-                                        )}
-                                    </div>
-                                    <div>
-                                        <h3 className="font-bold text-lg text-zinc-100 truncate max-w-[150px]" title={member.name}>{member.name}</h3>
-                                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mt-0.5">{member.isAdmin ? 'Administrador' : 'Membro'}</span>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                     <button onClick={async () => { if (member.email) { const newStatus = !member.isAdmin; await Supabase.toggleAdminSQL(member.email, newStatus); loadData(); addToast(`${member.name} agora é ${newStatus ? 'Admin' : 'Membro'}.`, 'success'); } else { addToast("Este usuário não possui e-mail para ser admin.", "error"); } }} className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors border ${member.isAdmin ? 'bg-zinc-800 border-zinc-600 text-white hover:bg-zinc-700' : 'bg-transparent border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-500'}`} title={member.isAdmin ? "Remover Admin" : "Tornar Admin"}><ShieldCheck size={16} fill={member.isAdmin ? "currentColor" : "none"} /></button>
-                                    <button onClick={async () => { 
-                                        confirmAction(
-                                            "Remover Membro",
-                                            `Deseja remover ${member.name} da equipe? Isso removerá o acesso dele ao ministério atual.`,
-                                            async () => {
-                                                const result = await Supabase.deleteMember(ministryId, member.id, member.name);
-                                                if (result.success) {
-                                                    setPublicMembers(prev => prev.filter(m => m.id !== member.id));
-                                                    loadData(false); // Ignora cache para garantir que dados novos venham da rede
-                                                    addToast(`${member.name} removido.`, "success");
-                                                } else {
-                                                    addToast(`Erro: ${result.message}`, "error");
-                                                }
-                                            }
-                                        );
-                                    }} className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors border bg-transparent border-zinc-700 text-zinc-500 hover:text-red-400 hover:border-red-900/50 hover:bg-red-900/10"><Trash2 size={16} /></button>
-                                </div>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                                {member.roles && member.roles.length > 0 ? member.roles.map(role => <span key={role} className="text-xs font-semibold px-3 py-1.5 rounded-md bg-blue-900/20 text-blue-400 border border-blue-900/30">{role}</span>) : <span className="text-xs text-zinc-600 italic px-2">Sem função definida</span>}
-                            </div>
-                            <hr className="border-zinc-800" />
-                            <div className="space-y-2.5 text-sm">
-                                <div className="flex items-center gap-3 text-zinc-400 group/item hover:text-zinc-300 transition-colors"><Mail size={16} className="text-zinc-600 group-hover/item:text-zinc-400 transition-colors shrink-0"/><span className="truncate">{member.email || "Sem e-mail"}</span></div>
-                                <div className="flex items-center gap-3 text-zinc-400 group/item hover:text-zinc-300 transition-colors">{member.whatsapp ? <><Phone size={16} className="text-zinc-600 group-hover/item:text-zinc-400 transition-colors shrink-0"/><span className="truncate">{member.whatsapp}</span></> : <span className="text-zinc-600 italic text-xs pl-7">WhatsApp não informado</span>}</div>
-                                {member.birthDate && <div className="flex items-center gap-3 text-zinc-400 group/item hover:text-zinc-300 transition-colors"><Gift size={16} className="text-zinc-600 group-hover/item:text-zinc-400 transition-colors shrink-0"/><span className="truncate">{new Date(member.birthDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}</span></div>}
-                            </div>
-                        </div>
-                    );})}
-                 </div>
-             </div>
+             <MembersScreen 
+                members={publicMembers} 
+                onlineUsers={onlineUsers} 
+                currentUser={currentUser}
+                onToggleAdmin={async (email, currentStatus, name) => {
+                    if (!email) return addToast("Usuário sem e-mail não pode ser admin.", "error");
+                    const newStatus = !currentStatus;
+                    // FIX: Pass ministryId to ensure context
+                    await Supabase.toggleAdminSQL(email, newStatus, ministryId); 
+                    loadData();
+                    addToast(`${name} agora é ${newStatus ? 'Admin' : 'Membro'}.`, 'success');
+                }}
+                onRemoveMember={async (id, name) => {
+                    confirmAction(
+                        "Remover Membro",
+                        `Deseja remover ${name} da equipe? Isso removerá o acesso dele ao ministério atual.`,
+                        async () => {
+                            const result = await Supabase.deleteMember(ministryId, id, name);
+                            if (result.success) {
+                                setPublicMembers(prev => prev.filter(m => m.id !== id));
+                                loadData(false); // Ignora cache para garantir que dados novos venham da rede
+                                addToast(`${name} removido.`, "success");
+                            } else {
+                                addToast(`Erro: ${result.message}`, "error");
+                            }
+                        }
+                    );
+                }}
+            />
         )}
 
         {currentTab === 'report' && isAdmin && (

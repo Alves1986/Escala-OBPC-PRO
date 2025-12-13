@@ -28,7 +28,7 @@ Deno.serve(async (req: Request) => {
         console.warn("Corpo da requisição vazio ou inválido.");
     }
 
-    const { ministryId, title, message, type, actionLink, action, name } = requestData;
+    const { ministryId, title, message, type, actionLink, action, name, memberId, targetEmail, status } = requestData;
 
     // 3. DETECÇÃO DE TESTE DO DASHBOARD (Supabase "Test Function" button)
     if (name === "Functions" || (!ministryId && !action)) {
@@ -58,6 +58,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Inicializa cliente com Service Role para poder validar o usuário e ler perfis/inscrições
+    // IMPORTANTE: Service Role bypassa RLS, permitindo ações de Admin.
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // --- SECURITY CHECK START ---
@@ -74,8 +75,8 @@ Deno.serve(async (req: Request) => {
         return new Response(JSON.stringify({ success: false, message: 'Invalid User Token' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Normaliza ID do ministério alvo
-    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+    // Normaliza ID do ministério alvo se existir
+    const cleanMid = ministryId ? ministryId.trim().toLowerCase().replace(/\s+/g, '-') : null;
 
     // Busca perfil do usuário para verificar permissões
     const { data: callerProfile } = await supabase
@@ -91,14 +92,69 @@ Deno.serve(async (req: Request) => {
     // Verifica se o usuário é Admin, se pertence ao ministério principal ou se tem permissão secundária
     const hasAccess = 
         callerProfile.is_admin || 
-        callerProfile.ministry_id === cleanMid || 
-        (callerProfile.allowed_ministries && callerProfile.allowed_ministries.includes(cleanMid));
+        (cleanMid && callerProfile.ministry_id === cleanMid) || 
+        (cleanMid && callerProfile.allowed_ministries && callerProfile.allowed_ministries.includes(cleanMid));
 
     if (!hasAccess) {
-        console.warn(`Acesso negado: Usuário ${user.id} tentou enviar para ${cleanMid} sem permissão.`);
-        return new Response(JSON.stringify({ success: false, message: 'Forbidden: You do not have permission to send notifications to this ministry.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        console.warn(`Acesso negado: Usuário ${user.id} tentou acessar ${cleanMid} sem permissão.`);
+        return new Response(JSON.stringify({ success: false, message: 'Forbidden: You do not have permission.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     // --- SECURITY CHECK END ---
+
+    // === ADMIN ACTIONS (Bypassing RLS safely) ===
+    
+    // ACTION: Delete Member
+    if (action === 'delete_member') {
+        if (!memberId || !cleanMid) {
+            return new Response(JSON.stringify({ success: false, message: 'Missing memberId or ministryId' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        // 1. Atualizar Perfil: Remove o ministério da lista de permitidos
+        const { data: profile } = await supabase.from('profiles').select('allowed_ministries, ministry_id').eq('id', memberId).single();
+        
+        if (profile) {
+             const currentAllowed = Array.isArray(profile.allowed_ministries) ? profile.allowed_ministries : [];
+             const newAllowed = currentAllowed.filter((m: string) => m !== cleanMid);
+             const updates: any = { allowed_ministries: newAllowed };
+             
+             // Se o ministério ativo for o que está sendo removido, troca ou zera
+             if (profile.ministry_id === cleanMid) {
+                 updates.ministry_id = newAllowed.length > 0 ? newAllowed[0] : null;
+             }
+             
+             const { error: updateError } = await supabase.from('profiles').update(updates).eq('id', memberId);
+             if (updateError) throw updateError;
+        }
+
+        // 2. Limpar Escalas Futuras
+        const todayIso = new Date().toISOString();
+        const { data: events } = await supabase.from('events').select('id').eq('ministry_id', cleanMid).gte('date_time', todayIso);
+        const eventIds = events?.map((e: any) => e.id) || [];
+        
+        if (eventIds.length > 0) {
+            await supabase.from('schedule_assignments').delete().eq('member_id', memberId).in('event_id', eventIds);
+        }
+
+        return new Response(JSON.stringify({ success: true, message: 'Membro removido com sucesso via Server-Side.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+    }
+
+    // ACTION: Toggle Admin
+    if (action === 'toggle_admin') {
+        if (!callerProfile.is_admin) {
+             return new Response(JSON.stringify({ success: false, message: 'Apenas Administradores podem alterar permissões.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        if (!targetEmail) {
+            return new Response(JSON.stringify({ success: false, message: 'Target email required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const { error } = await supabase.from('profiles').update({ is_admin: status }).eq('email', targetEmail);
+        
+        if (error) throw error;
+        
+        return new Response(JSON.stringify({ success: true, message: 'Permissão alterada.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+    }
+
+    // === PUSH NOTIFICATIONS LOGIC ===
 
     // 6. Configuração VAPID (Push Notifications) via Env Vars
     const publicKey = Deno.env.get('VAPID_PUBLIC_KEY');
@@ -119,19 +175,15 @@ Deno.serve(async (req: Request) => {
     }
 
     try {
-        // Configure um email válido para contato em caso de problemas com o serviço de push
         const subject = 'mailto:admin@example.com'; 
         webpush.setVapidDetails(subject, publicKey, privateKey);
     } catch (err: any) {
-        console.error("Erro Fatal VAPID:", err.message);
-        return new Response(JSON.stringify({ 
-            success: false, 
-            message: "Erro na validação das chaves VAPID.",
-            details: err.message
-        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 })
+        return new Response(JSON.stringify({ success: false, message: "Erro VAPID.", details: err.message }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 })
     }
 
-    // 7. Lógica de Envio (Coleta de destinatários)
+    // 7. Lógica de Envio
+    if (!cleanMid) return new Response(JSON.stringify({ success: false, message: 'Ministry ID missing for push' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
+
     const { data: profiles } = await supabase
         .from('profiles')
         .select('id')
@@ -140,9 +192,7 @@ Deno.serve(async (req: Request) => {
     const userIds = profiles?.map((p: any) => p.id) || []
     
     if (userIds.length === 0) {
-      return new Response(JSON.stringify({ success: true, message: 'Nenhum usuário encontrado neste ministério.' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
-      })
+      return new Response(JSON.stringify({ success: true, message: 'Nenhum usuário para notificar.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 })
     }
 
     const { data: subscriptions } = await supabase
@@ -151,9 +201,7 @@ Deno.serve(async (req: Request) => {
       .in('user_id', userIds)
 
     if (!subscriptions || subscriptions.length === 0) {
-      return new Response(JSON.stringify({ success: true, message: 'Nenhum dispositivo inscrito.' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
-      })
+      return new Response(JSON.stringify({ success: true, message: 'Nenhum dispositivo inscrito.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 })
     }
 
     const results = []
@@ -179,7 +227,6 @@ Deno.serve(async (req: Request) => {
         results.push({ endpoint: record.endpoint, status: 'success' })
         successCount++;
       } catch (err: any) {
-        console.error('Falha envio:', err.statusCode)
         if (err.statusCode === 410 || err.statusCode === 404) {
             await supabase.from('push_subscriptions').delete().eq('endpoint', record.endpoint);
         }
@@ -194,7 +241,6 @@ Deno.serve(async (req: Request) => {
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 })
 
   } catch (error: any) {
-    console.error('Erro Fatal Handler:', error)
     return new Response(JSON.stringify({ 
         success: false, 
         message: 'Erro interno na função.', 
