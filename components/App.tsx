@@ -1,11 +1,10 @@
 
-// ... existing imports ...
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { 
   LayoutDashboard, Calendar, CalendarCheck, RefreshCcw, Music, 
   Megaphone, Settings, FileBarChart, CalendarDays,
   Users, Edit, Send, ListMusic, Trash2, ShieldAlert, Clock, ArrowLeft, ArrowRight,
-  ShieldCheck, Mail, Phone, Calendar as CalendarIcon, Gift, Trophy
+  ShieldCheck, Mail, Phone, Calendar as CalendarIcon, Gift, Trophy, Loader2
 } from 'lucide-react';
 import { ToastProvider, useToast } from './components/Toast';
 import { LoginScreen } from './components/LoginScreen';
@@ -15,17 +14,6 @@ import { DashboardLayout } from './components/DashboardLayout';
 import { NextEventCard } from './components/NextEventCard';
 import { BirthdayCard } from './components/BirthdayCard';
 import { WeatherWidget } from './components/WeatherWidget';
-import { ScheduleTable } from './components/ScheduleTable';
-import { CalendarGrid } from './components/CalendarGrid';
-import { AvailabilityScreen } from './components/AvailabilityScreen';
-import { SwapRequestsScreen } from './components/SwapRequestsScreen';
-import { RepertoireScreen } from './components/RepertoireScreen';
-import { AnnouncementsScreen } from './components/AnnouncementsScreen';
-import { AlertsManager } from './components/AlertsManager';
-import { AvailabilityReportScreen } from './components/AvailabilityReportScreen';
-import { SettingsScreen } from './components/SettingsScreen';
-import { ProfileScreen } from './components/ProfileScreen';
-import { EventsScreen } from './components/EventsScreen';
 import { InstallBanner } from './components/InstallBanner';
 import { InstallModal } from './components/InstallModal';
 import { JoinMinistryModal } from './components/JoinMinistryModal';
@@ -34,7 +22,6 @@ import { EventDetailsModal } from './components/EventDetailsModal';
 import { StatsModal } from './components/StatsModal';
 import { ConfirmationModal } from './components/ConfirmationModal';
 import { EventsModal, AvailabilityModal, RolesModal } from './components/ManagementModals';
-import { RankingScreen } from './components/RankingScreen';
 
 import * as Supabase from './services/supabaseService';
 import { generateScheduleWithAI } from './services/aiService';
@@ -46,6 +33,27 @@ import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from './utils/pushUtils';
 import { useAuth } from './hooks/useAuth';
 import { useMinistryData } from './hooks/useMinistryData';
 import { useOnlinePresence } from './hooks/useOnlinePresence';
+
+// --- Lazy Load Heavy Components ---
+const ScheduleTable = React.lazy(() => import('./components/ScheduleTable').then(module => ({ default: module.ScheduleTable })));
+const CalendarGrid = React.lazy(() => import('./components/CalendarGrid').then(module => ({ default: module.CalendarGrid })));
+const AvailabilityScreen = React.lazy(() => import('./components/AvailabilityScreen').then(module => ({ default: module.AvailabilityScreen })));
+const SwapRequestsScreen = React.lazy(() => import('./components/SwapRequestsScreen').then(module => ({ default: module.SwapRequestsScreen })));
+const RepertoireScreen = React.lazy(() => import('./components/RepertoireScreen').then(module => ({ default: module.RepertoireScreen })));
+const AnnouncementsScreen = React.lazy(() => import('./components/AnnouncementsScreen').then(module => ({ default: module.AnnouncementsScreen })));
+const AlertsManager = React.lazy(() => import('./components/AlertsManager').then(module => ({ default: module.AlertsManager })));
+const AvailabilityReportScreen = React.lazy(() => import('./components/AvailabilityReportScreen').then(module => ({ default: module.AvailabilityReportScreen })));
+const SettingsScreen = React.lazy(() => import('./components/SettingsScreen').then(module => ({ default: module.SettingsScreen })));
+const ProfileScreen = React.lazy(() => import('./components/ProfileScreen').then(module => ({ default: module.ProfileScreen })));
+const EventsScreen = React.lazy(() => import('./components/EventsScreen').then(module => ({ default: module.EventsScreen })));
+const RankingScreen = React.lazy(() => import('./components/RankingScreen').then(module => ({ default: module.RankingScreen })));
+
+const LoadingFallback = () => (
+  <div className="flex flex-col items-center justify-center h-[60vh] text-zinc-400 animate-fade-in">
+    <Loader2 size={48} className="animate-spin mb-4 text-teal-500" />
+    <p className="text-sm font-medium">Carregando módulo...</p>
+  </div>
+);
 
 const InnerApp = () => {
   // --- CONFIG CHECK ---
@@ -456,6 +464,7 @@ const InnerApp = () => {
         onSwitchMinistry={handleSwitchMinistry}
         onOpenJoinMinistry={() => setShowJoinModal(true)}
     >
+      <Suspense fallback={<LoadingFallback />}>
         {currentTab === 'dashboard' && (
             <div className="space-y-6 animate-fade-in">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -542,7 +551,6 @@ const InnerApp = () => {
             </div>
         )}
 
-        {/* ... (Rest of the tabs) ... */}
         {currentTab === 'calendar' && (
             <div className="space-y-6 animate-fade-in">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -741,26 +749,22 @@ const InnerApp = () => {
         )}
 
         {currentTab === 'announcements' && (
-            <div className="space-y-8">
-                <AnnouncementsScreen 
-                    announcements={announcements}
-                    currentUser={currentUser}
-                    onMarkRead={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'read').then(loadData)}
-                    onToggleLike={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'like').then(loadData)}
-                />
-            </div>
+            <AnnouncementsScreen 
+                announcements={announcements}
+                currentUser={currentUser}
+                onMarkRead={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'read').then(loadData)}
+                onToggleLike={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'like').then(loadData)}
+            />
         )}
 
         {currentTab === 'send-announcements' && isAdmin && (
-            <div className="space-y-8">
-                <AlertsManager 
-                    onSend={async (title, message, type, exp) => {
-                            await Supabase.sendNotificationSQL(ministryId, { title, message, type, actionLink: 'announcements' });
-                            await Supabase.createAnnouncementSQL(ministryId, { title, message, type, expirationDate: exp }, currentUser.name);
-                            loadData();
-                    }}
-                />
-            </div>
+            <AlertsManager 
+                onSend={async (title, message, type, exp) => {
+                        await Supabase.sendNotificationSQL(ministryId, { title, message, type, actionLink: 'announcements' });
+                        await Supabase.createAnnouncementSQL(ministryId, { title, message, type, expirationDate: exp }, currentUser.name);
+                        loadData();
+                }}
+            />
         )}
 
         {currentTab === 'members' && isAdmin && (
@@ -875,6 +879,7 @@ const InnerApp = () => {
                 isAdmin={isAdmin}
             />
         )}
+      </Suspense>
 
         <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ ...e, iso: e.iso }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, e); loadData(); }} onRemove={async (id) => { loadData(); }} />
         <AvailabilityModal 

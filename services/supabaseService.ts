@@ -100,7 +100,7 @@ export const joinMinistry = async (newMinistryId: string, roles: string[]) => {
 export const deleteMember = async (ministryId: string, memberId: string, memberName: string) => {
     if (!supabase) return { success: false, message: "Erro de conexão" };
     try {
-        // 1. Busca o perfil atual para garantir que temos os dados mais recentes
+        // 1. Busca o perfil atual
         const { data: profile, error: fetchError } = await supabase
             .from('profiles')
             .select('allowed_ministries, ministry_id')
@@ -109,43 +109,51 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
         
         if (fetchError || !profile) {
             console.error("Erro ao buscar perfil:", fetchError);
-            return { success: false, message: "Perfil não encontrado ou erro de permissão." };
+            return { success: false, message: "Perfil não encontrado. Verifique se você tem permissão de Admin." };
         }
 
-        // Normaliza o ID do ministério atual para comparação
+        // Normalização
         const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
         
-        // 2. Filtra o ministério removido da lista (Case Insensitive e Robustez)
+        // 2. Filtra o ministério removido
         const currentAllowed = Array.isArray(profile.allowed_ministries) ? profile.allowed_ministries : [];
-        
         const newAllowed = currentAllowed.filter((m: string) => {
-            // Normaliza cada item do array para comparar
             const normalizedM = (m || "").trim().toLowerCase().replace(/\s+/g, '-');
-            return normalizedM !== cleanMid;
+            return normalizedM && normalizedM !== cleanMid;
         });
 
-        // Se o tamanho não mudou, talvez o usuário não estivesse na lista (mas estava no ministry_id)
-        // Prosseguimos mesmo assim para limpar o ministry_id se necessário.
+        // Prepara objeto de atualização
+        const updates: any = { 
+            allowed_ministries: newAllowed 
+        };
 
-        const updates: any = { allowed_ministries: newAllowed };
-
-        // 3. Se o usuário estava com este ministério ATIVO/SELECIONADO, precisamos mudar
-        // Normaliza também o ministry_id do banco
+        // 3. Lógica Crítica: Se o usuário estava 'ativo' neste ministério
         const currentActive = (profile.ministry_id || "").trim().toLowerCase().replace(/\s+/g, '-');
         
         if (currentActive === cleanMid) {
-            // Define como o primeiro disponível ou null se não sobrar nenhum
-            updates.ministry_id = newAllowed.length > 0 ? newAllowed[0] : null;
+            // Se tiver outros ministérios permitidos, move para o primeiro
+            if (newAllowed.length > 0) {
+                updates.ministry_id = newAllowed[0];
+            } else {
+                // Se não sobrou nenhum, define como null (ou 'none' se o banco não aceitar null)
+                updates.ministry_id = null; 
+            }
         }
 
         // 4. Executa o Update
-        const { error: updateError } = await supabase.from('profiles').update(updates).eq('id', memberId);
+        const { error: updateError } = await supabase
+            .from('profiles')
+            .update(updates)
+            .eq('id', memberId);
 
         if (updateError) {
             console.error("Erro no update:", updateError);
-            // Mensagem amigável para erro de RLS
+            // Tratamento de Erro RLS Amigável
             if (updateError.code === '42501' || updateError.message.includes('policy')) {
-                return { success: false, message: "Permissão negada. Apenas o próprio usuário ou Super Admins podem alterar perfis." };
+                return { success: false, message: "Permissão negada. Apenas Super Admins ou o próprio usuário podem alterar perfis. Contate o suporte para ajustar as Políticas RLS." };
+            }
+            if (updateError.code === '23502') { // Not Null Violation
+                 return { success: false, message: "Erro: O usuário deve pertencer a pelo menos um ministério principal." };
             }
             return { success: false, message: `Falha ao salvar: ${updateError.message}` };
         }
