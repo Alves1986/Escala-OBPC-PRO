@@ -326,6 +326,7 @@ export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, sched
   const availabilityLookup = useMemo(() => {
       const set = new Set<string>();
       Object.entries(availability).forEach(([member, dates]) => {
+          // Garante que dates é um array de strings antes de iterar
           (dates as string[]).forEach((date) => {
               set.add(`${member}_${date}`);
           });

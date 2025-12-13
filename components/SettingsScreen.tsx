@@ -168,7 +168,8 @@ export const SettingsScreen: React.FC<Props> = ({
         </h2>
       </div>
 
-      {/* --- AVAILABILITY WINDOW --- */}
+      {/* --- AVAILABILITY WINDOW (ADMIN ONLY) --- */}
+      {isAdmin && (
       <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm relative overflow-hidden">
           <div className={`absolute top-0 left-0 w-1 h-full ${status ? 'bg-green-500' : 'bg-red-500'}`}></div>
           
@@ -243,6 +244,7 @@ export const SettingsScreen: React.FC<Props> = ({
               * Ao usar "Liberar e Notificar", uma notificação push será enviada para todos os membros.
           </p>
       </div>
+      )}
 
       {/* Identidade Visual */}
       <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
@@ -273,6 +275,7 @@ export const SettingsScreen: React.FC<Props> = ({
                 </div>
             </div>
 
+            {isAdmin && (
             <div>
                 <label className="text-xs font-bold text-zinc-500 uppercase block mb-2">Nome do Ministério</label>
                 <div className="flex gap-2">
@@ -290,6 +293,7 @@ export const SettingsScreen: React.FC<Props> = ({
                     </button>
                 </div>
             </div>
+            )}
         </div>
         
         {onSaveTheme && (

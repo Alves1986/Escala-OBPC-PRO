@@ -42,6 +42,7 @@ import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from './utils/pushUtils';
 // Novos Hooks
 import { useAuth } from './hooks/useAuth';
 import { useMinistryData } from './hooks/useMinistryData';
+import { useOnlinePresence } from './hooks/useOnlinePresence';
 
 const InnerApp = () => {
   // --- CONFIG CHECK ---
@@ -52,18 +53,17 @@ const InnerApp = () => {
   // --- CUSTOM HOOKS ---
   const { currentUser, setCurrentUser, loadingAuth } = useAuth();
   
+  // Realtime Online Presence
+  const onlineUsers = useOnlinePresence(currentUser?.id, currentUser?.name);
+  
   const [ministryId, setMinistryId] = useState<string>('midia');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
   const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
   
-  // Lógica de Tabs Atualizada: Detecta retorno do Spotify IMEDIATAMENTE na inicialização
   const [currentTab, setCurrentTab] = useState(() => {
       if (typeof window !== 'undefined') {
-          // Se tiver voltando do Spotify com token no hash, força a aba de gerenciamento
           if (window.location.hash && window.location.hash.includes('access_token')) {
-              // Verifica se é admin para decidir a aba correta, mas garante que não vá para dashboard
-              // Como currentUser pode ser null aqui, assumimos repertoire-manager por segurança se tiver hash
               return 'repertoire-manager'; 
           }
           const params = new URLSearchParams(window.location.search);
@@ -72,7 +72,6 @@ const InnerApp = () => {
       return 'dashboard';
   });
 
-  // Ajuste fino de Tab se voltar do Spotify (Garante permissão correta após carregar user)
   useEffect(() => {
       if (window.location.hash && window.location.hash.includes('access_token') && currentUser) {
           const target = currentUser.role === 'admin' ? 'repertoire-manager' : 'repertoire';
@@ -130,11 +129,9 @@ const InnerApp = () => {
       }
   }, [currentUser]);
 
-  // Auto-refresh data on window focus
   useEffect(() => {
       const handleFocus = () => {
           if (currentUser && ministryId) {
-              // Silently refresh data when user comes back to the app
               loadData();
           }
       };
@@ -146,7 +143,6 @@ const InnerApp = () => {
   useEffect(() => {
       const url = new URL(window.location.href);
       if (url.searchParams.get('tab') !== currentTab) {
-          // Não sobrescreve se tiver hash do spotify
           if (!window.location.hash.includes('access_token')) {
               url.searchParams.set('tab', currentTab);
               try {
@@ -210,10 +206,13 @@ const InnerApp = () => {
     );
   };
 
-  const handleSwitchMinistry = (id: string) => {
+  const handleSwitchMinistry = async (id: string) => {
       setMinistryId(id);
       if (currentUser) {
           setCurrentUser({ ...currentUser, ministryId: id });
+          if (currentUser.id) {
+              await Supabase.updateProfileMinistry(currentUser.id, id);
+          }
       }
       addToast(`Alternado para ${id}`, 'info');
   };
@@ -299,10 +298,9 @@ const InnerApp = () => {
 
       const myEvents: any[] = [];
       
-      // Filter events where user is assigned
       Object.keys(schedule).forEach(key => {
           if (schedule[key] === currentUser.name) {
-              const iso = key.slice(0, 16); // Extract YYYY-MM-DDTHH:mm
+              const iso = key.slice(0, 16);
               const role = key.split('_').pop() || 'Escala';
               const eventInfo = events.find(e => e.iso.startsWith(iso));
               
@@ -322,7 +320,6 @@ const InnerApp = () => {
           return;
       }
 
-      // Generate ICS content
       let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//EscalaOBPC//PT\n";
       
       myEvents.forEach(evt => {
@@ -339,7 +336,6 @@ const InnerApp = () => {
       
       icsContent += "END:VCALENDAR";
 
-      // Trigger Download
       const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
       const link = document.createElement('a');
       link.href = window.URL.createObjectURL(blob);
@@ -353,11 +349,10 @@ const InnerApp = () => {
 
   const calculateEndTime = (iso: string) => {
       const date = new Date(iso);
-      date.setHours(date.getHours() + 2); // Default 2 hours duration
+      date.setHours(date.getHours() + 2); 
       return date.toISOString().slice(0, 19);
   };
 
-  // --- AI HANDLER ---
   const handleAiAutoFill = async () => {
       if (Object.keys(schedule).length > 0) {
           if (!confirm("A escala já possui itens preenchidos. Deseja sobrescrever usando Inteligência Artificial?")) return;
@@ -375,12 +370,19 @@ const InnerApp = () => {
               ministryId
           });
 
-          // Update State Local
           setSchedule(generatedSchedule);
-          // Save Bulk to DB with Strict Mode enabled to prevent event duplication
           await Supabase.saveScheduleBulk(ministryId, generatedSchedule, true);
           
           addToast("Escala gerada com sucesso!", "success");
+
+          // Notificar Equipe
+          await Supabase.sendNotificationSQL(ministryId, { 
+              title: "Escala Disponível", 
+              message: `A escala de ${getMonthName(currentMonth)} foi gerada com IA e está disponível.`, 
+              type: 'info', 
+              actionLink: 'calendar' 
+          });
+
       } catch (e: any) {
           addToast(`Erro: ${e.message}`, "error");
       }
@@ -424,7 +426,7 @@ const InnerApp = () => {
         currentTab={currentTab}
         onTabChange={setCurrentTab}
         mainNavItems={MAIN_NAV}
-        managementNavItems={MANAGEMENT_NAV}
+        managementNavItems={isAdmin ? MANAGEMENT_NAV : []}
         notifications={notifications}
         onNotificationsUpdate={setNotifications}
         onInstall={handleInstallApp}
@@ -518,6 +520,7 @@ const InnerApp = () => {
             </div>
         )}
 
+        {/* ... (Existing Tabs: calendar, schedule-editor, events, availability, swaps, ranking, repertoire) ... */}
         {currentTab === 'calendar' && (
             <div className="space-y-6 animate-fade-in">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -637,6 +640,7 @@ const InnerApp = () => {
                     })()}
                     ministryId={ministryId}
                     readOnly={false}
+                    onlineUsers={onlineUsers} // New prop
                 />
             </div>
         )}
@@ -720,7 +724,8 @@ const InnerApp = () => {
             <div className="space-y-8">
                 <AlertsManager 
                     onSend={async (title, message, type, exp) => {
-                            await Supabase.sendNotificationSQL(ministryId, { title, message, type });
+                            // Fix: Added actionLink so notification opens announcements tab
+                            await Supabase.sendNotificationSQL(ministryId, { title, message, type, actionLink: 'announcements' });
                             await Supabase.createAnnouncementSQL(ministryId, { title, message, type, expirationDate: exp }, currentUser.name);
                             loadData();
                     }}
@@ -739,11 +744,19 @@ const InnerApp = () => {
                     </div>
                  </div>
                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {publicMembers.map(member => (
+                    {publicMembers.map(member => {
+                        const isOnline = onlineUsers.includes(member.id);
+                        return (
                         <div key={member.id} className="bg-[#18181b] rounded-2xl border border-zinc-800 p-5 flex flex-col gap-4 relative group shadow-sm transition-all hover:border-zinc-700">
                             <div className="flex justify-between items-start">
                                 <div className="flex gap-4">
-                                    {member.avatar_url ? <img src={member.avatar_url} alt={member.name} className="w-14 h-14 rounded-full object-cover border-2 border-zinc-700 shadow-sm" /> : <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold border-2 border-zinc-700 shadow-sm">{member.name.charAt(0).toUpperCase()}</div>}
+                                    <div className="relative">
+                                        {member.avatar_url ? <img src={member.avatar_url} alt={member.name} className="w-14 h-14 rounded-full object-cover border-2 border-zinc-700 shadow-sm" /> : <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold border-2 border-zinc-700 shadow-sm">{member.name.charAt(0).toUpperCase()}</div>}
+                                        {/* ONLINE INDICATOR */}
+                                        {isOnline && (
+                                            <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-[#18181b] animate-pulse" title="Online Agora"></div>
+                                        )}
+                                    </div>
                                     <div>
                                         <h3 className="font-bold text-lg text-zinc-100 truncate max-w-[150px]" title={member.name}>{member.name}</h3>
                                         <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mt-0.5">{member.isAdmin ? 'Administrador' : 'Membro'}</span>
@@ -764,7 +777,7 @@ const InnerApp = () => {
                                 {member.birthDate && <div className="flex items-center gap-3 text-zinc-400 group/item hover:text-zinc-300 transition-colors"><Gift size={16} className="text-zinc-600 group-hover/item:text-zinc-400 transition-colors shrink-0"/><span className="truncate">{new Date(member.birthDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}</span></div>}
                             </div>
                         </div>
-                    ))}
+                    );})}
                  </div>
              </div>
         )}
@@ -820,7 +833,20 @@ const InnerApp = () => {
         )}
 
         <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ ...e, iso: e.iso }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, e); loadData(); }} onRemove={async (id) => { loadData(); }} />
-        <AvailabilityModal isOpen={isAvailModalOpen} onClose={() => setAvailModalOpen(false)} members={publicMembers.map(m => m.name)} availability={availability} onUpdate={async (member, dates) => { const p = publicMembers.find(pm => pm.name === member); if (p) { await Supabase.saveMemberAvailability(p.id, member, dates, currentMonth); loadData(); } }} currentMonth={currentMonth} />
+        <AvailabilityModal 
+            isOpen={isAvailModalOpen} 
+            onClose={() => setAvailModalOpen(false)} 
+            members={publicMembers.map(m => m.name)} 
+            availability={availability} 
+            onUpdate={async (member, dates) => { 
+                const p = publicMembers.find(pm => pm.name === member); 
+                if (p) { 
+                    await Supabase.saveMemberAvailability(p.id, member, dates, currentMonth, {}); 
+                    loadData(); 
+                } 
+            }} 
+            currentMonth={currentMonth} 
+        />
         <RolesModal isOpen={isRolesModalOpen} onClose={() => setRolesModalOpen(false)} roles={roles} onUpdate={async (newRoles) => { await Supabase.saveMinistrySettings(ministryId, undefined, newRoles); loadData(); }} />
         <InstallBanner isVisible={showInstallBanner} onInstall={handleInstallApp} onDismiss={() => setShowInstallBanner(false)} appName={ministryTitle || "Gestão Escala"} />
         <InstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />
