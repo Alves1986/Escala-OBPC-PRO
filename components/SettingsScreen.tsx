@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, Moon, Sun, BellRing, Megaphone, Monitor, Loader2, CalendarClock, Lock, Unlock, BellOff, Check, Music, ShieldCheck, AlertCircle, Youtube, Link, Play, Ban } from 'lucide-react';
+import { Settings, Save, Moon, Sun, BellRing, Megaphone, Monitor, Loader2, CalendarClock, Lock, Unlock, BellOff, Check, Music, ShieldCheck, AlertCircle, Youtube, Link, Play, Ban, ArrowRight, Calendar } from 'lucide-react';
 import { useToast } from './Toast';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { ThemeMode } from '../types';
@@ -168,81 +168,116 @@ export const SettingsScreen: React.FC<Props> = ({
         </h2>
       </div>
 
-      {/* --- AVAILABILITY WINDOW (ADMIN ONLY) --- */}
+      {/* --- AVAILABILITY WINDOW (ADMIN ONLY) - NEW MODERN DESIGN --- */}
       {isAdmin && (
-      <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm relative overflow-hidden">
-          <div className={`absolute top-0 left-0 w-1 h-full ${status ? 'bg-green-500' : 'bg-red-500'}`}></div>
+      <div className="bg-white dark:bg-zinc-800 rounded-3xl shadow-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden relative group">
           
-          <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-5 flex items-center gap-2">
-              <CalendarClock size={18}/> Janela de Disponibilidade
-          </h3>
-
-          {/* Status Banner */}
-          <div className={`p-4 rounded-xl border mb-6 flex items-center justify-between transition-colors ${status ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800/30' : 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800/30'}`}>
-              <div className="flex items-center gap-4">
-                  <div className={`p-3 rounded-full shadow-sm ${status ? 'bg-green-100 text-green-600 dark:bg-green-900/50 dark:text-green-400' : 'bg-red-100 text-red-600 dark:bg-red-900/50 dark:text-red-400'}`}>
-                      {status ? <Unlock size={24}/> : <Lock size={24}/>}
-                  </div>
-                  <div>
-                      <h4 className={`font-bold text-lg leading-tight ${status ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}`}>
-                          {status ? 'Aberta para Edição' : 'Fechada para Edição'}
-                      </h4>
-                      <p className={`text-xs mt-1 ${status ? 'text-green-600 dark:text-green-300' : 'text-red-600 dark:text-red-300'}`}>
-                          {status ? 'Membros podem alterar suas disponibilidades.' : 'Apenas administradores podem fazer alterações.'}
-                      </p>
-                  </div>
-              </div>
-          </div>
-
-          {/* Manual Date Inputs */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
-              <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-zinc-500 uppercase block ml-1">Data/Hora Abertura</label>
-                  <input 
-                      type="datetime-local" 
-                      value={availStart} 
-                      onChange={e => setAvailStart(e.target.value)} 
-                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100 transition-all font-medium"
-                  />
-              </div>
-              <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-zinc-500 uppercase block ml-1">Data/Hora Fechamento</label>
-                  <input 
-                      type="datetime-local" 
-                      value={availEnd} 
-                      onChange={e => setAvailEnd(e.target.value)} 
-                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100 transition-all font-medium"
-                  />
-              </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex flex-col sm:flex-row gap-3 pt-2">
-              <button 
-                  onClick={handleSaveAdvanced}
-                  className="flex-1 bg-zinc-800 dark:bg-zinc-100 hover:bg-zinc-700 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
-              >
-                  <Save size={18}/> Salvar Manualmente
-              </button>
+          {/* Status Header Area */}
+          <div className={`relative px-6 py-8 transition-colors duration-500 ${
+              status 
+                ? 'bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800' 
+                : 'bg-gradient-to-br from-zinc-700 via-zinc-800 to-black'
+          }`}>
+              {/* Pattern Overlay */}
+              <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
               
-              <div className="w-px bg-zinc-200 dark:bg-zinc-700 mx-2 hidden sm:block"></div>
-
-              <button 
-                  onClick={() => handleQuickAction('open')}
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 shadow-green-600/20"
-              >
-                  <Unlock size={18}/> Liberar e Notificar
-              </button>
-              <button 
-                  onClick={() => handleQuickAction('block')}
-                  className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 shadow-red-600/20"
-              >
-                  <Lock size={18}/> Bloquear Agora
-              </button>
+              <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div className="flex items-center gap-4">
+                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg border border-white/20 backdrop-blur-md ${status ? 'bg-emerald-500/30' : 'bg-red-500/20'}`}>
+                          {status ? <Unlock size={28} className="text-emerald-100"/> : <Lock size={28} className="text-red-100"/>}
+                      </div>
+                      <div>
+                          <div className="flex items-center gap-2 mb-1">
+                              <h3 className="text-white font-bold text-xl tracking-tight">Janela de Disponibilidade</h3>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border ${status ? 'bg-emerald-400 text-emerald-950 border-emerald-300' : 'bg-red-500 text-white border-red-400'}`}>
+                                  {status ? 'Aberta' : 'Fechada'}
+                              </span>
+                          </div>
+                          <p className="text-white/70 text-sm font-medium">
+                              {status 
+                                ? 'Os membros podem enviar suas datas.' 
+                                : 'A agenda está bloqueada para edições.'}
+                          </p>
+                      </div>
+                  </div>
+              </div>
           </div>
-          <p className="text-[10px] text-zinc-400 mt-2 text-center">
-              * Ao usar "Liberar e Notificar", uma notificação push será enviada para todos os membros.
-          </p>
+
+          <div className="p-6">
+              {/* Date Inputs - Modern "Connected" Style */}
+              <div className="mb-8">
+                  <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3 block flex items-center gap-2">
+                      <CalendarClock size={14}/> Configuração de Período
+                  </label>
+                  
+                  <div className="flex flex-col md:flex-row items-stretch md:items-center gap-0 bg-zinc-50 dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 p-1 shadow-inner">
+                      {/* Start Date */}
+                      <div className="flex-1 relative group">
+                          <label className="absolute left-4 top-2 text-[10px] font-bold text-zinc-400 uppercase">Abertura</label>
+                          <input 
+                              type="datetime-local" 
+                              value={availStart} 
+                              onChange={e => setAvailStart(e.target.value)} 
+                              className="w-full bg-transparent border-none rounded-xl pt-6 pb-2 px-4 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:bg-white dark:focus:bg-zinc-800 transition-colors"
+                          />
+                      </div>
+
+                      {/* Connector Arrow */}
+                      <div className="hidden md:flex items-center justify-center w-8 text-zinc-300 dark:text-zinc-600">
+                          <ArrowRight size={16} />
+                      </div>
+                      <div className="md:hidden h-px w-full bg-zinc-200 dark:bg-zinc-700 my-1"></div>
+
+                      {/* End Date */}
+                      <div className="flex-1 relative group">
+                          <label className="absolute left-4 top-2 text-[10px] font-bold text-zinc-400 uppercase">Fechamento</label>
+                          <input 
+                              type="datetime-local" 
+                              value={availEnd} 
+                              onChange={e => setAvailEnd(e.target.value)} 
+                              className="w-full bg-transparent border-none rounded-xl pt-6 pb-2 px-4 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:bg-white dark:focus:bg-zinc-800 transition-colors text-right md:text-left"
+                          />
+                      </div>
+                  </div>
+              </div>
+
+              {/* Actions Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Manual Save */}
+                  <button 
+                      onClick={handleSaveAdvanced}
+                      className="flex items-center justify-center gap-2 w-full py-4 bg-zinc-100 dark:bg-zinc-700/50 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-xl font-bold text-sm transition-all border border-transparent hover:border-zinc-300 dark:hover:border-zinc-600"
+                  >
+                      <Save size={18} />
+                      Salvar Alterações
+                  </button>
+
+                  {/* Quick Actions based on state */}
+                  {status ? (
+                      <button 
+                          onClick={() => handleQuickAction('block')}
+                          className="flex items-center justify-center gap-2 w-full py-4 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 rounded-xl font-bold text-sm transition-all shadow-sm hover:shadow active:scale-95"
+                      >
+                          <Lock size={18} />
+                          Bloquear Imediatamente
+                      </button>
+                  ) : (
+                      <button 
+                          onClick={() => handleQuickAction('open')}
+                          className="flex items-center justify-center gap-2 w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/40 active:scale-95 group"
+                      >
+                          <Unlock size={18} className="group-hover:rotate-12 transition-transform" />
+                          Liberar por 7 Dias
+                      </button>
+                  )}
+              </div>
+
+              {/* Footer Note */}
+              <div className="mt-4 flex items-center justify-center gap-2 text-[10px] text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 py-2 rounded-lg">
+                  <BellRing size={12} />
+                  <span>"Liberar por 7 dias" envia notificação automática para o time.</span>
+              </div>
+          </div>
       </div>
       )}
 
