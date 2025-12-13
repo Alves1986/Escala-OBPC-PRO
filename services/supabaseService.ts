@@ -295,7 +295,7 @@ export const fetchMinistryAvailability = async (ministryId: string): Promise<{ a
             }
 
             if (metadata.type !== 'GENERAL') {
-                // Se não for uma nota geral (que fica no dia 1), adiciona como indisponibilidade
+                // Se não for uma nota geral (que fica no dia 1), adiciona como registro de disponibilidade
                 if (!availability[name]) availability[name] = [];
                 availability[name].push(uiDateKey);
             }
@@ -341,7 +341,7 @@ export const saveMemberAvailability = async (
         const endDate = `${targetMonth}-${String(lastDay).padStart(2, '0')}`;
 
         // Deleta TODAS as entradas existentes para esse usuário nesse mês
-        // Isso garante que se o usuário desmarcar um dia, ele suma do banco.
+        // Isso garante que se o usuário desmarcar um dia (tornando-o indisponível), ele suma do banco.
         const { error: deleteError } = await supabase.from('availability')
             .delete()
             .eq('member_id', userId)
@@ -352,25 +352,21 @@ export const saveMemberAvailability = async (
 
         const rowsToInsert: any[] = [];
         
-        // 1. Processa Datas de Indisponibilidade
-        const unavailableDates = dates.filter(d => d.startsWith(targetMonth));
+        // 1. Processa Datas de Disponibilidade
+        const availableDates = dates.filter(d => d.startsWith(targetMonth));
         
-        for (const uiDate of unavailableDates) {
+        for (const uiDate of availableDates) {
             const [datePart, suffix] = uiDate.split('_'); 
             
             let metadata: any = {};
             if (suffix === 'M') metadata.period = 'M';
             if (suffix === 'N') metadata.period = 'N';
             
-            // Verifica se tem nota específica para este dia (ainda não implementado na UI, mas preparado no backend)
-            // const noteKey = datePart;
-            // if (notes && notes[noteKey]) metadata.text = notes[noteKey];
-
             rowsToInsert.push({
                 member_id: userId,
                 date: datePart, // YYYY-MM-DD
                 note: Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null,
-                status: 'available' // Nome legado, significa "tem registro"
+                status: 'available' 
             });
         }
 
@@ -380,11 +376,11 @@ export const saveMemberAvailability = async (
             const generalText = notes[generalNoteKey];
             const firstOfMonth = `${targetMonth}-01`;
             
-            // Verifica se já existe uma entrada para o dia 1 (indisponibilidade)
+            // Verifica se já existe uma entrada para o dia 1 (disponibilidade)
             const existingEntryIndex = rowsToInsert.findIndex(r => r.date === firstOfMonth);
             
             if (existingEntryIndex >= 0) {
-                // Se já existe, atualiza o metadata existente
+                // Se já existe (usuário marcou que pode dia 1), atualiza o metadata existente
                 const existingRow = rowsToInsert[existingEntryIndex];
                 let existingMeta = {};
                 try {
@@ -397,12 +393,12 @@ export const saveMemberAvailability = async (
                     text: generalText
                 });
             } else {
-                // Se não existe, cria uma nova entrada apenas para a nota
+                // Se não existe (usuário não pode dia 1, mas deixou nota), cria entrada apenas para a nota
                 rowsToInsert.push({
                     member_id: userId,
                     date: firstOfMonth,
                     note: JSON.stringify({ type: 'GENERAL', text: generalText }),
-                    status: 'available'
+                    status: 'available' // Mantém 'available' por constraint do banco, mas a lógica de leitura ignora TYPE=GENERAL
                 });
             }
         }

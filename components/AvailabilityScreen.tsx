@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { AvailabilityMap, AvailabilityNotesMap, User } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
-import { CalendarCheck, CheckCircle2, Lock, Save, MessageSquare, Sun, Moon, ShieldCheck, Unlock } from 'lucide-react';
+import { CalendarCheck, CheckCircle2, Lock, Save, MessageSquare, Sun, Moon, ShieldCheck, Unlock, ThumbsUp } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface Props {
@@ -37,46 +37,38 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   // --- LÓGICA DE JANELA DE DISPONIBILIDADE ---
   const getWindowState = () => {
-      // 1. Se não houver configuração, aberto por padrão
       if (!availabilityWindow?.start && !availabilityWindow?.end) return 'OPEN';
       
       const startStr = availabilityWindow.start;
       const endStr = availabilityWindow.end;
 
-      // 2. Verifica "Código de Bloqueio" (Epoch 1970)
       if (startStr?.includes('1970') || endStr?.includes('1970')) return 'CLOSED';
 
-      // 3. Validação de datas
       const start = new Date(startStr || '');
       const end = new Date(endStr || '');
       const now = new Date();
 
       if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-          return 'OPEN'; // Falha segura: Aberto
+          return 'OPEN'; 
       }
       
-      // 4. Comparação Temporal
       return (now >= start && now <= end) ? 'OPEN' : 'CLOSED';
   };
 
   const windowState = getWindowState();
   const isEditable = isAdmin || windowState === 'OPEN';
 
-  // Inicializa com o usuário atual se não for admin (ou se for admin, mas sem seleção ainda)
   useEffect(() => {
     if (currentUser && currentUser.name && !isAdmin) {
         setSelectedMember(currentUser.name);
     } else if (isAdmin && !selectedMember && currentUser) {
-        // Admin começa vendo a si mesmo ou o primeiro da lista
         setSelectedMember(currentUser.name);
     }
   }, [currentUser, isAdmin]);
 
-  // Carrega dados do banco para o estado temporário (tempDates/generalNote)
   useEffect(() => {
     if (selectedMember) {
         const storedDates = availability[selectedMember] || [];
-        // Cria uma cópia para evitar mutação direta
         setTempDates([...storedDates]);
         
         const genKey = `${selectedMember}_${currentMonth}-00`;
@@ -100,8 +92,8 @@ export const AvailabilityScreen: React.FC<Props> = ({
       
       const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
       
-      // Encontra se já existe alguma entrada para este dia (Full, Morning ou Night)
-      // O .find retorna a string completa ex: "2023-10-05" ou "2023-10-05_M"
+      // Verifica o estado atual deste dia
+      // Formatos no tempDates: "YYYY-MM-DD" (Full), "YYYY-MM-DD_M" (Manhã), "YYYY-MM-DD_N" (Noite)
       const existingEntry = tempDates.find(d => d.startsWith(dateStr));
 
       const dateObj = new Date(year, month - 1, day);
@@ -109,28 +101,27 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
       let newDates = [...tempDates];
 
-      // Remove a entrada existente para este dia (limpeza prévia)
+      // Remove qualquer entrada existente para este dia antes de adicionar a nova
       if (existingEntry) {
           newDates = newDates.filter(d => !d.startsWith(dateStr));
       }
 
-      // Lógica de Toggle
+      // Lógica de Toggle (Disponibilidade Positiva)
       if (isSunday) {
-          // Domingo: Vazio -> Full -> Manhã -> Noite -> Vazio
+          // Domingo: Vazio (Não posso) -> Full (Posso Tudo) -> Manhã (Só Manhã) -> Noite (Só Noite) -> Vazio
           if (!existingEntry) {
-              newDates.push(dateStr); // Full
+              newDates.push(dateStr); // Full Available
           } else if (existingEntry === dateStr) {
-              newDates.push(`${dateStr}_M`); // Manhã
+              newDates.push(`${dateStr}_M`); // Available Morning Only
           } else if (existingEntry.endsWith('_M')) {
-              newDates.push(`${dateStr}_N`); // Noite
+              newDates.push(`${dateStr}_N`); // Available Night Only
           } 
-          // Se era Noite (_N), já foi removido no filtro acima, então fica vazio
+          // Se era Noite (_N), já foi removido no filtro acima, volta para Vazio (Indisponível)
       } else {
-          // Dias Normais: Vazio -> Full -> Vazio
+          // Dias Normais: Vazio (Não posso) -> Full (Posso) -> Vazio
           if (!existingEntry) {
-              newDates.push(dateStr); // Full (Unavailable)
+              newDates.push(dateStr); // Full Available
           }
-          // Se já existia, foi removido, então fica vazio (Available)
       }
       
       setTempDates(newDates);
@@ -141,10 +132,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
       const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
       const found = tempDates.find(d => d.startsWith(dateStr));
       
-      if (!found) return 'NONE'; // Available
-      if (found.endsWith('_M')) return 'MORNING'; // Unavailable Morning
-      if (found.endsWith('_N')) return 'NIGHT';   // Unavailable Night
-      return 'FULL'; // Unavailable All Day
+      if (!found) return 'NONE'; // Unavailable (Default)
+      if (found.endsWith('_M')) return 'MORNING'; // Available Morning
+      if (found.endsWith('_N')) return 'NIGHT';   // Available Night
+      return 'FULL'; // Available All Day
   };
 
   const handleSave = async () => {
@@ -159,8 +150,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
       try {
           const notesToSave: Record<string, string> = {};
           if (generalNote.trim()) {
-              // A chave da nota precisa seguir o padrão esperado pelo hook useMinistryData -> supabaseService
-              // O service espera: notes[`${targetMonth}-00`] = text
               notesToSave[`${currentMonth}-00`] = generalNote.trim();
           }
 
@@ -182,12 +171,12 @@ export const AvailabilityScreen: React.FC<Props> = ({
       {/* Header Controls */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
           <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
+              <div className="p-2 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg">
                   <CalendarCheck size={20} />
               </div>
               <div>
                   <h2 className="font-bold text-zinc-800 dark:text-white">Disponibilidade</h2>
-                  <p className="text-xs text-zinc-500">Informe quando você <span className="font-bold text-red-500">NÃO</span> pode servir.</p>
+                  <p className="text-xs text-zinc-500">Marque os dias que você <span className="font-bold text-green-600 dark:text-green-400">PODERÁ</span> servir.</p>
               </div>
           </div>
 
@@ -255,16 +244,21 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
                   {days.map(day => {
                       const status = getDayStatus(day);
-                      let styles = "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700";
+                      // Default style (NONE/Unavailable) -> Grey/Faded
+                      let styles = "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-transparent";
                       let icon = null;
 
                       if (status === 'FULL') {
-                          styles = "bg-red-500 text-white shadow-md ring-2 ring-red-400 ring-offset-1 dark:ring-offset-zinc-900";
+                          // Available All Day -> Green
+                          styles = "bg-green-500 text-white shadow-md ring-2 ring-green-400 ring-offset-1 dark:ring-offset-zinc-900 font-bold";
+                          icon = <ThumbsUp size={12} className="absolute top-1 right-1 opacity-90"/>;
                       } else if (status === 'MORNING') {
-                          styles = "bg-orange-400 text-white shadow-md ring-2 ring-orange-300 ring-offset-1 dark:ring-offset-zinc-900";
-                          icon = <Sun size={12} className="absolute top-1 right-1 opacity-90"/>;
+                          // Available Morning Only -> Yellow/Orange
+                          styles = "bg-yellow-400 text-yellow-900 shadow-md ring-2 ring-yellow-300 ring-offset-1 dark:ring-offset-zinc-900 font-bold";
+                          icon = <Sun size={12} className="absolute top-1 right-1 opacity-80"/>;
                       } else if (status === 'NIGHT') {
-                          styles = "bg-indigo-500 text-white shadow-md ring-2 ring-indigo-400 ring-offset-1 dark:ring-offset-zinc-900";
+                          // Available Night Only -> Blue/Indigo
+                          styles = "bg-blue-600 text-white shadow-md ring-2 ring-blue-500 ring-offset-1 dark:ring-offset-zinc-900 font-bold";
                           icon = <Moon size={12} className="absolute top-1 right-1 opacity-90"/>;
                       }
 
@@ -273,21 +267,21 @@ export const AvailabilityScreen: React.FC<Props> = ({
                               key={day}
                               onClick={() => handleDayClick(day)}
                               className={`aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all active:scale-95 ${styles}`}
-                              title={status === 'FULL' ? 'Indisponível o dia todo' : status === 'NONE' ? 'Disponível' : `Indisponível: ${status}`}
+                              title={status === 'FULL' ? 'Disponível o dia todo' : status === 'NONE' ? 'Indisponível' : status === 'MORNING' ? 'Disponível apenas Manhã' : 'Disponível apenas Noite'}
                           >
-                              <span className="text-sm sm:text-base font-bold">{day}</span>
+                              <span className="text-sm sm:text-base">{day}</span>
                               {icon}
                           </button>
                       );
                   })}
               </div>
 
-              {/* Legend */}
+              {/* Legend - Updated for Positive Availability */}
               <div className="flex flex-wrap justify-center gap-4 text-[10px] text-zinc-500 uppercase font-bold tracking-wide mb-6">
-                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600"/> Disponível</div>
-                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-red-500"/> Indisponível</div>
-                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-orange-400"/> Indisp. Manhã</div>
-                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-indigo-500"/> Indisp. Noite</div>
+                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600"/> Indisponível</div>
+                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-green-500"/> Disponível</div>
+                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-yellow-400"/> Só Manhã</div>
+                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-blue-600"/> Só Noite</div>
               </div>
 
               {/* Note Section */}
@@ -299,8 +293,8 @@ export const AvailabilityScreen: React.FC<Props> = ({
                   <textarea 
                       value={generalNote}
                       onChange={(e) => { setGeneralNote(e.target.value); setHasChanges(true); }}
-                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 text-sm text-zinc-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]"
-                      placeholder={isEditable ? "Ex: Viajarei do dia 10 ao 20..." : "Edição de observações encerrada."}
+                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 text-sm text-zinc-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-green-500 min-h-[80px]"
+                      placeholder={isEditable ? "Ex: Chego atrasado no dia 15..." : "Edição de observações encerrada."}
                       disabled={!isEditable}
                   />
               </div>
@@ -310,10 +304,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
                   <button 
                       onClick={handleSave}
                       disabled={isSaving}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-full font-bold shadow-xl flex items-center gap-2 transition-transform hover:scale-105 active:scale-95 disabled:opacity-70 ring-2 ring-white dark:ring-zinc-900"
+                      className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-full font-bold shadow-xl flex items-center gap-2 transition-transform hover:scale-105 active:scale-95 disabled:opacity-70 ring-2 ring-white dark:ring-zinc-900"
                   >
                       <Save size={20} className={isSaving ? "animate-spin" : ""} />
-                      {isSaving ? "Salvando..." : "Salvar Alterações"}
+                      {isSaving ? "Salvando..." : "Confirmar Disponibilidade"}
                   </button>
               </div>
           </div>
