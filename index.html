@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
   <head>
@@ -18,7 +19,7 @@
     <link rel="apple-touch-icon" href="/icon.png" />
 
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
         darkMode: 'class',
@@ -38,17 +39,28 @@
               }
             },
             animation: {
-              'slide-up': 'slideUp 0.3s ease-out',
-              'fade-in': 'fadeIn 0.2s ease-out',
+              'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+              'fade-in': 'fadeIn 0.3s ease-out',
+              'wave': 'wave 2.5s infinite',
             },
             keyframes: {
               slideUp: {
-                '0%': { transform: 'translateY(100%)', opacity: '0' },
+                '0%': { transform: 'translateY(20px)', opacity: '0' },
                 '100%': { transform: 'translateY(0)', opacity: '1' },
               },
               fadeIn: {
                 '0%': { opacity: '0' },
                 '100%': { opacity: '1' },
+              },
+              wave: {
+                '0%': { transform: 'rotate(0.0deg)' },
+                '10%': { transform: 'rotate(14.0deg)' },
+                '20%': { transform: 'rotate(-8.0deg)' },
+                '30%': { transform: 'rotate(14.0deg)' },
+                '40%': { transform: 'rotate(-4.0deg)' },
+                '50%': { transform: 'rotate(10.0deg)' },
+                '60%': { transform: 'rotate(0.0deg)' },
+                '100%': { transform: 'rotate(0.0deg)' },
               }
             }
           }
@@ -56,11 +68,26 @@
       }
     </script>
     <style>
-      body { @apply bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100; }
-      /* Custom Scrollbar */
+      body { 
+        @apply text-zinc-900 dark:text-zinc-100 transition-colors duration-300;
+        /* Premium Gradient Background */
+        background-image: radial-gradient(ellipse at top right, rgba(20, 184, 166, 0.15), transparent 50%),
+                          radial-gradient(ellipse at bottom left, rgba(99, 102, 241, 0.15), transparent 50%);
+        background-color: #f8fafc; /* zinc-50 equivalent */
+        background-attachment: fixed;
+      }
+      .dark body {
+        background-image: radial-gradient(ellipse at top right, rgba(20, 184, 166, 0.1), transparent 40%),
+                          radial-gradient(ellipse at bottom left, rgba(99, 102, 241, 0.1), transparent 40%);
+        background-color: #09090b; /* zinc-950 */
+      }
+
+      /* Refined Scrollbar */
       ::-webkit-scrollbar { width: 6px; height: 6px; }
-      ::-webkit-scrollbar-track { @apply bg-transparent; }
-      ::-webkit-scrollbar-thumb { @apply bg-zinc-300 dark:bg-zinc-700 rounded-full; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { 
+        @apply bg-zinc-300/50 dark:bg-zinc-700/50 rounded-full hover:bg-zinc-400 dark:hover:bg-zinc-600 transition-colors; 
+      }
     </style>
   <script type="importmap">
 {

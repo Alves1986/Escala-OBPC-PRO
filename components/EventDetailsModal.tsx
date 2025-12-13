@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Clock, Calendar, Save, User, RefreshCcw, Lock, CheckSquare, Square, UserPlus } from 'lucide-react';
+import { X, Clock, Calendar, Save, User, RefreshCcw, Lock, CheckSquare, Square, UserPlus, CalendarPlus } from 'lucide-react';
 import { Role, ScheduleMap, User as UserType, TeamMemberProfile } from '../types';
+import { generateGoogleCalendarUrl } from '../utils/dateUtils';
 
 interface Props {
   isOpen: boolean;
@@ -48,6 +50,14 @@ export const EventDetailsModal: React.FC<Props> = ({
 
   // Determine if user is scheduled for this event
   const userAssignment = currentUser ? expandedRoles.find(r => schedule[`${event.iso}_${r.keySuffix}`] === currentUser.name) : null;
+
+  const googleCalUrl = generateGoogleCalendarUrl(
+      `Escala: ${title}`,
+      event.iso,
+      userAssignment 
+        ? `Você está escalado como: ${userAssignment.display}.\nMinistério: ${ministryId?.toUpperCase()}`
+        : `Evento do ministério ${ministryId?.toUpperCase()}`
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -112,11 +122,21 @@ export const EventDetailsModal: React.FC<Props> = ({
                         </div>
                     </div>
 
+                    {/* Google Calendar Link */}
+                    <a 
+                        href={googleCalUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-xl border border-blue-100 dark:border-blue-900/40 text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                    >
+                        <CalendarPlus size={16}/> Adicionar ao Google Agenda
+                    </a>
+
                     {/* Apply to All Checkbox */}
                     {canEdit && (
                         <div 
                             onClick={() => setApplyToAll(!applyToAll)}
-                            className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-800/30 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/20 transition-colors"
+                            className="flex items-start gap-3 p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-zinc-200 dark:border-zinc-700 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                         >
                             <div className={`mt-0.5 ${applyToAll ? 'text-blue-600 dark:text-blue-400' : 'text-zinc-400'}`}>
                                 {applyToAll ? <CheckSquare size={18} /> : <Square size={18} />}

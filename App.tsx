@@ -660,10 +660,10 @@ const InnerApp = () => {
                 currentMonth={currentMonth}
                 onMonthChange={setCurrentMonth}
                 currentUser={currentUser}
-                onSaveAvailability={async (member, dates, notes) => {
+                onSaveAvailability={async (member, dates, notes, targetMonth) => {
                      const p = publicMembers.find(pm => pm.name === member);
                      if (p) { 
-                         await Supabase.saveMemberAvailability(p.id, member, dates, notes); 
+                         await Supabase.saveMemberAvailability(p.id, member, dates, targetMonth, notes); 
                          loadData(); 
                      }
                 }}
@@ -820,7 +820,7 @@ const InnerApp = () => {
         )}
 
         <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ ...e, iso: e.iso }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, e); loadData(); }} onRemove={async (id) => { loadData(); }} />
-        <AvailabilityModal isOpen={isAvailModalOpen} onClose={() => setAvailModalOpen(false)} members={publicMembers.map(m => m.name)} availability={availability} onUpdate={async (member, dates) => { const p = publicMembers.find(pm => pm.name === member); if (p) { await Supabase.saveMemberAvailability(p.id, member, dates); loadData(); } }} currentMonth={currentMonth} />
+        <AvailabilityModal isOpen={isAvailModalOpen} onClose={() => setAvailModalOpen(false)} members={publicMembers.map(m => m.name)} availability={availability} onUpdate={async (member, dates) => { const p = publicMembers.find(pm => pm.name === member); if (p) { await Supabase.saveMemberAvailability(p.id, member, dates, currentMonth); loadData(); } }} currentMonth={currentMonth} />
         <RolesModal isOpen={isRolesModalOpen} onClose={() => setRolesModalOpen(false)} roles={roles} onUpdate={async (newRoles) => { await Supabase.saveMinistrySettings(ministryId, undefined, newRoles); loadData(); }} />
         <InstallBanner isVisible={showInstallBanner} onInstall={handleInstallApp} onDismiss={() => setShowInstallBanner(false)} appName={ministryTitle || "Gestão Escala"} />
         <InstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />

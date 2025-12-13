@@ -57,3 +57,37 @@ export const generateMonthEvents = (year: number, month: number, customEvents: C
   // Ordena por string ISO, que funciona cronologicamente de forma consistente
   return events.sort((a, b) => a.iso.localeCompare(b.iso));
 };
+
+export const generateGoogleCalendarUrl = (title: string, isoDateTime: string, description: string = ""): string => {
+    // Input: "2023-10-25T19:30"
+    try {
+        const dateObj = new Date(isoDateTime);
+        const endDateObj = new Date(dateObj.getTime() + 2 * 60 * 60 * 1000); // +2 horas de duração padrão
+
+        // Formata para YYYYMMDDTHHmmss (Sem Z para usar horário local do usuário/agenda)
+        const format = (d: Date) => {
+            return d.getFullYear().toString() +
+            (d.getMonth() + 1).toString().padStart(2, '0') +
+            d.getDate().toString().padStart(2, '0') +
+            'T' +
+            d.getHours().toString().padStart(2, '0') +
+            d.getMinutes().toString().padStart(2, '0') +
+            '00';
+        };
+
+        const start = format(dateObj);
+        const end = format(endDateObj);
+
+        const params = new URLSearchParams({
+            action: 'TEMPLATE',
+            text: title,
+            dates: `${start}/${end}`,
+            details: description,
+        });
+
+        return `https://calendar.google.com/calendar/render?${params.toString()}`;
+    } catch (e) {
+        console.error("Erro ao gerar link do calendário", e);
+        return "#";
+    }
+};

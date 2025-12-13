@@ -1,4 +1,5 @@
 
+// ... existing imports ...
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, Calendar, CalendarCheck, RefreshCcw, Music, 
@@ -58,13 +59,9 @@ const InnerApp = () => {
   
   const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
   
-  // Lógica de Tabs Atualizada: Detecta retorno do Spotify IMEDIATAMENTE na inicialização
   const [currentTab, setCurrentTab] = useState(() => {
       if (typeof window !== 'undefined') {
-          // Se tiver voltando do Spotify com token no hash, força a aba de gerenciamento
           if (window.location.hash && window.location.hash.includes('access_token')) {
-              // Verifica se é admin para decidir a aba correta, mas garante que não vá para dashboard
-              // Como currentUser pode ser null aqui, assumimos repertoire-manager por segurança se tiver hash
               return 'repertoire-manager'; 
           }
           const params = new URLSearchParams(window.location.search);
@@ -73,7 +70,6 @@ const InnerApp = () => {
       return 'dashboard';
   });
 
-  // Ajuste fino de Tab se voltar do Spotify (Garante permissão correta após carregar user)
   useEffect(() => {
       if (window.location.hash && window.location.hash.includes('access_token') && currentUser) {
           const target = currentUser.role === 'admin' ? 'repertoire-manager' : 'repertoire';
@@ -131,11 +127,9 @@ const InnerApp = () => {
       }
   }, [currentUser]);
 
-  // Auto-refresh data on window focus
   useEffect(() => {
       const handleFocus = () => {
           if (currentUser && ministryId) {
-              // Silently refresh data when user comes back to the app
               loadData();
           }
       };
@@ -147,7 +141,6 @@ const InnerApp = () => {
   useEffect(() => {
       const url = new URL(window.location.href);
       if (url.searchParams.get('tab') !== currentTab) {
-          // Não sobrescreve se tiver hash do spotify
           if (!window.location.hash.includes('access_token')) {
               url.searchParams.set('tab', currentTab);
               try {
@@ -212,14 +205,9 @@ const InnerApp = () => {
   };
 
   const handleSwitchMinistry = async (id: string) => {
-      // 1. Atualiza estado local imediatamente para feedback visual
       setMinistryId(id);
-      
-      // 2. Atualiza contexto do usuário
       if (currentUser) {
           setCurrentUser({ ...currentUser, ministryId: id });
-          
-          // 3. CRUCIAL: Persiste a escolha no banco para não perder ao recarregar token
           if (currentUser.id) {
               await Supabase.updateProfileMinistry(currentUser.id, id);
           }
@@ -308,10 +296,9 @@ const InnerApp = () => {
 
       const myEvents: any[] = [];
       
-      // Filter events where user is assigned
       Object.keys(schedule).forEach(key => {
           if (schedule[key] === currentUser.name) {
-              const iso = key.slice(0, 16); // Extract YYYY-MM-DDTHH:mm
+              const iso = key.slice(0, 16);
               const role = key.split('_').pop() || 'Escala';
               const eventInfo = events.find(e => e.iso.startsWith(iso));
               
@@ -331,7 +318,6 @@ const InnerApp = () => {
           return;
       }
 
-      // Generate ICS content
       let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//EscalaOBPC//PT\n";
       
       myEvents.forEach(evt => {
@@ -348,7 +334,6 @@ const InnerApp = () => {
       
       icsContent += "END:VCALENDAR";
 
-      // Trigger Download
       const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
       const link = document.createElement('a');
       link.href = window.URL.createObjectURL(blob);
@@ -362,11 +347,10 @@ const InnerApp = () => {
 
   const calculateEndTime = (iso: string) => {
       const date = new Date(iso);
-      date.setHours(date.getHours() + 2); // Default 2 hours duration
+      date.setHours(date.getHours() + 2); 
       return date.toISOString().slice(0, 19);
   };
 
-  // --- AI HANDLER ---
   const handleAiAutoFill = async () => {
       if (Object.keys(schedule).length > 0) {
           if (!confirm("A escala já possui itens preenchidos. Deseja sobrescrever usando Inteligência Artificial?")) return;
@@ -384,9 +368,7 @@ const InnerApp = () => {
               ministryId
           });
 
-          // Update State Local
           setSchedule(generatedSchedule);
-          // Save Bulk to DB with Strict Mode enabled to prevent event duplication
           await Supabase.saveScheduleBulk(ministryId, generatedSchedule, true);
           
           addToast("Escala gerada com sucesso!", "success");
@@ -669,10 +651,10 @@ const InnerApp = () => {
                 currentMonth={currentMonth}
                 onMonthChange={setCurrentMonth}
                 currentUser={currentUser}
-                onSaveAvailability={async (member, dates, notes) => {
+                onSaveAvailability={async (member, dates, notes, targetMonth) => {
                      const p = publicMembers.find(pm => pm.name === member);
                      if (p) { 
-                         await Supabase.saveMemberAvailability(p.id, member, dates, notes); 
+                         await Supabase.saveMemberAvailability(p.id, member, dates, targetMonth, notes); 
                          loadData(); 
                      }
                 }}
@@ -680,6 +662,7 @@ const InnerApp = () => {
             />
         )}
 
+        {/* ... (Other Tabs) ... */}
         {currentTab === 'swaps' && (
             <SwapRequestsScreen 
                 schedule={schedule}
@@ -778,8 +761,72 @@ const InnerApp = () => {
              </div>
         )}
 
+        {currentTab === 'report' && isAdmin && (
+            <AvailabilityReportScreen 
+                availability={availability}
+                registeredMembers={publicMembers}
+                membersMap={membersMap}
+                currentMonth={currentMonth}
+                onMonthChange={setCurrentMonth}
+                availableRoles={roles}
+                onRefresh={async () => { await loadData(); }}
+            />
+        )}
+
+        {currentTab === 'profile' && (
+            <ProfileScreen 
+                user={currentUser}
+                onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => {
+                    const res = await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId);
+                    if (res.success) {
+                        addToast(res.message, "success");
+                        if (currentUser) {
+                            setCurrentUser({ ...currentUser, name, whatsapp, avatar_url: avatar || currentUser.avatar_url, functions: funcs, birthDate: bdate });
+                        }
+                        loadData(); // Reload to update other components
+                    } else {
+                        addToast(res.message, "error");
+                    }
+                }}
+                availableRoles={roles}
+            />
+        )}
+
+        {currentTab === 'settings' && (
+            <SettingsScreen 
+                initialTitle={ministryTitle} 
+                ministryId={ministryId}
+                themeMode={themeMode}
+                onSetThemeMode={handleSetThemeMode}
+                onSaveTheme={handleSaveTheme}
+                onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, newTitle); setMinistryTitle(newTitle); addToast("Nome do ministério atualizado!", "success"); }}
+                onAnnounceUpdate={async () => { await Supabase.sendNotificationSQL(ministryId, { title: "Atualização de Sistema", message: "Uma nova versão do app está disponível. Recarregue a página para aplicar.", type: "warning" }); addToast("Notificação de atualização enviada.", "success"); }}
+                onEnableNotifications={handleEnableNotifications}
+                onSaveAvailabilityWindow={async (start, end) => { 
+                    await Supabase.saveMinistrySettings(ministryId, undefined, undefined, start, end); 
+                    loadData(); 
+                }}
+                availabilityWindow={availabilityWindow}
+                isAdmin={isAdmin}
+            />
+        )}
+
         <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ ...e, iso: e.iso }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, e); loadData(); }} onRemove={async (id) => { loadData(); }} />
-        <AvailabilityModal isOpen={isAvailModalOpen} onClose={() => setAvailModalOpen(false)} members={publicMembers.map(m => m.name)} availability={availability} onUpdate={async (member, dates) => { const p = publicMembers.find(pm => pm.name === member); if (p) { await Supabase.saveMemberAvailability(p.id, member, dates); loadData(); } }} currentMonth={currentMonth} />
+        <AvailabilityModal 
+            isOpen={isAvailModalOpen} 
+            onClose={() => setAvailModalOpen(false)} 
+            members={publicMembers.map(m => m.name)} 
+            availability={availability} 
+            onUpdate={async (member, dates) => { 
+                const p = publicMembers.find(pm => pm.name === member); 
+                if (p) { 
+                    // Use new signature for robust saving, passing currentMonth
+                    await Supabase.saveMemberAvailability(p.id, member, dates, currentMonth, {}); 
+                    loadData(); 
+                } 
+            }} 
+            currentMonth={currentMonth} 
+        />
         <RolesModal isOpen={isRolesModalOpen} onClose={() => setRolesModalOpen(false)} roles={roles} onUpdate={async (newRoles) => { await Supabase.saveMinistrySettings(ministryId, undefined, newRoles); loadData(); }} />
         <InstallBanner isVisible={showInstallBanner} onInstall={handleInstallApp} onDismiss={() => setShowInstallBanner(false)} appName={ministryTitle || "Gestão Escala"} />
         <InstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />

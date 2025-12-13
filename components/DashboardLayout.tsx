@@ -1,3 +1,4 @@
+
 import React, { ReactNode, useState } from 'react';
 import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle } from 'lucide-react';
 import { User, AppNotification } from '../types';
@@ -23,15 +24,12 @@ interface Props {
   onTabChange: (tab: string) => void;
   mainNavItems: NavItem[];
   managementNavItems: NavItem[];
-  // Props de Notificação
   notifications: AppNotification[];
   onNotificationsUpdate: (n: AppNotification[]) => void;
-  // Props de PWA
   onInstall?: () => void;
   isStandalone?: boolean;
-  // Props de Multi-Tenancy
   onSwitchMinistry?: (id: string) => void;
-  onOpenJoinMinistry?: () => void; // New Prop
+  onOpenJoinMinistry?: () => void; 
 }
 
 const getMinistryLabel = (id: string) => {
@@ -67,11 +65,7 @@ export const DashboardLayout: React.FC<Props> = ({
       } catch (e) {
         console.error("Erro geral na atualização:", e);
       } finally {
-        if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-             window.location.href = "https://escalaobpcpro.vercel.app";
-        } else {
-             window.location.reload();
-        }
+        window.location.reload();
       }
     }, 500);
   };
@@ -82,17 +76,22 @@ export const DashboardLayout: React.FC<Props> = ({
       <button
         key={item.id}
         onClick={() => { onTabChange(item.id); setSidebarOpen(false); }}
-        className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 group ${
+        className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-300 group relative overflow-hidden ${
           isActive 
-            ? 'bg-teal-600 text-white shadow-lg shadow-teal-900/20' 
-            : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white'
+            ? 'text-white shadow-lg shadow-teal-500/30' 
+            : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-white'
         }`}
       >
-        <span className={isActive ? 'text-white' : 'text-zinc-500 dark:text-zinc-500 group-hover:text-zinc-800 dark:group-hover:text-white transition-colors'}>
+        {/* Active Background Gradient */}
+        {isActive && (
+            <div className="absolute inset-0 bg-gradient-to-r from-teal-600 to-emerald-600 z-0" />
+        )}
+        
+        <span className={`relative z-10 transition-colors ${isActive ? 'text-white' : 'text-zinc-500 dark:text-zinc-500 group-hover:text-zinc-800 dark:group-hover:text-white'}`}>
           {item.icon}
         </span>
-        <span className="flex-1 text-left">{item.label}</span>
-        {isActive && <ChevronRight size={14} className="opacity-50" />}
+        <span className="flex-1 text-left relative z-10">{item.label}</span>
+        {isActive && <ChevronRight size={14} className="opacity-70 relative z-10" />}
       </button>
     );
   };
@@ -100,11 +99,11 @@ export const DashboardLayout: React.FC<Props> = ({
   const renderUserAvatar = () => {
     if (currentUser?.avatar_url) {
       return (
-        <img src={currentUser.avatar_url} alt={currentUser.name} className="w-10 h-10 rounded-full object-cover border-2 border-zinc-200 dark:border-zinc-700" />
+        <img src={currentUser.avatar_url} alt={currentUser.name} className="w-10 h-10 rounded-full object-cover border-2 border-white dark:border-zinc-700 shadow-sm" />
       );
     }
     return (
-      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-teal-500 to-emerald-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
+      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white font-bold text-sm shadow-md border-2 border-white dark:border-zinc-700">
          {currentUser?.name.charAt(0).toUpperCase()}
       </div>
     );
@@ -113,59 +112,60 @@ export const DashboardLayout: React.FC<Props> = ({
   const renderMobileAvatar = () => {
     if (currentUser?.avatar_url) {
         return (
-          <img src={currentUser.avatar_url} alt={currentUser.name} className="w-8 h-8 rounded-full object-cover border border-zinc-300 dark:border-zinc-700" />
+          <img src={currentUser.avatar_url} alt={currentUser.name} className="w-9 h-9 rounded-full object-cover border border-zinc-200 dark:border-zinc-700 shadow-sm" />
         );
       }
       return (
-        <div className="w-8 h-8 rounded-full bg-teal-600 flex items-center justify-center text-white text-xs font-bold">
+        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
            {currentUser?.name.charAt(0)}
         </div>
       );
     }
 
-  // Verifica se o usuário tem múltiplos ministérios
   const hasMultipleMinistries = currentUser?.allowedMinistries && currentUser.allowedMinistries.length > 1;
 
   return (
-    <div className={`flex h-screen overflow-hidden bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 transition-colors duration-300 font-sans`}>
+    <div className="flex h-screen overflow-hidden bg-transparent font-sans">
+      
       {/* Mobile Backdrop */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-20 bg-black/60 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden transition-opacity duration-300" onClick={() => setSidebarOpen(false)} />
       )}
 
-      {/* Sidebar Navigation */}
-      <aside className={`fixed inset-y-0 left-0 z-30 w-72 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 flex flex-col shadow-xl lg:shadow-none ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      {/* Sidebar Navigation - Glassmorphism */}
+      <aside 
+        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-xl border-r border-zinc-200/50 dark:border-zinc-800/50 transform transition-transform duration-300 ease-cubic lg:translate-x-0 lg:static lg:inset-0 flex flex-col shadow-2xl lg:shadow-none ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+      >
         
-        {/* Header Logo & Ministry Selector */}
-        <div className="relative px-6 py-6 border-b border-zinc-200 dark:border-zinc-800/50 shrink-0">
+        {/* Header */}
+        <div className="relative px-6 py-8 border-b border-zinc-100 dark:border-zinc-800/50 shrink-0">
            <div className="flex items-center gap-3">
                {imgError ? (
                  <div className="w-10 h-10 rounded-xl bg-teal-600 flex items-center justify-center text-white shadow-lg shadow-teal-900/20"><Layout size={20} /></div>
                ) : (
-                 <img src="/icon.png?v=2" alt="Logo" className="w-10 h-10 rounded-xl shadow-lg" onError={() => setImgError(true)} />
+                 <img src="/icon.png?v=2" alt="Logo" className="w-11 h-11 rounded-2xl shadow-md" onError={() => setImgError(true)} />
                )}
                
                <div className="flex-1 min-w-0">
-                 {/* Seletor de Ministério */}
                  <button 
                     onClick={() => setMinistryMenuOpen(!ministryMenuOpen)}
-                    className="flex items-center gap-1 w-full group cursor-pointer hover:opacity-80"
+                    className="flex items-center gap-1 w-full group cursor-pointer hover:opacity-80 transition-opacity"
                  >
-                     <h1 className="text-lg font-bold text-zinc-900 dark:text-white tracking-tight leading-none truncate">{title}</h1>
-                     <ChevronDown size={14} className="text-zinc-500 transition-transform duration-200" style={{ transform: ministryMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />
+                     <h1 className="text-base font-bold text-zinc-900 dark:text-white tracking-tight leading-tight truncate">{title}</h1>
+                     <ChevronDown size={14} className="text-zinc-400 transition-transform duration-200" style={{ transform: ministryMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />
                  </button>
-                 <span className="text-[10px] text-zinc-500 font-medium tracking-wider uppercase block mt-0.5">Painel Administrativo</span>
+                 <span className="text-[10px] text-zinc-400 font-semibold tracking-widest uppercase block mt-0.5">Painel Administrativo</span>
                </div>
                
-               <button onClick={() => setSidebarOpen(false)} className="lg:hidden ml-auto text-zinc-500"><X size={24}/></button>
+               <button onClick={() => setSidebarOpen(false)} className="lg:hidden ml-auto p-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"><X size={20}/></button>
            </div>
 
-           {/* Dropdown de Troca de Ministério */}
+           {/* Dropdown Menu */}
            {ministryMenuOpen && (
                <>
                    <div className="fixed inset-0 z-30" onClick={() => setMinistryMenuOpen(false)} />
-                   <div className="absolute top-20 left-4 right-4 bg-white dark:bg-zinc-800 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-700 z-40 overflow-hidden animate-fade-in">
-                       <p className="px-3 py-2 text-[10px] font-bold text-zinc-500 uppercase bg-zinc-50 dark:bg-zinc-900/50">Trocar Ministério</p>
+                   <div className="absolute top-24 left-4 right-4 bg-white dark:bg-zinc-800 rounded-2xl shadow-xl border border-zinc-200/50 dark:border-zinc-700/50 z-40 overflow-hidden animate-fade-in ring-1 ring-black/5">
+                       <p className="px-4 py-2.5 text-[10px] font-bold text-zinc-400 uppercase bg-zinc-50 dark:bg-zinc-900/50">Trocar Ministério</p>
                        {currentUser?.allowedMinistries?.map(mid => {
                            const isCurrent = currentUser.ministryId === mid;
                            return (
@@ -175,15 +175,14 @@ export const DashboardLayout: React.FC<Props> = ({
                                        if (onSwitchMinistry) onSwitchMinistry(mid);
                                        setMinistryMenuOpen(false);
                                    }}
-                                   className={`w-full text-left px-4 py-3 text-sm flex items-center justify-between hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-colors ${isCurrent ? 'bg-teal-50 dark:bg-teal-900/10 text-teal-600 dark:text-teal-400 font-bold' : 'text-zinc-700 dark:text-zinc-300'}`}
+                                   className={`w-full text-left px-4 py-3 text-sm flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-700/50 transition-colors ${isCurrent ? 'bg-teal-50/50 dark:bg-teal-900/10 text-teal-600 dark:text-teal-400 font-bold' : 'text-zinc-700 dark:text-zinc-300'}`}
                                >
                                    {getMinistryLabel(mid)}
-                                   {isCurrent && <Check size={16} />}
+                                   {isCurrent && <Check size={16} className="text-teal-500" />}
                                </button>
                            )
                        })}
                        
-                       {/* Add Ministry Button */}
                        {onOpenJoinMinistry && (
                            <button
                                onClick={() => {
@@ -200,107 +199,99 @@ export const DashboardLayout: React.FC<Props> = ({
            )}
         </div>
 
-        {/* Navigation Menu */}
-        <div className="flex-1 overflow-y-auto py-6 px-3 custom-scrollbar space-y-6">
+        {/* Navigation */}
+        <div className="flex-1 overflow-y-auto py-6 px-4 custom-scrollbar space-y-8">
           
-          {/* MENU PRINCIPAL */}
           <div className="space-y-1">
-            <p className="px-3 text-xs font-bold text-zinc-500 dark:text-zinc-600 uppercase tracking-wider mb-2">Menu Principal</p>
+            <p className="px-4 text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest mb-2">Menu Principal</p>
             {mainNavItems.map(renderNavButton)}
           </div>
 
-          {/* GESTÃO (Apenas Admin) */}
           {currentUser?.role === 'admin' && (
             <div className="space-y-1">
-              <p className="px-3 text-xs font-bold text-zinc-500 dark:text-zinc-600 uppercase tracking-wider mb-2">Gestão</p>
+              <p className="px-4 text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest mb-2">Gestão</p>
               {managementNavItems.map(renderNavButton)}
             </div>
           )}
 
         </div>
 
-        {/* Footer User Profile & Actions */}
-        <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 space-y-3 shrink-0">
+        {/* Footer */}
+        <div className="p-4 border-t border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/50 dark:bg-zinc-900/30 space-y-3 shrink-0">
            
-           {/* Install App Button - Only if NOT standalone and Available */}
            {!isStandalone && onInstall && (
              <button 
                onClick={onInstall}
-               className="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-zinc-100 dark:text-zinc-900 shadow-lg hover:scale-[1.02] active:scale-95 transition-all text-xs font-bold mb-2"
+               className="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-zinc-100 dark:text-zinc-900 shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 transition-all text-xs font-bold mb-2"
              >
                <Download size={16} /> Instalar Aplicativo
              </button>
            )}
 
-           {/* User Card (Clickable to Profile) */}
            {currentUser && (
              <button 
                onClick={() => { onTabChange('profile'); setSidebarOpen(false); }}
-               className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${
+               className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 group ${
                  currentTab === 'profile' 
-                   ? 'bg-white dark:bg-zinc-800 border-teal-500/50 shadow-md' 
-                   : 'bg-zinc-100 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700/50 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                   ? 'bg-white dark:bg-zinc-800 border-teal-500/50 shadow-md ring-1 ring-teal-500/20' 
+                   : 'bg-white dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700/50 hover:border-zinc-300 dark:hover:border-zinc-600'
                }`}
              >
                 {renderUserAvatar()}
                 <div className="flex-1 min-w-0 text-left">
-                   <p className="text-sm font-bold text-zinc-800 dark:text-white truncate">{currentUser.name}</p>
+                   <p className="text-sm font-bold text-zinc-800 dark:text-white truncate group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">{currentUser.name}</p>
                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">{currentUser.role === 'admin' ? 'Administrador' : 'Membro'}</p>
                 </div>
-                {currentTab !== 'profile' && <ChevronRight size={14} className="text-zinc-400" />}
              </button>
            )}
 
            <div className="grid grid-cols-2 gap-2">
-              <button onClick={toggleTheme} className="flex flex-col items-center justify-center p-2 rounded-lg bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white">
-                 {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-                 <span className="text-[10px] mt-1">{theme === 'dark' ? 'Claro' : 'Escuro'}</span>
+              <button onClick={toggleTheme} className="flex items-center justify-center gap-2 p-2 rounded-lg bg-zinc-200/50 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-zinc-600 dark:text-zinc-400">
+                 {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+                 <span className="text-[10px] font-bold">{theme === 'dark' ? 'Claro' : 'Escuro'}</span>
               </button>
               
-              <button onClick={onLogout} className="flex flex-col items-center justify-center p-2 rounded-lg bg-zinc-200 dark:bg-zinc-800 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-zinc-600 dark:text-zinc-400 hover:text-red-500 dark:hover:text-red-400">
-                 <LogOut size={18} />
-                 <span className="text-[10px] mt-1">Sair</span>
+              <button onClick={onLogout} className="flex items-center justify-center gap-2 p-2 rounded-lg bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-red-600 dark:text-red-400">
+                 <LogOut size={16} />
+                 <span className="text-[10px] font-bold">Sair</span>
               </button>
            </div>
 
-           {/* System Status Row */}
-           <div className="flex items-center justify-between px-1 pt-1">
+           <div className="flex items-center justify-between px-1 pt-1 opacity-70 hover:opacity-100 transition-opacity">
               <div className={`flex items-center gap-1.5 text-[10px] font-medium ${isConnected ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-500'}`}>
-                 <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-red-500'} animate-pulse`} />
-                 {isConnected ? 'Online' : 'Offline'}
+                 <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-red-500'} animate-pulse`} />
+                 {isConnected ? 'Sistema Online' : 'Offline'}
               </div>
               
-              <button onClick={handleHardReload} className="flex items-center gap-1 text-[10px] text-zinc-500 hover:text-teal-500 transition-colors">
+              <button onClick={handleHardReload} className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-teal-500 transition-colors">
                   <RefreshCw size={10} className={isUpdating ? 'animate-spin' : ''} />
-                  {isUpdating ? 'v2.1' : 'v2.1'}
+                  v2.2 Pro
               </button>
            </div>
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-zinc-50 dark:bg-zinc-950">
-        {/* Mobile Header */}
-        <header className="flex items-center justify-between h-16 px-4 border-b border-zinc-200 dark:border-zinc-800 lg:hidden bg-white dark:bg-zinc-900 shrink-0 transition-colors duration-300">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+        {/* Mobile Header - Glassmorphism */}
+        <header className="flex items-center justify-between h-16 px-4 border-b border-zinc-200/50 dark:border-zinc-800/50 lg:hidden bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md sticky top-0 z-30 transition-all">
            <div className="flex items-center gap-3">
-              <button onClick={() => setSidebarOpen(true)} className="p-2 -ml-2 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg">
+              <button onClick={() => setSidebarOpen(true)} className="p-2 -ml-2 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors">
                   <Menu size={24} />
               </button>
               <div className="flex flex-col leading-tight">
-                  <span className="font-bold text-zinc-800 dark:text-zinc-100 text-sm truncate max-w-[200px]">{title}</span>
-                  {hasMultipleMinistries && <span className="text-[10px] text-teal-500 font-medium">Trocar no Menu</span>}
+                  <span className="font-bold text-zinc-900 dark:text-zinc-100 text-sm truncate max-w-[200px]">{title}</span>
+                  {hasMultipleMinistries && <span className="text-[10px] text-teal-600 font-semibold">Toque no Menu</span>}
               </div>
            </div>
            
-           <div className="flex items-center gap-2">
-               {/* Install Button Mobile Header */}
+           <div className="flex items-center gap-3">
                {!isStandalone && onInstall && (
-                 <button onClick={onInstall} className="p-2 text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/20 rounded-lg mr-1 animate-pulse" title="Instalar App">
+                 <button onClick={onInstall} className="p-2 text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/20 rounded-xl animate-pulse active:scale-95 transition-transform" title="Instalar App">
                     <Download size={20} />
                  </button>
                )}
 
-               {/* Notificações Mobile */}
                {currentUser && (
                  <NotificationCenter 
                     notifications={notifications} 
@@ -311,27 +302,35 @@ export const DashboardLayout: React.FC<Props> = ({
                )}
                
                {currentUser && (
-                <button onClick={() => onTabChange('profile')} className="flex items-center justify-center ml-2">
+                <button onClick={() => onTabChange('profile')} className="flex items-center justify-center">
                     {renderMobileAvatar()}
                 </button>
                )}
            </div>
         </header>
 
-        {/* Desktop Top Bar (Optional, for notifications) */}
-        <div className="hidden lg:flex justify-end items-center px-8 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50">
-             {currentUser && (
-               <NotificationCenter 
-                  notifications={notifications} 
-                  ministryId={currentUser.ministryId || null} 
-                  onNotificationsUpdate={onNotificationsUpdate} 
-                  onNavigate={onTabChange}
-               />
-             )}
+        {/* Desktop Top Bar */}
+        <div className="hidden lg:flex justify-end items-center px-8 py-4 sticky top-0 z-30 bg-transparent pointer-events-none">
+             {/* Notification Center is pointer-events-auto inside a pointer-events-none container to let clicks pass through the header area if empty */}
+             <div className="pointer-events-auto flex items-center gap-4 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md p-2 rounded-full shadow-sm border border-zinc-200/50 dark:border-zinc-800/50">
+               {currentUser && (
+                 <NotificationCenter 
+                    notifications={notifications} 
+                    ministryId={currentUser.ministryId || null} 
+                    onNotificationsUpdate={onNotificationsUpdate} 
+                    onNavigate={onTabChange}
+                 />
+               )}
+               {currentUser && (
+                   <button onClick={() => onTabChange('profile')} className="flex items-center pr-1">
+                       {renderMobileAvatar()}
+                   </button>
+               )}
+             </div>
         </div>
 
-        <main className="flex-1 overflow-y-auto p-4 lg:p-8 custom-scrollbar relative">
-          <div className="max-w-7xl mx-auto">
+        <main className="flex-1 overflow-y-auto p-4 lg:p-8 custom-scrollbar relative scroll-smooth">
+          <div className="max-w-7xl mx-auto pb-20 lg:pb-10">
              {children}
           </div>
         </main>
