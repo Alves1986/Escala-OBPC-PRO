@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, Moon, Sun, BellRing, Megaphone, Monitor, Loader2, CalendarClock, Lock, Unlock, BellOff, Check, Music, ShieldCheck, AlertCircle, Youtube, Link, Play, Ban, ArrowRight, Calendar } from 'lucide-react';
+import { Settings, Save, Moon, Sun, BellRing, Monitor, Loader2, CalendarClock, Lock, Unlock, BellOff, Check, ShieldCheck, ArrowRight } from 'lucide-react';
 import { useToast } from './Toast';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { ThemeMode } from '../types';
@@ -34,24 +34,8 @@ export const SettingsScreen: React.FC<Props> = ({
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
   const { addToast } = useToast();
 
-  const hasSpotifyVars = (() => {
-      try {
-          // @ts-ignore
-          return !!(import.meta.env && import.meta.env.VITE_SPOTIFY_CLIENT_ID);
-      } catch (e) { return false; }
-  })();
-
-  const hasYoutubeKey = (() => {
-      try {
-          // @ts-ignore
-          return !!(import.meta.env && import.meta.env.VITE_YOUTUBE_API_KEY);
-      } catch (e) { return false; }
-  })();
-
   const toLocalInput = (isoString?: string) => {
       if (!isoString) return "";
-      
-      // Checagem robusta de 1970 (Bloqueio) independente de timezone
       if (isoString.includes('1970')) return "";
       const d = new Date(isoString);
       if(d.getFullYear() === 1970 || d.getUTCFullYear() === 1970) return "";
@@ -82,13 +66,10 @@ export const SettingsScreen: React.FC<Props> = ({
 
   const isWindowActive = () => {
       const dbStart = availabilityWindow?.start;
-      
-      // Checagem robusta de 1970 (Bloqueio)
       const isDbBlocked = dbStart && (dbStart.includes('1970') || new Date(dbStart).getUTCFullYear() === 1970);
 
       if (isDbBlocked) return false;
-
-      if (!dbStart && !availabilityWindow?.end && !availStart && !availEnd) return true;
+      if (!dbStart && !availabilityWindow?.end && !availStart && !availEnd) return true; // Default open if empty
       
       const startIso = availStart ? fromLocalInput(availStart) : dbStart;
       const endIso = availEnd ? fromLocalInput(availEnd) : availabilityWindow?.end;
@@ -174,141 +155,157 @@ export const SettingsScreen: React.FC<Props> = ({
   };
 
   return (
-    <div className="space-y-8 animate-fade-in max-w-4xl mx-auto pb-10">
+    <div className="space-y-8 animate-fade-in max-w-4xl mx-auto pb-24">
       
       {/* Header */}
       <div className="border-b border-zinc-200 dark:border-zinc-700 pb-4">
         <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
           <Settings className="text-zinc-500"/> Configurações
         </h2>
+        <p className="text-zinc-500 text-sm mt-1">Gerencie preferências e controles do sistema.</p>
       </div>
 
-      {/* --- AVAILABILITY WINDOW (ADMIN ONLY) --- */}
+      {/* --- AVAILABILITY WINDOW CONTROL (ADMIN ONLY) --- */}
       {isAdmin && (
       <div className="bg-white dark:bg-zinc-800 rounded-3xl shadow-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden relative group">
           
-          {/* Status Header Area */}
-          <div className={`relative px-6 py-8 transition-colors duration-500 ${
+          {/* Status Header Area - Premium Gradient */}
+          <div className={`relative px-6 py-8 transition-all duration-500 ${
               status 
                 ? 'bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800' 
                 : 'bg-gradient-to-br from-zinc-700 via-zinc-800 to-black'
           }`}>
-              <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+              {/* Pattern Overlay */}
+              <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.3) 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
               
               <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                  <div className="flex items-center gap-4">
-                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg border border-white/20 backdrop-blur-md ${status ? 'bg-emerald-500/30' : 'bg-red-500/20'}`}>
-                          {status ? <Unlock size={28} className="text-emerald-100"/> : <Lock size={28} className="text-red-100"/>}
+                  <div className="flex items-center gap-5">
+                      <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-2xl border border-white/20 backdrop-blur-md transition-all duration-500 ${status ? 'bg-emerald-500/30' : 'bg-red-500/20'}`}>
+                          {status ? <Unlock size={32} className="text-emerald-100"/> : <Lock size={32} className="text-red-100"/>}
                       </div>
                       <div>
-                          <div className="flex items-center gap-2 mb-1">
-                              <h3 className="text-white font-bold text-xl tracking-tight">Janela de Disponibilidade</h3>
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border ${status ? 'bg-emerald-400 text-emerald-950 border-emerald-300' : 'bg-red-500 text-white border-red-400'}`}>
+                          <div className="flex items-center gap-3 mb-1">
+                              <h3 className="text-white font-bold text-2xl tracking-tight">Janela de Disponibilidade</h3>
+                              <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border shadow-sm ${status ? 'bg-emerald-400 text-emerald-950 border-emerald-300' : 'bg-red-500 text-white border-red-400'}`}>
                                   {status ? 'Aberta' : 'Fechada'}
                               </span>
                           </div>
-                          <p className="text-white/70 text-sm font-medium">
+                          <p className="text-white/80 text-sm font-medium">
                               {status 
-                                ? 'Os membros podem enviar suas datas.' 
-                                : 'A agenda está bloqueada para edições.'}
+                                ? 'Os membros estão habilitados a enviar datas.' 
+                                : 'A agenda está bloqueada para novas edições.'}
                           </p>
                       </div>
                   </div>
               </div>
           </div>
 
-          <div className="p-6">
-              {/* Date Inputs */}
+          <div className="p-6 md:p-8 bg-white dark:bg-zinc-800">
+              
               <div className="mb-8">
-                  <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3 block flex items-center gap-2">
-                      <CalendarClock size={14}/> Configuração de Período
-                  </label>
+                  <div className="flex items-center justify-between mb-4">
+                      <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                          <CalendarClock size={16}/> Configuração de Período
+                      </label>
+                      
+                      {status && (
+                          <span className="text-[10px] font-bold text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded">
+                              Edição Manual Ativa
+                          </span>
+                      )}
+                  </div>
                   
-                  <div className={`flex flex-col md:flex-row items-stretch md:items-center gap-0 bg-zinc-50 dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 p-1 shadow-inner ${!status ? 'opacity-70' : ''}`}>
-                      <div className="flex-1 relative group">
-                          <label className="absolute left-4 top-2 text-[10px] font-bold text-zinc-400 uppercase">Abertura</label>
+                  <div className={`flex flex-col md:flex-row items-stretch md:items-center gap-0 bg-zinc-50 dark:bg-zinc-900/50 rounded-2xl border border-zinc-200 dark:border-zinc-700 p-2 shadow-inner transition-opacity ${!status ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+                      <div className="flex-1 relative group p-2">
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase block mb-1">Abertura</label>
                           <input 
                               type="datetime-local" 
                               value={availStart} 
                               onChange={e => setAvailStart(e.target.value)} 
-                              placeholder={!status ? "Bloqueado" : ""}
-                              disabled={!status && !availStart} // Disable if currently locked and empty
-                              className="w-full bg-transparent border-none rounded-xl pt-6 pb-2 px-4 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:bg-white dark:focus:bg-zinc-800 transition-colors placeholder:text-red-400 disabled:cursor-not-allowed"
+                              className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl py-2 px-3 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                           />
                       </div>
 
-                      <div className="hidden md:flex items-center justify-center w-8 text-zinc-300 dark:text-zinc-600"><ArrowRight size={16} /></div>
-                      <div className="md:hidden h-px w-full bg-zinc-200 dark:bg-zinc-700 my-1"></div>
-
-                      <div className="flex-1 relative group">
-                          <label className="absolute left-4 top-2 text-[10px] font-bold text-zinc-400 uppercase">Fechamento</label>
+                      <div className="hidden md:flex items-center justify-center w-10 text-zinc-300 dark:text-zinc-600 mt-4"><ArrowRight size={20} /></div>
+                      
+                      <div className="flex-1 relative group p-2">
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase block mb-1">Fechamento</label>
                           <input 
                               type="datetime-local" 
                               value={availEnd} 
                               onChange={e => setAvailEnd(e.target.value)}
-                              placeholder={!status ? "Bloqueado" : ""}
-                              disabled={!status && !availEnd} 
-                              className="w-full bg-transparent border-none rounded-xl pt-6 pb-2 px-4 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:bg-white dark:focus:bg-zinc-800 transition-colors text-right md:text-left placeholder:text-red-400 disabled:cursor-not-allowed"
+                              className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl py-2 px-3 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                           />
                       </div>
                   </div>
-                  {!status && (
-                      <p className="text-[10px] text-red-400 mt-2 text-center">
-                          A janela está bloqueada. Clique em "Liberar por 7 Dias" para reabrir.
-                      </p>
+                  
+                  {status && (
+                      <div className="mt-3 flex justify-end">
+                          <button 
+                              onClick={handleSaveAdvanced}
+                              className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1"
+                          >
+                              <Save size={14}/> Salvar Datas Manuais
+                          </button>
+                      </div>
                   )}
               </div>
 
-              {/* Actions Grid */}
+              {/* Action Buttons - Professional Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <button 
-                      onClick={handleSaveAdvanced}
-                      disabled={!status} // Disable save if blocked, force user to use "Open"
-                      className="flex items-center justify-center gap-2 w-full py-4 bg-zinc-100 dark:bg-zinc-700/50 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-xl font-bold text-sm transition-all border border-transparent hover:border-zinc-300 dark:hover:border-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => handleQuickAction('open')}
+                      className={`relative overflow-hidden group flex items-center justify-between p-4 rounded-xl border transition-all duration-300 ${status ? 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700 opacity-50 cursor-not-allowed' : 'bg-white dark:bg-zinc-800 border-emerald-200 dark:border-emerald-900 hover:border-emerald-500 hover:shadow-lg hover:shadow-emerald-500/10'}`}
+                      disabled={status}
                   >
-                      <Save size={18} />
-                      Salvar Alterações
+                      <div className="flex items-center gap-3 relative z-10">
+                          <div className={`p-3 rounded-full ${status ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-400' : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform'}`}>
+                              <Unlock size={20} />
+                          </div>
+                          <div className="text-left">
+                              <span className={`block font-bold text-sm ${status ? 'text-zinc-400' : 'text-zinc-800 dark:text-white'}`}>Liberar Acesso</span>
+                              <span className="text-[10px] text-zinc-500 block">Abre por 7 dias e notifica a equipe</span>
+                          </div>
+                      </div>
                   </button>
 
-                  {status ? (
-                      <button 
-                          onClick={() => handleQuickAction('block')}
-                          className="flex items-center justify-center gap-2 w-full py-4 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 rounded-xl font-bold text-sm transition-all shadow-sm hover:shadow active:scale-95"
-                      >
-                          <Lock size={18} />
-                          Bloquear Imediatamente
-                      </button>
-                  ) : (
-                      <button 
-                          onClick={() => handleQuickAction('open')}
-                          className="flex items-center justify-center gap-2 w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/40 active:scale-95 group"
-                      >
-                          <Unlock size={18} className="group-hover:rotate-12 transition-transform" />
-                          Liberar por 7 Dias
-                      </button>
-                  )}
+                  <button 
+                      onClick={() => handleQuickAction('block')}
+                      className={`relative overflow-hidden group flex items-center justify-between p-4 rounded-xl border transition-all duration-300 ${!status ? 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700 opacity-50 cursor-not-allowed' : 'bg-white dark:bg-zinc-800 border-red-200 dark:border-red-900 hover:border-red-500 hover:shadow-lg hover:shadow-red-500/10'}`}
+                      disabled={!status}
+                  >
+                      <div className="flex items-center gap-3 relative z-10">
+                          <div className={`p-3 rounded-full ${!status ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 group-hover:scale-110 transition-transform'}`}>
+                              <Lock size={20} />
+                          </div>
+                          <div className="text-left">
+                              <span className={`block font-bold text-sm ${!status ? 'text-zinc-400' : 'text-zinc-800 dark:text-white'}`}>Bloquear Acesso</span>
+                              <span className="text-[10px] text-zinc-500 block">Fecha a janela imediatamente</span>
+                          </div>
+                      </div>
+                  </button>
               </div>
           </div>
       </div>
       )}
 
-      {/* Restante da UI (Aparência, Integrações, etc) */}
+      {/* Aparência */}
       <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
         <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <Monitor size={16}/> Aparência
+            <Monitor size={16}/> Aparência & Sistema
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-                <label className="text-xs font-bold text-zinc-500 uppercase block mb-2">Tema</label>
-                <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl">
+                <label className="text-xs font-bold text-zinc-500 uppercase block mb-2">Tema do App</label>
+                <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1.5 rounded-xl">
                     {(['light', 'dark', 'system'] as ThemeMode[]).map((mode) => (
                         <button
                             key={mode}
                             onClick={() => onSetThemeMode(mode)}
-                            className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                            className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${
                                 themeMode === mode 
-                                ? 'bg-white dark:bg-zinc-800 shadow text-zinc-900 dark:text-white' 
-                                : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+                                ? 'bg-white dark:bg-zinc-800 shadow-sm text-zinc-900 dark:text-white scale-100' 
+                                : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/5'
                             }`}
                         >
                             {mode === 'light' && <Sun size={14}/>}
@@ -318,7 +315,13 @@ export const SettingsScreen: React.FC<Props> = ({
                         </button>
                     ))}
                 </div>
+                {onSaveTheme && (
+                    <button onClick={onSaveTheme} className="text-[10px] text-blue-600 dark:text-blue-400 font-bold hover:underline mt-2 block w-full text-right">
+                        Salvar Preferência
+                    </button>
+                )}
             </div>
+
             {isAdmin && (
             <div>
                 <label className="text-xs font-bold text-zinc-500 uppercase block mb-2">Nome do Ministério</label>
@@ -327,11 +330,11 @@ export const SettingsScreen: React.FC<Props> = ({
                         type="text" 
                         value={tempTitle}
                         onChange={(e) => setTempTitle(e.target.value)}
-                        className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100"
+                        className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100 transition-all font-medium"
                     />
                     <button 
                         onClick={() => onSaveTitle(tempTitle)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded-lg transition-colors"
+                        className="bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded-xl transition-all shadow-lg shadow-blue-600/20 active:scale-95"
                     >
                         <Save size={18}/>
                     </button>
@@ -339,49 +342,41 @@ export const SettingsScreen: React.FC<Props> = ({
             </div>
             )}
         </div>
-        {onSaveTheme && (
-            <div className="mt-4 flex justify-end">
-                <button onClick={onSaveTheme} className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:underline">
-                    Salvar preferência de tema neste dispositivo
-                </button>
-            </div>
-        )}
       </div>
 
+      {/* Notifications */}
       <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
         <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <ShieldCheck size={16}/> Sistema
+            <ShieldCheck size={16}/> Permissões
         </h3>
-        <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-zinc-100 dark:border-zinc-700/50">
-                <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${notifPermission === 'granted' ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30' : 'bg-zinc-200 text-zinc-500'}`}>
-                        {notifPermission === 'granted' ? <BellRing size={20}/> : <BellOff size={20}/>}
-                    </div>
-                    <div>
-                        <h4 className="font-bold text-sm text-zinc-800 dark:text-zinc-200">Notificações Push</h4>
-                        <p className="text-xs text-zinc-500">
-                            {notifPermission === 'granted' ? 'Ativas neste dispositivo.' : 'Permita para receber avisos.'}
-                        </p>
-                    </div>
+        <div className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-zinc-100 dark:border-zinc-700/50">
+            <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-xl ${notifPermission === 'granted' ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-zinc-200 text-zinc-500'}`}>
+                    {notifPermission === 'granted' ? <BellRing size={20}/> : <BellOff size={20}/>}
                 </div>
-                {onEnableNotifications && notifPermission !== 'granted' && (
-                    <button 
-                        onClick={handleNotificationClick} 
-                        disabled={isNotifLoading}
-                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-2"
-                    >
-                        {isNotifLoading ? <Loader2 size={12} className="animate-spin"/> : 'Ativar'}
-                    </button>
-                )}
-                {notifPermission === 'granted' && <Check size={18} className="text-green-500 mr-2"/>}
+                <div>
+                    <h4 className="font-bold text-sm text-zinc-800 dark:text-zinc-200">Notificações Push</h4>
+                    <p className="text-xs text-zinc-500">
+                        {notifPermission === 'granted' ? 'Ativas e configuradas.' : 'Permita para receber avisos importantes.'}
+                    </p>
+                </div>
             </div>
+            {onEnableNotifications && notifPermission !== 'granted' && (
+                <button 
+                    onClick={handleNotificationClick} 
+                    disabled={isNotifLoading}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-2 shadow-md active:scale-95"
+                >
+                    {isNotifLoading ? <Loader2 size={14} className="animate-spin"/> : 'Ativar Agora'}
+                </button>
+            )}
+            {notifPermission === 'granted' && <div className="bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 p-2 rounded-full"><Check size={18} /></div>}
         </div>
       </div>
 
-      <div className="flex justify-center gap-4 pt-4">
-          <button onClick={() => setLegalDoc('terms')} className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300 underline">Termos de Uso</button>
-          <button onClick={() => setLegalDoc('privacy')} className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300 underline">Política de Privacidade</button>
+      <div className="flex justify-center gap-6 pt-4 opacity-70">
+          <button onClick={() => setLegalDoc('terms')} className="text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300 transition-colors">Termos de Uso</button>
+          <button onClick={() => setLegalDoc('privacy')} className="text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300 transition-colors">Política de Privacidade</button>
       </div>
 
       <LegalModal isOpen={!!legalDoc} type={legalDoc} onClose={() => setLegalDoc(null)} />

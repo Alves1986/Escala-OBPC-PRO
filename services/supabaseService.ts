@@ -98,8 +98,19 @@ export const joinMinistry = async (newMinistryId: string, roles: string[]) => {
 
 export const deleteMember = async (ministryId: string, memberId: string, memberName: string) => {
     if (!supabase) return { success: false, message: "Erro de conexão" };
+    
+    // Validar quem está deletando (Admin Check)
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, message: "Não autorizado" };
+
     try {
-        // 1. Busca o perfil atual
+        // Verificar se quem solicita é admin
+        const { data: requesterProfile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single();
+        if (!requesterProfile?.is_admin) {
+            return { success: false, message: "Apenas administradores podem remover membros." };
+        }
+
+        // 1. Busca o perfil atual do membro
         const { data: profile, error: fetchError } = await supabase
             .from('profiles')
             .select('allowed_ministries, ministry_id')
@@ -107,14 +118,13 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
             .single();
         
         if (fetchError || !profile) {
-            console.error("Erro ao buscar perfil:", fetchError);
-            return { success: false, message: "Perfil não encontrado. Verifique se você tem permissão de Admin." };
+            return { success: false, message: "Perfil não encontrado no banco de dados." };
         }
 
-        // Normalização
+        // Normalização do ID do ministério a remover
         const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
         
-        // 2. Filtra o ministério removido
+        // 2. Filtra a lista de ministérios permitidos, removendo o atual
         const currentAllowed = Array.isArray(profile.allowed_ministries) ? profile.allowed_ministries : [];
         const newAllowed = currentAllowed.filter((m: string) => {
             const normalizedM = (m || "").trim().toLowerCase().replace(/\s+/g, '-');
@@ -130,31 +140,42 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
         const currentActive = (profile.ministry_id || "").trim().toLowerCase().replace(/\s+/g, '-');
         
         if (currentActive === cleanMid) {
-            // Se tiver outros ministérios permitidos, move para o primeiro
+            // Se tiver outros ministérios permitidos, move para o primeiro disponível
             if (newAllowed.length > 0) {
                 updates.ministry_id = newAllowed[0];
             } else {
-                updates.ministry_id = null; // Sem ministério principal
+                updates.ministry_id = null; // Sem ministério principal (usuário fica 'órfão' mas não deletado)
             }
         }
 
-        // 4. Executa o Update com VERIFICAÇÃO DE COUNT
-        const { error: updateError, count } = await supabase
+        // 4. Executa o Update
+        const { error: updateError } = await supabase
             .from('profiles')
-            .update(updates, { count: 'exact' })
+            .update(updates)
             .eq('id', memberId);
 
         if (updateError) {
             console.error("Erro no update:", updateError);
-            if (updateError.code === '42501' || updateError.message.includes('policy')) {
-                return { success: false, message: "Permissão negada (RLS). Execute o SQL de correção de políticas no painel do Supabase." };
+            if (updateError.code === '42501') {
+                return { success: false, message: "Permissão negada. Verifique as políticas RLS no Supabase." };
             }
             return { success: false, message: `Falha ao salvar: ${updateError.message}` };
         }
 
-        if (count === 0) {
-            return { success: false, message: "Falha na exclusão: Permissão insuficiente (RLS) ou usuário não encontrado." };
-        }
+        // 5. Limpeza opcional: Remover agendamentos futuros deste membro neste ministério
+        // Isso é uma boa prática para não deixar escalas 'fantasmas'
+        const todayIso = new Date().toISOString();
+        await supabase.from('schedule_assignments')
+            .delete()
+            .eq('member_id', memberId)
+            .in('event_id', (
+                // Subquery simulada: Busca IDs de eventos futuros do ministério
+                await supabase.from('events')
+                    .select('id')
+                    .eq('ministry_id', cleanMid)
+                    .gte('date_time', todayIso)
+                    .then(res => res.data?.map(e => e.id) || [])
+            ));
 
         return { success: true, message: "Acesso do membro revogado com sucesso." };
 
