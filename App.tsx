@@ -95,7 +95,7 @@ const InnerApp = () => {
   const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
   
   // ========================================================================
-  // LÓGICA DE ROTEAMENTO CORRIGIDA
+  // LÓGICA DE ROTEAMENTO (Login Google vs Spotify)
   // ========================================================================
   
   // 1. Auxiliar para detectar callback do Spotify
@@ -154,7 +154,8 @@ const InnerApp = () => {
       }
       
       // Caso 2: Login Google/Supabase (vai para dashboard e limpa URL)
-      if (window.location.hash.includes('access_token') && !isSpotifyCallback()) {
+      // CORREÇÃO CRÍTICA: "&& currentUser" garante que só limpamos a URL APÓS o login ter sido processado.
+      if (currentUser && window.location.hash.includes('access_token') && !isSpotifyCallback()) {
           // Limpa a URL visualmente
           try {
               window.history.replaceState(null, '', window.location.pathname + window.location.search);
@@ -165,7 +166,7 @@ const InnerApp = () => {
               setCurrentTab('dashboard');
           }
       }
-  }, [currentUser]);
+  }, [currentUser]); // Executa quando currentUser muda (de null para logado)
 
   // Smooth Loading Transition
   useEffect(() => {
