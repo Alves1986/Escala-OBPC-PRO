@@ -1,35 +1,5 @@
-import React, { useState, useEffect, Suspense, useRef } from 'react';
-import { 
-  LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
-  Megaphone, Settings, FileBarChart, CalendarDays,
-  Users, Edit, Send, ListMusic, Clock, ArrowLeft, ArrowRight,
-  Calendar as CalendarIcon, Trophy, Loader2, ShieldAlert, Share2
-} from 'lucide-react';
-import { ToastProvider, useToast } from './components/Toast';
-import { LoginScreen } from './components/LoginScreen';
-import { SetupScreen } from './components/SetupScreen';
-import { LoadingScreen } from './components/LoadingScreen';
-import { DashboardLayout } from './components/DashboardLayout';
-import { NextEventCard } from './components/NextEventCard';
-import { BirthdayCard } from './components/BirthdayCard';
-import { WeatherWidget } from './components/WeatherWidget';
-import { InstallBanner } from './components/InstallBanner';
-import { InstallModal } from './components/InstallModal';
-import { JoinMinistryModal } from './components/JoinMinistryModal';
-import { ToolsMenu } from './components/ToolsMenu';
-import { EventDetailsModal } from './components/EventDetailsModal';
-import { StatsModal } from './components/StatsModal';
-import { ConfirmationModal } from './components/ConfirmationModal';
-import { EventsModal, AvailabilityModal, RolesModal } from './components/ManagementModals';
-import { ErrorBoundary } from './components/ErrorBoundary';
 
-import * as Supabase from './services/supabaseService';
-import { generateScheduleWithAI } from './services/aiService';
-import { ThemeMode, SUPABASE_URL, SUPABASE_KEY } from './types';
-import { adjustMonth, getMonthName, getLocalDateISOString } from './utils/dateUtils';
-import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from './utils/pushUtils';
-
-// Hooks
+// ... existing imports ...
 import { useAuth } from './hooks/useAuth';
 import { useMinistryData } from './hooks/useMinistryData';
 import { useOnlinePresence } from './hooks/useOnlinePresence';
@@ -49,352 +19,13 @@ const EventsScreen = React.lazy(() => import('./components/EventsScreen').then(m
 const RankingScreen = React.lazy(() => import('./components/RankingScreen').then(module => ({ default: module.RankingScreen })));
 const MembersScreen = React.lazy(() => import('./components/MembersScreen').then(module => ({ default: module.MembersScreen })));
 const SocialMediaScreen = React.lazy(() => import('./components/SocialMediaScreen').then(module => ({ default: module.SocialMediaScreen })));
+const AdminReportsScreen = React.lazy(() => import('./components/AdminReportsScreen').then(module => ({ default: module.AdminReportsScreen })));
 
 // Loading Spinner para Lazy Components
-const LoadingFallback = () => (
-  <div className="flex flex-col items-center justify-center h-[50vh] text-zinc-400 animate-fade-in">
-    <Loader2 size={32} className="animate-spin mb-3 text-teal-500" />
-    <p className="text-xs font-medium uppercase tracking-widest opacity-70">Carregando...</p>
-  </div>
-);
+// ... existing LoadingFallback ...
 
 const InnerApp = () => {
-  // --- STATE & HOOKS (Must be called unconditionally) ---
-  const [isDemoMode, setIsDemoMode] = useState(false);
-
-  const { currentUser, setCurrentUser, loadingAuth } = useAuth();
-  const { addToast, confirmAction } = useToast();
-
-  // Ref para armazenar timers de notificação e evitar spam no refresh
-  const presenceTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-
-  const onlineUsers = useOnlinePresence(
-    currentUser?.id, 
-    currentUser?.name,
-    (name, status) => {
-        // Lógica de Debounce para Presença
-        if (status === 'offline') {
-            if (presenceTimeouts.current[name]) clearTimeout(presenceTimeouts.current[name]);
-            presenceTimeouts.current[name] = setTimeout(() => {
-                addToast(`${name} saiu`, 'info'); 
-                delete presenceTimeouts.current[name];
-            }, 5000);
-        } else {
-            if (presenceTimeouts.current[name]) {
-                clearTimeout(presenceTimeouts.current[name]);
-                delete presenceTimeouts.current[name];
-            } else {
-                addToast(`${name} entrou`, 'success');
-            }
-        }
-    }
-  );
-  
-  const [ministryId, setMinistryId] = useState<string>('midia');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
-  
-  // ========================================================================
-  // LÓGICA DE ROTEAMENTO (Login Google vs Spotify)
-  // ========================================================================
-  
-  // 1. Auxiliar para detectar callback do Spotify
-  const isSpotifyCallback = () => {
-      if (typeof window === 'undefined') return false;
-      return window.location.hash.includes('state=spotify_login_app');
-  };
-
-  // 2. Estado inicial da aba
-  const [currentTab, setCurrentTab] = useState(() => {
-      if (typeof window !== 'undefined') {
-          // Só vai para o repertório se for callback do Spotify
-          if (isSpotifyCallback()) return 'repertoire-manager'; 
-          
-          const params = new URLSearchParams(window.location.search);
-          return params.get('tab') || 'dashboard';
-      }
-      return 'dashboard';
-  });
-
-  const { 
-    events, setEvents, schedule, setSchedule, attendance, setAttendance,
-    membersMap, publicMembers, setPublicMembers, availability, setAvailability,
-    availabilityNotes, notifications, setNotifications, announcements, 
-    repertoire, setRepertoire, swapRequests, globalConflicts, roles, 
-    ministryTitle, setMinistryTitle, availabilityWindow, setAvailabilityWindow, 
-    refreshData: loadData, isLoading: loadingData
-  } = useMinistryData(ministryId, currentMonth, currentUser);
-
-  const [showInstallBanner, setShowInstallBanner] = useState(false);
-  const [showInstallModal, setShowInstallModal] = useState(false);
-  const [showJoinModal, setShowJoinModal] = useState(false);
-  const [eventDetailsModal, setEventDetailsModal] = useState<{ isOpen: boolean; event: any | null }>({ isOpen: false, event: null });
-  const [statsModalOpen, setStatsModalOpen] = useState(false);
-  const [confirmModalData, setConfirmModalData] = useState<any>(null);
-
-  const [isEventsModalOpen, setEventsModalOpen] = useState(false);
-  const [isAvailModalOpen, setAvailModalOpen] = useState(false);
-  const [isRolesModalOpen, setRolesModalOpen] = useState(false);
-
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
-      try { return (localStorage.getItem('themeMode') as ThemeMode) || 'system'; } catch (e) { return 'system'; }
-  });
-  const [visualTheme, setVisualTheme] = useState<'light' | 'dark'>('light');
-  const [showInitialLoading, setShowInitialLoading] = useState(true);
-
-  // --- EFFECTS ---
-
-  // 3. Gerenciamento de Login e Limpeza de URL
-  useEffect(() => {
-      // Caso 1: Retorno do Spotify (vai para repertório)
-      if (isSpotifyCallback() && currentUser) {
-          const target = currentUser.role === 'admin' ? 'repertoire-manager' : 'repertoire';
-          if (currentTab !== target) setCurrentTab(target);
-          return;
-      }
-      
-      // Caso 2: Login Google/Supabase (vai para dashboard e limpa URL)
-      // CORREÇÃO CRÍTICA: "&& currentUser" garante que só limpamos a URL APÓS o login ter sido processado.
-      if (currentUser && window.location.hash.includes('access_token') && !isSpotifyCallback()) {
-          // Limpa a URL visualmente
-          try {
-              window.history.replaceState(null, '', window.location.pathname + window.location.search);
-          } catch(e) {}
-          
-          // Se estiver na aba errada (devido à hash inicial), corrige para dashboard
-          if (currentTab === 'repertoire-manager') {
-              setCurrentTab('dashboard');
-          }
-      }
-  }, [currentUser]); // Executa quando currentUser muda (de null para logado)
-
-  // Smooth Loading Transition
-  useEffect(() => {
-      if (!loadingAuth && !loadingData) {
-          const timer = setTimeout(() => setShowInitialLoading(false), 800);
-          return () => clearTimeout(timer);
-      }
-  }, [loadingAuth, loadingData]);
-
-  useEffect(() => {
-      if (currentUser?.ministryId) setMinistryId(currentUser.ministryId);
-  }, [currentUser]);
-
-  useEffect(() => {
-      const handleFocus = () => { if (currentUser && ministryId) loadData(); };
-      window.addEventListener('focus', handleFocus);
-      return () => window.removeEventListener('focus', handleFocus);
-  }, [currentUser, ministryId, loadData]);
-
-  // Sync URL with Tab
-  useEffect(() => {
-      const url = new URL(window.location.href);
-      if (url.searchParams.get('tab') !== currentTab) {
-          // Evita sujar a URL se tiver hash importante
-          if (!window.location.hash.includes('access_token') && !isSpotifyCallback()) {
-              url.searchParams.set('tab', currentTab);
-              try { window.history.replaceState({}, '', url.toString()); } catch (e) {}
-          }
-      }
-  }, [currentTab]);
-
-  useEffect(() => {
-      const handlePwaReady = () => setShowInstallBanner(true);
-      window.addEventListener('pwa-ready', handlePwaReady);
-      return () => window.removeEventListener('pwa-ready', handlePwaReady);
-  }, []);
-
-  // Theme Logic
-  useEffect(() => {
-    const applyTheme = () => {
-        let targetTheme: 'light' | 'dark' = 'light';
-        if (themeMode === 'system') {
-            const hour = new Date().getHours();
-            targetTheme = (hour >= 6 && hour < 18) ? 'light' : 'dark';
-        } else {
-            targetTheme = themeMode;
-        }
-        setVisualTheme(targetTheme);
-        document.documentElement.classList.toggle('dark', targetTheme === 'dark');
-    };
-    applyTheme();
-    let interval: any;
-    if (themeMode === 'system') interval = setInterval(applyTheme, 60000);
-    return () => { if (interval) clearInterval(interval); };
-  }, [themeMode]);
-
-  // --- HANDLERS ---
-
-  const handleSetThemeMode = (mode: ThemeMode) => setThemeMode(mode);
-  
-  const handleSaveTheme = () => {
-      try {
-          localStorage.setItem('themeMode', themeMode);
-          addToast("Preferência de tema salva com sucesso!", "success");
-      } catch (e) {
-          addToast("Erro ao salvar preferência.", "warning");
-      }
-  };
-
-  const toggleVisualTheme = () => {
-      if (themeMode === 'system') setThemeMode(visualTheme === 'light' ? 'dark' : 'light');
-      else setThemeMode(themeMode === 'light' ? 'dark' : 'light');
-  };
-
-  const handleEnableNotifications = async () => {
-      try {
-          if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error("Push não suportado");
-          
-          // Espera o SW estar ativo
-          const reg = await navigator.serviceWorker.ready;
-          if (!reg) throw new Error("Service Worker não está pronto.");
-
-          let sub = await reg.pushManager.getSubscription();
-          if (!sub) {
-              sub = await reg.pushManager.subscribe({ 
-                  userVisibleOnly: true, 
-                  applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) 
-              });
-          }
-          
-          if (sub) {
-              await Supabase.saveSubscriptionSQL(ministryId, sub);
-              addToast("Notificações ativadas com sucesso!", "success");
-          }
-      } catch(e: any) {
-          console.error("Erro Push:", e);
-          addToast("Erro ao ativar notificações. Verifique as permissões.", "error");
-      }
-  };
-
-  const handleLogout = () => {
-    confirmAction("Sair", "Deseja realmente sair do sistema?", async () => {
-        await Supabase.logout();
-        setCurrentUser(null);
-        try { window.history.replaceState(null, '', '/'); } catch(e) {}
-    });
-  };
-
-  const handleJoinMinistry = async (newId: string, roles: string[]) => {
-      const result = await Supabase.joinMinistry(newId, roles);
-      if (result.success) {
-          addToast(result.message, 'success');
-          window.location.reload();
-      } else {
-          addToast(result.message, 'error');
-      }
-  };
-
-  const handleInstallApp = () => {
-      const promptEvent = (window as any).deferredPrompt;
-      if (promptEvent) {
-          promptEvent.prompt();
-          promptEvent.userChoice.then((choiceResult: any) => {
-              if (choiceResult.outcome === 'accepted') setShowInstallBanner(false);
-          });
-      } else {
-          setShowInstallModal(true);
-      }
-  };
-
-  const handleCellChange = async (key: string, value: string) => {
-      let keyToRemove: string | null = null;
-      if (value) {
-          const eventIso = key.substring(0, 16);
-          Object.entries(schedule).forEach(([k, val]) => {
-              if (k.startsWith(eventIso) && k !== key && val === value) keyToRemove = k; 
-          });
-      }
-      setSchedule(prev => {
-          const next = { ...prev };
-          if (keyToRemove) delete next[keyToRemove];
-          if (value) next[key] = value; else delete next[key];
-          return next;
-      });
-      if (keyToRemove) await Supabase.saveScheduleAssignment(ministryId, keyToRemove, "");
-      const success = await Supabase.saveScheduleAssignment(ministryId, key, value);
-      if (!success) { addToast("Erro ao salvar escala.", "error"); loadData(); }
-  };
-
-  const handleAttendanceToggle = async (key: string) => {
-      const success = await Supabase.toggleAssignmentConfirmation(ministryId, key);
-      if (success) {
-          setAttendance(prev => {
-              const newVal = !prev[key];
-              const copy = { ...prev };
-              if (newVal) copy[key] = true; else delete copy[key];
-              return copy;
-          });
-      }
-  };
-
-  const handleSyncCalendar = () => {
-      if (!currentUser || !schedule || !events) return;
-      const myEvents: any[] = [];
-      Object.keys(schedule).forEach(key => {
-          if (schedule[key] === currentUser.name) {
-              const iso = key.slice(0, 16);
-              const role = key.split('_').pop() || 'Escala';
-              const eventInfo = events.find(e => e.iso.startsWith(iso));
-              if (eventInfo) {
-                  const d = new Date(iso);
-                  d.setHours(d.getHours() + 2);
-                  myEvents.push({ title: `${eventInfo.title} (${role})`, start: iso, end: d.toISOString().slice(0, 19), description: `Função: ${role}` });
-              }
-          }
-      });
-
-      if (myEvents.length === 0) { addToast("Sem escalas para sincronizar.", "info"); return; }
-
-      let ics = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//EscalaOBPC//PT\n";
-      myEvents.forEach(evt => {
-          const dtStart = evt.start.replace(/[-:]/g, "").replace("T", "T") + "00";
-          const dtEnd = evt.end.replace(/[-:]/g, "").replace("T", "T") + "00";
-          ics += `BEGIN:VEVENT\nSUMMARY:${evt.title}\nDTSTART:${dtStart}\nDTEND:${dtEnd}\nDESCRIPTION:${evt.description}\nEND:VEVENT\n`;
-      });
-      ics += "END:VCALENDAR";
-
-      const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
-      const link = document.createElement('a');
-      link.href = window.URL.createObjectURL(blob);
-      link.setAttribute('download', `escala_${currentMonth}.ics`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      addToast("Calendário baixado!", "success");
-  };
-
-  const handleAiAutoFill = async () => {
-      const runAi = async () => {
-          addToast("Gerando escala inteligente com IA... aguarde.", "info");
-          try {
-              const generatedSchedule = await generateScheduleWithAI({
-                  events: events.map(e => ({ iso: e.iso, title: e.title })),
-                  members: publicMembers,
-                  availability,
-                  availabilityNotes,
-                  roles,
-                  ministryId
-              });
-              setSchedule(generatedSchedule);
-              await Supabase.saveScheduleBulk(ministryId, generatedSchedule, true);
-              addToast("Escala gerada com sucesso!", "success");
-              await Supabase.sendNotificationSQL(ministryId, { title: "Escala Disponível", message: `Escala de ${getMonthName(currentMonth)} gerada com IA.`, type: 'info', actionLink: 'calendar' });
-          } catch (e: any) { addToast(`Erro: ${e.message}`, "error"); }
-      };
-      if (Object.keys(schedule).length > 0) confirmAction("Sobrescrever?", "Deseja usar IA para refazer a escala existente?", runAi);
-      else runAi();
-  };
-
-  // --- RENDER ---
-
-  // 1. CONFIG CHECK (Moved after hooks to avoid React Error #310)
-  if ((!SUPABASE_URL || !SUPABASE_KEY) && !isDemoMode) {
-      return <SetupScreen onEnterDemo={() => setIsDemoMode(true)} />;
-  }
-
-  if (loadingAuth || (currentUser && showInitialLoading)) return <LoadingScreen />;
-  if (!currentUser) return <LoginScreen isLoading={loadingAuth} />;
+  // ... existing code ...
 
   const MAIN_NAV = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20}/> },
@@ -411,7 +42,8 @@ const InnerApp = () => {
   const MANAGEMENT_NAV = [
     { id: 'schedule-editor', label: 'Editor de Escala', icon: <Edit size={20}/> },
     { id: 'repertoire-manager', label: 'Gerenciar Repertório', icon: <ListMusic size={20}/> },
-    { id: 'report', label: 'Relat. Disponibilidade', icon: <FileBarChart size={20}/> },
+    { id: 'admin-reports', label: 'Relatórios (KPIs)', icon: <FileBarChart size={20}/> }, // Updated here
+    { id: 'report', label: 'Disponibilidade (Mês)', icon: <CalendarDays size={20}/> }, // Renamed slightly to distinguish
     { id: 'events', label: 'Eventos', icon: <CalendarDays size={20}/> },
     { id: 'send-announcements', label: 'Enviar Avisos', icon: <Send size={20}/> },
     { id: 'members', label: 'Membros & Equipe', icon: <Users size={20}/> },
@@ -422,89 +54,17 @@ const InnerApp = () => {
   return (
     <ErrorBoundary>
         <DashboardLayout
-            sidebarOpen={sidebarOpen}
-            setSidebarOpen={setSidebarOpen}
-            theme={visualTheme}
-            toggleTheme={toggleVisualTheme}
-            onLogout={handleLogout}
-            title={ministryTitle}
-            isConnected={true}
-            currentUser={currentUser}
+            // ... existing props ...
             currentTab={currentTab}
             onTabChange={setCurrentTab}
             mainNavItems={MAIN_NAV}
             managementNavItems={isAdmin ? MANAGEMENT_NAV : []}
-            notifications={notifications}
-            onNotificationsUpdate={setNotifications}
-            onInstall={handleInstallApp}
-            isStandalone={window.matchMedia('(display-mode: standalone)').matches}
-            onSwitchMinistry={async (id) => {
-                setMinistryId(id);
-                if (currentUser) {
-                    setCurrentUser({ ...currentUser, ministryId: id });
-                    if(currentUser.id) await Supabase.updateProfileMinistry(currentUser.id, id);
-                }
-                addToast(`Alternado para ${id}`, 'info');
-            }}
-            onOpenJoinMinistry={() => setShowJoinModal(true)}
+            // ... existing props ...
         >
             <Suspense fallback={<LoadingFallback />}>
-                {currentTab === 'dashboard' && (
-                    <div className="space-y-6 animate-fade-in">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                            <div>
-                                <h1 className="text-3xl font-bold text-zinc-900 dark:text-white tracking-tight">
-                                    {(() => {
-                                        const h = new Date().getHours();
-                                        if (h < 12) return "Bom dia";
-                                        if (h < 18) return "Boa tarde";
-                                        return "Boa noite";
-                                    })()}, <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-600 to-emerald-600 dark:from-teal-400 dark:to-emerald-400">{currentUser.name.split(' ')[0]}</span>.
-                                </h1>
-                                <p className="text-zinc-500 dark:text-zinc-400 mt-1">Bem-vindo a {ministryTitle}.</p>
-                            </div>
-                            <WeatherWidget />
-                        </div>
-
-                        {(() => {
-                            const now = new Date();
-                            const upcoming = events.filter(e => new Date(e.iso) >= now || e.iso.startsWith(now.toISOString().split('T')[0])).sort((a, b) => a.iso.localeCompare(b.iso))[0];
-                            return <NextEventCard event={upcoming} schedule={schedule} attendance={attendance} roles={roles} onConfirm={(key) => { const assignment = Object.entries(schedule).find(([k, v]) => k === key); if (assignment) setConfirmModalData({ key, memberName: assignment[1], eventName: upcoming.title, date: upcoming.dateDisplay, role: key.split('_').pop() || '' }); }} ministryId={ministryId} currentUser={currentUser} />;
-                        })()}
-                        
-                        <BirthdayCard members={publicMembers} currentMonthIso={currentMonth} />
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700">
-                                <h3 className="font-bold text-zinc-800 dark:text-white mb-4">Acesso Rápido</h3>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button onClick={() => setCurrentTab('availability')} className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-xl font-bold text-sm hover:bg-blue-100 transition-colors flex flex-col items-center gap-2 text-center"><CalendarCheck size={24}/> Marcar Disponibilidade</button>
-                                    <button onClick={() => setCurrentTab('calendar')} className="p-3 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-xl font-bold text-sm hover:bg-purple-100 transition-colors flex flex-col items-center gap-2 text-center"><CalendarIcon size={24}/> Ver Escala Completa</button>
-                                </div>
-                            </div>
-                            <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700">
-                                <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-zinc-800 dark:text-white">Últimos Avisos</h3><button onClick={() => setCurrentTab('announcements')} className="text-xs text-blue-500 font-bold hover:underline">Ver Todos</button></div>
-                                {announcements.length === 0 ? <p className="text-sm text-zinc-400 italic">Nenhum aviso recente.</p> : <div className="space-y-3">{announcements.slice(0, 3).map(a => (<div key={a.id} className="text-sm border-l-2 border-blue-500 pl-3"><p className="font-bold text-zinc-800 dark:text-zinc-200 truncate">{a.title}</p><p className="text-zinc-500 text-xs truncate">{a.message}</p></div>))}</div>}
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {currentTab === 'calendar' && (
-                    <div className="space-y-6 animate-fade-in">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                            <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2"><CalendarIcon className="text-blue-500"/> Calendário</h2>
-                            <div className="flex items-center gap-4 bg-white dark:bg-zinc-800 p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm">
-                                <button onClick={() => setCurrentMonth(adjustMonth(currentMonth, -1))} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md">←</button>
-                                <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 min-w-[100px] text-center">{getMonthName(currentMonth)}</span>
-                                <button onClick={() => setCurrentMonth(adjustMonth(currentMonth, 1))} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md">→</button>
-                            </div>
-                        </div>
-                        <CalendarGrid currentMonth={currentMonth} events={events} schedule={schedule} roles={roles} onEventClick={(event) => setEventDetailsModal({ isOpen: true, event })} />
-                    </div>
-                )}
-
+                {/* ... existing routes ... */}
                 {currentTab === 'schedule-editor' && isAdmin && (
+                    // ... existing schedule editor ...
                     <div className="space-y-6 animate-fade-in">
                         <div className="flex flex-col md:flex-row justify-between items-end gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-6">
                             <div><h2 className="text-3xl font-bold text-zinc-800 dark:text-white flex items-center gap-3"><Edit className="text-blue-600 dark:text-blue-500" size={32} /> Editor de Escala</h2><p className="text-zinc-500 dark:text-zinc-400 mt-2">Gerencie a escala oficial de {getMonthName(currentMonth)}.</p></div>
@@ -531,6 +91,7 @@ const InnerApp = () => {
                 {currentTab === 'announcements' && <AnnouncementsScreen announcements={announcements} currentUser={currentUser} onMarkRead={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'read').then(() => loadData())} onToggleLike={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'like').then(() => loadData())} />}
                 {currentTab === 'send-announcements' && isAdmin && <AlertsManager onSend={async (title, message, type, exp) => { await Supabase.sendNotificationSQL(ministryId, { title, message, type, actionLink: 'announcements' }); await Supabase.createAnnouncementSQL(ministryId, { title, message, type, expirationDate: exp }, currentUser.name); loadData(); }} />}
                 {currentTab === 'report' && isAdmin && <AvailabilityReportScreen availability={availability} registeredMembers={publicMembers} membersMap={membersMap} currentMonth={currentMonth} onMonthChange={setCurrentMonth} availableRoles={roles} onRefresh={async () => { await loadData(); }} />}
+                {currentTab === 'admin-reports' && isAdmin && <AdminReportsScreen ministryId={ministryId} currentMonth={currentMonth} onMonthChange={setCurrentMonth} />}
                 {currentTab === 'profile' && <ProfileScreen user={currentUser} onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { const res = await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId); if (res.success) { addToast(res.message, "success"); if (currentUser) { setCurrentUser({ ...currentUser, name, whatsapp, avatar_url: avatar || currentUser.avatar_url, functions: funcs, birthDate: bdate }); } loadData(); } else { addToast(res.message, "error"); }}} availableRoles={roles} />}
                 {currentTab === 'settings' && <SettingsScreen initialTitle={ministryTitle} ministryId={ministryId} themeMode={themeMode} onSetThemeMode={handleSetThemeMode} onSaveTheme={handleSaveTheme} onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, newTitle); setMinistryTitle(newTitle); addToast("Nome do ministério atualizado!", "success"); }} onAnnounceUpdate={async () => { await Supabase.sendNotificationSQL(ministryId, { title: "Atualização de Sistema", message: "Uma nova versão do app está disponível. Recarregue a página para aplicar.", type: "warning" }); addToast("Notificação de atualização enviada.", "success"); }} onEnableNotifications={handleEnableNotifications} onSaveAvailabilityWindow={async (start, end) => { setAvailabilityWindow({ start, end }); await Supabase.saveMinistrySettings(ministryId, undefined, undefined, start, end); loadData(); }} availabilityWindow={availabilityWindow} isAdmin={isAdmin} />}
                 {currentTab === 'social' && <SocialMediaScreen />}
@@ -582,11 +143,3 @@ const InnerApp = () => {
     </ErrorBoundary>
   );
 };
-
-export default function App() {
-  return (
-    <ToastProvider>
-      <InnerApp />
-    </ToastProvider>
-  );
-}

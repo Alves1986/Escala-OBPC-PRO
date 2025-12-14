@@ -28,10 +28,10 @@ Deno.serve(async (req: Request) => {
         console.warn("Corpo da requisição vazio ou inválido.");
     }
 
-    const { ministryId, title, message, type, actionLink, action, name, memberId, targetEmail, status } = requestData;
+    const { ministryId, title, message, type, actionLink, action, name, memberId, targetEmail, status, targetUserId } = requestData;
 
     // 3. DETECÇÃO DE TESTE DO DASHBOARD (Supabase "Test Function" button)
-    if (name === "Functions" || (!ministryId && !action)) {
+    if (name === "Functions" || (!ministryId && !action && !targetUserId)) {
          return new Response(JSON.stringify({ 
              success: true, 
              message: 'Edge Function está ONLINE! Configure os Segredos (Secrets) no Dashboard para envio real.' 
@@ -74,25 +74,29 @@ Deno.serve(async (req: Request) => {
         return new Response(JSON.stringify({ success: false, message: 'Invalid User Token' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Se tiver targetUserId (Notificação Pessoal), a verificação de ministério é relaxada ou checada contra o target
+    // Se for broadcast (ministryId), verifica permissão do remetente
     const cleanMid = ministryId ? ministryId.trim().toLowerCase().replace(/\s+/g, '-') : null;
 
-    const { data: callerProfile } = await supabase
-        .from('profiles')
-        .select('ministry_id, allowed_ministries, is_admin')
-        .eq('id', user.id)
-        .single();
+    if (cleanMid) {
+        const { data: callerProfile } = await supabase
+            .from('profiles')
+            .select('ministry_id, allowed_ministries, is_admin')
+            .eq('id', user.id)
+            .single();
 
-    if (!callerProfile) {
-        return new Response(JSON.stringify({ success: false, message: 'Profile not found' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
+        if (!callerProfile) {
+            return new Response(JSON.stringify({ success: false, message: 'Profile not found' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
 
-    const hasAccess = 
-        callerProfile.is_admin || 
-        (cleanMid && callerProfile.ministry_id === cleanMid) || 
-        (cleanMid && callerProfile.allowed_ministries && callerProfile.allowed_ministries.includes(cleanMid));
+        const hasAccess = 
+            callerProfile.is_admin || 
+            (cleanMid && callerProfile.ministry_id === cleanMid) || 
+            (cleanMid && callerProfile.allowed_ministries && callerProfile.allowed_ministries.includes(cleanMid));
 
-    if (!hasAccess) {
-        return new Response(JSON.stringify({ success: false, message: 'Forbidden: You do not have permission.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        if (!hasAccess && !targetUserId) { // Se for pessoal, permitimos (ex: avisar troca)
+            return new Response(JSON.stringify({ success: false, message: 'Forbidden: You do not have permission.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
     }
     // --- SECURITY CHECK END ---
 
@@ -115,7 +119,10 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === 'toggle_admin') {
-        if (!callerProfile.is_admin) return new Response(JSON.stringify({ success: false, message: 'Restrito a Admin.' }), { status: 403, headers: corsHeaders });
+        // Check admin again strictly
+        const { data: caller } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single();
+        if (!caller?.is_admin) return new Response(JSON.stringify({ success: false, message: 'Restrito a Admin.' }), { status: 403, headers: corsHeaders });
+        
         await supabase.from('profiles').update({ is_admin: status }).eq('email', targetEmail);
         return new Response(JSON.stringify({ success: true, message: 'Permissão alterada.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
     }
@@ -136,24 +143,30 @@ Deno.serve(async (req: Request) => {
         return new Response(JSON.stringify({ success: false, message: "Erro VAPID.", details: err.message }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 })
     }
 
-    if (!cleanMid) return new Response(JSON.stringify({ success: false, message: 'Ministry ID missing' }), { headers: corsHeaders, status: 400 });
+    let userIds = [];
 
-    // Busca usuários do ministério
-    const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id')
-        .or(`ministry_id.eq.${cleanMid},allowed_ministries.cs.{${cleanMid}}`)
-        
-    const userIds = profiles?.map((p: any) => p.id) || []
+    // Lógica Híbrida: Envio Direto (Pessoal) OU Broadcast (Ministério)
+    if (targetUserId) {
+        userIds = [targetUserId];
+    } else if (cleanMid) {
+        // Broadcast
+        const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id')
+            .or(`ministry_id.eq.${cleanMid},allowed_ministries.cs.{${cleanMid}}`)
+        userIds = profiles?.map((p: any) => p.id) || []
+    } else {
+        return new Response(JSON.stringify({ success: false, message: 'Destinatário não definido (nem ministryId nem targetUserId).' }), { headers: corsHeaders, status: 400 });
+    }
     
-    if (userIds.length === 0) return new Response(JSON.stringify({ success: true, message: 'Nenhum usuário.' }), { headers: corsHeaders, status: 200 })
+    if (userIds.length === 0) return new Response(JSON.stringify({ success: true, message: 'Nenhum usuário encontrado.' }), { headers: corsHeaders, status: 200 })
 
     const { data: subscriptions } = await supabase
       .from('push_subscriptions')
       .select('endpoint, p256dh, auth')
       .in('user_id', userIds)
 
-    if (!subscriptions || subscriptions.length === 0) return new Response(JSON.stringify({ success: true, message: 'Nenhuma inscrição.' }), { headers: corsHeaders, status: 200 })
+    if (!subscriptions || subscriptions.length === 0) return new Response(JSON.stringify({ success: true, message: 'Nenhuma inscrição de push encontrada.' }), { headers: corsHeaders, status: 200 })
 
     const results = []
     let successCount = 0;

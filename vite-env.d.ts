@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 
 interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL: string;
@@ -15,3 +16,13 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+// Global defines
+declare const __SUPABASE_URL__: string;
+declare const __SUPABASE_KEY__: string;
+declare const process: {
+  env: {
+    API_KEY?: string;
+    [key: string]: any;
+  }
+};
