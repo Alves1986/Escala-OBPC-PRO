@@ -96,12 +96,11 @@ const InnerApp = () => {
   const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
   
   // Função auxiliar para distinguir callback do Spotify vs Supabase Auth
+  // Agora verificamos explicitamente o state=spotify_login_app
   const isSpotifyCallback = () => {
       if (typeof window === 'undefined') return false;
       const hash = window.location.hash;
-      // Spotify: access_token, token_type, expires_in, state (SEM refresh_token)
-      // Supabase: access_token, refresh_token, token_type, expires_in, type=...
-      return hash.includes('access_token') && !hash.includes('refresh_token') && !hash.includes('type=');
+      return hash.includes('access_token') && hash.includes('state=spotify_login_app');
   };
 
   const [currentTab, setCurrentTab] = useState(() => {
@@ -146,6 +145,7 @@ const InnerApp = () => {
 
   // Atualiza a aba se vier do callback do Spotify (e não Supabase Auth)
   useEffect(() => {
+      // Usa a verificação robusta isSpotifyCallback()
       if (isSpotifyCallback() && currentUser) {
           const target = currentUser.role === 'admin' ? 'repertoire-manager' : 'repertoire';
           if (currentTab !== target) setCurrentTab(target);

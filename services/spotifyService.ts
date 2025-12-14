@@ -76,11 +76,19 @@ export const getLoginUrl = (ministryId: string) => {
         "playlist-read-collaborative"
     ].join(" ");
 
-    return `https://accounts.spotify.com/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&response_type=token&show_dialog=true`;
+    // Adicionado state=spotify_login_app para diferenciar do login do Google/Supabase
+    const state = 'spotify_login_app';
+
+    return `https://accounts.spotify.com/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&response_type=token&state=${state}&show_dialog=true`;
 };
 
 export const handleLoginCallback = () => {
     const hash = window.location.hash;
+    
+    // Verificação de segurança: Só processa se tiver o state correto
+    // Isso impede que o token do Google seja salvo como token do Spotify
+    if (!hash.includes('state=spotify_login_app')) return null;
+
     const tokenMatch = hash.match(/access_token=([^&]*)/);
     const expiresInMatch = hash.match(/expires_in=([^&]*)/);
 
