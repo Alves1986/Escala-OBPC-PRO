@@ -51,14 +51,15 @@ const prepareMinifiedContext = (context: AIContext) => {
       const rawAvail = context.availability[m.name] || [];
       
       // Critical check for NEW Block Tag (Updated to _BLK)
+      // If found, this member is forcefully unavailable for the whole month
       const isBlocked = rawAvail.some(d => d.startsWith(monthPrefix) && (d.includes('BLK') || d.includes('BLOCKED')));
       
       if (isBlocked) {
           return {
               n: m.name,
               r: m.roles?.filter(r => context.roles.includes(r)) || [],
-              d: [], // Empty days means completely unavailable for AI
-              nt: {}
+              d: [], // Empty days array signals 0 availability to AI
+              nt: { "0": "User requested BLOCK MONTH" }
           };
       }
 
@@ -126,11 +127,12 @@ export const generateScheduleWithAI = async (context: AIContext): Promise<Schedu
         - "5": Available ALL day.
         - "5(M)": Available ONLY Morning (h < 13).
         - "5(N)": Available ONLY Night (h >= 13).
+        - empty list []: NOT AVAILABLE AT ALL. DO NOT SCHEDULE.
         
         RULES:
         0. **STRICT EVENTS**: Schedule ONLY for provided Event IDs.
         1. **ONE ROLE PER DAY**: A member takes max 1 slot per day.
-        2. **AVAILABILITY**: Respect (M)/(N) constraints vs event hour (h).
+        2. **AVAILABILITY**: Respect (M)/(N) constraints vs event hour (h). If 'd' is empty, NEVER schedule.
         3. **NOTES (nt)**: 
            - If 'nt' exists for a day, READ IT.
            - If note says "Prefer [Role]", prioritize assignment to that role.

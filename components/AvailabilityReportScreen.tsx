@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { AvailabilityMap, TeamMemberProfile, MemberMap } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
-import { CalendarSearch, Search, Filter, CalendarX, RefreshCw } from 'lucide-react';
+import { CalendarSearch, Search, Filter, CalendarX, RefreshCw, AlertOctagon } from 'lucide-react';
 
 interface Props {
   availability: AvailabilityMap;
@@ -72,8 +72,11 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
           dates = availability[availKey] || [];
       }
 
+      // Check for Block Tag
+      const isBlocked = dates.some(d => d.startsWith(currentMonth) && (d.includes('BLK') || d.includes('BLOCKED')));
+
       const monthDates = dates
-        .filter(d => d.startsWith(currentMonth))
+        .filter(d => d.startsWith(currentMonth) && !d.includes('BLK'))
         .map(d => {
             const parts = d.split('_');
             const dayNum = parseInt(d.split('-')[2]);
@@ -89,6 +92,7 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
         roles,
         days: monthDates,
         count: monthDates.length,
+        isBlocked
       };
     });
 
@@ -168,7 +172,7 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
           </div>
         ) : (
           reportData.map((item) => (
-            <div key={item.name} className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 p-5 shadow-sm hover:shadow-md transition-shadow">
+            <div key={item.name} className={`bg-white dark:bg-zinc-800 rounded-xl border p-5 shadow-sm hover:shadow-md transition-shadow ${item.isBlocked ? 'border-red-200 dark:border-red-900/50 bg-red-50/10' : 'border-zinc-200 dark:border-zinc-700'}`}>
                <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
                      {item.avatar_url ? (
@@ -192,13 +196,23 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
                      </div>
                   </div>
                   
-                  <div className={`px-2 py-1 rounded text-xs font-bold ${item.count > 0 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400'}`}>
-                     {item.count > 0 ? `${item.count} dias` : 'Pendente'}
-                  </div>
+                  {item.isBlocked ? (
+                      <div className="px-2 py-1 rounded text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800 flex items-center gap-1">
+                          <AlertOctagon size={12} /> BLOQUEADO
+                      </div>
+                  ) : (
+                      <div className={`px-2 py-1 rounded text-xs font-bold ${item.count > 0 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400'}`}>
+                         {item.count > 0 ? `${item.count} dias` : 'Pendente'}
+                      </div>
+                  )}
                </div>
 
                <div className="pt-4 border-t border-zinc-100 dark:border-zinc-700/50">
-                  {item.days.length > 0 ? (
+                  {item.isBlocked ? (
+                      <div className="text-center py-2 text-red-400 text-xs italic flex items-center justify-center gap-2 font-medium">
+                          Membro solicitou não ser escalado este mês.
+                      </div>
+                  ) : item.days.length > 0 ? (
                      <div className="flex flex-wrap gap-1.5">
                         {item.days.map(({day, type}) => {
                            let bgClass = "bg-green-500 text-white";

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { AvailabilityMap, AvailabilityNotesMap, User } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
-import { CalendarCheck, Lock, Save, MessageSquare, Sun, Moon, ShieldCheck, Unlock, ThumbsUp, Check } from 'lucide-react';
+import { CalendarCheck, Lock, Save, MessageSquare, Sun, Moon, ShieldCheck, Unlock, ThumbsUp, Check, AlertOctagon, CalendarX } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface Props {
@@ -27,13 +27,16 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const [generalNote, setGeneralNote] = useState(""); 
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const { addToast } = useToast();
+  const { addToast, confirmAction } = useToast();
 
   const [year, month] = currentMonth.split('-').map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
   const isAdmin = currentUser?.role === 'admin';
+
+  // Check if month is blocked for the selected member
+  const isMonthBlocked = tempDates.includes(`${currentMonth}_BLK`);
 
   // --- CORREÇÃO AQUI: LÓGICA DE JANELA ROBUSTA ---
   const getWindowState = () => {
@@ -90,6 +93,11 @@ export const AvailabilityScreen: React.FC<Props> = ({
           return;
       }
       
+      if (isMonthBlocked) {
+          addToast("Desbloqueie o mês primeiro para marcar dias individuais.", "warning");
+          return;
+      }
+      
       const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
       const existingEntry = tempDates.find(d => d.startsWith(dateStr));
       const dateObj = new Date(year, month - 1, day);
@@ -109,6 +117,25 @@ export const AvailabilityScreen: React.FC<Props> = ({
       }
       
       setTempDates(newDates);
+      setHasChanges(true);
+  };
+
+  const toggleMonthBlock = () => {
+      if (!isEditable) return;
+
+      if (isMonthBlocked) {
+          // Unblock: Remove the tag
+          setTempDates(prev => prev.filter(d => d !== `${currentMonth}_BLK`));
+      } else {
+          // Block: Warn and add tag
+          confirmAction(
+              "Bloquear Mês Inteiro?", 
+              "Você está indicando que NÃO poderá ser escalado em NENHUM dia deste mês. Isso apagará suas seleções atuais.", 
+              () => {
+                  setTempDates([`${currentMonth}_BLK`]);
+              }
+          );
+      }
       setHasChanges(true);
   };
 
@@ -184,31 +211,58 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
       {selectedMember ? (
           <div className={`relative transition-opacity duration-300 ${!isEditable ? 'opacity-60 pointer-events-none grayscale-[0.5]' : ''}`}>
-              <div className="flex flex-wrap justify-center gap-4 text-[10px] text-zinc-500 uppercase font-bold tracking-wide mb-6 bg-white dark:bg-zinc-800 p-3 rounded-full border border-zinc-100 dark:border-zinc-700 shadow-sm w-fit mx-auto">
-                  <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600"/> Indisponível</div>
-                  <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"/> Disponível</div>
-                  <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-amber-400 shadow-sm shadow-amber-400/50"/> Só Manhã</div>
-                  <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-indigo-500 shadow-sm shadow-indigo-500/50"/> Só Noite</div>
+              
+              {/* Opção de Bloqueio de Mês */}
+              <div className="mb-6 flex justify-center">
+                  <button 
+                      onClick={toggleMonthBlock}
+                      className={`flex items-center gap-2 px-6 py-3 rounded-full text-xs font-bold uppercase tracking-wide transition-all shadow-sm ${
+                          isMonthBlocked 
+                          ? 'bg-red-600 text-white shadow-red-500/30' 
+                          : 'bg-white dark:bg-zinc-800 text-zinc-500 hover:text-red-500 border border-zinc-200 dark:border-zinc-700 hover:border-red-200'
+                      }`}
+                  >
+                      {isMonthBlocked ? <><CalendarX size={16}/> Mês Bloqueado (Clique p/ liberar)</> : <><AlertOctagon size={16}/> Não me escale neste mês</>}
+                  </button>
               </div>
 
-              <div className="grid grid-cols-7 gap-2 sm:gap-3 mb-8 select-none">
-                  {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => <div key={i} className="text-center text-xs font-bold text-zinc-400 py-2">{d}</div>)}
-                  {Array.from({ length: new Date(year, month - 1, 1).getDay() }).map((_, i) => <div key={`empty-${i}`} />)}
-                  {days.map(day => {
-                      const status = getDayStatus(day);
-                      let styles = "bg-white dark:bg-zinc-800 text-zinc-400 border border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600";
-                      let icon = null;
-                      let shadow = "shadow-sm";
-                      if (status === 'FULL') { styles = "bg-emerald-500 text-white border-emerald-600 font-bold ring-2 ring-emerald-200 dark:ring-emerald-900"; shadow = "shadow-lg shadow-emerald-500/30 transform scale-105 z-10"; icon = <ThumbsUp size={14} className="absolute top-1 right-1 opacity-90 stroke-[3]"/>; } 
-                      else if (status === 'MORNING') { styles = "bg-amber-400 text-amber-950 border-amber-500 font-bold ring-2 ring-amber-200 dark:ring-amber-900"; shadow = "shadow-lg shadow-amber-400/30 transform scale-105 z-10"; icon = <Sun size={14} className="absolute top-1 right-1 opacity-80 stroke-[2.5]"/>; } 
-                      else if (status === 'NIGHT') { styles = "bg-indigo-500 text-white border-indigo-600 font-bold ring-2 ring-indigo-200 dark:ring-indigo-900"; shadow = "shadow-lg shadow-indigo-500/30 transform scale-105 z-10"; icon = <Moon size={14} className="absolute top-1 right-1 opacity-90 stroke-[2.5]"/>; }
-                      return (
-                          <button key={day} onClick={() => handleDayClick(day)} className={`aspect-square rounded-2xl flex flex-col items-center justify-center relative transition-all duration-200 ${styles} ${shadow}`}>
-                              <span className="text-sm sm:text-lg">{day}</span>{icon}
-                          </button>
-                      );
-                  })}
-              </div>
+              {isMonthBlocked ? (
+                  <div className="py-16 text-center border-2 border-dashed border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/10 rounded-2xl mb-8 animate-fade-in">
+                      <CalendarX size={64} className="mx-auto text-red-300 dark:text-red-800 mb-4"/>
+                      <h3 className="text-lg font-bold text-red-700 dark:text-red-400">Indisponibilidade Total</h3>
+                      <p className="text-sm text-red-600/80 dark:text-red-400/80 mt-1 max-w-xs mx-auto">
+                          Você sinalizou que não pode servir em nenhuma data de {getMonthName(currentMonth)}.
+                      </p>
+                  </div>
+              ) : (
+                  <>
+                    <div className="flex flex-wrap justify-center gap-4 text-[10px] text-zinc-500 uppercase font-bold tracking-wide mb-6 bg-white dark:bg-zinc-800 p-3 rounded-full border border-zinc-100 dark:border-zinc-700 shadow-sm w-fit mx-auto">
+                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600"/> Indisponível</div>
+                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"/> Disponível</div>
+                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-amber-400 shadow-sm shadow-amber-400/50"/> Só Manhã</div>
+                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-indigo-500 shadow-sm shadow-indigo-500/50"/> Só Noite</div>
+                    </div>
+
+                    <div className="grid grid-cols-7 gap-2 sm:gap-3 mb-8 select-none">
+                        {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => <div key={i} className="text-center text-xs font-bold text-zinc-400 py-2">{d}</div>)}
+                        {Array.from({ length: new Date(year, month - 1, 1).getDay() }).map((_, i) => <div key={`empty-${i}`} />)}
+                        {days.map(day => {
+                            const status = getDayStatus(day);
+                            let styles = "bg-white dark:bg-zinc-800 text-zinc-400 border border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600";
+                            let icon = null;
+                            let shadow = "shadow-sm";
+                            if (status === 'FULL') { styles = "bg-emerald-500 text-white border-emerald-600 font-bold ring-2 ring-emerald-200 dark:ring-emerald-900"; shadow = "shadow-lg shadow-emerald-500/30 transform scale-105 z-10"; icon = <ThumbsUp size={14} className="absolute top-1 right-1 opacity-90 stroke-[3]"/>; } 
+                            else if (status === 'MORNING') { styles = "bg-amber-400 text-amber-950 border-amber-500 font-bold ring-2 ring-amber-200 dark:ring-amber-900"; shadow = "shadow-lg shadow-amber-400/30 transform scale-105 z-10"; icon = <Sun size={14} className="absolute top-1 right-1 opacity-80 stroke-[2.5]"/>; } 
+                            else if (status === 'NIGHT') { styles = "bg-indigo-500 text-white border-indigo-600 font-bold ring-2 ring-indigo-200 dark:ring-indigo-900"; shadow = "shadow-lg shadow-indigo-500/30 transform scale-105 z-10"; icon = <Moon size={14} className="absolute top-1 right-1 opacity-90 stroke-[2.5]"/>; }
+                            return (
+                                <button key={day} onClick={() => handleDayClick(day)} className={`aspect-square rounded-2xl flex flex-col items-center justify-center relative transition-all duration-200 ${styles} ${shadow}`}>
+                                    <span className="text-sm sm:text-lg">{day}</span>{icon}
+                                </button>
+                            );
+                        })}
+                    </div>
+                  </>
+              )}
 
               <div className="bg-white dark:bg-zinc-800 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm mb-24">
                   <div className="flex items-center gap-2 mb-3 text-zinc-500"><MessageSquare size={18} className="text-emerald-500" /><span className="text-xs font-bold uppercase tracking-wider">Observações do Mês</span></div>
