@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, Suspense, useRef } from 'react';
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
@@ -67,7 +66,7 @@ const InnerApp = () => {
   const { addToast, confirmAction } = useToast();
 
   // Ref para armazenar timers de notificação e evitar spam no refresh
-  const presenceTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
+  const presenceTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const onlineUsers = useOnlinePresence(
     currentUser?.id, 

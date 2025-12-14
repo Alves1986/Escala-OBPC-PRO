@@ -86,17 +86,36 @@ export const SettingsScreen: React.FC<Props> = ({
   const status = isWindowActive();
 
   const handleSaveAdvanced = async () => {
-      if (onSaveAvailabilityWindow) {
-          if (!status) { 
-             addToast("A janela está bloqueada. Clique em 'Liberar' primeiro.", "warning");
-             return;
-          }
-
+      if (onSaveAvailabilityWindow && ministryId) {
           const startISO = fromLocalInput(availStart);
           const endISO = fromLocalInput(availEnd);
           
           await onSaveAvailabilityWindow(startISO, endISO);
-          addToast("Período de disponibilidade atualizado!", "success");
+
+          // Lógica de Notificação Manual
+          const now = new Date();
+          const s = new Date(startISO);
+          const e = new Date(endISO);
+          
+          // Verifica se o novo período está aberto ou fechado agora
+          const isOpenNow = now >= s && now <= e;
+
+          if (isOpenNow) {
+              await sendNotificationSQL(ministryId, {
+                  title: "📅 Agenda Atualizada",
+                  message: `A disponibilidade está aberta até ${e.toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'})} às ${e.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}.`,
+                  type: "info",
+                  actionLink: "availability"
+              });
+          } else {
+              await sendNotificationSQL(ministryId, {
+                  title: "🔒 Janela Encerrada",
+                  message: "O período para envio de disponibilidade foi encerrado/alterado.",
+                  type: "warning"
+              });
+          }
+
+          addToast("Período atualizado e notificação enviada!", "success");
       }
   };
 
@@ -192,27 +211,25 @@ export const SettingsScreen: React.FC<Props> = ({
                   <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3 block flex items-center gap-2">
                       <CalendarClock size={14}/> Configuração de Período
                   </label>
-                  <div className={`flex flex-col md:flex-row items-stretch md:items-center gap-0 bg-zinc-50 dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 p-1 shadow-inner ${!status ? 'opacity-70 pointer-events-none' : ''}`}>
+                  <div className="flex flex-col md:flex-row items-stretch md:items-center gap-0 bg-zinc-50 dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 p-1 shadow-inner">
                       <div className="flex-1 relative group">
                           <label className="absolute left-4 top-2 text-[10px] font-bold text-zinc-400 uppercase">Abertura</label>
-                          <input type="datetime-local" value={availStart} onChange={e => setAvailStart(e.target.value)} disabled={!status} className="w-full bg-transparent border-none rounded-xl pt-6 pb-2 px-4 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:bg-white dark:focus:bg-zinc-800 transition-colors" />
+                          <input type="datetime-local" value={availStart} onChange={e => setAvailStart(e.target.value)} className="w-full bg-transparent border-none rounded-xl pt-6 pb-2 px-4 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:bg-white dark:focus:bg-zinc-800 transition-colors" />
                       </div>
                       <div className="hidden md:flex items-center justify-center w-8 text-zinc-300 dark:text-zinc-600"><ArrowRight size={16} /></div>
                       <div className="flex-1 relative group">
                           <label className="absolute left-4 top-2 text-[10px] font-bold text-zinc-400 uppercase">Fechamento</label>
-                          <input type="datetime-local" value={availEnd} onChange={e => setAvailEnd(e.target.value)} disabled={!status} className="w-full bg-transparent border-none rounded-xl pt-6 pb-2 px-4 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:bg-white dark:focus:bg-zinc-800 transition-colors text-right md:text-left" />
+                          <input type="datetime-local" value={availEnd} onChange={e => setAvailEnd(e.target.value)} className="w-full bg-transparent border-none rounded-xl pt-6 pb-2 px-4 text-sm font-bold text-zinc-800 dark:text-zinc-200 outline-none focus:bg-white dark:focus:bg-zinc-800 transition-colors text-right md:text-left" />
                       </div>
                   </div>
-                  {!status && <p className="text-[10px] text-red-400 mt-2 text-center">A janela está bloqueada. Clique em "Liberar" para reabrir.</p>}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <button 
                       onClick={handleSaveAdvanced}
-                      disabled={!status} 
-                      className={`flex items-center justify-center gap-2 w-full py-4 bg-zinc-100 dark:bg-zinc-700/50 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-xl font-bold text-sm transition-all border border-transparent hover:border-zinc-300 dark:hover:border-zinc-600 ${!status ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      className="flex items-center justify-center gap-2 w-full py-4 bg-zinc-100 dark:bg-zinc-700/50 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-xl font-bold text-sm transition-all border border-transparent hover:border-zinc-300 dark:hover:border-zinc-600"
                   >
-                      <Save size={18} /> Salvar Alterações
+                      <Save size={18} /> Salvar & Notificar
                   </button>
 
                   {status ? (
