@@ -5,51 +5,50 @@ import {
   Users, Edit, Send, ListMusic, Clock, ArrowLeft, ArrowRight,
   Calendar as CalendarIcon, Trophy, Loader2, ShieldAlert, Share2
 } from 'lucide-react';
-import { ToastProvider, useToast } from './Toast';
-import { LoginScreen } from './LoginScreen';
-import { SetupScreen } from './SetupScreen';
-import { LoadingScreen } from './LoadingScreen';
-import { DashboardLayout } from './DashboardLayout';
-import { NextEventCard } from './NextEventCard';
-import { BirthdayCard } from './BirthdayCard';
-import { WeatherWidget } from './WeatherWidget';
-import { InstallBanner } from './InstallBanner';
-import { InstallModal } from './InstallModal';
-import { JoinMinistryModal } from './JoinMinistryModal';
-import { ToolsMenu } from './ToolsMenu';
-import { EventDetailsModal } from './EventDetailsModal';
-import { StatsModal } from './StatsModal';
-import { ConfirmationModal } from './ConfirmationModal';
-import { EventsModal, AvailabilityModal, RolesModal } from './ManagementModals';
-import { ErrorBoundary } from './ErrorBoundary';
+import { ToastProvider, useToast } from './components/Toast';
+import { LoginScreen } from './components/LoginScreen';
+import { SetupScreen } from './components/SetupScreen';
+import { LoadingScreen } from './components/LoadingScreen';
+import { DashboardLayout } from './components/DashboardLayout';
+import { NextEventCard } from './components/NextEventCard';
+import { BirthdayCard } from './components/BirthdayCard';
+import { WeatherWidget } from './components/WeatherWidget';
+import { InstallBanner } from './components/InstallBanner';
+import { InstallModal } from './components/InstallModal';
+import { JoinMinistryModal } from './components/JoinMinistryModal';
+import { ToolsMenu } from './components/ToolsMenu';
+import { EventDetailsModal } from './components/EventDetailsModal';
+import { StatsModal } from './components/StatsModal';
+import { ConfirmationModal } from './components/ConfirmationModal';
+import { EventsModal, AvailabilityModal, RolesModal } from './components/ManagementModals';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
-import * as Supabase from '../services/supabaseService';
-import { generateScheduleWithAI } from '../services/aiService';
-import { ThemeMode, SUPABASE_URL, SUPABASE_KEY } from '../types';
-import { adjustMonth, getMonthName, getLocalDateISOString } from '../utils/dateUtils';
-import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from '../utils/pushUtils';
+import * as Supabase from './services/supabaseService';
+import { generateScheduleWithAI } from './services/aiService';
+import { ThemeMode, SUPABASE_URL, SUPABASE_KEY } from './types';
+import { adjustMonth, getMonthName, getLocalDateISOString } from './utils/dateUtils';
+import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from './utils/pushUtils';
 
 // Hooks
-import { useAuth } from '../hooks/useAuth';
-import { useMinistryData } from '../hooks/useMinistryData';
-import { useOnlinePresence } from '../hooks/useOnlinePresence';
+import { useAuth } from './hooks/useAuth';
+import { useMinistryData } from './hooks/useMinistryData';
+import { useOnlinePresence } from './hooks/useOnlinePresence';
 
 // --- Lazy Load Heavy Components (Code Splitting) ---
-const ScheduleTable = React.lazy(() => import('./ScheduleTable').then(module => ({ default: module.ScheduleTable })));
-const CalendarGrid = React.lazy(() => import('./CalendarGrid').then(module => ({ default: module.CalendarGrid })));
-const AvailabilityScreen = React.lazy(() => import('./AvailabilityScreen').then(module => ({ default: module.AvailabilityScreen })));
-const SwapRequestsScreen = React.lazy(() => import('./SwapRequestsScreen').then(module => ({ default: module.SwapRequestsScreen })));
-const RepertoireScreen = React.lazy(() => import('./RepertoireScreen').then(module => ({ default: module.RepertoireScreen })));
-const AnnouncementsScreen = React.lazy(() => import('./AnnouncementsScreen').then(module => ({ default: module.AnnouncementsScreen })));
-const AlertsManager = React.lazy(() => import('./AlertsManager').then(module => ({ default: module.AlertsManager })));
-const AvailabilityReportScreen = React.lazy(() => import('./AvailabilityReportScreen').then(module => ({ default: module.AvailabilityReportScreen })));
-const SettingsScreen = React.lazy(() => import('./SettingsScreen').then(module => ({ default: module.SettingsScreen })));
-const ProfileScreen = React.lazy(() => import('./ProfileScreen').then(module => ({ default: module.ProfileScreen })));
-const EventsScreen = React.lazy(() => import('./EventsScreen').then(module => ({ default: module.EventsScreen })));
-const RankingScreen = React.lazy(() => import('./RankingScreen').then(module => ({ default: module.RankingScreen })));
-const MembersScreen = React.lazy(() => import('./MembersScreen').then(module => ({ default: module.MembersScreen })));
-const SocialMediaScreen = React.lazy(() => import('./SocialMediaScreen').then(module => ({ default: module.SocialMediaScreen })));
-const AdminReportsScreen = React.lazy(() => import('./AdminReportsScreen').then(module => ({ default: module.AdminReportsScreen })));
+const ScheduleTable = React.lazy(() => import('./components/ScheduleTable').then(module => ({ default: module.ScheduleTable })));
+const CalendarGrid = React.lazy(() => import('./components/CalendarGrid').then(module => ({ default: module.CalendarGrid })));
+const AvailabilityScreen = React.lazy(() => import('./components/AvailabilityScreen').then(module => ({ default: module.AvailabilityScreen })));
+const SwapRequestsScreen = React.lazy(() => import('./components/SwapRequestsScreen').then(module => ({ default: module.SwapRequestsScreen })));
+const RepertoireScreen = React.lazy(() => import('./components/RepertoireScreen').then(module => ({ default: module.RepertoireScreen })));
+const AnnouncementsScreen = React.lazy(() => import('./components/AnnouncementsScreen').then(module => ({ default: module.AnnouncementsScreen })));
+const AlertsManager = React.lazy(() => import('./components/AlertsManager').then(module => ({ default: module.AlertsManager })));
+const AvailabilityReportScreen = React.lazy(() => import('./components/AvailabilityReportScreen').then(module => ({ default: module.AvailabilityReportScreen })));
+const SettingsScreen = React.lazy(() => import('./components/SettingsScreen').then(module => ({ default: module.SettingsScreen })));
+const ProfileScreen = React.lazy(() => import('./components/ProfileScreen').then(module => ({ default: module.ProfileScreen })));
+const EventsScreen = React.lazy(() => import('./components/EventsScreen').then(module => ({ default: module.EventsScreen })));
+const RankingScreen = React.lazy(() => import('./components/RankingScreen').then(module => ({ default: module.RankingScreen })));
+const MembersScreen = React.lazy(() => import('./components/MembersScreen').then(module => ({ default: module.MembersScreen })));
+const SocialMediaScreen = React.lazy(() => import('./components/SocialMediaScreen').then(module => ({ default: module.SocialMediaScreen })));
 
 // Loading Spinner para Lazy Components
 const LoadingFallback = () => (
@@ -74,25 +73,17 @@ const InnerApp = () => {
     currentUser?.name,
     (name, status) => {
         // Lógica de Debounce para Presença
-        // Evita notificar "Saiu" + "Entrou" quando o usuário apenas recarrega a página (F5)
         if (status === 'offline') {
-            // Se já tiver um timer rodando, limpa ele
             if (presenceTimeouts.current[name]) clearTimeout(presenceTimeouts.current[name]);
-            
-            // Agenda a notificação de saída para daqui a 5 segundos
             presenceTimeouts.current[name] = setTimeout(() => {
                 addToast(`${name} saiu`, 'info'); 
                 delete presenceTimeouts.current[name];
             }, 5000);
         } else {
-            // Usuário entrou (online)
             if (presenceTimeouts.current[name]) {
-                // Se existe um timer de saída pendente, significa que ele saiu e voltou rápido (refresh)
-                // Então cancelamos o aviso de "Saiu" e NÃO mostramos o aviso de "Entrou"
                 clearTimeout(presenceTimeouts.current[name]);
                 delete presenceTimeouts.current[name];
             } else {
-                // Se não tem timer pendente, é uma entrada legítima
                 addToast(`${name} entrou`, 'success');
             }
         }
@@ -103,9 +94,22 @@ const InnerApp = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
   
+  // ========================================================================
+  // LÓGICA DE ROTEAMENTO SEGURA
+  // ========================================================================
+  
+  // 1. Auxiliar para detectar callback do Spotify
+  const isSpotifyCallback = () => {
+      if (typeof window === 'undefined') return false;
+      return window.location.hash.includes('state=spotify_login_app');
+  };
+
+  // 2. Estado inicial da aba
+  // CORREÇÃO: Ignora o token do Google e só redireciona se for Spotify
   const [currentTab, setCurrentTab] = useState(() => {
       if (typeof window !== 'undefined') {
-          if (window.location.hash && window.location.hash.includes('access_token')) return 'repertoire-manager'; 
+          if (isSpotifyCallback()) return 'repertoire-manager'; 
+          
           const params = new URLSearchParams(window.location.search);
           return params.get('tab') || 'dashboard';
       }
@@ -140,12 +144,15 @@ const InnerApp = () => {
 
   // --- EFFECTS ---
 
-  // Atualiza a aba se vier do callback do Spotify
+  // 3. Atualiza a aba APENAS se for callback do Spotify
+  // Removemos a limpeza automática de URL para evitar conflitos de login
   useEffect(() => {
-      if (window.location.hash && window.location.hash.includes('access_token') && currentUser) {
+      if (isSpotifyCallback() && currentUser) {
           const target = currentUser.role === 'admin' ? 'repertoire-manager' : 'repertoire';
           if (currentTab !== target) setCurrentTab(target);
       }
+      // Se for login do Google, o estado inicial já tratou de mandar para o Dashboard.
+      // O token ficará na URL, mas o login funcionará corretamente.
   }, [currentUser]);
 
   // Smooth Loading Transition
@@ -170,7 +177,8 @@ const InnerApp = () => {
   useEffect(() => {
       const url = new URL(window.location.href);
       if (url.searchParams.get('tab') !== currentTab) {
-          if (!window.location.hash.includes('access_token')) {
+          // Evita sujar a URL se tiver hash importante
+          if (!window.location.hash.includes('access_token') && !isSpotifyCallback()) {
               url.searchParams.set('tab', currentTab);
               try { window.history.replaceState({}, '', url.toString()); } catch (e) {}
           }
@@ -390,8 +398,7 @@ const InnerApp = () => {
   const MANAGEMENT_NAV = [
     { id: 'schedule-editor', label: 'Editor de Escala', icon: <Edit size={20}/> },
     { id: 'repertoire-manager', label: 'Gerenciar Repertório', icon: <ListMusic size={20}/> },
-    { id: 'admin-reports', label: 'Relatórios (KPIs)', icon: <FileBarChart size={20}/> },
-    { id: 'report', label: 'Disponibilidade (Mês)', icon: <CalendarDays size={20}/> },
+    { id: 'report', label: 'Relat. Disponibilidade', icon: <FileBarChart size={20}/> },
     { id: 'events', label: 'Eventos', icon: <CalendarDays size={20}/> },
     { id: 'send-announcements', label: 'Enviar Avisos', icon: <Send size={20}/> },
     { id: 'members', label: 'Membros & Equipe', icon: <Users size={20}/> },
@@ -511,7 +518,6 @@ const InnerApp = () => {
                 {currentTab === 'announcements' && <AnnouncementsScreen announcements={announcements} currentUser={currentUser} onMarkRead={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'read').then(() => loadData())} onToggleLike={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'like').then(() => loadData())} />}
                 {currentTab === 'send-announcements' && isAdmin && <AlertsManager onSend={async (title, message, type, exp) => { await Supabase.sendNotificationSQL(ministryId, { title, message, type, actionLink: 'announcements' }); await Supabase.createAnnouncementSQL(ministryId, { title, message, type, expirationDate: exp }, currentUser.name); loadData(); }} />}
                 {currentTab === 'report' && isAdmin && <AvailabilityReportScreen availability={availability} registeredMembers={publicMembers} membersMap={membersMap} currentMonth={currentMonth} onMonthChange={setCurrentMonth} availableRoles={roles} onRefresh={async () => { await loadData(); }} />}
-                {currentTab === 'admin-reports' && isAdmin && <AdminReportsScreen ministryId={ministryId} currentMonth={currentMonth} onMonthChange={setCurrentMonth} />}
                 {currentTab === 'profile' && <ProfileScreen user={currentUser} onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { const res = await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId); if (res.success) { addToast(res.message, "success"); if (currentUser) { setCurrentUser({ ...currentUser, name, whatsapp, avatar_url: avatar || currentUser.avatar_url, functions: funcs, birthDate: bdate }); } loadData(); } else { addToast(res.message, "error"); }}} availableRoles={roles} />}
                 {currentTab === 'settings' && <SettingsScreen initialTitle={ministryTitle} ministryId={ministryId} themeMode={themeMode} onSetThemeMode={handleSetThemeMode} onSaveTheme={handleSaveTheme} onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, newTitle); setMinistryTitle(newTitle); addToast("Nome do ministério atualizado!", "success"); }} onAnnounceUpdate={async () => { await Supabase.sendNotificationSQL(ministryId, { title: "Atualização de Sistema", message: "Uma nova versão do app está disponível. Recarregue a página para aplicar.", type: "warning" }); addToast("Notificação de atualização enviada.", "success"); }} onEnableNotifications={handleEnableNotifications} onSaveAvailabilityWindow={async (start, end) => { setAvailabilityWindow({ start, end }); await Supabase.saveMinistrySettings(ministryId, undefined, undefined, start, end); loadData(); }} availabilityWindow={availabilityWindow} isAdmin={isAdmin} />}
                 {currentTab === 'social' && <SocialMediaScreen />}
