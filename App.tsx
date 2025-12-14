@@ -468,6 +468,7 @@ const InnerApp = () => {
                         members={publicMembers} 
                         onlineUsers={onlineUsers} 
                         currentUser={currentUser}
+                        availableRoles={roles}
                         onToggleAdmin={async (email, currentStatus, name) => {
                             if (!email) return addToast("Usuário sem e-mail não pode ser admin.", "error");
                             const newStatus = !currentStatus;

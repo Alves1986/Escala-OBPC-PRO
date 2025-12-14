@@ -138,8 +138,15 @@ export const DashboardLayout: React.FC<Props> = ({
         {/* Header */}
         <div className="relative px-6 py-6 shrink-0">
            <div className="flex items-center gap-3">
-               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white shadow-lg shadow-teal-500/20 shrink-0 border border-white/20">
-                  {imgError ? <Layout size={20} /> : <img src="/icon.png?v=2" alt="Logo" className="w-full h-full object-cover rounded-full opacity-90" onError={() => setImgError(true)} />}
+               {/* Updated Logo Container: Matches Loading Screen Style (Clean/Professional) */}
+               <div className="w-10 h-10 rounded-full bg-white dark:bg-zinc-900 flex items-center justify-center shadow-md border border-zinc-200 dark:border-zinc-700 overflow-hidden shrink-0">
+                  {imgError ? (
+                      <div className="bg-gradient-to-br from-teal-500 to-emerald-600 w-full h-full flex items-center justify-center text-white">
+                          <Layout size={20} />
+                      </div>
+                  ) : (
+                      <img src="/icon.png?v=2" alt="Logo" className="w-full h-full object-cover" onError={() => setImgError(true)} />
+                  )}
                </div>
                
                <div className="flex-1 min-w-0 relative" ref={ministryMenuRef}>
