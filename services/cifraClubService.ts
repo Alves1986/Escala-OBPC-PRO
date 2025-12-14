@@ -9,21 +9,7 @@ export interface CifraClubResult {
 }
 
 const getAiClient = () => {
-    let key = '';
-    try {
-        // @ts-ignore
-        if (import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) {
-            // @ts-ignore
-            key = import.meta.env.VITE_GEMINI_API_KEY;
-        }
-    } catch(e) {}
-  
-    if (!key && typeof process !== 'undefined' && process.env) {
-        key = process.env.API_KEY || '';
-    }
-  
-    if (!key) return null;
-    return new GoogleGenAI({ apiKey: key });
+    return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
 // Cache simples para evitar chamadas repetitivas

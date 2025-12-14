@@ -2,26 +2,9 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AvailabilityMap, ScheduleMap, TeamMemberProfile, AvailabilityNotesMap } from "../types";
 
-// Initialize Gemini Client Lazily with robust env check
+// Initialize Gemini Client
 const getAiClient = () => {
-  let key = '';
-  try {
-      // @ts-ignore
-      if (import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) {
-          // @ts-ignore
-          key = import.meta.env.VITE_GEMINI_API_KEY;
-      }
-  } catch(e) {}
-
-  if (!key && typeof process !== 'undefined' && process.env) {
-      key = process.env.API_KEY || '';
-  }
-
-  if (!key) {
-    console.warn("API Key do Gemini não encontrada.");
-    throw new Error("Chave de API da Inteligência Artificial não configurada. Verifique o arquivo .env.");
-  }
-  return new GoogleGenAI({ apiKey: key });
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
 interface AIContext {
@@ -144,7 +127,7 @@ export const generateScheduleWithAI = async (context: AIContext): Promise<Schedu
       `;
 
       const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash', 
+          model: 'gemini-3-pro-preview', 
           contents: JSON.stringify(inputData),
           config: {
               systemInstruction: systemInstruction,

@@ -1,5 +1,27 @@
-export const SUPABASE_URL = (typeof __SUPABASE_URL__ !== 'undefined' ? __SUPABASE_URL__ : (import.meta.env.VITE_SUPABASE_URL || ''));
-export const SUPABASE_KEY = (typeof __SUPABASE_KEY__ !== 'undefined' ? __SUPABASE_KEY__ : (import.meta.env.VITE_SUPABASE_KEY || ''));
+
+export const SUPABASE_URL = (() => {
+    if (typeof __SUPABASE_URL__ !== 'undefined') return __SUPABASE_URL__;
+    try {
+        // @ts-ignore
+        if (typeof import.meta !== 'undefined' && import.meta.env) {
+            // @ts-ignore
+            return import.meta.env.VITE_SUPABASE_URL || '';
+        }
+    } catch (e) {}
+    return '';
+})();
+
+export const SUPABASE_KEY = (() => {
+    if (typeof __SUPABASE_KEY__ !== 'undefined') return __SUPABASE_KEY__;
+    try {
+        // @ts-ignore
+        if (typeof import.meta !== 'undefined' && import.meta.env) {
+            // @ts-ignore
+            return import.meta.env.VITE_SUPABASE_KEY || '';
+        }
+    } catch (e) {}
+    return '';
+})();
 
 export type Role = string;
 export type ThemeMode = 'light' | 'dark' | 'system';
