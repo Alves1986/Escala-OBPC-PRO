@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Cloud, Sun, CloudRain, CloudLightning, CloudSnow, MapPin, Loader2, RefreshCw } from 'lucide-react';
 
@@ -8,13 +9,14 @@ interface WeatherData {
   timestamp: number;
 }
 
-const CACHE_KEY = 'widget_weather_data';
-const CACHE_EXPIRATION = 1000 * 60 * 60; // 1 Hora
+const CACHE_KEY = 'widget_weather_data_v2'; // Bumped version to invalidate old potentially wrong cache
+const CACHE_EXPIRATION = 1000 * 60 * 30; // 30 Minutos
 
 export const WeatherWidget: React.FC = () => {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(false);
 
   const getWeatherIcon = (code: number) => {
     // WMO Weather interpretation codes (WW)
@@ -39,9 +41,10 @@ export const WeatherWidget: React.FC = () => {
   const fetchWeatherData = async (lat: number, lon: number) => {
       try {
           // Executa em paralelo para ser mais rápido
+          // Zoom 12 captures Town/City better than 10 (which might get Region)
           const [weatherRes, cityRes] = await Promise.all([
              fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`),
-             fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10&accept-language=pt`)
+             fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=12&accept-language=pt`)
           ]);
 
           if (!weatherRes.ok) throw new Error("Weather API Error");
@@ -50,9 +53,12 @@ export const WeatherWidget: React.FC = () => {
           let city = "Localização";
           if (cityRes.ok) {
               const cityJson = await cityRes.json();
-              // Tenta pegar o nome mais relevante
-              city = cityJson.address?.city || cityJson.address?.town || cityJson.address?.municipality || cityJson.address?.village || "Local";
-              city = city.replace("Município de ", "").trim();
+              const addr = cityJson.address;
+              // Ordem de prioridade aprimorada para capturar o nome da cidade corretamente
+              city = addr?.city || addr?.town || addr?.municipality || addr?.village || addr?.suburb || "Local";
+              
+              // Limpeza comum de nomes
+              city = city.replace("Município de ", "").replace("Distrito de ", "").trim();
           }
 
           const newData: WeatherData = {
@@ -64,17 +70,53 @@ export const WeatherWidget: React.FC = () => {
 
           setWeather(newData);
           localStorage.setItem(CACHE_KEY, JSON.stringify(newData));
+          setError(false);
 
       } catch (e) {
           console.error("Erro ao atualizar clima:", e);
+          setError(true);
       } finally {
           setLoading(false);
           setRefreshing(false);
       }
   };
 
+  const getLocationAndFetch = () => {
+      if (!navigator.geolocation) {
+          setLoading(false);
+          setError(true);
+          return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+          (pos) => {
+              fetchWeatherData(pos.coords.latitude, pos.coords.longitude);
+          },
+          (err) => {
+              console.warn("Erro de geolocalização:", err);
+              // Fallback para coordenadas padrão (Brasília) se negar permissão, ou mostrar erro
+              // fetchWeatherData(-15.7975, -47.8919); 
+              setLoading(false);
+              setRefreshing(false);
+              setError(true);
+          },
+          { 
+              enableHighAccuracy: true, // Força uso de GPS/WIFI preciso
+              timeout: 10000, 
+              maximumAge: 0 // Não aceita cache do navegador
+          }
+      );
+  };
+
+  const handleRefresh = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setRefreshing(true);
+      // Pequeno delay visual para o usuário perceber o clique
+      setTimeout(() => getLocationAndFetch(), 300);
+  };
+
   useEffect(() => {
-      // 1. Tenta carregar do Cache imediatamente
+      // 1. Tenta carregar do Cache
       const cached = localStorage.getItem(CACHE_KEY);
       let hasValidCache = false;
 
@@ -84,7 +126,7 @@ export const WeatherWidget: React.FC = () => {
               setWeather(parsed);
               setLoading(false); // Remove loading imediatamente
               
-              // Verifica se o cache é recente (menos de 1 hora)
+              // Verifica se o cache é recente
               if (Date.now() - parsed.timestamp < CACHE_EXPIRATION) {
                   hasValidCache = true;
               } else {
@@ -95,28 +137,12 @@ export const WeatherWidget: React.FC = () => {
           }
       }
 
-      // 2. Se não tem cache válido, ou se o cache expirou, busca novos dados
-      if (!hasValidCache || !weather) {
-          if (!navigator.geolocation) {
-              setLoading(false);
-              return;
-          }
-
-          navigator.geolocation.getCurrentPosition(
-              (pos) => {
-                  fetchWeatherData(pos.coords.latitude, pos.coords.longitude);
-              },
-              (err) => {
-                  console.warn("Erro de geolocalização:", err);
-                  setLoading(false);
-                  setRefreshing(false);
-              },
-              { 
-                  enableHighAccuracy: false, // Mais rápido, menos preciso (suficiente para clima)
-                  timeout: 5000, 
-                  maximumAge: 1000 * 60 * 30 // Aceita posição cacheada de até 30 min atrás
-              }
-          );
+      // 2. Se não tem cache válido, busca novos dados
+      if (!hasValidCache) {
+          getLocationAndFetch();
+      } else if (refreshing) {
+          // Se tem cache mas expirou, busca em background
+          getLocationAndFetch();
       }
   }, []);
 
@@ -124,26 +150,25 @@ export const WeatherWidget: React.FC = () => {
     return (
       <div className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-zinc-800 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-pulse">
         <Loader2 size={16} className="animate-spin text-zinc-400" />
-        <span className="text-xs text-zinc-400">Carregando tempo...</span>
+        <span className="text-xs text-zinc-400">Localizando...</span>
       </div>
     );
+  }
+
+  if (error && !weather) {
+      return (
+        <button onClick={handleRefresh} className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/20 rounded-2xl border border-red-200 dark:border-red-800/50 shadow-sm text-red-500 hover:bg-red-100 transition-colors">
+            <RefreshCw size={14} />
+            <span className="text-xs font-bold">Tentar Novamente</span>
+        </button>
+      );
   }
 
   if (!weather) return null;
 
   return (
-    <div className="flex items-center gap-4 px-5 py-3 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-sm rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md transition-shadow cursor-default group relative overflow-hidden">
+    <div className="flex items-center gap-4 px-5 py-3 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-sm rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden">
       
-      {/* Indicador de Atualização Sutil */}
-      {refreshing && (
-          <div className="absolute top-0 right-0 p-1">
-              <span className="flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-              </span>
-          </div>
-      )}
-
       <div className="flex flex-col items-end">
         <div className="flex items-center gap-1.5 text-zinc-800 dark:text-zinc-100 font-bold text-lg leading-none">
           {Math.round(weather.temperature)}°C
@@ -160,10 +185,14 @@ export const WeatherWidget: React.FC = () => {
         <div className="flex items-center gap-1 text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wide truncate max-w-[150px]" title={weather.city}>
            <MapPin size={12} className="text-red-500 shrink-0" /> <span className="truncate">{weather.city}</span>
         </div>
-        <div className="flex items-center gap-1">
-            <span className="text-[10px] text-zinc-400">Tempo Real</span>
-            {refreshing && <RefreshCw size={8} className="animate-spin text-zinc-400"/>}
-        </div>
+        <button 
+            onClick={handleRefresh}
+            className="flex items-center gap-1 mt-0.5 text-[10px] text-zinc-400 hover:text-blue-500 transition-colors"
+            disabled={refreshing}
+        >
+            <span className="truncate">Atualizar Local</span>
+            <RefreshCw size={8} className={refreshing ? "animate-spin text-blue-500" : ""}/>
+        </button>
       </div>
     </div>
   );
