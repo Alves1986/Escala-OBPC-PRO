@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, Suspense, useRef } from 'react';
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
@@ -49,7 +50,6 @@ const EventsScreen = React.lazy(() => import('./EventsScreen').then(module => ({
 const RankingScreen = React.lazy(() => import('./RankingScreen').then(module => ({ default: module.RankingScreen })));
 const MembersScreen = React.lazy(() => import('./MembersScreen').then(module => ({ default: module.MembersScreen })));
 const SocialMediaScreen = React.lazy(() => import('./SocialMediaScreen').then(module => ({ default: module.SocialMediaScreen })));
-const AdminReportsScreen = React.lazy(() => import('./AdminReportsScreen').then(module => ({ default: module.AdminReportsScreen })));
 
 // Loading Spinner para Lazy Components
 const LoadingFallback = () => (
@@ -390,8 +390,7 @@ const InnerApp = () => {
   const MANAGEMENT_NAV = [
     { id: 'schedule-editor', label: 'Editor de Escala', icon: <Edit size={20}/> },
     { id: 'repertoire-manager', label: 'Gerenciar Repertório', icon: <ListMusic size={20}/> },
-    { id: 'admin-reports', label: 'Relatórios (KPIs)', icon: <FileBarChart size={20}/> },
-    { id: 'report', label: 'Disponibilidade (Mês)', icon: <CalendarDays size={20}/> },
+    { id: 'report', label: 'Relat. Disponibilidade', icon: <FileBarChart size={20}/> },
     { id: 'events', label: 'Eventos', icon: <CalendarDays size={20}/> },
     { id: 'send-announcements', label: 'Enviar Avisos', icon: <Send size={20}/> },
     { id: 'members', label: 'Membros & Equipe', icon: <Users size={20}/> },
@@ -511,7 +510,6 @@ const InnerApp = () => {
                 {currentTab === 'announcements' && <AnnouncementsScreen announcements={announcements} currentUser={currentUser} onMarkRead={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'read').then(() => loadData())} onToggleLike={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'like').then(() => loadData())} />}
                 {currentTab === 'send-announcements' && isAdmin && <AlertsManager onSend={async (title, message, type, exp) => { await Supabase.sendNotificationSQL(ministryId, { title, message, type, actionLink: 'announcements' }); await Supabase.createAnnouncementSQL(ministryId, { title, message, type, expirationDate: exp }, currentUser.name); loadData(); }} />}
                 {currentTab === 'report' && isAdmin && <AvailabilityReportScreen availability={availability} registeredMembers={publicMembers} membersMap={membersMap} currentMonth={currentMonth} onMonthChange={setCurrentMonth} availableRoles={roles} onRefresh={async () => { await loadData(); }} />}
-                {currentTab === 'admin-reports' && isAdmin && <AdminReportsScreen ministryId={ministryId} currentMonth={currentMonth} onMonthChange={setCurrentMonth} />}
                 {currentTab === 'profile' && <ProfileScreen user={currentUser} onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { const res = await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId); if (res.success) { addToast(res.message, "success"); if (currentUser) { setCurrentUser({ ...currentUser, name, whatsapp, avatar_url: avatar || currentUser.avatar_url, functions: funcs, birthDate: bdate }); } loadData(); } else { addToast(res.message, "error"); }}} availableRoles={roles} />}
                 {currentTab === 'settings' && <SettingsScreen initialTitle={ministryTitle} ministryId={ministryId} themeMode={themeMode} onSetThemeMode={handleSetThemeMode} onSaveTheme={handleSaveTheme} onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, newTitle); setMinistryTitle(newTitle); addToast("Nome do ministério atualizado!", "success"); }} onAnnounceUpdate={async () => { await Supabase.sendNotificationSQL(ministryId, { title: "Atualização de Sistema", message: "Uma nova versão do app está disponível. Recarregue a página para aplicar.", type: "warning" }); addToast("Notificação de atualização enviada.", "success"); }} onEnableNotifications={handleEnableNotifications} onSaveAvailabilityWindow={async (start, end) => { setAvailabilityWindow({ start, end }); await Supabase.saveMinistrySettings(ministryId, undefined, undefined, start, end); loadData(); }} availabilityWindow={availabilityWindow} isAdmin={isAdmin} />}
                 {currentTab === 'social' && <SocialMediaScreen />}

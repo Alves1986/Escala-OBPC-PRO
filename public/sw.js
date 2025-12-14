@@ -1,102 +1,83 @@
 
-const CACHE_NAME = "escala-pro-v2";
+const CACHE_NAME = 'gestao-escala-pwa-v30';
 
-// Assets estáticos fundamentais para o app parecer nativo e profissional offline.
-// Inclui CDNs de estilo e fontes para garantir que o visual não quebre sem internet.
-const STATIC_ASSETS = [
-  "/",
-  "/index.html",
-  "/manifest.json",
-  "/icon.png",
-  "https://cdn.tailwindcss.com", 
-  "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+// Arquivos estáticos fundamentais
+const PRECACHE_URLS = [
+  '/',
+  '/index.html',
+  '/manifest.json',
+  'https://cdn.tailwindcss.com',
+  'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'
 ];
 
-// --- INSTALAÇÃO ---
-self.addEventListener("install", (event) => {
-  self.skipWaiting(); // Força o SW a assumir imediatamente
+// Instalação
+self.addEventListener('install', event => {
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      // Usa catch para garantir que a instalação não falhe se um CDN externo estiver instável
-      return cache.addAll(STATIC_ASSETS).catch(err => {
-          console.warn("Aviso: Alguns assets opcionais não foram cacheados no install.", err);
+    caches.open(CACHE_NAME).then(cache => {
+      return cache.addAll(PRECACHE_URLS).catch(err => {
+        console.warn('Falha no precache não crítico:', err);
       });
     })
   );
 });
 
-// --- ATIVAÇÃO & LIMPEZA ---
-self.addEventListener("activate", (event) => {
+// Ativação e Limpeza
+self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys.map((key) => {
-          // Remove caches antigos automaticamente para manter o app leve
-          if (key !== CACHE_NAME) return caches.delete(key);
+    caches.keys().then(cacheNames => {
+      return Promise.all(
+        cacheNames.map(cacheName => {
+          if (cacheName !== CACHE_NAME) {
+            return caches.delete(cacheName);
+          }
         })
-      )
-    )
+      );
+    })
   );
-  self.clients.claim(); // Controla as páginas abertas imediatamente
+  return self.clients.claim();
 });
 
-// --- INTERCEPTAÇÃO DE REDE (ESTRATÉGIA HÍBRIDA) ---
-self.addEventListener("fetch", (event) => {
-  // Ignora requisições que não sejam GET ou esquemas exóticos
-  if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) return;
+// Interceptação de Rede
+self.addEventListener('fetch', event => {
+  if (!event.request.url.startsWith('http')) return;
 
-  const url = new URL(event.request.url);
-
-  // 1. Navegação (HTML): Network First -> Fallback Cache
-  // Garante que o usuário sempre veja a versão mais nova se tiver internet.
+  // 1. Navegação (HTML)
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-            // Atualiza o cache com a nova versão
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-            return response;
-        })
-        .catch(() => {
-            // Se offline, retorna a página salva
-            return caches.match('/index.html') || caches.match('/');
-        })
+      fetch(event.request).catch(() => {
+        return caches.match('/')
+          .then(response => response || caches.match('/index.html'));
+      })
     );
     return;
   }
 
-  // 2. Assets Estáticos (JS, CSS, Imagens, Fonts): Stale-While-Revalidate
-  // Performance máxima: entrega o cache imediatamente e atualiza em background.
-  if (
-      STATIC_ASSETS.includes(event.request.url) || 
-      url.pathname.match(/\.(js|css|png|jpg|jpeg|svg|ico|json|woff2)$/) ||
-      url.hostname.includes('cdn.tailwindcss.com') ||
-      url.hostname.includes('fonts.googleapis.com') ||
-      url.hostname.includes('fonts.gstatic.com')
-  ) {
-      event.respondWith(
-        caches.match(event.request).then((cached) => {
-          const networkFetch = fetch(event.request).then((response) => {
-            if(response.ok) {
-                caches.open(CACHE_NAME).then((cache) => cache.put(event.request, response.clone()));
-            }
-            return response;
-          }).catch(() => {}); // Falha silenciosa no background se offline
-
-          return cached || networkFetch;
-        })
-      );
-      return;
+  // 2. Assets Estáticos (Cache First / Stale-While-Revalidate)
+  if (['script', 'style', 'image', 'font', 'manifest'].includes(event.request.destination)) {
+    event.respondWith(
+      caches.match(event.request).then(cachedResponse => {
+        const fetchPromise = fetch(event.request).then(networkResponse => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
+          }
+          return networkResponse;
+        }).catch(() => {}); // Falha silenciosa offline
+        return cachedResponse || fetchPromise;
+      })
+    );
+    return;
   }
 
-  // 3. Padrão: Network First com Fallback
+  // 3. Outras requisições: Network First
   event.respondWith(
     fetch(event.request).catch(() => caches.match(event.request))
   );
 });
 
-// --- NOTIFICAÇÕES PUSH (Essencial para App Profissional) ---
+// --- PUSH NOTIFICATIONS (Background & Closed App) ---
+
 self.addEventListener('push', function(event) {
   if (!event.data) return;
 
@@ -104,17 +85,24 @@ self.addEventListener('push', function(event) {
   try {
     data = event.data.json();
   } catch (e) {
-    data = { title: 'Escala PRO', body: event.data.text() };
+    data = { title: 'Nova Notificação', body: event.data.text() };
   }
 
+  // Configuração Robusta para Android/iOS
   const options = {
     body: data.body,
-    icon: data.icon || '/icon.png',
-    badge: '/icon.png',
-    vibrate: [100, 50, 100],
-    data: { url: data.data?.url || '/' },
-    actions: [{ action: 'open', title: 'Ver Detalhes' }],
-    tag: 'escala-pro-notification' // Agrupa notificações para não poluir a barra
+    icon: data.icon || 'https://i.ibb.co/nsFR8zNG/icon1.png',
+    badge: 'https://i.ibb.co/nsFR8zNG/icon1.png', // Ícone pequeno na barra de status (Android)
+    vibrate: [100, 50, 100], // Vibração padrão
+    data: { 
+      url: data.data?.url || '/',
+      dateOfArrival: Date.now() 
+    },
+    actions: [
+      { action: 'open', title: 'Ver Agora' }
+    ],
+    tag: 'escala-notification', // Agrupa notificações para não spammar
+    renotify: true // Vibra novamente mesmo se tiver a mesma tag
   };
 
   event.waitUntil(
@@ -124,19 +112,29 @@ self.addEventListener('push', function(event) {
 
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
+
   const urlToOpen = new URL(event.notification.data?.url || '/', self.location.origin).href;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
-      // Tenta focar em uma aba já aberta para uma experiência fluida
+      // 1. Tenta encontrar uma aba já aberta do app
       for (let i = 0; i < clientList.length; i++) {
         const client = clientList[i];
+        // Verifica se a URL base corresponde (ignora query params para match básico)
         if (client.url.startsWith(self.location.origin) && 'focus' in client) {
-          return client.focus().then(c => c.navigate ? c.navigate(urlToOpen) : null);
+          // Se encontrou, foca nela e navega para a URL correta
+          return client.focus().then(c => {
+              if (c && 'navigate' in c) {
+                  return c.navigate(urlToOpen);
+              }
+          });
         }
       }
-      // Se não, abre uma nova
-      if (clients.openWindow) return clients.openWindow(urlToOpen);
+      
+      // 2. Se não encontrou, abre uma nova janela
+      if (clients.openWindow) {
+        return clients.openWindow(urlToOpen);
+      }
     })
   );
 });

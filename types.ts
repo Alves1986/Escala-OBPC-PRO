@@ -1,53 +1,151 @@
 
-export const SUPABASE_URL = (() => {
-    if (typeof __SUPABASE_URL__ !== 'undefined') return __SUPABASE_URL__;
-    try {
-        // @ts-ignore
-        if (typeof import.meta !== 'undefined' && import.meta.env) {
-            // @ts-ignore
-            return import.meta.env.VITE_SUPABASE_URL || '';
-        }
-    } catch (e) {}
-    return '';
-})();
-
-export const SUPABASE_KEY = (() => {
-    if (typeof __SUPABASE_KEY__ !== 'undefined') return __SUPABASE_KEY__;
-    try {
-        // @ts-ignore
-        if (typeof import.meta !== 'undefined' && import.meta.env) {
-            // @ts-ignore
-            return import.meta.env.VITE_SUPABASE_KEY || '';
-        }
-    } catch (e) {}
-    return '';
-})();
-
 export type Role = string;
+
 export type ThemeMode = 'light' | 'dark' | 'system';
 
-export interface User {
-    id: string;
-    name: string;
-    email?: string;
-    role: 'admin' | 'member';
-    ministryId: string;
-    allowedMinistries: string[];
-    avatar_url?: string;
-    whatsapp?: string;
-    birthDate?: string;
-    functions?: string[];
+export interface MemberMap {
+  [role: string]: string[];
+}
+
+export interface ScheduleMap {
+  [key: string]: string; // key format: "YYYY-MM-DDTHH:mm_Role" -> MemberName
+}
+
+export interface AttendanceMap {
+  [key: string]: boolean;
+}
+
+export interface CustomEvent {
+  id: string;
+  title: string;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:mm
+  iso: string; // Helper for UI
+}
+
+export interface AvailabilityMap {
+  [memberName: string]: string[]; // Array of YYYY-MM-DD (prefix '+' for preferred)
+}
+
+export interface AvailabilityNotesMap {
+  [key: string]: string; // Key: "MemberName_YYYY-MM-DD" -> Note content
+}
+
+export interface MinistrySettings {
+    displayName: string;
+    roles: string[];
+    availabilityStart?: string; // ISO String
+    availabilityEnd?: string;   // ISO String
+    spotifyClientId?: string;   // New
+    spotifyClientSecret?: string; // New
+}
+
+export interface AuditLogEntry {
+  id?: string;
+  date: string;
+  action: string;
+  details: string;
 }
 
 export interface AppNotification {
-    id: string;
-    title: string;
-    message: string;
-    type: 'info' | 'success' | 'warning' | 'alert';
-    timestamp: string;
-    read: boolean;
-    ministryId?: string;
-    actionLink?: string;
+  id: string;
+  type: 'info' | 'success' | 'warning' | 'alert';
+  title: string;
+  message: string;
+  timestamp: string;
+  read: boolean;
+  actionLink?: string;
+  ministryId?: string; // Added for cross-ministry support
+}
+
+export interface Announcement {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'alert';
+  timestamp: string;
+  expirationDate?: string; 
+  author: string;
+  readBy: { userId: string; name: string; timestamp: string }[];
+  likedBy: { userId: string; name: string; timestamp: string }[]; 
+}
+
+export interface ScheduleIssue {
+  type: 'error' | 'warning' | 'info';
+  message: string;
+  suggestedReplacement?: string;
+}
+
+export interface ScheduleAnalysis {
+  [key: string]: ScheduleIssue;
+}
+
+// --- GLOBAL CONFLICT TYPES ---
+export const KNOWN_MINISTRIES = ['midia', 'louvor', 'infantil', 'recepcao', 'teatro', 'diaconia'];
+
+export const MINISTRIES = [
+  { id: 'midia', label: 'Mídia / Comunicação' },
+  { id: 'louvor', label: 'Louvor / Adoração' },
+  { id: 'infantil', label: 'Ministério Infantil' },
+  { id: 'recepcao', label: 'Recepção / Diaconia' }
+];
+
+export interface GlobalConflict {
+    ministryId: string; 
+    eventIso: string;   
+    role: string;       
+}
+
+export interface GlobalConflictMap {
+    [normalizedMemberName: string]: GlobalConflict[];
+}
+
+export interface SwapRequest {
+  id: string;
+  ministryId: string;
+  requesterName: string;
+  requesterId?: string;
+  role: string;
+  eventIso: string; // YYYY-MM-DDTHH:mm
+  eventTitle: string;
+  status: 'pending' | 'completed' | 'cancelled';
+  createdAt: string;
+  takenByName?: string;
+}
+
+export interface RepertoireItem {
+  id: string;
+  title: string;
+  link: string;
+  date: string; // YYYY-MM-DD (Data do culto/evento)
+  observation?: string;
+  addedBy: string;
+  createdAt: string;
+}
+
+export interface PushSubscriptionRecord {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+  device_id: string; 
+  last_updated: string;
+}
+
+export interface User {
+  id?: string;        
+  email?: string;     
+  username?: string;  
+  name: string;       
+  avatar_url?: string; 
+  role: 'admin' | 'member';
+  ministryId?: string; 
+  allowedMinistries?: string[]; 
+  whatsapp?: string;
+  birthDate?: string; 
+  functions?: string[];
+  createdAt?: string;
 }
 
 export interface TeamMemberProfile {
@@ -55,87 +153,25 @@ export interface TeamMemberProfile {
     name: string;
     email?: string;
     whatsapp?: string;
+    birthDate?: string; 
     avatar_url?: string;
     roles?: string[];
+    createdAt?: string;
     isAdmin?: boolean;
-    birthDate?: string;
-    functions?: string[];
 }
 
-export interface AvailabilityMap {
-    [memberName: string]: string[];
-}
-
-export interface AvailabilityNotesMap {
-    [key: string]: string;
-}
-
-export interface SwapRequest {
-    id: string;
-    ministryId: string;
-    requesterName: string;
-    requesterId: string;
-    role: string;
-    eventIso: string;
-    eventTitle: string;
-    status: 'pending' | 'approved' | 'rejected';
-    createdAt: string;
-}
-
-export interface ScheduleMap {
-    [key: string]: string;
-}
-
-export interface RepertoireItem {
-    id: string;
-    title: string;
-    link: string;
-    date: string;
-    addedBy: string;
-}
-
-export interface Announcement {
-    id: string;
-    title: string;
-    message: string;
-    type: 'info' | 'success' | 'warning' | 'alert';
-    timestamp: string;
-    expirationDate?: string;
-    author: string;
-    readBy: { userId: string, name: string, timestamp: string }[];
-    likedBy?: { userId: string, name: string }[];
-    ministryId: string;
-}
-
-export interface GlobalConflict {
-    ministryId: string;
-    eventIso: string;
-    role: string;
-}
-
-export interface GlobalConflictMap {
-    [memberName: string]: GlobalConflict[];
-}
-
-export interface ScheduleAnalysis {
-    // Define properties if needed for schedule analysis
-}
-
-export interface AttendanceMap {
-    [key: string]: boolean;
-}
-
-export interface AuditLogEntry {
-    date: string;
-    action: string;
-    details: string;
-}
-
-export interface MinistrySettings {
-    displayName: string;
-    roles: string[];
-    availabilityStart?: string;
-    availabilityEnd?: string;
+export interface AppState {
+  ministryId: string | null;
+  currentUser: User | null;
+  currentMonth: string; 
+  members: MemberMap;
+  schedule: ScheduleMap;
+  attendance: AttendanceMap;
+  customEvents: CustomEvent[];
+  availability: AvailabilityMap;
+  roles: string[];
+  theme: 'light' | 'dark';
+  sidebarOpen: boolean;
 }
 
 export interface RankingEntry {
@@ -145,51 +181,55 @@ export interface RankingEntry {
     points: number;
     stats: {
         confirmedEvents: number;
+        missedEvents: number;
+        swapsRequested: number;
         announcementsRead: number;
+        announcementsLiked: number;
     };
 }
 
-export interface CustomEvent {
-    id: string;
-    date: string;
-    time: string;
-    title: string;
-    iso?: string;
-}
-
-export interface MemberMonthlyStat {
-    memberId: string;
-    name: string;
-    avatar_url?: string;
-    totalScheduled: number;
-    totalConfirmed: number;
-    swapsRequested: number;
-    attendanceRate: number; // 0 to 100
-    engagementScore: 'High' | 'Medium' | 'Low';
-    mainRole: string;
-}
-
-export interface MemberMap {
-  [role: string]: string[];
-}
-
-export interface PushSubscriptionRecord {
-    endpoint: string;
-    p256dh: string;
-    auth: string;
-}
-
-export const MINISTRIES = [
-    { id: 'midia', label: 'Mídia' },
-    { id: 'louvor', label: 'Louvor' },
-    { id: 'infantil', label: 'Infantil' },
-    { id: 'recepcao', label: 'Recepção' }
-];
-
 export const DEFAULT_ROLES: Record<string, string[]> = {
-    midia: ['Projeção', 'Som', 'Transmissão', 'Corte', 'Fotografia'],
-    louvor: ['Vocal', 'Teclado', 'Violão', 'Guitarra', 'Baixo', 'Bateria'],
-    infantil: ['Professor', 'Auxiliar'],
-    recepcao: ['Porta', 'Interior', 'Estacionamento'],
-    default: ['Membro']
+  'midia': ["Projeção", "Transmissão", "Fotografia", "Storys"],
+  'louvor': ['Ministro', 'Vocal', 'Guitarra', 'Baixo', 'Teclado', 'Bateria', 'Mesa de Som'],
+  'default': ["Membro"]
 };
+
+// ============================================================================
+// SECURITY CONFIGURATION
+// ============================================================================
+
+// Globals injected by Vite via define
+declare const __SUPABASE_URL__: string;
+declare const __SUPABASE_KEY__: string;
+
+// 1. Try Injected Globals (Build-time env vars - MOST ROBUST)
+let injectedUrl = '';
+let injectedKey = '';
+try {
+    // @ts-ignore
+    if (typeof __SUPABASE_URL__ !== 'undefined') injectedUrl = __SUPABASE_URL__;
+    // @ts-ignore
+    if (typeof __SUPABASE_KEY__ !== 'undefined') injectedKey = __SUPABASE_KEY__;
+} catch(e) {}
+
+// 2. Try import.meta.env (Vite Standard)
+let metaUrl = '';
+let metaKey = '';
+try {
+  // @ts-ignore
+  const meta = import.meta;
+  if (meta && meta.env) {
+    metaUrl = meta.env.VITE_SUPABASE_URL;
+    metaKey = meta.env.VITE_SUPABASE_KEY;
+  }
+} catch (e) {}
+
+// Priority: Injected Globals > Import Meta
+// LocalStorage is no longer used for security reasons.
+export const SUPABASE_URL = injectedUrl || metaUrl || "";
+export const SUPABASE_KEY = injectedKey || metaKey || "";
+
+// Debug Log (Optional - remove in production)
+if ((!SUPABASE_URL || !SUPABASE_KEY) && typeof window !== 'undefined' && window.location.pathname !== '/setup') {
+  console.warn("⚠️ Sistema aguardando credenciais. Verifique o arquivo .env na raiz.");
+}

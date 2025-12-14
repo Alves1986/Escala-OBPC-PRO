@@ -119,10 +119,7 @@ export function useAuth() {
     // 2. Listen for changes
     const { data: { subscription } } = sb.auth.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-            // Evita flicker de carregamento desnecessário se já temos o usuário
-            if (!currentUser) {
-                // setLoadingAuth(true); // Removido para evitar loop visual/race condition
-            }
+            if (event === 'SIGNED_IN') setLoadingAuth(true);
             handleUserSession(session);
         } else if (event === 'SIGNED_OUT') {
             setCurrentUser(null);

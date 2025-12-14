@@ -1,6 +1,6 @@
 {
-  "name": "Escala PRO",
-  "description": "Sistema profissional de gestão de escalas e equipes",
+  "name": "Gestão de Escala OBPC",
+  "description": "Professional Ministry Scheduling System with AI and Cloud Sync",
   "requestFramePermissions": [
     "geolocation"
   ]

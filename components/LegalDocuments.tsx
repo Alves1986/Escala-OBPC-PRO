@@ -1,191 +1,173 @@
 
 import React from 'react';
-import { X, Shield } from 'lucide-react';
+import { X, Shield, FileText, ArrowLeft, Mail } from 'lucide-react';
 
 export type LegalDocType = 'terms' | 'privacy' | null;
 
 // --- CONTEÚDO PURO (Reutilizável) ---
 const LegalContent: React.FC<{ type: LegalDocType }> = ({ type }) => {
-  const lastUpdate = new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
-
   if (type === 'terms') {
       return (
-        <div className="space-y-6 text-zinc-700 dark:text-zinc-300 text-sm leading-relaxed text-justify animate-fade-in">
-          <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-lg text-xs text-zinc-500 mb-6">
-            <strong>Última atualização:</strong> {lastUpdate} <br/>
-            Por favor, leia estes termos atentamente antes de utilizar a plataforma.
-          </div>
+        <div className="space-y-4 text-zinc-700 dark:text-zinc-300 text-sm leading-relaxed text-justify">
+          <p><strong>Última atualização: {new Date().toLocaleDateString('pt-BR')}</strong></p>
           
-          <section>
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white mb-2 flex items-center gap-2">
-              1. Aceitação dos Termos
-            </h3>
-            <p>
-              Ao criar uma conta, acessar ou utilizar o sistema <strong>Gestão de Escala OBPC</strong> ("Plataforma"), você concorda expressamente em cumprir e vincular-se aos presentes Termos e Condições de Uso. Caso não concorde com qualquer disposição, você deve interromper o uso imediatamente.
-            </p>
-          </section>
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">1. Aceitação dos Termos</h3>
+          <p>Ao acessar e utilizar o sistema <strong>Escala Mídia Pro</strong>, você concorda em cumprir e ficar vinculado aos seguintes termos e condições de uso. Se você não concordar com estes termos, não deverá utilizar o serviço.</p>
 
-          <section>
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white mb-2">
-              2. Natureza do Serviço e Voluntariado
-            </h3>
-            <p>
-              A Plataforma tem como objetivo exclusivo a organização logística, comunicação e gestão de escalas de equipes ministeriais.
-            </p>
-            <ul className="list-disc pl-5 mt-2 space-y-1 marker:text-zinc-400">
-              <li><strong>Inexistência de Vínculo Empregatício:</strong> O uso desta ferramenta para gestão de escalas não constitui, em hipótese alguma, vínculo empregatício, promessa de remuneração ou obrigatoriedade de prestação de serviços.</li>
-              <li><strong>Caráter Voluntário:</strong> A participação nas escalas geridas por este sistema é de natureza estritamente voluntária, religiosa e beneficente.</li>
-            </ul>
-          </section>
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">2. Descrição do Serviço</h3>
+          <p>O Escala Mídia Pro é uma ferramenta de gestão de escalas, disponibilidade e comunicação para equipes voluntárias e ministeriais. O serviço é fornecido "como está", sem garantias de que será ininterrupto ou livre de erros.</p>
 
-          <section>
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white mb-2">
-              3. Responsabilidades do Usuário
-            </h3>
-            <p>Ao utilizar o sistema, você se compromete a:</p>
-            <ul className="list-disc pl-5 mt-2 space-y-1 marker:text-zinc-400">
-              <li>Manter a confidencialidade de suas credenciais de acesso (login e senha).</li>
-              <li>Fornecer informações verdadeiras, exatas e atualizadas sobre sua disponibilidade.</li>
-              <li>Utilizar os canais de comunicação (Avisos/Chats) de forma respeitosa, ética e condizente com os princípios da organização.</li>
-              <li>Não tentar violar a segurança da plataforma ou extrair dados de outros membros sem autorização.</li>
-            </ul>
-          </section>
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">3. Responsabilidades do Usuário</h3>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Você é responsável por manter a confidencialidade de sua senha e conta.</li>
+            <li>Você concorda em fornecer informações verdadeiras e precisas sobre sua disponibilidade.</li>
+            <li>É proibido usar o sistema para fins ilegais ou não autorizados pela liderança da equipe.</li>
+          </ul>
 
-          <section>
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white mb-2">
-              4. Disponibilidade e Modificações
-            </h3>
-            <p>
-              A administração da Plataforma envidará os melhores esforços para manter o sistema disponível 24/7. No entanto, o serviço é fornecido "como está", podendo ocorrer interrupções para manutenção, atualizações ou devido a falhas de terceiros (servidores, APIs). Reservamo-nos o direito de modificar ou descontinuar funcionalidades a qualquer momento.
-            </p>
-          </section>
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">4. Propriedade Intelectual</h3>
+          <p>Todo o código-fonte, design, logotipos e funcionalidades do sistema são propriedade exclusiva dos desenvolvedores ou licenciados para a organização. O uso não autorizado de qualquer material é estritamente proibido.</p>
 
-          <section>
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white mb-2">
-              5. Propriedade Intelectual
-            </h3>
-            <p>
-              Todo o código-fonte, design, interfaces visuais, logotipos e funcionalidades são de propriedade exclusiva dos desenvolvedores ou licenciados para a organização. É proibida a reprodução, engenharia reversa ou distribuição não autorizada.
-            </p>
-          </section>
-
-          <section>
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white mb-2">
-              6. Disposições Finais
-            </h3>
-            <p>
-              A administração reserva-se o direito de suspender ou encerrar contas que violem estes termos, causem danos à comunidade ou utilizem a plataforma para fins ilícitos.
-            </p>
-          </section>
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">5. Encerramento</h3>
+          <p>A administração reserva-se o direito de suspender ou encerrar sua conta a qualquer momento, por qualquer motivo, incluindo, sem limitação, a violação destes Termos de Uso.</p>
         </div>
       );
     }
 
     if (type === 'privacy') {
       return (
-        <div className="space-y-6 text-zinc-700 dark:text-zinc-300 text-sm leading-relaxed text-justify animate-fade-in">
-          <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-lg text-xs text-zinc-500 mb-6 flex gap-3">
-             <Shield className="shrink-0 text-teal-500" size={16} />
-             <div>
-               <strong>Compromisso com a Privacidade:</strong> Seus dados são utilizados estritamente para a organização das atividades ministeriais e nunca serão vendidos a terceiros.
-             </div>
+        <div className="space-y-4 text-zinc-700 dark:text-zinc-300 text-sm leading-relaxed text-justify">
+          <p><strong>Última atualização: {new Date().toLocaleDateString('pt-BR')}</strong></p>
+
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">1. Coleta de Informações</h3>
+          <p>Para o funcionamento adequado das escalas, coletamos as seguintes informações pessoais:</p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Nome completo (para identificação na escala).</li>
+            <li>E-mail (para login e recuperação de senha).</li>
+            <li>Telefone/WhatsApp (para comunicação urgente e notificações).</li>
+            <li>Foto de perfil (opcional, para identificação visual).</li>
+            <li>Dados de disponibilidade (datas em que você pode ou não servir).</li>
+          </ul>
+
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">2. Uso das Informações</h3>
+          <p>Seus dados são utilizados exclusivamente para:</p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Organização e geração de escalas de voluntários.</li>
+            <li>Envio de notificações sobre eventos, trocas e avisos.</li>
+            <li>Gestão administrativa da equipe.</li>
+          </ul>
+          <p>Nós <strong>não</strong> vendemos, trocamos ou transferimos suas informações pessoais para terceiros externos para fins de marketing.</p>
+
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">3. Segurança dos Dados</h3>
+          <p>Implementamos medidas de segurança para manter suas informações pessoais protegidas. Os dados são armazenados em bancos de dados seguros (Supabase) com autenticação criptografada.</p>
+
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">4. Dados do Google (Limited Use Policy)</h3>
+          <p>O uso de informações recebidas das APIs do Google por este aplicativo adere à <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">Política de Dados do Usuário dos Serviços de API do Google</a>, incluindo os requisitos de uso limitado.</p>
+          <p>Ao utilizar o login com Google:</p>
+          <ul className="list-disc pl-5 space-y-1">
+             <li>Acessamos apenas seu nome, e-mail e foto de perfil para criar sua conta no sistema.</li>
+             <li>Não compartilhamos seus dados do Google com ferramentas de IA de terceiros para fins de treinamento.</li>
+             <li>Não armazenamos dados além do necessário para a identificação do usuário na escala.</li>
+          </ul>
+
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">5. Seus Direitos</h3>
+          <p>Você tem o direito de acessar, corrigir ou solicitar a exclusão de seus dados pessoais a qualquer momento. Para excluir sua conta, entre em contato com o administrador do sistema ou utilize a opção de exclusão nas configurações (se disponível).</p>
+
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">6. Alterações nesta Política</h3>
+          <p>Podemos atualizar nossa Política de Privacidade periodicamente. Recomendamos que você revise esta página regularmente para quaisquer alterações.</p>
+
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mt-4">7. Contato</h3>
+          <p>Se você tiver dúvidas sobre esta Política de Privacidade, entre em contato conosco:</p>
+          <div className="flex items-center gap-2 mt-2 p-3 bg-zinc-100 dark:bg-zinc-800 rounded-lg w-fit">
+             <Mail size={16} className="text-zinc-500"/>
+             <span className="font-medium text-zinc-700 dark:text-zinc-300">cassia.andinho@gmail.com</span>
           </div>
-
-          <section>
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white mb-2">
-              1. Coleta de Dados
-            </h3>
-            <p>Para o funcionamento das escalas e comunicação, coletamos e processamos os seguintes dados pessoais:</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-                <div className="p-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg">
-                    <strong className="block text-zinc-900 dark:text-white text-xs uppercase mb-1">Identificação</strong>
-                    Nome completo, E-mail e Foto de Perfil.
-                </div>
-                <div className="p-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg">
-                    <strong className="block text-zinc-900 dark:text-white text-xs uppercase mb-1">Contato</strong>
-                    Número de telefone/WhatsApp (para urgências).
-                </div>
-                <div className="p-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg">
-                    <strong className="block text-zinc-900 dark:text-white text-xs uppercase mb-1">Operacional</strong>
-                    Datas de disponibilidade, funções exercidas e histórico de participação.
-                </div>
-                <div className="p-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg">
-                    <strong className="block text-zinc-900 dark:text-white text-xs uppercase mb-1">Técnico</strong>
-                    Logs de acesso, IP e interações no sistema (para auditoria).
-                </div>
-            </div>
-          </section>
-
-          <section>
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white mb-2">
-              2. Finalidade do Tratamento
-            </h3>
-            <p>Os dados coletados têm como base legal o legítimo interesse e a execução de atividades voluntárias, sendo utilizados para:</p>
-            <ul className="list-disc pl-5 mt-2 space-y-1 marker:text-zinc-400">
-              <li>Criação e gerenciamento de escalas de serviço.</li>
-              <li>Envio de notificações automáticas (lembretes, trocas, avisos).</li>
-              <li>Identificação visual dos membros nas equipes.</li>
-              <li>Geração de métricas de engajamento (Ranking).</li>
-            </ul>
-          </section>
-
-          <section>
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white mb-2">
-              3. Armazenamento e Segurança
-            </h3>
-            <p>
-              Adotamos práticas de segurança alinhadas ao mercado (criptografia em repouso e em trânsito) e utilizamos infraestrutura de nuvem confiável (Supabase/Google).
-            </p>
-          </section>
         </div>
       );
     }
-    
     return null;
 };
 
-interface LegalModalProps {
+// --- MODAL (Uso interno no App) ---
+interface Props {
   isOpen: boolean;
   type: LegalDocType;
   onClose: () => void;
 }
 
-export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, type, onClose }) => {
+export const LegalModal: React.FC<Props> = ({ isOpen, type, onClose }) => {
   if (!isOpen || !type) return null;
 
-  const titles = {
-    terms: 'Termos de Uso',
-    privacy: 'Política de Privacidade'
-  };
-
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-2xl w-full max-w-2xl border border-zinc-200 dark:border-zinc-700 flex flex-col max-h-[85vh]">
-        <div className="p-5 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900/50 rounded-t-2xl">
-          <h2 className="text-xl font-bold text-zinc-900 dark:text-white">
-            {titles[type]}
-          </h2>
-          <button 
-            onClick={onClose} 
-            className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-          >
+    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col max-h-[85vh]">
+        
+        {/* Header */}
+        <div className="p-5 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900/50 rounded-t-2xl">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${type === 'terms' ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30' : 'bg-green-100 text-green-600 dark:bg-green-900/30'}`}>
+               {type === 'terms' ? <FileText size={20}/> : <Shield size={20}/>}
+            </div>
+            <h2 className="text-xl font-bold text-zinc-900 dark:text-white">
+              {type === 'terms' ? 'Termos de Uso' : 'Política de Privacidade'}
+            </h2>
+          </div>
+          <button onClick={onClose} className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full transition-colors">
             <X size={20} />
           </button>
         </div>
-        
+
+        {/* Content */}
         <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
-          <LegalContent type={type} />
+           <LegalContent type={type} />
         </div>
 
-        <div className="p-5 border-t border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 rounded-b-2xl flex justify-end">
+        {/* Footer */}
+        <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 flex justify-end">
           <button 
             onClick={onClose}
-            className="px-6 py-2.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-bold text-sm rounded-xl shadow-lg hover:opacity-90 transition-opacity active:scale-95"
+            className="px-6 py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-bold rounded-xl hover:opacity-90 transition-opacity"
           >
-            Fechar
+            Entendi
           </button>
         </div>
       </div>
     </div>
   );
+};
+
+// --- PÁGINA PÚBLICA (Uso Externo/Google Cloud) ---
+export const PublicLegalPage: React.FC<{ type: LegalDocType }> = ({ type }) => {
+    if (!type) return null;
+
+    return (
+        <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col items-center py-10 px-4">
+            <div className="w-full max-w-3xl bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+                <div className="p-8 border-b border-zinc-200 dark:border-zinc-800 flex items-center gap-4 bg-zinc-50/50 dark:bg-zinc-900/50">
+                     <button 
+                        onClick={() => window.location.href = '/'}
+                        className="p-2 -ml-2 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full transition-colors"
+                        title="Voltar ao início"
+                     >
+                        <ArrowLeft size={24} className="text-zinc-500" />
+                     </button>
+                     <div>
+                        <h1 className="text-2xl font-bold">
+                            {type === 'terms' ? 'Termos de Uso' : 'Política de Privacidade'}
+                        </h1>
+                        <p className="text-sm text-zinc-500">Gestão de Escala OBPC</p>
+                     </div>
+                </div>
+                
+                <div className="p-8 md:p-12">
+                    <LegalContent type={type} />
+                </div>
+
+                <div className="p-6 bg-zinc-50 dark:bg-black/20 border-t border-zinc-200 dark:border-zinc-800 text-center">
+                    <p className="text-xs text-zinc-400">
+                        &copy; {new Date().getFullYear()} Gestão Escala OBPC. Todos os direitos reservados.
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
 };

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, Suspense, useRef } from 'react';
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
@@ -50,7 +49,6 @@ const EventsScreen = React.lazy(() => import('./components/EventsScreen').then(m
 const RankingScreen = React.lazy(() => import('./components/RankingScreen').then(module => ({ default: module.RankingScreen })));
 const MembersScreen = React.lazy(() => import('./components/MembersScreen').then(module => ({ default: module.MembersScreen })));
 const SocialMediaScreen = React.lazy(() => import('./components/SocialMediaScreen').then(module => ({ default: module.SocialMediaScreen })));
-const AdminReportsScreen = React.lazy(() => import('./components/AdminReportsScreen').then(module => ({ default: module.AdminReportsScreen })));
 
 // Loading Spinner para Lazy Components
 const LoadingFallback = () => (
@@ -75,17 +73,25 @@ const InnerApp = () => {
     currentUser?.name,
     (name, status) => {
         // Lógica de Debounce para Presença
+        // Evita notificar "Saiu" + "Entrou" quando o usuário apenas recarrega a página (F5)
         if (status === 'offline') {
+            // Se já tiver um timer rodando, limpa ele
             if (presenceTimeouts.current[name]) clearTimeout(presenceTimeouts.current[name]);
+            
+            // Agenda a notificação de saída para daqui a 5 segundos
             presenceTimeouts.current[name] = setTimeout(() => {
                 addToast(`${name} saiu`, 'info'); 
                 delete presenceTimeouts.current[name];
             }, 5000);
         } else {
+            // Usuário entrou (online)
             if (presenceTimeouts.current[name]) {
+                // Se existe um timer de saída pendente, significa que ele saiu e voltou rápido (refresh)
+                // Então cancelamos o aviso de "Saiu" e NÃO mostramos o aviso de "Entrou"
                 clearTimeout(presenceTimeouts.current[name]);
                 delete presenceTimeouts.current[name];
             } else {
+                // Se não tem timer pendente, é uma entrada legítima
                 addToast(`${name} entrou`, 'success');
             }
         }
@@ -96,24 +102,9 @@ const InnerApp = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
   
-  // ========================================================================
-  // LÓGICA DE ROTEAMENTO (Login Google vs Spotify)
-  // ========================================================================
-  
-  // 1. Auxiliar para detectar callback do Spotify
-  const isSpotifyCallback = () => {
-      if (typeof window === 'undefined') return false;
-      return window.location.hash.includes('state=spotify_login_app');
-  };
-
-  // 2. Estado inicial da aba
   const [currentTab, setCurrentTab] = useState(() => {
       if (typeof window !== 'undefined') {
-          // Só vai para o repertório se for callback do Spotify (valida o state)
-          if (window.location.hash.includes('access_token') && isSpotifyCallback()) {
-              return 'repertoire-manager'; 
-          }
-          
+          if (window.location.hash && window.location.hash.includes('access_token')) return 'repertoire-manager'; 
           const params = new URLSearchParams(window.location.search);
           return params.get('tab') || 'dashboard';
       }
@@ -148,27 +139,11 @@ const InnerApp = () => {
 
   // --- EFFECTS ---
 
-  // 3. Gerenciamento de Login e Limpeza de URL
+  // Atualiza a aba se vier do callback do Spotify
   useEffect(() => {
-      // Caso 1: Retorno do Spotify (vai para repertório)
-      if (isSpotifyCallback() && currentUser) {
+      if (window.location.hash && window.location.hash.includes('access_token') && currentUser) {
           const target = currentUser.role === 'admin' ? 'repertoire-manager' : 'repertoire';
           if (currentTab !== target) setCurrentTab(target);
-          return;
-      }
-      
-      // Caso 2: Login Google/Supabase (vai para dashboard e limpa URL)
-      // "&& currentUser" garante que só limpamos a URL APÓS o login ter sido processado.
-      if (currentUser && window.location.hash.includes('access_token') && !isSpotifyCallback()) {
-          // Limpa a URL visualmente
-          try {
-              window.history.replaceState(null, '', window.location.pathname + window.location.search);
-          } catch(e) {}
-          
-          // Se estiver na aba errada (devido à hash inicial não ser spotify), corrige para dashboard
-          if (currentTab === 'repertoire-manager') {
-              setCurrentTab('dashboard');
-          }
       }
   }, [currentUser]);
 
@@ -194,7 +169,7 @@ const InnerApp = () => {
   useEffect(() => {
       const url = new URL(window.location.href);
       if (url.searchParams.get('tab') !== currentTab) {
-          if (!window.location.hash.includes('access_token') && !isSpotifyCallback()) {
+          if (!window.location.hash.includes('access_token')) {
               url.searchParams.set('tab', currentTab);
               try { window.history.replaceState({}, '', url.toString()); } catch (e) {}
           }
@@ -414,8 +389,7 @@ const InnerApp = () => {
   const MANAGEMENT_NAV = [
     { id: 'schedule-editor', label: 'Editor de Escala', icon: <Edit size={20}/> },
     { id: 'repertoire-manager', label: 'Gerenciar Repertório', icon: <ListMusic size={20}/> },
-    { id: 'admin-reports', label: 'Relatórios (KPIs)', icon: <FileBarChart size={20}/> }, // Added Admin Reports
-    { id: 'report', label: 'Relat. Disponibilidade', icon: <CalendarDays size={20}/> },
+    { id: 'report', label: 'Relat. Disponibilidade', icon: <FileBarChart size={20}/> },
     { id: 'events', label: 'Eventos', icon: <CalendarDays size={20}/> },
     { id: 'send-announcements', label: 'Enviar Avisos', icon: <Send size={20}/> },
     { id: 'members', label: 'Membros & Equipe', icon: <Users size={20}/> },
@@ -535,7 +509,6 @@ const InnerApp = () => {
                 {currentTab === 'announcements' && <AnnouncementsScreen announcements={announcements} currentUser={currentUser} onMarkRead={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'read').then(() => loadData())} onToggleLike={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'like').then(() => loadData())} />}
                 {currentTab === 'send-announcements' && isAdmin && <AlertsManager onSend={async (title, message, type, exp) => { await Supabase.sendNotificationSQL(ministryId, { title, message, type, actionLink: 'announcements' }); await Supabase.createAnnouncementSQL(ministryId, { title, message, type, expirationDate: exp }, currentUser.name); loadData(); }} />}
                 {currentTab === 'report' && isAdmin && <AvailabilityReportScreen availability={availability} registeredMembers={publicMembers} membersMap={membersMap} currentMonth={currentMonth} onMonthChange={setCurrentMonth} availableRoles={roles} onRefresh={async () => { await loadData(); }} />}
-                {currentTab === 'admin-reports' && isAdmin && <AdminReportsScreen ministryId={ministryId} currentMonth={currentMonth} onMonthChange={setCurrentMonth} />}
                 {currentTab === 'profile' && <ProfileScreen user={currentUser} onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { const res = await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId); if (res.success) { addToast(res.message, "success"); if (currentUser) { setCurrentUser({ ...currentUser, name, whatsapp, avatar_url: avatar || currentUser.avatar_url, functions: funcs, birthDate: bdate }); } loadData(); } else { addToast(res.message, "error"); }}} availableRoles={roles} />}
                 {currentTab === 'settings' && <SettingsScreen initialTitle={ministryTitle} ministryId={ministryId} themeMode={themeMode} onSetThemeMode={handleSetThemeMode} onSaveTheme={handleSaveTheme} onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, newTitle); setMinistryTitle(newTitle); addToast("Nome do ministério atualizado!", "success"); }} onAnnounceUpdate={async () => { await Supabase.sendNotificationSQL(ministryId, { title: "Atualização de Sistema", message: "Uma nova versão do app está disponível. Recarregue a página para aplicar.", type: "warning" }); addToast("Notificação de atualização enviada.", "success"); }} onEnableNotifications={handleEnableNotifications} onSaveAvailabilityWindow={async (start, end) => { setAvailabilityWindow({ start, end }); await Supabase.saveMinistrySettings(ministryId, undefined, undefined, start, end); loadData(); }} availabilityWindow={availabilityWindow} isAdmin={isAdmin} />}
                 {currentTab === 'social' && <SocialMediaScreen />}
