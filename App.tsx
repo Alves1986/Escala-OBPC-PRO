@@ -95,23 +95,29 @@ const InnerApp = () => {
   const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
   
   // ========================================================================
-  // LÓGICA DE ROTEAMENTO (Login Google vs Spotify)
+  // LÓGICA CRÍTICA DE ROTEAMENTO (LOGIN GOOGLE vs SPOTIFY)
   // ========================================================================
   
-  // 1. Auxiliar para detectar callback do Spotify
+  // Verifica se é retorno do Spotify procurando o parâmetro 'state' específico.
+  // O login do Google NÃO tem esse parâmetro.
   const isSpotifyCallback = () => {
       if (typeof window === 'undefined') return false;
-      return window.location.hash.includes('state=spotify_login_app');
+      const hash = window.location.hash;
+      return hash.includes('access_token') && hash.includes('state=spotify_login_app');
   };
 
-  // 2. Estado inicial da aba
   const [currentTab, setCurrentTab] = useState(() => {
       if (typeof window !== 'undefined') {
-          // Só vai para o repertório se for callback do Spotify
+          // Prioridade 1: Callback Spotify (vai para Repertório)
           if (isSpotifyCallback()) return 'repertoire-manager'; 
           
+          // Prioridade 2: URL Query Param (?tab=xxx)
           const params = new URLSearchParams(window.location.search);
-          return params.get('tab') || 'dashboard';
+          const tab = params.get('tab');
+          if (tab) return tab;
+
+          // Padrão Absoluto: Dashboard
+          return 'dashboard';
       }
       return 'dashboard';
   });
@@ -144,29 +150,30 @@ const InnerApp = () => {
 
   // --- EFFECTS ---
 
-  // 3. Gerenciamento de Login e Limpeza de URL
+  // Gerenciamento de Login e Limpeza de URL
   useEffect(() => {
-      // Caso 1: Retorno do Spotify (vai para repertório)
+      // Caso 1: Retorno do Spotify
       if (isSpotifyCallback() && currentUser) {
           const target = currentUser.role === 'admin' ? 'repertoire-manager' : 'repertoire';
           if (currentTab !== target) setCurrentTab(target);
           return;
       }
       
-      // Caso 2: Login Google/Supabase (vai para dashboard e limpa URL)
-      // CORREÇÃO CRÍTICA: "&& currentUser" garante que só limpamos a URL APÓS o login ter sido processado.
-      if (currentUser && window.location.hash.includes('access_token') && !isSpotifyCallback()) {
-          // Limpa a URL visualmente
+      // Caso 2: Login Google (Supabase) - URL suja com tokens
+      if (window.location.hash.includes('access_token') && !isSpotifyCallback()) {
+          // Limpa a URL para remover o token visualmente para uma experiência mais limpa
           try {
               window.history.replaceState(null, '', window.location.pathname + window.location.search);
           } catch(e) {}
           
-          // Se estiver na aba errada (devido à hash inicial), corrige para dashboard
-          if (currentTab === 'repertoire-manager') {
+          // Garante que está no Dashboard se não houver outra aba especificada explicitamente na URL
+          // Isso corrige o problema onde ele podia ficar em 'repertoire-manager' se o estado inicial falhasse
+          const params = new URLSearchParams(window.location.search);
+          if (!params.get('tab') && currentTab === 'repertoire-manager') {
               setCurrentTab('dashboard');
           }
       }
-  }, [currentUser]); // Executa quando currentUser muda (de null para logado)
+  }, [currentUser]);
 
   // Smooth Loading Transition
   useEffect(() => {
@@ -189,12 +196,10 @@ const InnerApp = () => {
   // Sync URL with Tab
   useEffect(() => {
       const url = new URL(window.location.href);
-      if (url.searchParams.get('tab') !== currentTab) {
-          // Evita sujar a URL se tiver hash importante
-          if (!window.location.hash.includes('access_token') && !isSpotifyCallback()) {
-              url.searchParams.set('tab', currentTab);
-              try { window.history.replaceState({}, '', url.toString()); } catch (e) {}
-          }
+      // Evita sobrescrever hash do Spotify se estiver processando
+      if (!isSpotifyCallback() && url.searchParams.get('tab') !== currentTab) {
+          url.searchParams.set('tab', currentTab);
+          try { window.history.replaceState({}, '', url.toString()); } catch (e) {}
       }
   }, [currentTab]);
 
@@ -245,7 +250,6 @@ const InnerApp = () => {
       try {
           if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error("Push não suportado");
           
-          // Espera o SW estar ativo
           const reg = await navigator.serviceWorker.ready;
           if (!reg) throw new Error("Service Worker não está pronto.");
 
@@ -388,7 +392,7 @@ const InnerApp = () => {
 
   // --- RENDER ---
 
-  // 1. CONFIG CHECK (Moved after hooks to avoid React Error #310)
+  // 1. CONFIG CHECK
   if ((!SUPABASE_URL || !SUPABASE_KEY) && !isDemoMode) {
       return <SetupScreen onEnterDemo={() => setIsDemoMode(true)} />;
   }
