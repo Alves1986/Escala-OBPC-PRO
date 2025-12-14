@@ -103,9 +103,18 @@ const InnerApp = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
   
+  // Helper to detect Spotify specific hash pattern vs Supabase
+  // Spotify (Implicit) returns: access_token, token_type, expires_in, state
+  // Supabase (Implicit) returns: access_token, refresh_token, token_type, expires_in, provider_token...
+  const isSpotifyCallback = () => {
+      if (typeof window === 'undefined') return false;
+      const hash = window.location.hash;
+      return hash.includes('access_token') && !hash.includes('refresh_token') && !hash.includes('type=');
+  };
+
   const [currentTab, setCurrentTab] = useState(() => {
       if (typeof window !== 'undefined') {
-          if (window.location.hash && window.location.hash.includes('access_token')) return 'repertoire-manager'; 
+          if (isSpotifyCallback()) return 'repertoire-manager'; 
           const params = new URLSearchParams(window.location.search);
           return params.get('tab') || 'dashboard';
       }
@@ -140,9 +149,9 @@ const InnerApp = () => {
 
   // --- EFFECTS ---
 
-  // Atualiza a aba se vier do callback do Spotify
+  // Atualiza a aba se vier do callback do Spotify (e não Supabase Auth)
   useEffect(() => {
-      if (window.location.hash && window.location.hash.includes('access_token') && currentUser) {
+      if (isSpotifyCallback() && currentUser) {
           const target = currentUser.role === 'admin' ? 'repertoire-manager' : 'repertoire';
           if (currentTab !== target) setCurrentTab(target);
       }
@@ -170,7 +179,8 @@ const InnerApp = () => {
   useEffect(() => {
       const url = new URL(window.location.href);
       if (url.searchParams.get('tab') !== currentTab) {
-          if (!window.location.hash.includes('access_token')) {
+          // Avoid overwriting Spotify hash if processing
+          if (!isSpotifyCallback()) {
               url.searchParams.set('tab', currentTab);
               try { window.history.replaceState({}, '', url.toString()); } catch (e) {}
           }
