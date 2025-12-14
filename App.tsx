@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect, Suspense, useRef } from 'react';
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
   Megaphone, Settings, FileBarChart, CalendarDays,
   Users, Edit, Send, ListMusic, Clock, ArrowLeft, ArrowRight,
-  Calendar as CalendarIcon, Trophy, Loader2, ShieldAlert, Share2, Sparkles, ChevronRight
+  Calendar as CalendarIcon, Trophy, Loader2, ShieldAlert, Share2, Sparkles, ChevronRight, FileText
 } from 'lucide-react';
 import { ToastProvider, useToast } from './components/Toast';
 import { LoginScreen } from './components/LoginScreen';
@@ -43,6 +44,7 @@ const RepertoireScreen = React.lazy(() => import('./components/RepertoireScreen'
 const AnnouncementsScreen = React.lazy(() => import('./components/AnnouncementsScreen').then(module => ({ default: module.AnnouncementsScreen })));
 const AlertsManager = React.lazy(() => import('./components/AlertsManager').then(module => ({ default: module.AlertsManager })));
 const AvailabilityReportScreen = React.lazy(() => import('./components/AvailabilityReportScreen').then(module => ({ default: module.AvailabilityReportScreen })));
+const MonthlyReportScreen = React.lazy(() => import('./components/MonthlyReportScreen').then(module => ({ default: module.MonthlyReportScreen })));
 const SettingsScreen = React.lazy(() => import('./components/SettingsScreen').then(module => ({ default: module.SettingsScreen })));
 const ProfileScreen = React.lazy(() => import('./components/ProfileScreen').then(module => ({ default: module.ProfileScreen })));
 const EventsScreen = React.lazy(() => import('./components/EventsScreen').then(module => ({ default: module.EventsScreen })));
@@ -149,7 +151,7 @@ const InnerApp = () => {
       }
       
       // Caso 2: Login Google/Supabase (vai para dashboard e limpa URL)
-      // "&& currentUser" garante que só limpamos a URL APÓS o login ter sido processado.
+      // CORREÇÃO CRÍTICA: "&& currentUser" garante que só limpamos a URL APÓS o login ter sido processado.
       if (currentUser && window.location.hash.includes('access_token') && !isSpotifyCallback()) {
           // Limpa a URL visualmente
           try {
@@ -161,7 +163,7 @@ const InnerApp = () => {
               setCurrentTab('dashboard');
           }
       }
-  }, [currentUser]); // Executa quando currentUser muda
+  }, [currentUser]); // Executa quando currentUser muda (de null para logado)
 
   useEffect(() => {
       if (!loadingAuth && !loadingData) {
@@ -180,10 +182,12 @@ const InnerApp = () => {
       return () => window.removeEventListener('focus', handleFocus);
   }, [currentUser, ministryId, loadData]);
 
+  // Sync URL with Tab
   useEffect(() => {
       const url = new URL(window.location.href);
       if (url.searchParams.get('tab') !== currentTab) {
-          if (!window.location.hash.includes('access_token')) {
+          // Evita sujar a URL se tiver hash importante
+          if (!window.location.hash.includes('access_token') && !isSpotifyCallback()) {
               url.searchParams.set('tab', currentTab);
               try { window.history.replaceState({}, '', url.toString()); } catch (e) {}
           }
@@ -393,6 +397,7 @@ const InnerApp = () => {
 
   const MANAGEMENT_NAV = [
     { id: 'schedule-editor', label: 'Editor de Escala', icon: <Edit size={20}/> },
+    { id: 'monthly-report', label: 'Relatório Mensal', icon: <FileText size={20}/> },
     { id: 'repertoire-manager', label: 'Gerenciar Repertório', icon: <ListMusic size={20}/> },
     { id: 'report', label: 'Relat. Disponibilidade', icon: <FileBarChart size={20}/> },
     { id: 'events', label: 'Eventos', icon: <CalendarDays size={20}/> },
@@ -560,6 +565,18 @@ const InnerApp = () => {
                         </div>
                         <ScheduleTable events={events} roles={roles} schedule={schedule} attendance={attendance} availability={availability} members={membersMap} allMembers={publicMembers.map(m => m.name)} memberProfiles={publicMembers} scheduleIssues={{}} globalConflicts={globalConflicts} onCellChange={handleCellChange} onAttendanceToggle={handleAttendanceToggle} onDeleteEvent={async (iso, title) => confirmAction("Remover?", `Remover "${title}"?`, async () => { await Supabase.deleteMinistryEvent(ministryId, iso.split('T')[0] + 'T' + iso.split('T')[1]); loadData(); })} onEditEvent={(event) => setEventDetailsModal({ isOpen: true, event })} memberStats={Object.values(schedule).reduce((acc: any, val: any) => { if(val) acc[val] = (acc[val] || 0) + 1; return acc; }, {})} ministryId={ministryId} readOnly={false} onlineUsers={onlineUsers} />
                     </div>
+                )}
+
+                {currentTab === 'monthly-report' && isAdmin && (
+                    <MonthlyReportScreen 
+                        currentMonth={currentMonth}
+                        onMonthChange={setCurrentMonth}
+                        schedule={schedule}
+                        attendance={attendance}
+                        swapRequests={swapRequests}
+                        members={publicMembers}
+                        events={events}
+                    />
                 )}
 
                 {/* Other Tabs Mapped to Lazy Components */}

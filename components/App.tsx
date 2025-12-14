@@ -1,54 +1,55 @@
+
 import React, { useState, useEffect, Suspense, useRef } from 'react';
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
   Megaphone, Settings, FileBarChart, CalendarDays,
   Users, Edit, Send, ListMusic, Clock, ArrowLeft, ArrowRight,
-  Calendar as CalendarIcon, Trophy, Loader2, ShieldAlert, Share2
+  Calendar as CalendarIcon, Trophy, Loader2, ShieldAlert, Share2, Sparkles, ChevronRight
 } from 'lucide-react';
-import { ToastProvider, useToast } from './components/Toast';
-import { LoginScreen } from './components/LoginScreen';
-import { SetupScreen } from './components/SetupScreen';
-import { LoadingScreen } from './components/LoadingScreen';
-import { DashboardLayout } from './components/DashboardLayout';
-import { NextEventCard } from './components/NextEventCard';
-import { BirthdayCard } from './components/BirthdayCard';
-import { WeatherWidget } from './components/WeatherWidget';
-import { InstallBanner } from './components/InstallBanner';
-import { InstallModal } from './components/InstallModal';
-import { JoinMinistryModal } from './components/JoinMinistryModal';
-import { ToolsMenu } from './components/ToolsMenu';
-import { EventDetailsModal } from './components/EventDetailsModal';
-import { StatsModal } from './components/StatsModal';
-import { ConfirmationModal } from './components/ConfirmationModal';
-import { EventsModal, AvailabilityModal, RolesModal } from './components/ManagementModals';
-import { ErrorBoundary } from './components/ErrorBoundary';
+import { ToastProvider, useToast } from './Toast';
+import { LoginScreen } from './LoginScreen';
+import { SetupScreen } from './SetupScreen';
+import { LoadingScreen } from './LoadingScreen';
+import { DashboardLayout } from './DashboardLayout';
+import { NextEventCard } from './NextEventCard';
+import { BirthdayCard } from './BirthdayCard';
+import { WeatherWidget } from './WeatherWidget';
+import { InstallBanner } from './InstallBanner';
+import { InstallModal } from './InstallModal';
+import { JoinMinistryModal } from './JoinMinistryModal';
+import { ToolsMenu } from './ToolsMenu';
+import { EventDetailsModal } from './EventDetailsModal';
+import { StatsModal } from './StatsModal';
+import { ConfirmationModal } from './ConfirmationModal';
+import { EventsModal, AvailabilityModal, RolesModal } from './ManagementModals';
+import { ErrorBoundary } from './ErrorBoundary';
 
-import * as Supabase from './services/supabaseService';
-import { generateScheduleWithAI } from './services/aiService';
-import { ThemeMode, SUPABASE_URL, SUPABASE_KEY } from './types';
-import { adjustMonth, getMonthName, getLocalDateISOString } from './utils/dateUtils';
-import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from './utils/pushUtils';
+import * as Supabase from '../services/supabaseService';
+import { generateScheduleWithAI } from '../services/aiService';
+import { ThemeMode, SUPABASE_URL, SUPABASE_KEY } from '../types';
+import { adjustMonth, getMonthName, getLocalDateISOString } from '../utils/dateUtils';
+import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from '../utils/pushUtils';
 
 // Hooks
-import { useAuth } from './hooks/useAuth';
-import { useMinistryData } from './hooks/useMinistryData';
-import { useOnlinePresence } from './hooks/useOnlinePresence';
+import { useAuth } from '../hooks/useAuth';
+import { useMinistryData } from '../hooks/useMinistryData';
+import { useOnlinePresence } from '../hooks/useOnlinePresence';
 
 // --- Lazy Load Heavy Components (Code Splitting) ---
-const ScheduleTable = React.lazy(() => import('./components/ScheduleTable').then(module => ({ default: module.ScheduleTable })));
-const CalendarGrid = React.lazy(() => import('./components/CalendarGrid').then(module => ({ default: module.CalendarGrid })));
-const AvailabilityScreen = React.lazy(() => import('./components/AvailabilityScreen').then(module => ({ default: module.AvailabilityScreen })));
-const SwapRequestsScreen = React.lazy(() => import('./components/SwapRequestsScreen').then(module => ({ default: module.SwapRequestsScreen })));
-const RepertoireScreen = React.lazy(() => import('./components/RepertoireScreen').then(module => ({ default: module.RepertoireScreen })));
-const AnnouncementsScreen = React.lazy(() => import('./components/AnnouncementsScreen').then(module => ({ default: module.AnnouncementsScreen })));
-const AlertsManager = React.lazy(() => import('./components/AlertsManager').then(module => ({ default: module.AlertsManager })));
-const AvailabilityReportScreen = React.lazy(() => import('./components/AvailabilityReportScreen').then(module => ({ default: module.AvailabilityReportScreen })));
-const SettingsScreen = React.lazy(() => import('./components/SettingsScreen').then(module => ({ default: module.SettingsScreen })));
-const ProfileScreen = React.lazy(() => import('./components/ProfileScreen').then(module => ({ default: module.ProfileScreen })));
-const EventsScreen = React.lazy(() => import('./components/EventsScreen').then(module => ({ default: module.EventsScreen })));
-const RankingScreen = React.lazy(() => import('./components/RankingScreen').then(module => ({ default: module.RankingScreen })));
-const MembersScreen = React.lazy(() => import('./components/MembersScreen').then(module => ({ default: module.MembersScreen })));
-const SocialMediaScreen = React.lazy(() => import('./components/SocialMediaScreen').then(module => ({ default: module.SocialMediaScreen })));
+const ScheduleTable = React.lazy(() => import('./ScheduleTable').then(module => ({ default: module.ScheduleTable })));
+const CalendarGrid = React.lazy(() => import('./CalendarGrid').then(module => ({ default: module.CalendarGrid })));
+const AvailabilityScreen = React.lazy(() => import('./AvailabilityScreen').then(module => ({ default: module.AvailabilityScreen })));
+const SwapRequestsScreen = React.lazy(() => import('./SwapRequestsScreen').then(module => ({ default: module.SwapRequestsScreen })));
+const RepertoireScreen = React.lazy(() => import('./RepertoireScreen').then(module => ({ default: module.RepertoireScreen })));
+const AnnouncementsScreen = React.lazy(() => import('./AnnouncementsScreen').then(module => ({ default: module.AnnouncementsScreen })));
+const AlertsManager = React.lazy(() => import('./AlertsManager').then(module => ({ default: module.AlertsManager })));
+const AvailabilityReportScreen = React.lazy(() => import('./AvailabilityReportScreen').then(module => ({ default: module.AvailabilityReportScreen })));
+const SettingsScreen = React.lazy(() => import('./SettingsScreen').then(module => ({ default: module.SettingsScreen })));
+const ProfileScreen = React.lazy(() => import('./ProfileScreen').then(module => ({ default: module.ProfileScreen })));
+const EventsScreen = React.lazy(() => import('./EventsScreen').then(module => ({ default: module.EventsScreen })));
+const RankingScreen = React.lazy(() => import('./RankingScreen').then(module => ({ default: module.RankingScreen })));
+const MembersScreen = React.lazy(() => import('./MembersScreen').then(module => ({ default: module.MembersScreen })));
+const SocialMediaScreen = React.lazy(() => import('./SocialMediaScreen').then(module => ({ default: module.SocialMediaScreen })));
 
 // Loading Spinner para Lazy Components
 const LoadingFallback = () => (
@@ -59,20 +60,15 @@ const LoadingFallback = () => (
 );
 
 const InnerApp = () => {
-  // --- STATE & HOOKS (Must be called unconditionally) ---
   const [isDemoMode, setIsDemoMode] = useState(false);
-
   const { currentUser, setCurrentUser, loadingAuth } = useAuth();
   const { addToast, confirmAction } = useToast();
-
-  // Ref para armazenar timers de notificação e evitar spam no refresh
   const presenceTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const onlineUsers = useOnlinePresence(
     currentUser?.id, 
     currentUser?.name,
     (name, status) => {
-        // Lógica de Debounce para Presença
         if (status === 'offline') {
             if (presenceTimeouts.current[name]) clearTimeout(presenceTimeouts.current[name]);
             presenceTimeouts.current[name] = setTimeout(() => {
@@ -168,7 +164,6 @@ const InnerApp = () => {
       }
   }, [currentUser]); // Executa quando currentUser muda (de null para logado)
 
-  // Smooth Loading Transition
   useEffect(() => {
       if (!loadingAuth && !loadingData) {
           const timer = setTimeout(() => setShowInitialLoading(false), 800);
@@ -204,7 +199,6 @@ const InnerApp = () => {
       return () => window.removeEventListener('pwa-ready', handlePwaReady);
   }, []);
 
-  // Theme Logic
   useEffect(() => {
     const applyTheme = () => {
         let targetTheme: 'light' | 'dark' = 'light';
@@ -222,8 +216,6 @@ const InnerApp = () => {
     if (themeMode === 'system') interval = setInterval(applyTheme, 60000);
     return () => { if (interval) clearInterval(interval); };
   }, [themeMode]);
-
-  // --- HANDLERS ---
 
   const handleSetThemeMode = (mode: ThemeMode) => setThemeMode(mode);
   
@@ -244,11 +236,8 @@ const InnerApp = () => {
   const handleEnableNotifications = async () => {
       try {
           if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error("Push não suportado");
-          
-          // Espera o SW estar ativo
           const reg = await navigator.serviceWorker.ready;
           if (!reg) throw new Error("Service Worker não está pronto.");
-
           let sub = await reg.pushManager.getSubscription();
           if (!sub) {
               sub = await reg.pushManager.subscribe({ 
@@ -256,7 +245,6 @@ const InnerApp = () => {
                   applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) 
               });
           }
-          
           if (sub) {
               await Supabase.saveSubscriptionSQL(ministryId, sub);
               addToast("Notificações ativadas com sucesso!", "success");
@@ -386,9 +374,7 @@ const InnerApp = () => {
       else runAi();
   };
 
-  // --- RENDER ---
-
-  // 1. CONFIG CHECK (Moved after hooks to avoid React Error #310)
+  // 1. CONFIG CHECK
   if ((!SUPABASE_URL || !SUPABASE_KEY) && !isDemoMode) {
       return <SetupScreen onEnterDemo={() => setIsDemoMode(true)} />;
   }
@@ -450,20 +436,22 @@ const InnerApp = () => {
         >
             <Suspense fallback={<LoadingFallback />}>
                 {currentTab === 'dashboard' && (
-                    <div className="space-y-6 animate-fade-in">
+                    <div className="space-y-8 animate-fade-in max-w-5xl mx-auto">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                             <div>
-                                <h1 className="text-3xl font-bold text-zinc-900 dark:text-white tracking-tight">
+                                <h1 className="text-2xl md:text-3xl font-bold text-zinc-900 dark:text-white tracking-tight leading-tight">
                                     {(() => {
                                         const h = new Date().getHours();
                                         if (h < 12) return "Bom dia";
                                         if (h < 18) return "Boa tarde";
                                         return "Boa noite";
-                                    })()}, <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-600 to-emerald-600 dark:from-teal-400 dark:to-emerald-400">{currentUser.name.split(' ')[0]}</span>.
+                                    })()}, <span className="text-teal-600 dark:text-teal-400">{currentUser.name.split(' ')[0]}</span>
                                 </h1>
-                                <p className="text-zinc-500 dark:text-zinc-400 mt-1">Bem-vindo a {ministryTitle}.</p>
+                                <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">Bem-vindo ao painel do {ministryTitle}.</p>
                             </div>
-                            <WeatherWidget />
+                            <div className="hidden md:block">
+                                <WeatherWidget />
+                            </div>
                         </div>
 
                         {(() => {
@@ -474,17 +462,72 @@ const InnerApp = () => {
                         
                         <BirthdayCard members={publicMembers} currentMonthIso={currentMonth} />
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700">
-                                <h3 className="font-bold text-zinc-800 dark:text-white mb-4">Acesso Rápido</h3>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button onClick={() => setCurrentTab('availability')} className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-xl font-bold text-sm hover:bg-blue-100 transition-colors flex flex-col items-center gap-2 text-center"><CalendarCheck size={24}/> Marcar Disponibilidade</button>
-                                    <button onClick={() => setCurrentTab('calendar')} className="p-3 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-xl font-bold text-sm hover:bg-purple-100 transition-colors flex flex-col items-center gap-2 text-center"><CalendarIcon size={24}/> Ver Escala Completa</button>
-                                </div>
+                        {/* Quick Access Grid - Pro Style */}
+                        <div>
+                            <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2"><Sparkles size={14}/> Acesso Rápido</h3>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <button onClick={() => setCurrentTab('availability')} className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-600 transition-all group text-left">
+                                    <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                        <CalendarCheck size={20} strokeWidth={1.5}/>
+                                    </div>
+                                    <span className="block text-sm font-bold text-zinc-800 dark:text-zinc-100">Disponibilidade</span>
+                                    <span className="text-[10px] text-zinc-500">Marcar dias livres</span>
+                                </button>
+
+                                <button onClick={() => setCurrentTab('calendar')} className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-600 transition-all group text-left">
+                                    <div className="w-10 h-10 rounded-lg bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                        <CalendarIcon size={20} strokeWidth={1.5}/>
+                                    </div>
+                                    <span className="block text-sm font-bold text-zinc-800 dark:text-zinc-100">Escala Completa</span>
+                                    <span className="text-[10px] text-zinc-500">Ver o mês inteiro</span>
+                                </button>
+
+                                <button onClick={() => setCurrentTab('swaps')} className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-600 transition-all group text-left">
+                                    <div className="w-10 h-10 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                        <RefreshCcw size={20} strokeWidth={1.5}/>
+                                    </div>
+                                    <span className="block text-sm font-bold text-zinc-800 dark:text-zinc-100">Trocas</span>
+                                    <span className="text-[10px] text-zinc-500">Solicitar/Aceitar</span>
+                                </button>
+
+                                <button onClick={() => setCurrentTab('repertoire')} className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-600 transition-all group text-left">
+                                    <div className="w-10 h-10 rounded-lg bg-pink-50 dark:bg-pink-900/20 text-pink-600 dark:text-pink-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                        <Music size={20} strokeWidth={1.5}/>
+                                    </div>
+                                    <span className="block text-sm font-bold text-zinc-800 dark:text-zinc-100">Repertório</span>
+                                    <span className="text-[10px] text-zinc-500">Músicas do culto</span>
+                                </button>
                             </div>
-                            <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700">
-                                <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-zinc-800 dark:text-white">Últimos Avisos</h3><button onClick={() => setCurrentTab('announcements')} className="text-xs text-blue-500 font-bold hover:underline">Ver Todos</button></div>
-                                {announcements.length === 0 ? <p className="text-sm text-zinc-400 italic">Nenhum aviso recente.</p> : <div className="space-y-3">{announcements.slice(0, 3).map(a => (<div key={a.id} className="text-sm border-l-2 border-blue-500 pl-3"><p className="font-bold text-zinc-800 dark:text-zinc-200 truncate">{a.title}</p><p className="text-zinc-500 text-xs truncate">{a.message}</p></div>))}</div>}
+                        </div>
+
+                        {/* Recent Announcements */}
+                        <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+                            <div className="p-5 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50/50 dark:bg-zinc-900/30">
+                                <h3 className="font-bold text-zinc-800 dark:text-white text-sm">Quadro de Avisos</h3>
+                                <button onClick={() => setCurrentTab('announcements')} className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:underline flex items-center gap-1">
+                                    Ver Todos <ChevronRight size={12}/>
+                                </button>
+                            </div>
+                            
+                            <div className="p-0">
+                                {announcements.length === 0 ? (
+                                    <div className="p-8 text-center text-zinc-400">
+                                        <Megaphone size={32} className="mx-auto mb-2 opacity-20"/>
+                                        <p className="text-sm">Nenhum aviso recente.</p>
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                                        {announcements.slice(0, 3).map(a => (
+                                            <div key={a.id} className="p-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                                                <div className="flex justify-between items-start mb-1">
+                                                    <span className="font-bold text-zinc-800 dark:text-zinc-200 text-sm line-clamp-1">{a.title}</span>
+                                                    <span className="text-[10px] text-zinc-400 whitespace-nowrap ml-2">{new Date(a.timestamp).toLocaleDateString('pt-BR')}</span>
+                                                </div>
+                                                <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-relaxed">{a.message}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
