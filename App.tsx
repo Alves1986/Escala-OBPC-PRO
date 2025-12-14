@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, Suspense } from 'react';
 import { 
   LayoutDashboard, Calendar, CalendarCheck, RefreshCcw, Music, 
@@ -513,6 +512,8 @@ const InnerApp = () => {
 
 export default function App() {
   return (
-    <ToastProvider children={<InnerApp />} />
+    <ToastProvider>
+      <InnerApp />
+    </ToastProvider>
   );
 }
