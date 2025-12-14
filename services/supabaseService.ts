@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 import { 
     SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, 
@@ -7,7 +8,12 @@ import {
     RankingEntry, AvailabilityNotesMap, CustomEvent, MemberMonthlyStat
 } from '../types';
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+// Fallback to placeholder values to prevent "supabaseUrl is required" crash during initial setup
+// The App.tsx component will detect if the real keys are missing and show the SetupScreen.
+const clientUrl = SUPABASE_URL || 'https://placeholder.supabase.co';
+const clientKey = SUPABASE_KEY || 'placeholder-key';
+
+export const supabase = createClient(clientUrl, clientKey);
 
 export const getSupabase = () => supabase;
 
@@ -532,7 +538,7 @@ export const fetchRankingData = async (ministryId: string): Promise<RankingEntry
     return [];
 };
 
-// --- Re-export monthly stats report from provided snippet ---
+// --- NEW FUNCTION: Report Stats ---
 export const fetchMonthlyStatsReport = async (ministryId: string, monthIso: string): Promise<MemberMonthlyStat[]> => {
     // 1. Setup Mock Data if needed
     if (!supabase) {
