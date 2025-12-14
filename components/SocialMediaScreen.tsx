@@ -7,11 +7,8 @@ export const SocialMediaScreen: React.FC = () => {
   const { addToast } = useToast();
   const [copied, setCopied] = useState(false);
   const qrCodeUrl = "https://i.ibb.co/DPqSFPdq/QR-Code-OBPC.png";
+  const linkUrl = "https://linktr.ee/obpccasaderestauracao";
   
-  // Link de destino (opcional, se você quiser colocar um botão para ir direto)
-  // Assumindo que o QR code leva para um linktree ou instagram, deixo genérico ou sem link direto por enquanto,
-  // mas adicionei a lógica de download da imagem.
-
   const handleDownload = async () => {
     try {
       const response = await fetch(qrCodeUrl);
@@ -33,10 +30,9 @@ export const SocialMediaScreen: React.FC = () => {
   };
 
   const handleCopyLink = () => {
-    // Como é uma imagem, copiamos a URL da imagem para a área de transferência
-    navigator.clipboard.writeText(qrCodeUrl);
+    navigator.clipboard.writeText(linkUrl);
     setCopied(true);
-    addToast("Link do QR Code copiado!", "success");
+    addToast("Link copiado!", "success");
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -44,7 +40,7 @@ export const SocialMediaScreen: React.FC = () => {
     <div className="space-y-6 animate-fade-in max-w-md mx-auto pb-10">
       <div className="border-b border-zinc-200 dark:border-zinc-700 pb-4">
         <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-          <Share2 className="text-purple-500"/> Redes Sociais
+          <Share2 className="text-teal-500"/> Redes Sociais
         </h2>
         <p className="text-zinc-500 text-sm mt-1">
           Compartilhe nossas conexões com visitantes e membros.
@@ -52,8 +48,8 @@ export const SocialMediaScreen: React.FC = () => {
       </div>
 
       <div className="bg-white dark:bg-zinc-800 rounded-3xl shadow-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden relative">
-          {/* Decorative Header Background */}
-          <div className="h-24 bg-gradient-to-r from-purple-600 to-indigo-600 relative">
+          {/* Decorative Header Background - System Gradient */}
+          <div className="h-24 bg-gradient-to-r from-teal-600 to-emerald-600 relative">
               <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-20"></div>
               <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 w-20 h-20 bg-white dark:bg-zinc-800 rounded-full flex items-center justify-center border-4 border-white dark:border-zinc-800 shadow-md">
                   <QrCode size={32} className="text-zinc-700 dark:text-zinc-300" />
@@ -85,7 +81,7 @@ export const SocialMediaScreen: React.FC = () => {
                   </button>
                   <button 
                     onClick={handleCopyLink}
-                    className="flex items-center justify-center gap-2 py-3 px-4 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-bold text-sm rounded-xl transition-colors"
+                    className="flex items-center justify-center gap-2 py-3 px-4 bg-teal-50 dark:bg-teal-900/20 hover:bg-teal-100 dark:hover:bg-teal-900/40 text-teal-700 dark:text-teal-300 font-bold text-sm rounded-xl transition-colors"
                   >
                       {copied ? <Check size={18} /> : <Copy size={18} />} 
                       {copied ? 'Copiado' : 'Copiar Link'}
