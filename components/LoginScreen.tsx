@@ -137,7 +137,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                 
                 <div className="text-center mb-8">
                     <div className="w-20 h-20 mx-auto mb-5 rounded-2xl shadow-2xl overflow-hidden ring-4 ring-white/5 bg-zinc-900 flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
-                        <img src="/icon.png?v=2" alt="Logo" className="w-full h-full object-cover" />
+                        <img src="https://i.ibb.co/ZRRqnpTF/LOGO-SIMBOLO-WHITE.png" alt="Logo" className="w-full h-full object-cover" />
                     </div>
                     <h2 className="text-zinc-400 text-[10px] font-bold uppercase tracking-[0.3em] mb-2">Gestão de Escala</h2>
                     <h1 className="text-2xl font-bold text-white tracking-tight">

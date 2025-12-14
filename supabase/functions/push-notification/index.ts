@@ -218,7 +218,7 @@ Deno.serve(async (req: Request) => {
       const payload = JSON.stringify({
         title: title || 'Novo Aviso',
         body: message || 'Você tem uma nova notificação.',
-        icon: 'https://escala-midia-pro.vercel.app/icon.png',
+        icon: 'https://i.ibb.co/jPKNYLQ2/icon.png',
         data: { url: actionLink ? `/?tab=${actionLink}` : '/', type }
       })
 

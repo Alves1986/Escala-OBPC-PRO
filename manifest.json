@@ -1,3 +1,4 @@
+
 {
   "name": "Gestão Escala OBPC",
   "short_name": "Gestão Escala",
@@ -10,16 +11,22 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/app-icon.png",
-      "type": "image/png",
+      "src": "https://i.ibb.co/jPKNYLQ2/icon.png",
       "sizes": "192x192",
-      "purpose": "any maskable"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "/app-icon.png",
-      "type": "image/png",
+      "src": "https://i.ibb.co/jPKNYLQ2/icon.png",
       "sizes": "512x512",
-      "purpose": "any maskable"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://i.ibb.co/jPKNYLQ2/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

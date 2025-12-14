@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'gestao-escala-pwa-v28';
+const CACHE_NAME = 'gestao-escala-pwa-v29';
 
 // Arquivos estáticos fundamentais
 // Usando caminhos absolutos para garantir a integridade do cache
@@ -7,7 +7,6 @@ const PRECACHE_URLS = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/icon.png',
   'https://cdn.tailwindcss.com',
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'
 ];
@@ -128,8 +127,8 @@ self.addEventListener('push', function(event) {
 
     const options = {
       body: data.body,
-      icon: data.icon || '/icon.png',
-      badge: '/icon.png', // Ícone pequeno na barra de status (Android)
+      icon: data.icon || 'https://i.ibb.co/jPKNYLQ2/icon.png',
+      badge: 'https://i.ibb.co/jPKNYLQ2/icon.png', // Ícone pequeno na barra de status (Android)
       vibrate: [200, 100, 200], // Vibração para chamar atenção
       requireInteraction: true, // Mantém a notificação até o usuário interagir (Desktop/Alguns Androids)
       tag: 'escala-app', // Substitui notificações antigas para não empilhar muitas

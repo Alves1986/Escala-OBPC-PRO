@@ -145,7 +145,12 @@ export const DashboardLayout: React.FC<Props> = ({
                           <Layout size={20} />
                       </div>
                   ) : (
-                      <img src="/icon.png?v=2" alt="Logo" className="w-full h-full object-cover" onError={() => setImgError(true)} />
+                      <img 
+                        src={theme === 'dark' ? "https://i.ibb.co/ZRRqnpTF/LOGO-SIMBOLO-WHITE.png" : "https://i.ibb.co/jPKNYLQ2/icon.png"} 
+                        alt="Logo" 
+                        className="w-full h-full object-cover" 
+                        onError={() => setImgError(true)} 
+                      />
                   )}
                </div>
                

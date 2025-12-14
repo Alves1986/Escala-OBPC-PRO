@@ -291,7 +291,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                               </div>
                           ) : (
                               <div>
-                                  {isLoadingPlaylists ? <div className="py-10 text-center"><Loader2 className="animate-spin mx-auto text-green-500"/></div> : <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-80 overflow-y-auto custom-scrollbar">{userPlaylists.map(pl => (<button key={pl.id} onClick={() => handleOpenPlaylist(pl)} className="flex flex-col items-start p-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-colors text-left group"><img src={pl.images?.[0]?.url || '/icon.png'} className="w-full aspect-square object-cover rounded-lg mb-2 shadow-sm bg-zinc-200" /><span className="font-bold text-xs text-zinc-800 dark:text-zinc-200 line-clamp-1 w-full">{pl.name}</span></button>))}</div>}
+                                  {isLoadingPlaylists ? <div className="py-10 text-center"><Loader2 className="animate-spin mx-auto text-green-500"/></div> : <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-80 overflow-y-auto custom-scrollbar">{userPlaylists.map(pl => (<button key={pl.id} onClick={() => handleOpenPlaylist(pl)} className="flex flex-col items-start p-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-colors text-left group"><img src={pl.images?.[0]?.url || 'https://i.ibb.co/jPKNYLQ2/icon.png'} className="w-full aspect-square object-cover rounded-lg mb-2 shadow-sm bg-zinc-200" /><span className="font-bold text-xs text-zinc-800 dark:text-zinc-200 line-clamp-1 w-full">{pl.name}</span></button>))}</div>}
                               </div>
                           )}
                       </div>
