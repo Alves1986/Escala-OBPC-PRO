@@ -54,7 +54,8 @@ export interface AppNotification {
   message: string;
   timestamp: string;
   read: boolean;
-  actionLink?: string; 
+  actionLink?: string;
+  ministryId?: string; // Added for cross-ministry support
 }
 
 export interface Announcement {

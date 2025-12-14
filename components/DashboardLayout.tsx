@@ -303,6 +303,7 @@ export const DashboardLayout: React.FC<Props> = ({
                     ministryId={currentUser?.ministryId || null} 
                     onNotificationsUpdate={onNotificationsUpdate} 
                     onNavigate={(tab) => onTabChange(tab)}
+                    onSwitchMinistry={onSwitchMinistry}
                 />
                 <button onClick={() => onTabChange('profile')}>
                     {renderMobileAvatar()}
@@ -335,6 +336,7 @@ export const DashboardLayout: React.FC<Props> = ({
                         ministryId={currentUser?.ministryId || null} 
                         onNotificationsUpdate={onNotificationsUpdate}
                         onNavigate={(tab) => onTabChange(tab)}
+                        onSwitchMinistry={onSwitchMinistry}
                     />
                  </div>
                  <div className="h-6 w-px bg-zinc-200 dark:bg-zinc-800"></div>

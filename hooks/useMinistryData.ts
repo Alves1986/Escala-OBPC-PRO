@@ -72,6 +72,8 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     }
 
     try {
+        const allowedMinistries = currentUser.allowedMinistries || [ministryId];
+
         const [
             settingsResult, schedResult, membersResult, availResult,
             notifsResult, annResult, swapsResult, repResult, conflictsResult
@@ -80,7 +82,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
             Supabase.fetchMinistrySchedule(ministryId, currentMonth),
             Supabase.fetchMinistryMembers(ministryId),
             Supabase.fetchMinistryAvailability(ministryId),
-            Supabase.fetchNotificationsSQL(ministryId, currentUser.id!),
+            Supabase.fetchNotificationsSQL(allowedMinistries, currentUser.id!),
             Supabase.fetchAnnouncementsSQL(ministryId),
             Supabase.fetchSwapRequests(ministryId),
             Supabase.fetchRepertoire(ministryId),

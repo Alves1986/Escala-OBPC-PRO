@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { Bell, Check, Trash2, Info, AlertTriangle, CheckCircle, AlertOctagon, ExternalLink } from 'lucide-react';
+import { Bell, Check, Trash2, Info, AlertTriangle, CheckCircle, AlertOctagon, ExternalLink, ArrowRightLeft } from 'lucide-react';
 import { AppNotification } from '../types';
 import { markNotificationsReadSQL, clearAllNotificationsSQL, getSupabase } from '../services/supabaseService';
 import { useToast } from './Toast';
@@ -11,9 +11,10 @@ interface Props {
   ministryId: string | null;
   onNotificationsUpdate: (updated: AppNotification[]) => void;
   onNavigate?: (tabId: string) => void;
+  onSwitchMinistry?: (ministryId: string) => void;
 }
 
-export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId, onNotificationsUpdate, onNavigate }) => {
+export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId, onNotificationsUpdate, onNavigate, onSwitchMinistry }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -36,8 +37,7 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
   }, []);
 
   const handleMarkAllRead = async () => {
-    if (!ministryId) return;
-    
+    // We mark all loaded notifications as read, regardless of ministry
     const supabase = getSupabase();
     if (!supabase) return;
     const { data: { user } } = await supabase.auth.getUser();
@@ -57,19 +57,33 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
       
       confirmAction(
           "Excluir Histórico Global",
-          "CUIDADO: Isso apagará todas as notificações para TODOS os membros da equipe. Essa ação não pode ser desfeita.",
+          "CUIDADO: Isso apagará todas as notificações para TODOS os membros da equipe DO MINISTÉRIO ATUAL. Essa ação não pode ser desfeita.",
           async () => {
               await clearAllNotificationsSQL(ministryId);
-              onNotificationsUpdate([]);
+              onNotificationsUpdate(notifications.filter(n => n.ministryId !== ministryId));
           }
       );
   };
 
   const handleNotificationClick = (notification: AppNotification) => {
-      if (notification.actionLink && onNavigate) {
+      // Logic: 
+      // 1. If notification is from another ministry, switch ministry first.
+      // 2. Then navigate to the link if present.
+      
+      const isDifferentMinistry = notification.ministryId && notification.ministryId !== ministryId;
+
+      if (isDifferentMinistry && onSwitchMinistry && notification.ministryId) {
+          onSwitchMinistry(notification.ministryId);
+          // Note: Navigation might need to happen after switch, usually state update handles view change.
+          // If we have a link, maybe we can set it in URL param or store it temporarily?
+          // For now, switching context is the primary "Quick Access".
+      } 
+      
+      if (notification.actionLink && onNavigate && !isDifferentMinistry) {
           onNavigate(notification.actionLink);
-          setIsOpen(false);
       }
+      
+      setIsOpen(false);
   };
 
   const getIcon = (type: string) => {
@@ -121,33 +135,40 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
                     </div>
                 ) : (
                     <div className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
-                        {notifications.map(n => (
-                            <div 
-                            key={n.id} 
-                            onClick={() => handleNotificationClick(n)}
-                            className={`p-4 transition-colors relative group ${!n.read ? 'bg-blue-50/50 dark:bg-blue-900/10' : 'hover:bg-zinc-50 dark:hover:bg-zinc-700/30'} ${n.actionLink ? 'cursor-pointer' : ''}`}
-                            >
-                                <div className="flex gap-3">
-                                    <div className="mt-1 shrink-0">{getIcon(n.type)}</div>
-                                    <div className="flex-1">
-                                        <div className="flex justify-between items-start">
-                                        <h4 className={`text-sm ${!n.read ? 'font-bold text-zinc-800 dark:text-zinc-100' : 'font-medium text-zinc-600 dark:text-zinc-400'}`}>
-                                            {n.title}
-                                        </h4>
-                                        {n.actionLink && (
-                                            <ExternalLink size={12} className="text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                        )}
+                        {notifications.map(n => {
+                            const isDifferent = n.ministryId && n.ministryId !== ministryId;
+                            return (
+                                <div 
+                                key={n.id} 
+                                onClick={() => handleNotificationClick(n)}
+                                className={`p-4 transition-colors relative group cursor-pointer ${!n.read ? 'bg-blue-50/50 dark:bg-blue-900/10' : 'hover:bg-zinc-50 dark:hover:bg-zinc-700/30'}`}
+                                >
+                                    <div className="flex gap-3">
+                                        <div className="mt-1 shrink-0">{getIcon(n.type)}</div>
+                                        <div className="flex-1">
+                                            <div className="flex justify-between items-start">
+                                            <h4 className={`text-sm ${!n.read ? 'font-bold text-zinc-800 dark:text-zinc-100' : 'font-medium text-zinc-600 dark:text-zinc-400'}`}>
+                                                {n.title}
+                                            </h4>
+                                            {isDifferent ? (
+                                                <span className="text-[9px] uppercase font-bold bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-1.5 py-0.5 rounded ml-2 flex items-center gap-1">
+                                                    <ArrowRightLeft size={8} /> {n.ministryId?.toUpperCase()}
+                                                </span>
+                                            ) : n.actionLink && (
+                                                <ExternalLink size={12} className="text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                            )}
+                                            </div>
+                                            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                                                {n.message}
+                                            </p>
+                                            <span className="text-[10px] text-zinc-400 mt-2 block">
+                                                {new Date(n.timestamp).toLocaleString('pt-BR')}
+                                            </span>
                                         </div>
-                                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
-                                            {n.message}
-                                        </p>
-                                        <span className="text-[10px] text-zinc-400 mt-2 block">
-                                            {new Date(n.timestamp).toLocaleString('pt-BR')}
-                                        </span>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </div>

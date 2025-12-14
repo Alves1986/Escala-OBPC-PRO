@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Users, Mail, Phone, Gift, ShieldCheck, Trash2, Search, Filter, Shield } from 'lucide-react';
+import { Users, Mail, Phone, Gift, ShieldCheck, Trash2, Search, Filter, Shield, Zap } from 'lucide-react';
 import { TeamMemberProfile, User } from '../types';
 
 interface Props {
@@ -22,6 +22,7 @@ export const MembersScreen: React.FC<Props> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRole, setSelectedRole] = useState("Todos");
+  const [showOnlineOnly, setShowOnlineOnly] = useState(false);
 
   const filteredMembers = useMemo(() => {
       return members.filter(member => {
@@ -29,10 +30,12 @@ export const MembersScreen: React.FC<Props> = ({
                                 (member.email && member.email.toLowerCase().includes(searchTerm.toLowerCase()));
           
           const matchesRole = selectedRole === "Todos" || (member.roles && member.roles.includes(selectedRole));
+          
+          const matchesOnline = showOnlineOnly ? onlineUsers.includes(member.id) : true;
 
-          return matchesSearch && matchesRole;
+          return matchesSearch && matchesRole && matchesOnline;
       });
-  }, [members, searchTerm, selectedRole]);
+  }, [members, searchTerm, selectedRole, showOnlineOnly, onlineUsers]);
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto pb-10">
@@ -45,8 +48,17 @@ export const MembersScreen: React.FC<Props> = ({
                    </h2>
                    <p className="text-zinc-500 text-sm mt-1">Gerencie os integrantes, funções e permissões de acesso.</p>
                </div>
-               <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-4 py-1.5 rounded-full text-xs font-bold text-zinc-600 dark:text-zinc-300 shadow-sm">
-                   Total: {filteredMembers.length} <span className="text-zinc-400 font-normal">/ {members.length}</span>
+               <div className="flex items-center gap-2">
+                   <button 
+                       onClick={() => setShowOnlineOnly(!showOnlineOnly)}
+                       className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${showOnlineOnly ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800' : 'bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700'}`}
+                   >
+                       <span className={`w-2 h-2 rounded-full ${showOnlineOnly ? 'bg-green-500 animate-pulse' : 'bg-zinc-300 dark:bg-zinc-600'}`}></span>
+                       {showOnlineOnly ? 'Apenas Online' : 'Mostrar Online'}
+                   </button>
+                   <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-4 py-1.5 rounded-full text-xs font-bold text-zinc-600 dark:text-zinc-300 shadow-sm">
+                       Total: {filteredMembers.length} <span className="text-zinc-400 font-normal">/ {members.length}</span>
+                   </div>
                </div>
            </div>
 

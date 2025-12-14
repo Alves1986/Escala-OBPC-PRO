@@ -249,19 +249,20 @@ export const fetchMinistryMembers = async (ministryId: string): Promise<{ member
     return { memberMap, publicList };
 };
 
-export const fetchNotificationsSQL = async (ministryId: string, userId: string): Promise<AppNotification[]> => {
+export const fetchNotificationsSQL = async (allowedMinistries: string[], userId: string): Promise<AppNotification[]> => {
     if (!supabase) {
         return [
-            { id: '1', title: "Bem-vindo ao Demo", message: "Explore todas as funcionalidades do sistema.", type: "success", timestamp: new Date().toISOString(), read: false },
-            { id: '2', title: "Escala Liberada", message: "A escala de Domingo já está disponível.", type: "info", timestamp: new Date(Date.now() - 86400000).toISOString(), read: true, actionLink: "calendar" }
+            { id: '1', title: "Bem-vindo ao Demo", message: "Explore todas as funcionalidades do sistema.", type: "success", timestamp: new Date().toISOString(), read: false, ministryId: 'midia' },
+            { id: '2', title: "Escala Liberada", message: "A escala de Domingo já está disponível.", type: "info", timestamp: new Date(Date.now() - 86400000).toISOString(), read: true, actionLink: "calendar", ministryId: 'midia' }
         ];
     }
     
+    // Fetch notifications for all allowed ministries
     const { data } = await supabase.from('notifications')
         .select('*')
-        .eq('ministry_id', ministryId)
+        .in('ministry_id', allowedMinistries)
         .order('created_at', { ascending: false })
-        .limit(20);
+        .limit(30);
 
     const { data: readData } = await supabase.from('notification_reads')
         .select('notification_id')
@@ -276,6 +277,7 @@ export const fetchNotificationsSQL = async (ministryId: string, userId: string):
         type: n.type,
         timestamp: n.created_at,
         actionLink: n.action_link,
+        ministryId: n.ministry_id, // Ensure this is mapped
         read: readIds.has(n.id)
     }));
 };
