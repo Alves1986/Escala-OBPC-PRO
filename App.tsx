@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useRef } from 'react';
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
   Megaphone, Settings, FileBarChart, CalendarDays,
@@ -66,15 +66,35 @@ const InnerApp = () => {
   const { currentUser, setCurrentUser, loadingAuth } = useAuth();
   const { addToast, confirmAction } = useToast();
 
+  // Ref para armazenar timers de notificação e evitar spam no refresh
+  const presenceTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
+
   const onlineUsers = useOnlinePresence(
     currentUser?.id, 
     currentUser?.name,
     (name, status) => {
-        // Notificação discreta de presença
-        if (status === 'online') {
-            addToast(`${name} entrou`, 'success');
+        // Lógica de Debounce para Presença
+        // Evita notificar "Saiu" + "Entrou" quando o usuário apenas recarrega a página (F5)
+        if (status === 'offline') {
+            // Se já tiver um timer rodando, limpa ele
+            if (presenceTimeouts.current[name]) clearTimeout(presenceTimeouts.current[name]);
+            
+            // Agenda a notificação de saída para daqui a 5 segundos
+            presenceTimeouts.current[name] = setTimeout(() => {
+                addToast(`${name} saiu`, 'info'); 
+                delete presenceTimeouts.current[name];
+            }, 5000);
         } else {
-            addToast(`${name} saiu`, 'info'); 
+            // Usuário entrou (online)
+            if (presenceTimeouts.current[name]) {
+                // Se existe um timer de saída pendente, significa que ele saiu e voltou rápido (refresh)
+                // Então cancelamos o aviso de "Saiu" e NÃO mostramos o aviso de "Entrou"
+                clearTimeout(presenceTimeouts.current[name]);
+                delete presenceTimeouts.current[name];
+            } else {
+                // Se não tem timer pendente, é uma entrada legítima
+                addToast(`${name} entrou`, 'success');
+            }
         }
     }
   );
@@ -412,8 +432,13 @@ const InnerApp = () => {
                     <div className="space-y-6 animate-fade-in">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                             <div>
-                                <h1 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                                    Olá, {currentUser.name.split(' ')[0]} <span className="animate-wave text-2xl">👋</span>
+                                <h1 className="text-3xl font-bold text-zinc-900 dark:text-white tracking-tight">
+                                    {(() => {
+                                        const h = new Date().getHours();
+                                        if (h < 12) return "Bom dia";
+                                        if (h < 18) return "Boa tarde";
+                                        return "Boa noite";
+                                    })()}, <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-600 to-emerald-600 dark:from-teal-400 dark:to-emerald-400">{currentUser.name.split(' ')[0]}</span>.
                                 </h1>
                                 <p className="text-zinc-500 dark:text-zinc-400 mt-1">Bem-vindo a {ministryTitle}.</p>
                             </div>
