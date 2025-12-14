@@ -90,9 +90,12 @@ export const MembersScreen: React.FC<Props> = ({
             {filteredMembers.map(member => {
                 const isOnline = onlineUsers.includes(member.id);
                 const isSelf = currentUser.id === member.id;
+                
+                // Filter roles to show only those belonging to the current ministry
+                const relevantRoles = member.roles?.filter(role => availableRoles.includes(role)) || [];
 
                 return (
-                <div key={member.id} className="bg-white dark:bg-[#18181b] rounded-2xl border border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-4 relative group shadow-sm hover:shadow-md transition-all hover:border-zinc-300 dark:hover:border-zinc-700 animate-slide-up">
+                <div key={member.id} className="bg-white dark:bg-zinc-800 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-4 relative group shadow-sm hover:shadow-md transition-all hover:border-zinc-300 dark:hover:border-zinc-700 animate-slide-up">
                     <div className="flex justify-between items-start">
                         <div className="flex gap-4">
                             <div className="relative">
@@ -147,14 +150,16 @@ export const MembersScreen: React.FC<Props> = ({
                     </div>
 
                     <div className="flex flex-wrap gap-2 min-h-[26px]">
-                        {member.roles && member.roles.length > 0 ? (
-                            member.roles.map(role => (
+                        {relevantRoles.length > 0 ? (
+                            relevantRoles.map(role => (
                                 <span key={role} className="text-[10px] font-semibold px-2.5 py-1 rounded-md bg-zinc-50 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-300 border border-zinc-100 dark:border-zinc-700/50">
                                     {role}
                                 </span>
                             ))
                         ) : (
-                            <span className="text-xs text-zinc-400 italic px-1">Sem função definida</span>
+                            <span className="text-xs text-zinc-400 italic px-1">
+                                {member.roles && member.roles.length > 0 ? 'Outras funções' : 'Sem função definida'}
+                            </span>
                         )}
                     </div>
 

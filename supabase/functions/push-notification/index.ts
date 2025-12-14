@@ -218,7 +218,7 @@ Deno.serve(async (req: Request) => {
       const payload = JSON.stringify({
         title: title || 'Novo Aviso',
         body: message || 'Você tem uma nova notificação.',
-        icon: 'https://i.ibb.co/jPKNYLQ2/icon.png',
+        icon: 'https://i.ibb.co/nsFR8zNG/icon1.png',
         data: { url: actionLink ? `/?tab=${actionLink}` : '/', type }
       })
 

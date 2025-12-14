@@ -30,7 +30,7 @@ export const NotificationToggle: React.FC<Props> = ({ ministryId }) => {
             addToast("Notificações permitidas!", "success");
             new Notification("Notificações Ativas", {
                 body: "Você receberá alertas no navegador.",
-                icon: "https://i.ibb.co/jPKNYLQ2/icon.png"
+                icon: "https://i.ibb.co/nsFR8zNG/icon1.png"
             });
         } else {
             addToast("Permissão negada.", "warning");

@@ -27,7 +27,7 @@ export const LoadingScreen = () => {
             
             {/* Logo Image - Agora Circular (rounded-full) */}
             <div className="relative w-full h-full bg-zinc-900 rounded-full shadow-2xl flex items-center justify-center border border-zinc-800 overflow-hidden z-10">
-                <img src="https://i.ibb.co/ZRRqnpTF/LOGO-SIMBOLO-WHITE.png" alt="Logo" className="w-full h-full object-cover opacity-90 scale-90 rounded-full" onError={(e) => e.currentTarget.style.display = 'none'} />
+                <img src="https://i.ibb.co/jPKNYLQ2/icon.png" alt="Logo" className="w-full h-full object-cover opacity-90 scale-90 rounded-full" onError={(e) => e.currentTarget.style.display = 'none'} />
             </div>
         </div>
 

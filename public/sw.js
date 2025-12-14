@@ -127,8 +127,8 @@ self.addEventListener('push', function(event) {
 
     const options = {
       body: data.body,
-      icon: data.icon || 'https://i.ibb.co/jPKNYLQ2/icon.png',
-      badge: 'https://i.ibb.co/jPKNYLQ2/icon.png', // Ícone pequeno na barra de status (Android)
+      icon: data.icon || 'https://i.ibb.co/nsFR8zNG/icon1.png',
+      badge: 'https://i.ibb.co/nsFR8zNG/icon1.png', // Ícone pequeno na barra de status (Android)
       vibrate: [200, 100, 200], // Vibração para chamar atenção
       requireInteraction: true, // Mantém a notificação até o usuário interagir (Desktop/Alguns Androids)
       tag: 'escala-app', // Substitui notificações antigas para não empilhar muitas

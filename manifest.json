@@ -11,19 +11,19 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "https://i.ibb.co/jPKNYLQ2/icon.png",
+      "src": "https://i.ibb.co/nsFR8zNG/icon1.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://i.ibb.co/jPKNYLQ2/icon.png",
+      "src": "https://i.ibb.co/nsFR8zNG/icon1.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://i.ibb.co/jPKNYLQ2/icon.png",
+      "src": "https://i.ibb.co/nsFR8zNG/icon1.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

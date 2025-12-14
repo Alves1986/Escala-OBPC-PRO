@@ -55,10 +55,12 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
     const data = registeredMembers.map((profile) => {
       let roles: string[] = [];
       if (profile.roles && profile.roles.length > 0) {
-        roles = profile.roles;
+        // Filter roles to only show those active in the current ministry
+        roles = profile.roles.filter(r => availableRoles.includes(r));
       } else {
+        // Fallback to searching map if no explicit roles, filtering by availableRoles
         Object.entries(membersMap).forEach(([role, members]) => {
-          if ((members as string[]).some(m => normalizeString(m) === normalizeString(profile.name))) {
+          if (availableRoles.includes(role) && (members as string[]).some(m => normalizeString(m) === normalizeString(profile.name))) {
               roles.push(role);
           }
         });
@@ -104,7 +106,7 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
       })
       .sort((a, b) => a.name.localeCompare(b.name));
 
-  }, [registeredMembers, availability, currentMonth, membersMap, searchTerm, selectedRole]);
+  }, [registeredMembers, availability, currentMonth, membersMap, searchTerm, selectedRole, availableRoles]);
 
   return (
     <div className="space-y-6 animate-fade-in max-w-6xl mx-auto">
