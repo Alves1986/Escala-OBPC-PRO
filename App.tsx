@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect, Suspense } from 'react';
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
   Megaphone, Settings, FileBarChart, CalendarDays,
   Users, Edit, Send, ListMusic, Clock, ArrowLeft, ArrowRight,
-  Calendar as CalendarIcon, Trophy, Loader2, ShieldAlert
+  Calendar as CalendarIcon, Trophy, Loader2, ShieldAlert, Share2
 } from 'lucide-react';
 import { ToastProvider, useToast } from './components/Toast';
 import { LoginScreen } from './components/LoginScreen';
@@ -48,6 +49,7 @@ const ProfileScreen = React.lazy(() => import('./components/ProfileScreen').then
 const EventsScreen = React.lazy(() => import('./components/EventsScreen').then(module => ({ default: module.EventsScreen })));
 const RankingScreen = React.lazy(() => import('./components/RankingScreen').then(module => ({ default: module.RankingScreen })));
 const MembersScreen = React.lazy(() => import('./components/MembersScreen').then(module => ({ default: module.MembersScreen })));
+const SocialMediaScreen = React.lazy(() => import('./components/SocialMediaScreen').then(module => ({ default: module.SocialMediaScreen })));
 
 // Loading Spinner para Lazy Components
 const LoadingFallback = () => (
@@ -62,7 +64,21 @@ const InnerApp = () => {
   const [isDemoMode, setIsDemoMode] = useState(false);
 
   const { currentUser, setCurrentUser, loadingAuth } = useAuth();
-  const onlineUsers = useOnlinePresence(currentUser?.id, currentUser?.name);
+  const { addToast, confirmAction } = useToast();
+
+  const onlineUsers = useOnlinePresence(
+    currentUser?.id, 
+    currentUser?.name,
+    (name, status) => {
+        // Notificação discreta de presença
+        if (status === 'online') {
+            addToast(`${name} entrou no sistema.`, 'success');
+        } else {
+            // Opcional: Descomente se quiser ser notificado quando sair também
+            // addToast(`${name} saiu.`, 'info'); 
+        }
+    }
+  );
   
   const [ministryId, setMinistryId] = useState<string>('midia');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -96,8 +112,6 @@ const InnerApp = () => {
   const [isEventsModalOpen, setEventsModalOpen] = useState(false);
   const [isAvailModalOpen, setAvailModalOpen] = useState(false);
   const [isRolesModalOpen, setRolesModalOpen] = useState(false);
-
-  const { addToast, confirmAction } = useToast();
 
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
       try { return (localStorage.getItem('themeMode') as ThemeMode) || 'system'; } catch (e) { return 'system'; }
@@ -339,6 +353,7 @@ const InnerApp = () => {
     { id: 'swaps', label: 'Trocas de Escala', icon: <RefreshCcw size={20}/> },
     { id: 'repertoire', label: 'Repertório', icon: <Music size={20}/> },
     { id: 'ranking', label: 'Destaques', icon: <Trophy size={20}/> },
+    { id: 'social', label: 'Redes Sociais', icon: <Share2 size={20}/> },
     { id: 'settings', label: 'Configurações', icon: <Settings size={20}/> },
   ];
 
@@ -462,6 +477,7 @@ const InnerApp = () => {
                 {currentTab === 'report' && isAdmin && <AvailabilityReportScreen availability={availability} registeredMembers={publicMembers} membersMap={membersMap} currentMonth={currentMonth} onMonthChange={setCurrentMonth} availableRoles={roles} onRefresh={async () => { await loadData(); }} />}
                 {currentTab === 'profile' && <ProfileScreen user={currentUser} onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { const res = await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId); if (res.success) { addToast(res.message, "success"); if (currentUser) { setCurrentUser({ ...currentUser, name, whatsapp, avatar_url: avatar || currentUser.avatar_url, functions: funcs, birthDate: bdate }); } loadData(); } else { addToast(res.message, "error"); }}} availableRoles={roles} />}
                 {currentTab === 'settings' && <SettingsScreen initialTitle={ministryTitle} ministryId={ministryId} themeMode={themeMode} onSetThemeMode={handleSetThemeMode} onSaveTheme={handleSaveTheme} onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, newTitle); setMinistryTitle(newTitle); addToast("Nome do ministério atualizado!", "success"); }} onAnnounceUpdate={async () => { await Supabase.sendNotificationSQL(ministryId, { title: "Atualização de Sistema", message: "Uma nova versão do app está disponível. Recarregue a página para aplicar.", type: "warning" }); addToast("Notificação de atualização enviada.", "success"); }} onEnableNotifications={handleEnableNotifications} onSaveAvailabilityWindow={async (start, end) => { setAvailabilityWindow({ start, end }); await Supabase.saveMinistrySettings(ministryId, undefined, undefined, start, end); loadData(); }} availabilityWindow={availabilityWindow} isAdmin={isAdmin} />}
+                {currentTab === 'social' && <SocialMediaScreen />}
                 
                 {currentTab === 'members' && isAdmin && (
                     <MembersScreen 
