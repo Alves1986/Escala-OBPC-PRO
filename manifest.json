@@ -1,16 +1,16 @@
 
 {
-  "name": "Gestão Escala OBPC",
-  "short_name": "Gestão Escala",
+  "name": "Escala PRO",
+  "short_name": "Escala PRO",
+  "description": "Sistema profissional de gestão de escalas e equipes",
   "start_url": "/",
   "id": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#09090b",
-  "theme_color": "#09090b",
-  "orientation": "portrait",
+  "orientation": "portrait-primary",
+  "theme_color": "#0D9488",
+  "background_color": "#0F766E",
   "categories": ["productivity", "social", "lifestyle"],
-  "description": "Sistema profissional de gestão de escalas ministeriais com IA e sincronização em tempo real.",
   "icons": [
     {
       "src": "https://i.ibb.co/nsFR8zNG/icon1.png",
@@ -21,6 +21,12 @@
     {
       "src": "https://i.ibb.co/nsFR8zNG/icon1.png",
       "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://i.ibb.co/nsFR8zNG/icon1.png",
+      "sizes": "180x180",
       "type": "image/png",
       "purpose": "any"
     },
