@@ -74,25 +74,17 @@ const InnerApp = () => {
     currentUser?.name,
     (name, status) => {
         // Lógica de Debounce para Presença
-        // Evita notificar "Saiu" + "Entrou" quando o usuário apenas recarrega a página (F5)
         if (status === 'offline') {
-            // Se já tiver um timer rodando, limpa ele
             if (presenceTimeouts.current[name]) clearTimeout(presenceTimeouts.current[name]);
-            
-            // Agenda a notificação de saída para daqui a 5 segundos
             presenceTimeouts.current[name] = setTimeout(() => {
                 addToast(`${name} saiu`, 'info'); 
                 delete presenceTimeouts.current[name];
             }, 5000);
         } else {
-            // Usuário entrou (online)
             if (presenceTimeouts.current[name]) {
-                // Se existe um timer de saída pendente, significa que ele saiu e voltou rápido (refresh)
-                // Então cancelamos o aviso de "Saiu" e NÃO mostramos o aviso de "Entrou"
                 clearTimeout(presenceTimeouts.current[name]);
                 delete presenceTimeouts.current[name];
             } else {
-                // Se não tem timer pendente, é uma entrada legítima
                 addToast(`${name} entrou`, 'success');
             }
         }
@@ -103,18 +95,21 @@ const InnerApp = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
   
-  // Helper to detect Spotify specific hash pattern vs Supabase
-  // Spotify (Implicit) returns: access_token, token_type, expires_in, state
-  // Supabase (Implicit) returns: access_token, refresh_token, token_type, expires_in, provider_token...
+  // Função auxiliar para distinguir callback do Spotify vs Supabase Auth
   const isSpotifyCallback = () => {
       if (typeof window === 'undefined') return false;
       const hash = window.location.hash;
+      // Spotify: access_token, token_type, expires_in, state (SEM refresh_token)
+      // Supabase: access_token, refresh_token, token_type, expires_in, type=...
       return hash.includes('access_token') && !hash.includes('refresh_token') && !hash.includes('type=');
   };
 
   const [currentTab, setCurrentTab] = useState(() => {
       if (typeof window !== 'undefined') {
+          // Se for callback do Spotify, vai para o gerenciador de repertório
           if (isSpotifyCallback()) return 'repertoire-manager'; 
+          
+          // Caso contrário (Login normal ou Supabase), respeita a URL ou vai para dashboard
           const params = new URLSearchParams(window.location.search);
           return params.get('tab') || 'dashboard';
       }
@@ -179,7 +174,7 @@ const InnerApp = () => {
   useEffect(() => {
       const url = new URL(window.location.href);
       if (url.searchParams.get('tab') !== currentTab) {
-          // Avoid overwriting Spotify hash if processing
+          // Evita sobrescrever hash do Spotify se estiver processando
           if (!isSpotifyCallback()) {
               url.searchParams.set('tab', currentTab);
               try { window.history.replaceState({}, '', url.toString()); } catch (e) {}
@@ -234,7 +229,6 @@ const InnerApp = () => {
       try {
           if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error("Push não suportado");
           
-          // Espera o SW estar ativo
           const reg = await navigator.serviceWorker.ready;
           if (!reg) throw new Error("Service Worker não está pronto.");
 
@@ -377,7 +371,7 @@ const InnerApp = () => {
 
   // --- RENDER ---
 
-  // 1. CONFIG CHECK (Moved after hooks to avoid React Error #310)
+  // 1. CONFIG CHECK
   if ((!SUPABASE_URL || !SUPABASE_KEY) && !isDemoMode) {
       return <SetupScreen onEnterDemo={() => setIsDemoMode(true)} />;
   }

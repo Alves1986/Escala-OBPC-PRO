@@ -1,5 +1,5 @@
 
-const CACHE_NAME = "escala-pro-v1";
+const CACHE_NAME = "escala-pro-v2";
 
 // Assets estáticos fundamentais para o app parecer nativo e profissional offline.
 // Inclui CDNs de estilo e fontes para garantir que o visual não quebre sem internet.

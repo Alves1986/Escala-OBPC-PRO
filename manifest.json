@@ -9,32 +9,26 @@
   "display": "standalone",
   "orientation": "portrait-primary",
   "theme_color": "#0D9488",
-  "background_color": "#0F766E",
+  "background_color": "#f8fafc",
   "categories": ["productivity", "social", "lifestyle"],
   "icons": [
     {
       "src": "https://i.ibb.co/nsFR8zNG/icon1.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
       "src": "https://i.ibb.co/nsFR8zNG/icon1.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
       "src": "https://i.ibb.co/nsFR8zNG/icon1.png",
       "sizes": "180x180",
       "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "https://i.ibb.co/nsFR8zNG/icon1.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "any maskable"
     }
   ],
   "screenshots": [
@@ -59,14 +53,14 @@
       "short_name": "Escala",
       "description": "Ver minha escala do mês",
       "url": "/?tab=calendar",
-      "icons": [{ "src": "https://i.ibb.co/nsFR8zNG/icon1.png", "sizes": "192x192" }]
+      "icons": [{ "src": "https://i.ibb.co/nsFR8zNG/icon1.png", "sizes": "192x192", "purpose": "any maskable" }]
     },
     {
       "name": "Avisos",
       "short_name": "Avisos",
       "description": "Ver avisos importantes",
       "url": "/?tab=announcements",
-      "icons": [{ "src": "https://i.ibb.co/nsFR8zNG/icon1.png", "sizes": "192x192" }]
+      "icons": [{ "src": "https://i.ibb.co/nsFR8zNG/icon1.png", "sizes": "192x192", "purpose": "any maskable" }]
     }
   ],
   "launch_handler": {

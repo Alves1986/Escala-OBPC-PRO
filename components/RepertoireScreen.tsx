@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Music, Plus, Trash2, ExternalLink, Calendar, Settings, ListMusic, Loader2, Search, Youtube, Link, ArrowLeft, X, PlayCircle, Save, FileText } from 'lucide-react';
+import { Music, Plus, Trash2, ExternalLink, Calendar, Settings, ListMusic, Loader2, Search, Youtube, Link, ArrowLeft, X, PlayCircle, Save, FileText, Mic2, RefreshCw, Sparkles } from 'lucide-react';
 import { RepertoireItem, User } from '../types';
 import { useToast } from './Toast';
 import { addToRepertoire, deleteFromRepertoire, sendNotificationSQL } from '../services/supabaseService';
 import { searchSpotifyTracks, getLoginUrl, handleLoginCallback, isUserLoggedIn, logoutSpotify, getUserProfile, getUserPlaylists, getPlaylistTracks } from '../services/spotifyService';
 import { searchYouTubeVideos } from '../services/youtubeService';
-import { searchCifraClub } from '../services/cifraClubService';
+import { findBestMatchChord, CifraClubResult } from '../services/cifraClubService';
 
 interface Props {
   repertoire: RepertoireItem[];
@@ -57,9 +57,9 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   const [youtubeResults, setYoutubeResults] = useState<any[]>([]);
   const [youtubeLoading, setYoutubeLoading] = useState(false);
 
-  const [cifraQuery, setCifraQuery] = useState("");
-  const [cifraResults, setCifraResults] = useState<any[]>([]);
-  const [cifraLoading, setCifraLoading] = useState(false);
+  // Auto-Cifras State
+  const [autoChords, setAutoChords] = useState<Record<string, CifraClubResult | null>>({});
+  const [loadingChords, setLoadingChords] = useState<Record<string, boolean>>({});
 
   // Init
   useEffect(() => {
@@ -73,6 +73,18 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       }
       if (isUserLoggedIn()) loadUserProfile();
   }, []);
+
+  // Effect para carregar cifras automaticamente quando entrar na aba e tiver data selecionada
+  useEffect(() => {
+      if (ministryId === 'louvor' && activeTab === 'cifra' && date) {
+          const songsForDate = repertoire.filter(r => r.date === date);
+          songsForDate.forEach(song => {
+              if (!autoChords[song.id] && !loadingChords[song.id]) {
+                  fetchChordForSong(song.id, song.title);
+              }
+          });
+      }
+  }, [activeTab, date, repertoire, ministryId]);
 
   const handleDateChange = (val: string) => {
       setDate(val);
@@ -128,13 +140,11 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       if (results.length === 0) addToast("Nenhum vídeo encontrado. Verifique a API Key em Configurações.", "warning");
   };
 
-  const handleCifraSearch = async () => {
-      if (!cifraQuery.trim()) return;
-      setCifraLoading(true);
-      const results = await searchCifraClub(cifraQuery);
-      setCifraResults(results);
-      setCifraLoading(false);
-      if (results.length === 0) addToast("Nenhuma cifra encontrada.", "warning");
+  const fetchChordForSong = async (id: string, title: string) => {
+      setLoadingChords(prev => ({ ...prev, [id]: true }));
+      const result = await findBestMatchChord(title);
+      setAutoChords(prev => ({ ...prev, [id]: result }));
+      setLoadingChords(prev => ({ ...prev, [id]: false }));
   };
 
   const handleAddToDraft = (overrideTitle?: string, overrideLink?: string) => {
@@ -246,7 +256,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                   <div className="flex gap-2 mb-4 border-b border-zinc-100 dark:border-zinc-700 pb-1 overflow-x-auto">
                       <button onClick={() => setActiveTab('spotify')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'spotify' ? 'text-green-600 border-green-500 bg-green-50 dark:bg-green-900/10' : 'text-zinc-500 border-transparent'}`}><Search size={14}/> Spotify</button>
                       <button onClick={() => setActiveTab('youtube')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'youtube' ? 'text-red-600 border-red-500 bg-red-50 dark:bg-red-900/10' : 'text-zinc-500 border-transparent'}`}><Youtube size={14}/> YouTube</button>
-                      {isLouvor && <button onClick={() => setActiveTab('cifra')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'cifra' ? 'text-orange-600 border-orange-500 bg-orange-50 dark:bg-orange-900/10' : 'text-zinc-500 border-transparent'}`}><FileText size={14}/> Cifras</button>}
+                      {isLouvor && <button onClick={() => setActiveTab('cifra')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'cifra' ? 'text-orange-600 border-orange-500 bg-orange-50 dark:bg-orange-900/10' : 'text-zinc-500 border-transparent'}`}><FileText size={14}/> Cifras (Auto)</button>}
                       {isSpotifyLoggedIn && <button onClick={() => { setActiveTab('playlists'); if(userPlaylists.length === 0) handleLoadPlaylists(); }} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'playlists' ? 'text-green-600 border-green-500 bg-green-50 dark:bg-green-900/10' : 'text-zinc-500 border-transparent'}`}><ListMusic size={14}/> Playlists</button>}
                       <button onClick={() => setActiveTab('manual')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'manual' ? 'text-blue-600 border-blue-500 bg-blue-50 dark:bg-blue-900/10' : 'text-zinc-500 border-transparent'}`}><Link size={14}/> Link Manual</button>
                   </div>
@@ -273,12 +283,62 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                   )}
 
                   {activeTab === 'cifra' && isLouvor && (
-                      <div className="space-y-4 animate-fade-in">
-                          <div className="flex gap-2">
-                              <input type="text" placeholder="Música ou Artista..." value={cifraQuery} onChange={e => setCifraQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleCifraSearch()} className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-orange-500 text-zinc-900 dark:text-zinc-100" />
-                              <button onClick={handleCifraSearch} disabled={cifraLoading} className="bg-orange-500 hover:bg-orange-600 text-white px-4 rounded-lg font-bold flex items-center justify-center disabled:opacity-50">{cifraLoading ? <Loader2 className="animate-spin" size={18}/> : <Search size={18}/>}</button>
-                          </div>
-                          {cifraResults.length > 0 && <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2 border border-zinc-100 dark:border-zinc-700 rounded-xl p-2 bg-zinc-50 dark:bg-zinc-900/30">{cifraResults.map((result, idx) => (<div key={idx} className="flex items-center justify-between p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors group"><div className="flex items-center gap-3 w-full overflow-hidden"><div className="w-10 h-10 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 flex items-center justify-center shrink-0"><span className="font-bold text-xs">{result.key || '?'}</span></div><div className="min-w-0 flex-1"><p className="font-bold text-sm text-zinc-800 dark:text-white line-clamp-1">{result.title}</p><p className="text-xs text-zinc-500 truncate">{result.artist}</p></div></div><button onClick={() => handleAddToDraft(result.title + (result.key ? ` (${result.key})` : ''), result.url)} className="shrink-0 text-xs px-3 py-1.5 rounded-full font-bold transition-colors bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-800 flex items-center gap-1 ml-1"><Plus size={14}/> Add</button></div>))}</div>}
+                      <div className="space-y-4 animate-fade-in h-full flex flex-col">
+                          {!date ? (
+                              <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-zinc-400 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl">
+                                  <Calendar size={32} className="mb-2 opacity-50"/>
+                                  <p className="text-sm">Selecione uma <strong>Data do Culto</strong> ao lado para carregar as cifras.</p>
+                              </div>
+                          ) : (
+                              <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3">
+                                  <p className="text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-2 px-1">
+                                      <Sparkles size={14} className="text-orange-500" /> A IA busca automaticamente as cifras das músicas do repertório deste dia.
+                                  </p>
+                                  {repertoire.filter(r => r.date === date).length === 0 ? (
+                                      <div className="p-6 text-center bg-zinc-50 dark:bg-zinc-900/30 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                                          <p className="text-sm text-zinc-500 italic">Nenhuma música adicionada para esta data.</p>
+                                      </div>
+                                  ) : (
+                                      repertoire.filter(r => r.date === date).map(song => {
+                                          const chord = autoChords[song.id];
+                                          const isLoading = loadingChords[song.id];
+
+                                          return (
+                                              <div key={song.id} className="bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900/20 p-4 rounded-xl flex items-center justify-between shadow-sm">
+                                                  <div className="flex-1 min-w-0 pr-3">
+                                                      <h4 className="font-bold text-sm text-zinc-800 dark:text-zinc-100 truncate">{song.title}</h4>
+                                                      <div className="flex items-center gap-2 mt-1">
+                                                          {isLoading ? (
+                                                              <span className="text-[10px] text-orange-500 flex items-center gap-1 animate-pulse"><Loader2 size={10} className="animate-spin"/> Buscando cifra...</span>
+                                                          ) : chord ? (
+                                                              <>
+                                                                  <span className="text-[10px] font-bold bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-200 px-1.5 py-0.5 rounded">Tom: {chord.key}</span>
+                                                                  <span className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">{chord.artist}</span>
+                                                              </>
+                                                          ) : (
+                                                              <span className="text-[10px] text-red-400">Cifra não encontrada automaticamente.</span>
+                                                          )}
+                                                      </div>
+                                                  </div>
+                                                  
+                                                  <div className="flex items-center gap-2 shrink-0">
+                                                      {!isLoading && (
+                                                          <button onClick={() => fetchChordForSong(song.id, song.title)} className="p-2 text-zinc-400 hover:text-orange-500 rounded-full hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors" title="Buscar novamente">
+                                                              <RefreshCw size={16} />
+                                                          </button>
+                                                      )}
+                                                      {chord && (
+                                                          <a href={chord.url} target="_blank" rel="noopener noreferrer" className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors shadow-sm flex items-center gap-1">
+                                                              Ver Cifra <ExternalLink size={12}/>
+                                                          </a>
+                                                      )}
+                                                  </div>
+                                              </div>
+                                          );
+                                      })
+                                  )}
+                              </div>
+                          )}
                       </div>
                   )}
 

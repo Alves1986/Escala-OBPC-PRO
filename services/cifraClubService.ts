@@ -28,6 +28,7 @@ const getAiClient = () => {
 
 // Cache simples para evitar chamadas repetitivas
 const searchCache: Record<string, CifraClubResult[]> = {};
+const matchCache: Record<string, CifraClubResult> = {};
 
 export const searchCifraClub = async (query: string): Promise<CifraClubResult[]> => {
     const cacheKey = query.toLowerCase().trim();
@@ -76,14 +77,8 @@ export const searchCifraClub = async (query: string): Promise<CifraClubResult[]>
 
         if (response.text) {
             const results = JSON.parse(response.text);
-            
-            // Garbage Collection simples do Cache
-            // Se o cache ficar muito grande, deleta a entrada mais antiga (FIFO aproximado)
             const keys = Object.keys(searchCache);
-            if (keys.length > 20) {
-                delete searchCache[keys[0]];
-            }
-            
+            if (keys.length > 20) delete searchCache[keys[0]];
             searchCache[cacheKey] = results; 
             return results;
         }
@@ -91,5 +86,56 @@ export const searchCifraClub = async (query: string): Promise<CifraClubResult[]>
     } catch (error) {
         console.error("Error searching Cifra Club:", error);
         return [];
+    }
+};
+
+export const findBestMatchChord = async (songTitle: string): Promise<CifraClubResult | null> => {
+    const cacheKey = songTitle.toLowerCase().trim();
+    if (matchCache[cacheKey]) return matchCache[cacheKey];
+
+    const ai = getAiClient();
+    if (!ai) return null;
+
+    try {
+        const prompt = `
+            Encontre a cifra exata no Cifra Club para a música: "${songTitle}".
+            Remova termos como "Ao Vivo", "Live", "Official Video" para melhorar a busca.
+            
+            Retorne um JSON object único com o melhor resultado (mais popular/correto).
+            Campos:
+            - title: Nome da música
+            - artist: Nome do artista
+            - url: URL da cifra
+            - key: O tom original da música (ex: C, F#, Bbm). Se não souber, chute o mais provável.
+        `;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        title: { type: Type.STRING },
+                        artist: { type: Type.STRING },
+                        url: { type: Type.STRING },
+                        key: { type: Type.STRING }
+                    }
+                }
+            }
+        });
+
+        if (response.text) {
+            const result = JSON.parse(response.text);
+            if (result && result.url) {
+                matchCache[cacheKey] = result;
+                return result;
+            }
+        }
+        return null;
+    } catch (error) {
+        console.error("Error finding match chord:", error);
+        return null;
     }
 };
