@@ -95,7 +95,7 @@ const InnerApp = () => {
   const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
   
   // ========================================================================
-  // LÓGICA DE ROTEAMENTO SEGURA
+  // LÓGICA DE ROTEAMENTO (Versão Estável)
   // ========================================================================
   
   // 1. Auxiliar para detectar callback do Spotify
@@ -104,8 +104,8 @@ const InnerApp = () => {
       return window.location.hash.includes('state=spotify_login_app');
   };
 
-  // 2. Estado inicial da aba
-  // CORREÇÃO: Ignora o token do Google e só redireciona se for Spotify
+  // 2. Inicialização da Aba
+  // O login do Google não tem 'state=spotify...', então cai no fallback 'dashboard'.
   const [currentTab, setCurrentTab] = useState(() => {
       if (typeof window !== 'undefined') {
           if (isSpotifyCallback()) return 'repertoire-manager'; 
@@ -144,15 +144,15 @@ const InnerApp = () => {
 
   // --- EFFECTS ---
 
-  // 3. Atualiza a aba APENAS se for callback do Spotify
-  // Removemos a limpeza automática de URL para evitar conflitos de login
+  // 3. Monitoramento de Login e Redirecionamento (Spotify)
   useEffect(() => {
+      // Se for Spotify, forçamos a ida para a aba de repertório
       if (isSpotifyCallback() && currentUser) {
           const target = currentUser.role === 'admin' ? 'repertoire-manager' : 'repertoire';
           if (currentTab !== target) setCurrentTab(target);
       }
-      // Se for login do Google, o estado inicial já tratou de mandar para o Dashboard.
-      // O token ficará na URL, mas o login funcionará corretamente.
+      // NOTA: Removemos a limpeza forçada da URL para evitar erros de login ("não entra").
+      // O Supabase lidará com a sessão, e se sobrar lixo na URL, o sistema ainda funcionará.
   }, [currentUser]);
 
   // Smooth Loading Transition
@@ -177,7 +177,8 @@ const InnerApp = () => {
   useEffect(() => {
       const url = new URL(window.location.href);
       if (url.searchParams.get('tab') !== currentTab) {
-          // Evita sujar a URL se tiver hash importante
+          // Não atualiza a URL se estivermos no meio do processo de login (hash presente)
+          // Isso evita sobrescrever o token de acesso
           if (!window.location.hash.includes('access_token') && !isSpotifyCallback()) {
               url.searchParams.set('tab', currentTab);
               try { window.history.replaceState({}, '', url.toString()); } catch (e) {}
