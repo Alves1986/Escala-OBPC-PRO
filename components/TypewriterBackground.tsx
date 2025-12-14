@@ -17,20 +17,17 @@ export const TypewriterBackground: React.FC = () => {
     const currentPhraseObj = PHRASES[currentPhraseIndex];
     const fullText = currentPhraseObj.text;
 
-    // Velocidade de digitação e exclusão
-    const typeSpeed = 100; // ms por letra
-    const deleteSpeed = 50; // ms por letra (mais rápido para apagar)
-    const pauseTime = 2000; // 2 segundos de leitura
+    const typeSpeed = 80;
+    const deleteSpeed = 40;
+    const pauseTime = 2500;
 
     if (isPaused) return;
 
     const handleType = () => {
       if (!isDeleting) {
-        // Digitando
         if (currentTextLength < fullText.length) {
           setCurrentTextLength((prev) => prev + 1);
         } else {
-          // Terminou de digitar, pausa para leitura
           setIsPaused(true);
           setTimeout(() => {
             setIsPaused(false);
@@ -38,11 +35,9 @@ export const TypewriterBackground: React.FC = () => {
           }, pauseTime);
         }
       } else {
-        // Apagando (Backspace)
         if (currentTextLength > 0) {
           setCurrentTextLength((prev) => prev - 1);
         } else {
-          // Terminou de apagar, vai para a próxima frase
           setIsDeleting(false);
           setCurrentPhraseIndex((prev) => (prev + 1) % PHRASES.length);
         }
@@ -50,35 +45,27 @@ export const TypewriterBackground: React.FC = () => {
     };
 
     const timer = setTimeout(handleType, isDeleting ? deleteSpeed : typeSpeed);
-
     return () => clearTimeout(timer);
   }, [currentTextLength, isDeleting, isPaused, currentPhraseIndex]);
 
-  // Lógica de Renderização com Highlight
   const renderText = () => {
     const currentPhraseObj = PHRASES[currentPhraseIndex];
     const fullText = currentPhraseObj.text;
     const highlightWord = currentPhraseObj.highlight;
 
-    // Texto cortado no tamanho atual
-    const visibleText = fullText.substring(0, currentTextLength);
-
-    // Se não tiver highlight ou a palavra highlight não estiver visível ainda, retorna normal
     const highlightIndex = fullText.indexOf(highlightWord);
     
+    // Normal rendering if highlight not reached or not found
     if (highlightIndex === -1 || currentTextLength <= highlightIndex) {
-      return <span className="text-zinc-400">{visibleText}</span>;
+      return <span className="text-zinc-400 drop-shadow-sm">{fullText.substring(0, currentTextLength)}</span>;
     }
 
-    // Separa as partes: Antes do highlight, O highlight (parcial ou total), Depois do highlight
+    // Split text logic
     const partBefore = fullText.substring(0, highlightIndex);
-    
-    // Calcula quanto do highlight está visível
     const highlightEndIndex = highlightIndex + highlightWord.length;
     const visibleHighlightLength = Math.min(currentTextLength, highlightEndIndex) - highlightIndex;
     const partHighlight = highlightWord.substring(0, visibleHighlightLength);
-
-    // Calcula o texto após o highlight (se houver)
+    
     let partAfter = "";
     if (currentTextLength > highlightEndIndex) {
       partAfter = fullText.substring(highlightEndIndex, currentTextLength);
@@ -86,20 +73,24 @@ export const TypewriterBackground: React.FC = () => {
 
     return (
       <>
-        <span className="text-zinc-400">{partBefore}</span>
-        <span className="text-orange-500 font-bold">{partHighlight}</span>
-        <span className="text-zinc-400">{partAfter}</span>
+        <span className="text-zinc-400 drop-shadow-sm">{partBefore}</span>
+        <span className="text-teal-400 font-bold drop-shadow-md glow-text">{partHighlight}</span>
+        <span className="text-zinc-400 drop-shadow-sm">{partAfter}</span>
       </>
     );
   };
 
   return (
-    <div className="w-full text-center py-6 pointer-events-none select-none flex justify-center">
-      <div className="max-w-md px-4">
-        <h1 className="font-sans font-medium text-sm md:text-base leading-tight tracking-wide min-h-[1.5em]">
+    <div className="w-full flex justify-center pointer-events-none select-none">
+      {/* Matches Login Card Width (max-w-[400px]) and Rounding */}
+      <div className="w-full max-w-[400px] h-14 flex items-center justify-center bg-[#0F0F11]/80 backdrop-blur-xl border border-white/5 rounded-[2rem] shadow-xl ring-1 ring-white/5 transition-all relative overflow-hidden">
+        {/* Subtle inner reflection */}
+        <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
+        
+        <p className="font-mono text-[11px] md:text-xs text-center tracking-wide px-4 whitespace-nowrap overflow-hidden text-ellipsis">
           {renderText()}
-          <span className="animate-pulse text-orange-500 ml-0.5 font-bold">|</span>
-        </h1>
+          <span className="animate-pulse text-teal-500 ml-0.5 font-bold inline-block align-middle">|</span>
+        </p>
       </div>
     </div>
   );
