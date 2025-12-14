@@ -1,8 +1,7 @@
 
-const CACHE_NAME = 'gestao-escala-pwa-v29';
+const CACHE_NAME = 'gestao-escala-pwa-v30';
 
 // Arquivos estáticos fundamentais
-// Usando caminhos absolutos para garantir a integridade do cache
 const PRECACHE_URLS = [
   '/',
   '/index.html',
@@ -16,10 +15,8 @@ self.addEventListener('install', event => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      // IMPORTANTE: Adicionado .catch() para que falhas no download de assets (ex: cdn fora do ar)
-      // NÃO impeçam a instalação do Service Worker. Prioridade é a funcionalidade de Push.
       return cache.addAll(PRECACHE_URLS).catch(err => {
-        console.warn('Falha no precache de alguns arquivos, mas continuando instalação do SW:', err);
+        console.warn('Falha no precache não crítico:', err);
       });
     })
   );
@@ -43,31 +40,21 @@ self.addEventListener('activate', event => {
 
 // Interceptação de Rede
 self.addEventListener('fetch', event => {
-  // Ignora requisições de esquemas não suportados (ex: chrome-extension://)
-  if (!event.request.url.startsWith('http')) {
-    return;
-  }
+  if (!event.request.url.startsWith('http')) return;
 
-  // 1. Navegação (HTML): Force a raiz / ou index.html
+  // 1. Navegação (HTML)
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request)
-        .catch(() => {
-          // Se estiver offline, retorna a raiz cacheada
-          return caches.match('/')
-            .then(response => response || caches.match('/index.html'));
-        })
+      fetch(event.request).catch(() => {
+        return caches.match('/')
+          .then(response => response || caches.match('/index.html'));
+      })
     );
     return;
   }
 
-  // 2. Assets Estáticos (JS, CSS, Imagens): Stale-While-Revalidate
-  if (event.request.destination === 'script' || 
-      event.request.destination === 'style' || 
-      event.request.destination === 'image' ||
-      event.request.destination === 'font' ||
-      event.request.destination === 'manifest') {
-    
+  // 2. Assets Estáticos (Cache First / Stale-While-Revalidate)
+  if (['script', 'style', 'image', 'font', 'manifest'].includes(event.request.destination)) {
     event.respondWith(
       caches.match(event.request).then(cachedResponse => {
         const fetchPromise = fetch(event.request).then(networkResponse => {
@@ -76,9 +63,7 @@ self.addEventListener('fetch', event => {
             caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
           }
           return networkResponse;
-        }).catch(() => {
-            // Falha silenciosa se offline
-        });
+        }).catch(() => {}); // Falha silenciosa offline
         return cachedResponse || fetchPromise;
       })
     );
@@ -91,55 +76,65 @@ self.addEventListener('fetch', event => {
   );
 });
 
-// Evento de Clique na Notificação
-self.addEventListener('notificationclick', function(event) {
-  event.notification.close();
+// --- PUSH NOTIFICATIONS (Background & Closed App) ---
 
-  // URL para abrir (pode vir no data da notificação ou usar a raiz)
-  const urlToOpen = event.notification.data?.url || '/';
+self.addEventListener('push', function(event) {
+  if (!event.data) return;
+
+  let data;
+  try {
+    data = event.data.json();
+  } catch (e) {
+    data = { title: 'Nova Notificação', body: event.data.text() };
+  }
+
+  // Configuração Robusta para Android/iOS
+  const options = {
+    body: data.body,
+    icon: data.icon || 'https://i.ibb.co/nsFR8zNG/icon1.png',
+    badge: 'https://i.ibb.co/nsFR8zNG/icon1.png', // Ícone pequeno na barra de status (Android)
+    vibrate: [100, 50, 100], // Vibração padrão
+    data: { 
+      url: data.data?.url || '/',
+      dateOfArrival: Date.now() 
+    },
+    actions: [
+      { action: 'open', title: 'Ver Agora' }
+    ],
+    tag: 'escala-notification', // Agrupa notificações para não spammar
+    renotify: true // Vibra novamente mesmo se tiver a mesma tag
+  };
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
-      // Tenta focar em uma janela já aberta
-      for (var i = 0; i < clientList.length; i++) {
-        var client = clientList[i];
-        if ((client.url === urlToOpen || client.url.endsWith(urlToOpen)) && 'focus' in client) {
-          return client.focus();
-        }
-      }
-      // Se não tiver janela aberta, abre uma nova
-      if (clients.openWindow) {
-        return clients.openWindow(urlToOpen).catch(err => console.warn('Falha ao abrir janela', err));
-      }
-    })
+    self.registration.showNotification(data.title, options)
   );
 });
 
-// Evento de Recebimento de Push (Mobile/Background)
-self.addEventListener('push', function(event) {
-  if (event.data) {
-    let data;
-    try {
-        data = event.data.json();
-    } catch (e) {
-        data = { title: 'Nova Notificação', body: event.data.text() };
-    }
+self.addEventListener('notificationclick', function(event) {
+  event.notification.close();
 
-    const options = {
-      body: data.body,
-      icon: data.icon || 'https://i.ibb.co/nsFR8zNG/icon1.png',
-      badge: 'https://i.ibb.co/nsFR8zNG/icon1.png', // Ícone pequeno na barra de status (Android)
-      vibrate: [200, 100, 200], // Vibração para chamar atenção
-      requireInteraction: true, // Mantém a notificação até o usuário interagir (Desktop/Alguns Androids)
-      tag: 'escala-app', // Substitui notificações antigas para não empilhar muitas
-      data: data.data || { url: '/' },
-      actions: [
-        { action: 'open', title: 'Ver Detalhes' }
-      ]
-    };
+  const urlToOpen = new URL(event.notification.data?.url || '/', self.location.origin).href;
 
-    event.waitUntil(
-      self.registration.showNotification(data.title, options)
-    );
-  }
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
+      // 1. Tenta encontrar uma aba já aberta do app
+      for (let i = 0; i < clientList.length; i++) {
+        const client = clientList[i];
+        // Verifica se a URL base corresponde (ignora query params para match básico)
+        if (client.url.startsWith(self.location.origin) && 'focus' in client) {
+          // Se encontrou, foca nela e navega para a URL correta
+          return client.focus().then(c => {
+              if (c && 'navigate' in c) {
+                  return c.navigate(urlToOpen);
+              }
+          });
+        }
+      }
+      
+      // 2. Se não encontrou, abre uma nova janela
+      if (clients.openWindow) {
+        return clients.openWindow(urlToOpen);
+      }
+    })
+  );
 });

@@ -203,15 +203,26 @@ const InnerApp = () => {
   const handleEnableNotifications = async () => {
       try {
           if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error("Push não suportado");
+          
+          // Espera o SW estar ativo
           const reg = await navigator.serviceWorker.ready;
+          if (!reg) throw new Error("Service Worker não está pronto.");
+
           let sub = await reg.pushManager.getSubscription();
-          if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
+          if (!sub) {
+              sub = await reg.pushManager.subscribe({ 
+                  userVisibleOnly: true, 
+                  applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) 
+              });
+          }
+          
           if (sub) {
               await Supabase.saveSubscriptionSQL(ministryId, sub);
-              addToast("Notificações ativadas!", "success");
+              addToast("Notificações ativadas com sucesso!", "success");
           }
       } catch(e: any) {
-          addToast("Erro ao ativar notificações.", "error");
+          console.error("Erro Push:", e);
+          addToast("Erro ao ativar notificações. Verifique as permissões.", "error");
       }
   };
 
