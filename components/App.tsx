@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, Suspense, useRef } from 'react';
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
@@ -95,30 +94,22 @@ const InnerApp = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
   
-  // ========================================================================
-  // LÓGICA CRÍTICA DE ROTEAMENTO (LOGIN GOOGLE vs SPOTIFY)
-  // ========================================================================
-  
-  // Verifica se é retorno do Spotify procurando o parâmetro 'state' específico.
-  // O login do Google NÃO tem esse parâmetro.
+  // Função auxiliar para distinguir callback do Spotify vs Supabase Auth
+  // Verifica explicitamente se existe o parâmetro 'state=spotify_login_app' na URL
   const isSpotifyCallback = () => {
       if (typeof window === 'undefined') return false;
       const hash = window.location.hash;
-      return hash.includes('state=spotify_login_app');
+      return hash.includes('access_token') && hash.includes('state=spotify_login_app');
   };
 
   const [currentTab, setCurrentTab] = useState(() => {
       if (typeof window !== 'undefined') {
-          // Prioridade 1: Callback Spotify (vai para Repertório)
+          // Se for callback do Spotify (token + state específico), vai para o gerenciador
           if (isSpotifyCallback()) return 'repertoire-manager'; 
           
-          // Prioridade 2: URL Query Param (?tab=xxx)
+          // Caso contrário (Login normal ou Supabase), respeita a URL ou vai para dashboard
           const params = new URLSearchParams(window.location.search);
-          const tab = params.get('tab');
-          if (tab) return tab;
-
-          // Padrão Absoluto: Dashboard
-          return 'dashboard';
+          return params.get('tab') || 'dashboard';
       }
       return 'dashboard';
   });
@@ -151,28 +142,28 @@ const InnerApp = () => {
 
   // --- EFFECTS ---
 
-  // Gerenciamento de Login e Limpeza de URL
+  // Gerenciamento de Login e Redirecionamento
   useEffect(() => {
-      // Caso 1: Retorno do Spotify
+      // 1. Caso seja Callback do Spotify
       if (isSpotifyCallback() && currentUser) {
           const target = currentUser.role === 'admin' ? 'repertoire-manager' : 'repertoire';
           if (currentTab !== target) setCurrentTab(target);
-          return;
+          return; // Para aqui se for Spotify
       }
       
-      // Caso 2: Login Google (Supabase) - URL suja com tokens
+      // 2. Caso seja Login do Google (Supabase) - URL contém token mas NÃO é Spotify
       if (window.location.hash.includes('access_token') && !isSpotifyCallback()) {
-          // Limpa a URL para remover o token visualmente
+          // Limpa a URL imediatamente para ficar profissional
           try {
               window.history.replaceState(null, '', window.location.pathname + window.location.search);
           } catch(e) {}
           
-          // Garante que está no Dashboard se não houver outra aba especificada
+          // Garante que, se por algum motivo caiu no gerenciador, volte para o dashboard
           if (currentTab === 'repertoire-manager') {
               setCurrentTab('dashboard');
           }
       }
-  }, [currentUser]);
+  }, [currentUser]); // Executa quando o usuário é carregado
 
   // Smooth Loading Transition
   useEffect(() => {
@@ -197,7 +188,7 @@ const InnerApp = () => {
       const url = new URL(window.location.href);
       if (url.searchParams.get('tab') !== currentTab) {
           // Evita sobrescrever hash do Spotify se estiver processando
-          if (!window.location.hash.includes('state=spotify_login_app')) {
+          if (!isSpotifyCallback()) {
               url.searchParams.set('tab', currentTab);
               try { window.history.replaceState({}, '', url.toString()); } catch (e) {}
           }
