@@ -72,10 +72,9 @@ const InnerApp = () => {
     (name, status) => {
         // Notificação discreta de presença
         if (status === 'online') {
-            addToast(`${name} entrou no sistema.`, 'success');
+            addToast(`${name} entrou`, 'success');
         } else {
-            // Opcional: Descomente se quiser ser notificado quando sair também
-            // addToast(`${name} saiu.`, 'info'); 
+            addToast(`${name} saiu`, 'info'); 
         }
     }
   );

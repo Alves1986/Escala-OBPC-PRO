@@ -1,6 +1,6 @@
 
 import React, { ReactNode, useState, useRef } from 'react';
-import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck } from 'lucide-react';
+import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles } from 'lucide-react';
 import { User, AppNotification } from '../types';
 import { NotificationCenter } from './NotificationCenter';
 import { useClickOutside } from '../hooks/useClickOutside';
@@ -55,6 +55,13 @@ export const DashboardLayout: React.FC<Props> = ({
   useClickOutside(ministryMenuRef, () => {
     if (ministryMenuOpen) setMinistryMenuOpen(false);
   });
+
+  // Encontra o item ativo para pegar o Label correto e o Ícone
+  const activeItem = [...mainNavItems, ...managementNavItems].find(item => item.id === currentTab);
+  
+  // Define título e ícone de fallback
+  const activeLabel = activeItem ? activeItem.label : (currentTab === 'profile' ? 'Meu Perfil' : 'Visão Geral');
+  const ActiveIcon = activeItem ? activeItem.icon : <Layout size={20}/>;
 
   const handleHardReload = async () => {
     setIsUpdating(true);
@@ -283,7 +290,12 @@ export const DashboardLayout: React.FC<Props> = ({
                 <button onClick={() => setSidebarOpen(true)} className="p-2 -ml-2 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg active:scale-95 transition-all">
                     <Menu size={24} />
                 </button>
-                <h1 className="font-bold text-lg text-zinc-900 dark:text-white truncate max-w-[180px]">{title}</h1>
+                
+                {/* Mobile Title - Simple and Professional */}
+                <div className="flex items-center gap-2 overflow-hidden">
+                    <span className="text-zinc-400 dark:text-zinc-600">|</span>
+                    <h1 className="font-bold text-sm text-zinc-800 dark:text-white truncate">{activeLabel}</h1>
+                </div>
             </div>
             <div className="flex items-center gap-3">
                 <NotificationCenter 
@@ -298,17 +310,22 @@ export const DashboardLayout: React.FC<Props> = ({
             </div>
         </header>
 
-        {/* Desktop Top Bar - Minimalist */}
-        <header className="hidden lg:flex h-20 px-8 items-center justify-between sticky top-0 z-30 bg-[#f8fafc]/90 dark:bg-[#09090b]/90 backdrop-blur-sm">
-             <div className="flex flex-col justify-center">
-                 <div className="flex items-center gap-2 text-xs font-medium text-zinc-400 uppercase tracking-wider mb-0.5">
-                     <span>Painel</span>
-                     <ChevronRight size={10} />
-                     <span className="text-teal-600 dark:text-teal-400">{currentTab.replace('-', ' ')}</span>
+        {/* Desktop Top Bar - Professional & Clean */}
+        <header className="hidden lg:flex h-20 px-8 items-center justify-between sticky top-0 z-30 bg-[#f8fafc]/80 dark:bg-[#09090b]/80 backdrop-blur-xl border-b border-zinc-200/50 dark:border-zinc-800/50 transition-all">
+             <div className="flex items-center gap-4">
+                 {/* Current Tab Icon Container */}
+                 <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-white dark:bg-zinc-800 shadow-sm border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
+                    {ActiveIcon}
                  </div>
-                 <h2 className="text-xl font-bold text-zinc-900 dark:text-white capitalize tracking-tight">
-                    {currentTab === 'dashboard' ? 'Visão Geral' : currentTab.replace('-', ' ')}
-                 </h2>
+                 
+                 <div className="flex flex-col justify-center">
+                     <h2 className="text-lg font-bold text-zinc-900 dark:text-white leading-none tracking-tight">
+                        {activeLabel}
+                     </h2>
+                     <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mt-1">
+                        Gestão de Ministério &bull; {title}
+                     </p>
+                 </div>
              </div>
              
              <div className="flex items-center gap-4 bg-white dark:bg-zinc-900 p-1.5 rounded-full shadow-sm border border-zinc-200/50 dark:border-zinc-800/50 pr-4">
