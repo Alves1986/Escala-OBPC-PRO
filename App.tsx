@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect, Suspense, useRef } from 'react';
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
   Megaphone, Settings, FileBarChart, CalendarDays,
   Users, Edit, Send, ListMusic, Clock, ArrowLeft, ArrowRight,
-  Calendar as CalendarIcon, Trophy, Loader2, ShieldAlert, Share2
+  Calendar as CalendarIcon, Trophy, Loader2, ShieldAlert, Share2, Sparkles, ChevronRight
 } from 'lucide-react';
 import { ToastProvider, useToast } from './components/Toast';
 import { LoginScreen } from './components/LoginScreen';
@@ -59,20 +60,15 @@ const LoadingFallback = () => (
 );
 
 const InnerApp = () => {
-  // --- STATE & HOOKS (Must be called unconditionally) ---
   const [isDemoMode, setIsDemoMode] = useState(false);
-
   const { currentUser, setCurrentUser, loadingAuth } = useAuth();
   const { addToast, confirmAction } = useToast();
-
-  // Ref para armazenar timers de notificação e evitar spam no refresh
   const presenceTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const onlineUsers = useOnlinePresence(
     currentUser?.id, 
     currentUser?.name,
     (name, status) => {
-        // Lógica de Debounce para Presença
         if (status === 'offline') {
             if (presenceTimeouts.current[name]) clearTimeout(presenceTimeouts.current[name]);
             presenceTimeouts.current[name] = setTimeout(() => {
@@ -94,22 +90,9 @@ const InnerApp = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
   
-  // ========================================================================
-  // LÓGICA DE ROTEAMENTO (Login Google vs Spotify)
-  // ========================================================================
-  
-  // 1. Auxiliar para detectar callback do Spotify
-  const isSpotifyCallback = () => {
-      if (typeof window === 'undefined') return false;
-      return window.location.hash.includes('state=spotify_login_app');
-  };
-
-  // 2. Estado inicial da aba
   const [currentTab, setCurrentTab] = useState(() => {
       if (typeof window !== 'undefined') {
-          // Só vai para o repertório se for callback do Spotify
-          if (isSpotifyCallback()) return 'repertoire-manager'; 
-          
+          if (window.location.hash && window.location.hash.includes('access_token')) return 'repertoire-manager'; 
           const params = new URLSearchParams(window.location.search);
           return params.get('tab') || 'dashboard';
       }
@@ -142,33 +125,13 @@ const InnerApp = () => {
   const [visualTheme, setVisualTheme] = useState<'light' | 'dark'>('light');
   const [showInitialLoading, setShowInitialLoading] = useState(true);
 
-  // --- EFFECTS ---
-
-  // 3. Gerenciamento de Login e Limpeza de URL
   useEffect(() => {
-      // Caso 1: Retorno do Spotify (vai para repertório)
-      if (isSpotifyCallback() && currentUser) {
+      if (window.location.hash && window.location.hash.includes('access_token') && currentUser) {
           const target = currentUser.role === 'admin' ? 'repertoire-manager' : 'repertoire';
           if (currentTab !== target) setCurrentTab(target);
-          return;
       }
-      
-      // Caso 2: Login Google/Supabase (vai para dashboard e limpa URL)
-      // CORREÇÃO CRÍTICA: "&& currentUser" garante que só limpamos a URL APÓS o login ter sido processado.
-      if (currentUser && window.location.hash.includes('access_token') && !isSpotifyCallback()) {
-          // Limpa a URL visualmente
-          try {
-              window.history.replaceState(null, '', window.location.pathname + window.location.search);
-          } catch(e) {}
-          
-          // Se estiver na aba errada (devido à hash inicial), corrige para dashboard
-          if (currentTab === 'repertoire-manager') {
-              setCurrentTab('dashboard');
-          }
-      }
-  }, [currentUser]); // Executa quando currentUser muda (de null para logado)
+  }, [currentUser]);
 
-  // Smooth Loading Transition
   useEffect(() => {
       if (!loadingAuth && !loadingData) {
           const timer = setTimeout(() => setShowInitialLoading(false), 800);
@@ -186,12 +149,10 @@ const InnerApp = () => {
       return () => window.removeEventListener('focus', handleFocus);
   }, [currentUser, ministryId, loadData]);
 
-  // Sync URL with Tab
   useEffect(() => {
       const url = new URL(window.location.href);
       if (url.searchParams.get('tab') !== currentTab) {
-          // Evita sujar a URL se tiver hash importante
-          if (!window.location.hash.includes('access_token') && !isSpotifyCallback()) {
+          if (!window.location.hash.includes('access_token')) {
               url.searchParams.set('tab', currentTab);
               try { window.history.replaceState({}, '', url.toString()); } catch (e) {}
           }
@@ -204,7 +165,6 @@ const InnerApp = () => {
       return () => window.removeEventListener('pwa-ready', handlePwaReady);
   }, []);
 
-  // Theme Logic
   useEffect(() => {
     const applyTheme = () => {
         let targetTheme: 'light' | 'dark' = 'light';
@@ -222,8 +182,6 @@ const InnerApp = () => {
     if (themeMode === 'system') interval = setInterval(applyTheme, 60000);
     return () => { if (interval) clearInterval(interval); };
   }, [themeMode]);
-
-  // --- HANDLERS ---
 
   const handleSetThemeMode = (mode: ThemeMode) => setThemeMode(mode);
   
@@ -244,11 +202,8 @@ const InnerApp = () => {
   const handleEnableNotifications = async () => {
       try {
           if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error("Push não suportado");
-          
-          // Espera o SW estar ativo
           const reg = await navigator.serviceWorker.ready;
           if (!reg) throw new Error("Service Worker não está pronto.");
-
           let sub = await reg.pushManager.getSubscription();
           if (!sub) {
               sub = await reg.pushManager.subscribe({ 
@@ -256,7 +211,6 @@ const InnerApp = () => {
                   applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) 
               });
           }
-          
           if (sub) {
               await Supabase.saveSubscriptionSQL(ministryId, sub);
               addToast("Notificações ativadas com sucesso!", "success");
@@ -386,9 +340,7 @@ const InnerApp = () => {
       else runAi();
   };
 
-  // --- RENDER ---
-
-  // 1. CONFIG CHECK (Moved after hooks to avoid React Error #310)
+  // 1. CONFIG CHECK
   if ((!SUPABASE_URL || !SUPABASE_KEY) && !isDemoMode) {
       return <SetupScreen onEnterDemo={() => setIsDemoMode(true)} />;
   }
@@ -450,20 +402,22 @@ const InnerApp = () => {
         >
             <Suspense fallback={<LoadingFallback />}>
                 {currentTab === 'dashboard' && (
-                    <div className="space-y-6 animate-fade-in">
+                    <div className="space-y-8 animate-fade-in max-w-5xl mx-auto">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                             <div>
-                                <h1 className="text-3xl font-bold text-zinc-900 dark:text-white tracking-tight">
+                                <h1 className="text-2xl md:text-3xl font-bold text-zinc-900 dark:text-white tracking-tight leading-tight">
                                     {(() => {
                                         const h = new Date().getHours();
                                         if (h < 12) return "Bom dia";
                                         if (h < 18) return "Boa tarde";
                                         return "Boa noite";
-                                    })()}, <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-600 to-emerald-600 dark:from-teal-400 dark:to-emerald-400">{currentUser.name.split(' ')[0]}</span>.
+                                    })()}, <span className="text-teal-600 dark:text-teal-400">{currentUser.name.split(' ')[0]}</span>
                                 </h1>
-                                <p className="text-zinc-500 dark:text-zinc-400 mt-1">Bem-vindo a {ministryTitle}.</p>
+                                <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">Bem-vindo ao painel do {ministryTitle}.</p>
                             </div>
-                            <WeatherWidget />
+                            <div className="hidden md:block">
+                                <WeatherWidget />
+                            </div>
                         </div>
 
                         {(() => {
@@ -474,17 +428,72 @@ const InnerApp = () => {
                         
                         <BirthdayCard members={publicMembers} currentMonthIso={currentMonth} />
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700">
-                                <h3 className="font-bold text-zinc-800 dark:text-white mb-4">Acesso Rápido</h3>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button onClick={() => setCurrentTab('availability')} className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-xl font-bold text-sm hover:bg-blue-100 transition-colors flex flex-col items-center gap-2 text-center"><CalendarCheck size={24}/> Marcar Disponibilidade</button>
-                                    <button onClick={() => setCurrentTab('calendar')} className="p-3 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-xl font-bold text-sm hover:bg-purple-100 transition-colors flex flex-col items-center gap-2 text-center"><CalendarIcon size={24}/> Ver Escala Completa</button>
-                                </div>
+                        {/* Quick Access Grid - Pro Style */}
+                        <div>
+                            <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2"><Sparkles size={14}/> Acesso Rápido</h3>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <button onClick={() => setCurrentTab('availability')} className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-600 transition-all group text-left">
+                                    <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                        <CalendarCheck size={20} strokeWidth={1.5}/>
+                                    </div>
+                                    <span className="block text-sm font-bold text-zinc-800 dark:text-zinc-100">Disponibilidade</span>
+                                    <span className="text-[10px] text-zinc-500">Marcar dias livres</span>
+                                </button>
+
+                                <button onClick={() => setCurrentTab('calendar')} className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-600 transition-all group text-left">
+                                    <div className="w-10 h-10 rounded-lg bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                        <CalendarIcon size={20} strokeWidth={1.5}/>
+                                    </div>
+                                    <span className="block text-sm font-bold text-zinc-800 dark:text-zinc-100">Escala Completa</span>
+                                    <span className="text-[10px] text-zinc-500">Ver o mês inteiro</span>
+                                </button>
+
+                                <button onClick={() => setCurrentTab('swaps')} className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-600 transition-all group text-left">
+                                    <div className="w-10 h-10 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                        <RefreshCcw size={20} strokeWidth={1.5}/>
+                                    </div>
+                                    <span className="block text-sm font-bold text-zinc-800 dark:text-zinc-100">Trocas</span>
+                                    <span className="text-[10px] text-zinc-500">Solicitar/Aceitar</span>
+                                </button>
+
+                                <button onClick={() => setCurrentTab('repertoire')} className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-600 transition-all group text-left">
+                                    <div className="w-10 h-10 rounded-lg bg-pink-50 dark:bg-pink-900/20 text-pink-600 dark:text-pink-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                        <Music size={20} strokeWidth={1.5}/>
+                                    </div>
+                                    <span className="block text-sm font-bold text-zinc-800 dark:text-zinc-100">Repertório</span>
+                                    <span className="text-[10px] text-zinc-500">Músicas do culto</span>
+                                </button>
                             </div>
-                            <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700">
-                                <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-zinc-800 dark:text-white">Últimos Avisos</h3><button onClick={() => setCurrentTab('announcements')} className="text-xs text-blue-500 font-bold hover:underline">Ver Todos</button></div>
-                                {announcements.length === 0 ? <p className="text-sm text-zinc-400 italic">Nenhum aviso recente.</p> : <div className="space-y-3">{announcements.slice(0, 3).map(a => (<div key={a.id} className="text-sm border-l-2 border-blue-500 pl-3"><p className="font-bold text-zinc-800 dark:text-zinc-200 truncate">{a.title}</p><p className="text-zinc-500 text-xs truncate">{a.message}</p></div>))}</div>}
+                        </div>
+
+                        {/* Recent Announcements */}
+                        <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+                            <div className="p-5 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50/50 dark:bg-zinc-900/30">
+                                <h3 className="font-bold text-zinc-800 dark:text-white text-sm">Quadro de Avisos</h3>
+                                <button onClick={() => setCurrentTab('announcements')} className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:underline flex items-center gap-1">
+                                    Ver Todos <ChevronRight size={12}/>
+                                </button>
+                            </div>
+                            
+                            <div className="p-0">
+                                {announcements.length === 0 ? (
+                                    <div className="p-8 text-center text-zinc-400">
+                                        <Megaphone size={32} className="mx-auto mb-2 opacity-20"/>
+                                        <p className="text-sm">Nenhum aviso recente.</p>
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                                        {announcements.slice(0, 3).map(a => (
+                                            <div key={a.id} className="p-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                                                <div className="flex justify-between items-start mb-1">
+                                                    <span className="font-bold text-zinc-800 dark:text-zinc-200 text-sm line-clamp-1">{a.title}</span>
+                                                    <span className="text-[10px] text-zinc-400 whitespace-nowrap ml-2">{new Date(a.timestamp).toLocaleDateString('pt-BR')}</span>
+                                                </div>
+                                                <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-relaxed">{a.message}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
