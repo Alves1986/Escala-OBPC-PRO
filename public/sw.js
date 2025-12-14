@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'gestao-escala-pwa-v26';
+const CACHE_NAME = 'gestao-escala-pwa-v28';
 
 // Arquivos estáticos fundamentais
 // Usando caminhos absolutos para garantir a integridade do cache

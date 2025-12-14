@@ -1,6 +1,6 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { 
-  LayoutDashboard, Calendar, CalendarCheck, RefreshCcw, Music, 
+  LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
   Megaphone, Settings, FileBarChart, CalendarDays,
   Users, Edit, Send, ListMusic, Clock, ArrowLeft, ArrowRight,
   Calendar as CalendarIcon, Trophy, Loader2, ShieldAlert
