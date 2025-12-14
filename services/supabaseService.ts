@@ -742,7 +742,43 @@ export const deleteMinistryEvent = async (ministryId: string, isoDate: string) =
 
 export const updateMinistryEvent = async (ministryId: string, oldIso: string, newTitle: string, newIso: string, applyToAll: boolean) => {
     if (!supabase) return;
-    await supabase.from('events').update({ title: newTitle, date_time: newIso }).eq('ministry_id', ministryId).eq('date_time', oldIso);
+
+    // 1. Fetch original event to get ID and Title
+    const { data: originalEvent } = await supabase.from('events')
+        .select('id, title')
+        .eq('ministry_id', ministryId)
+        .eq('date_time', oldIso)
+        .single();
+
+    if (!originalEvent) return;
+
+    const newTime = newIso.split('T')[1];
+
+    if (applyToAll) {
+        // Fetch ALL future events with SAME title (across all months)
+        const { data: futureEvents } = await supabase.from('events')
+            .select('*')
+            .eq('ministry_id', ministryId)
+            .eq('title', originalEvent.title) // Match old title
+            .gte('date_time', oldIso); // From this date onwards
+
+        if (futureEvents) {
+            for (const evt of futureEvents) {
+                // Keep original date, update time
+                const datePart = evt.date_time.split('T')[0];
+                const updatedDateTime = `${datePart}T${newTime}`;
+
+                await supabase.from('events')
+                    .update({ title: newTitle, date_time: updatedDateTime })
+                    .eq('id', evt.id);
+            }
+        }
+    } else {
+        // Update only single event
+        await supabase.from('events')
+            .update({ title: newTitle, date_time: newIso })
+            .eq('id', originalEvent.id);
+    }
 };
 
 export const clearScheduleForMonth = async (ministryId: string, month: string) => {

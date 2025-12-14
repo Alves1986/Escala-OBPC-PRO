@@ -142,9 +142,9 @@ export const EventDetailsModal: React.FC<Props> = ({
                                 {applyToAll ? <CheckSquare size={18} /> : <Square size={18} />}
                             </div>
                             <div>
-                                <p className="text-sm font-bold text-zinc-800 dark:text-zinc-200">Aplicar a todos os eventos iguais</p>
+                                <p className="text-sm font-bold text-zinc-800 dark:text-zinc-200">Aplicar em todos os futuros</p>
                                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                                    Atualiza o nome e horário de todos os eventos <strong>"{event.title}"</strong> neste mês.
+                                    Atualiza nome e horário de <strong>"{event.title}"</strong> deste dia em diante (incluindo meses seguintes).
                                 </p>
                             </div>
                         </div>
