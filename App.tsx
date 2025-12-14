@@ -73,25 +73,17 @@ const InnerApp = () => {
     currentUser?.name,
     (name, status) => {
         // Lógica de Debounce para Presença
-        // Evita notificar "Saiu" + "Entrou" quando o usuário apenas recarrega a página (F5)
         if (status === 'offline') {
-            // Se já tiver um timer rodando, limpa ele
             if (presenceTimeouts.current[name]) clearTimeout(presenceTimeouts.current[name]);
-            
-            // Agenda a notificação de saída para daqui a 5 segundos
             presenceTimeouts.current[name] = setTimeout(() => {
                 addToast(`${name} saiu`, 'info'); 
                 delete presenceTimeouts.current[name];
             }, 5000);
         } else {
-            // Usuário entrou (online)
             if (presenceTimeouts.current[name]) {
-                // Se existe um timer de saída pendente, significa que ele saiu e voltou rápido (refresh)
-                // Então cancelamos o aviso de "Saiu" e NÃO mostramos o aviso de "Entrou"
                 clearTimeout(presenceTimeouts.current[name]);
                 delete presenceTimeouts.current[name];
             } else {
-                // Se não tem timer pendente, é uma entrada legítima
                 addToast(`${name} entrou`, 'success');
             }
         }
@@ -102,9 +94,22 @@ const InnerApp = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
   
+  // ========================================================================
+  // LÓGICA DE ROTEAMENTO CORRIGIDA
+  // ========================================================================
+  
+  // 1. Auxiliar para detectar callback do Spotify
+  const isSpotifyCallback = () => {
+      if (typeof window === 'undefined') return false;
+      return window.location.hash.includes('state=spotify_login_app');
+  };
+
+  // 2. Estado inicial da aba
   const [currentTab, setCurrentTab] = useState(() => {
       if (typeof window !== 'undefined') {
-          if (window.location.hash && window.location.hash.includes('access_token')) return 'repertoire-manager'; 
+          // Só vai para o repertório se for callback do Spotify
+          if (isSpotifyCallback()) return 'repertoire-manager'; 
+          
           const params = new URLSearchParams(window.location.search);
           return params.get('tab') || 'dashboard';
       }
@@ -139,11 +144,26 @@ const InnerApp = () => {
 
   // --- EFFECTS ---
 
-  // Atualiza a aba se vier do callback do Spotify
+  // 3. Gerenciamento de Login e Limpeza de URL
   useEffect(() => {
-      if (window.location.hash && window.location.hash.includes('access_token') && currentUser) {
+      // Caso 1: Retorno do Spotify (vai para repertório)
+      if (isSpotifyCallback() && currentUser) {
           const target = currentUser.role === 'admin' ? 'repertoire-manager' : 'repertoire';
           if (currentTab !== target) setCurrentTab(target);
+          return;
+      }
+      
+      // Caso 2: Login Google/Supabase (vai para dashboard e limpa URL)
+      if (window.location.hash.includes('access_token') && !isSpotifyCallback()) {
+          // Limpa a URL visualmente
+          try {
+              window.history.replaceState(null, '', window.location.pathname + window.location.search);
+          } catch(e) {}
+          
+          // Se estiver na aba errada (devido à hash inicial), corrige para dashboard
+          if (currentTab === 'repertoire-manager') {
+              setCurrentTab('dashboard');
+          }
       }
   }, [currentUser]);
 
@@ -169,7 +189,8 @@ const InnerApp = () => {
   useEffect(() => {
       const url = new URL(window.location.href);
       if (url.searchParams.get('tab') !== currentTab) {
-          if (!window.location.hash.includes('access_token')) {
+          // Evita sujar a URL se tiver hash importante
+          if (!window.location.hash.includes('access_token') && !isSpotifyCallback()) {
               url.searchParams.set('tab', currentTab);
               try { window.history.replaceState({}, '', url.toString()); } catch (e) {}
           }
