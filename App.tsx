@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, Suspense, useRef } from 'react';
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
@@ -90,9 +89,22 @@ const InnerApp = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
   
+  // ========================================================================
+  // LÓGICA DE ROTEAMENTO (Login Google vs Spotify)
+  // ========================================================================
+  
+  // 1. Auxiliar para detectar callback do Spotify
+  const isSpotifyCallback = () => {
+      if (typeof window === 'undefined') return false;
+      return window.location.hash.includes('state=spotify_login_app');
+  };
+
+  // 2. Estado inicial da aba
   const [currentTab, setCurrentTab] = useState(() => {
       if (typeof window !== 'undefined') {
-          if (window.location.hash && window.location.hash.includes('access_token')) return 'repertoire-manager'; 
+          // Só vai para o repertório se for callback do Spotify
+          if (isSpotifyCallback()) return 'repertoire-manager'; 
+          
           const params = new URLSearchParams(window.location.search);
           return params.get('tab') || 'dashboard';
       }
@@ -125,12 +137,31 @@ const InnerApp = () => {
   const [visualTheme, setVisualTheme] = useState<'light' | 'dark'>('light');
   const [showInitialLoading, setShowInitialLoading] = useState(true);
 
+  // --- EFFECTS ---
+
+  // 3. Gerenciamento de Login e Limpeza de URL
   useEffect(() => {
-      if (window.location.hash && window.location.hash.includes('access_token') && currentUser) {
+      // Caso 1: Retorno do Spotify (vai para repertório)
+      if (isSpotifyCallback() && currentUser) {
           const target = currentUser.role === 'admin' ? 'repertoire-manager' : 'repertoire';
           if (currentTab !== target) setCurrentTab(target);
+          return;
       }
-  }, [currentUser]);
+      
+      // Caso 2: Login Google/Supabase (vai para dashboard e limpa URL)
+      // "&& currentUser" garante que só limpamos a URL APÓS o login ter sido processado.
+      if (currentUser && window.location.hash.includes('access_token') && !isSpotifyCallback()) {
+          // Limpa a URL visualmente
+          try {
+              window.history.replaceState(null, '', window.location.pathname + window.location.search);
+          } catch(e) {}
+          
+          // Se estiver na aba errada (devido à hash inicial), corrige para dashboard
+          if (currentTab === 'repertoire-manager') {
+              setCurrentTab('dashboard');
+          }
+      }
+  }, [currentUser]); // Executa quando currentUser muda
 
   useEffect(() => {
       if (!loadingAuth && !loadingData) {
