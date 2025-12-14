@@ -1,5 +1,5 @@
 
-// ... existing imports
+// ... existing code ...
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
     SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, 
@@ -76,13 +76,20 @@ export const loginWithGoogle = async () => {
     if (!supabase) return { success: true, data: { user: getMockUser() } };
     const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: window.location.origin }
+        options: { 
+            redirectTo: window.location.origin,
+            queryParams: {
+                prompt: 'select_account', // Forces account selection
+                access_type: 'offline'
+            }
+        }
     });
     if (error) return { success: false, message: error.message };
     return { success: true, data };
 };
 
 export const registerWithEmail = async (email: string, password: string, name: string, ministries: string[], phone?: string, roles?: string[]) => {
+// ... existing code ...
     if (!supabase) return { success: true, message: "Registro simulado (Demo)" };
     const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } });
     if (error) return { success: false, message: error.message };
@@ -107,6 +114,7 @@ export const sendPasswordResetEmail = async (email: string) => {
 // --- DATA MOCKS ---
 
 export const fetchMinistrySettings = async (ministryId: string): Promise<MinistrySettings> => {
+// ... existing code ...
     if (!supabase) return { 
         displayName: 'Mídia & Comunicação (Demo)', 
         roles: ["Projeção", "Transmissão", "Câmera 1", "Câmera 2", "Fotografia", "Storys"],
@@ -127,6 +135,7 @@ export const fetchMinistrySettings = async (ministryId: string): Promise<Ministr
 };
 
 export const fetchMinistrySchedule = async (ministryId: string, month: string): Promise<{ events: any[], schedule: ScheduleMap, attendance: AttendanceMap }> => {
+// ... existing code ...
     if (!supabase) {
         const mockEvents = generateMockEvents(month);
         const sched: ScheduleMap = {};
@@ -193,6 +202,7 @@ export const fetchMinistrySchedule = async (ministryId: string, month: string): 
 };
 
 export const fetchMinistryMembers = async (ministryId: string): Promise<{ memberMap: MemberMap, publicList: TeamMemberProfile[] }> => {
+// ... existing code ...
     if (!supabase) {
         const publicList: TeamMemberProfile[] = mockNames.map((name, idx) => ({
             id: `mock-member-${idx}`,
@@ -250,6 +260,7 @@ export const fetchMinistryMembers = async (ministryId: string): Promise<{ member
 };
 
 export const fetchNotificationsSQL = async (allowedMinistries: string[], userId: string): Promise<AppNotification[]> => {
+// ... existing code ...
     if (!supabase) {
         return [
             { id: '1', title: "Bem-vindo ao Demo", message: "Explore todas as funcionalidades do sistema.", type: "success", timestamp: new Date().toISOString(), read: false, ministryId: 'midia' },
@@ -283,6 +294,7 @@ export const fetchNotificationsSQL = async (allowedMinistries: string[], userId:
 };
 
 export const fetchAnnouncementsSQL = async (ministryId: string): Promise<Announcement[]> => {
+// ... existing code ...
     if (!supabase) {
         return [
             { 
@@ -323,6 +335,7 @@ export const fetchAnnouncementsSQL = async (ministryId: string): Promise<Announc
 };
 
 export const fetchSwapRequests = async (ministryId: string): Promise<SwapRequest[]> => {
+// ... existing code ...
     if (!supabase) return [];
     const { data } = await supabase.from('swap_requests')
         .select('*')
@@ -344,6 +357,7 @@ export const fetchSwapRequests = async (ministryId: string): Promise<SwapRequest
 };
 
 export const fetchRepertoire = async (ministryId: string): Promise<RepertoireItem[]> => {
+// ... existing code ...
     if (!supabase) {
         const nextSunday = new Date();
         nextSunday.setDate(nextSunday.getDate() + (7 - nextSunday.getDay()));
@@ -371,6 +385,7 @@ export const fetchRepertoire = async (ministryId: string): Promise<RepertoireIte
 // --- WRITE OPS (MOCK) ---
 
 export const saveScheduleAssignment = async (ministryId: string, key: string, memberName: string) => {
+// ... existing code ...
     if (!supabase) return true; // Mock success
     const [eventIso, role] = key.split(/_(.+)/); 
     if (!eventIso || !role) return false;
@@ -400,6 +415,7 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
 };
 
 export const toggleAssignmentConfirmation = async (ministryId: string, key: string) => {
+// ... existing code ...
     if (!supabase) return true;
     const [eventIso, role] = key.split(/_(.+)/);
     const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', eventIso).single();
@@ -413,6 +429,7 @@ export const toggleAssignmentConfirmation = async (ministryId: string, key: stri
 };
 
 export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap, overwrite: boolean) => {
+// ... existing code ...
     if (!supabase) return;
     for (const [key, memberName] of Object.entries(schedule)) {
         if (memberName) {
@@ -422,6 +439,7 @@ export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap
 };
 
 export const sendNotificationSQL = async (ministryId: string, notification: Partial<AppNotification>) => {
+// ... existing code ...
     if (!supabase) return;
     const { error } = await supabase.from('notifications').insert({
         ministry_id: ministryId,
@@ -447,6 +465,7 @@ export const sendNotificationSQL = async (ministryId: string, notification: Part
 };
 
 export const joinMinistry = async (newMinistryId: string, roles: string[]) => {
+// ... existing code ...
     if (!supabase) return { success: true, message: "Sucesso Demo" };
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, message: "Usuário não autenticado" };
@@ -472,6 +491,7 @@ export const joinMinistry = async (newMinistryId: string, roles: string[]) => {
 };
 
 export const deleteMember = async (ministryId: string, memberId: string, memberName: string) => {
+// ... existing code ...
     if (!supabase) return { success: true, message: "Membro removido (Demo)" };
     
     const { data: { user } } = await supabase.auth.getUser();
@@ -486,11 +506,13 @@ export const deleteMember = async (ministryId: string, memberId: string, memberN
 };
 
 export const toggleAdminSQL = async (email: string, isAdmin: boolean, ministryId: string = 'midia') => {
+// ... existing code ...
     if (!supabase) return;
     await supabase.functions.invoke('push-notification', { body: { action: 'toggle_admin', targetEmail: email, status: isAdmin, ministryId } });
 };
 
 export const updateUserProfile = async (name: string, whatsapp: string, avatar_url: string | undefined, functions: string[] | undefined, birthDate: string | undefined, ministryId: string | undefined) => {
+// ... existing code ...
     if (!supabase) return { success: true, message: "Perfil Demo Atualizado" };
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, message: "Não autenticado" };
@@ -507,11 +529,13 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
 };
 
 export const updateProfileMinistry = async (userId: string, ministryId: string) => {
+// ... existing code ...
     if (!supabase) return;
     await supabase.from('profiles').update({ ministry_id: ministryId }).eq('id', userId);
 };
 
 export const fetchGlobalSchedules = async (monthIso: string, currentMinistryId: string): Promise<GlobalConflictMap> => {
+// ... existing code ...
     if (!supabase || !monthIso) return {};
     const cleanMid = currentMinistryId.trim().toLowerCase().replace(/\s+/g, '-');
     const startDate = `${monthIso}-01T00:00:00`;
@@ -536,6 +560,7 @@ export const fetchGlobalSchedules = async (monthIso: string, currentMinistryId: 
 };
 
 export const fetchRankingData = async (ministryId: string): Promise<RankingEntry[]> => {
+// ... existing code ...
     if (!supabase) {
         return mockNames.map((name, idx) => ({
             memberId: `mock-${idx}`,
@@ -567,6 +592,7 @@ export const fetchRankingData = async (ministryId: string): Promise<RankingEntry
 };
 
 export const fetchMinistryAvailability = async (ministryId: string): Promise<{ availability: AvailabilityMap, notes: AvailabilityNotesMap }> => {
+// ... existing code ...
     if (!supabase) return { availability: {}, notes: {} };
     
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
@@ -646,6 +672,7 @@ export const fetchMinistryAvailability = async (ministryId: string): Promise<{ a
 export const saveMemberAvailability = async (
     userId: string, memberName: string, dates: string[], targetMonth: string, notes?: Record<string, string>
 ) => {
+// ... existing code ...
     if (!supabase) return;
     
     if (!targetMonth || targetMonth.length !== 7) return;
@@ -726,6 +753,7 @@ export const saveMemberAvailability = async (
 };
 
 export const createMinistryEvent = async (ministryId: string, event: Partial<CustomEvent>) => {
+// ... existing code ...
     if (!supabase || !event.date || !event.time) return;
     const dateTime = `${event.date}T${event.time}`;
     await supabase.from('events').insert({
@@ -736,11 +764,13 @@ export const createMinistryEvent = async (ministryId: string, event: Partial<Cus
 };
 
 export const deleteMinistryEvent = async (ministryId: string, isoDate: string) => {
+// ... existing code ...
     if (!supabase) return;
     await supabase.from('events').delete().eq('ministry_id', ministryId).eq('date_time', isoDate);
 };
 
 export const updateMinistryEvent = async (ministryId: string, oldIso: string, newTitle: string, newIso: string, applyToAll: boolean) => {
+// ... existing code ...
     if (!supabase) return;
 
     // 1. Fetch original event to get ID and Title
@@ -782,6 +812,7 @@ export const updateMinistryEvent = async (ministryId: string, oldIso: string, ne
 };
 
 export const clearScheduleForMonth = async (ministryId: string, month: string) => {
+// ... existing code ...
     if (!supabase) return;
     const startDate = `${month}-01T00:00:00`;
     const [y, m] = month.split('-').map(Number);
@@ -800,6 +831,7 @@ export const resetToDefaultEvents = async (ministryId: string, month: string) =>
 };
 
 export const createSwapRequestSQL = async (ministryId: string, request: SwapRequest) => {
+// ... existing code ...
     if (!supabase) return true; // Mock
     const { error } = await supabase.from('swap_requests').insert({
         ministry_id: ministryId,
@@ -814,6 +846,7 @@ export const createSwapRequestSQL = async (ministryId: string, request: SwapRequ
 };
 
 export const performSwapSQL = async (ministryId: string, reqId: string, takerName: string, takerId: string) => {
+// ... existing code ...
     if (!supabase) return { success: true, message: "Troca (Demo) Realizada" };
     
     const { data: req } = await supabase.from('swap_requests').select('*').eq('id', reqId).single();
@@ -842,6 +875,7 @@ export const performSwapSQL = async (ministryId: string, reqId: string, takerNam
 };
 
 export const interactAnnouncementSQL = async (announcementId: string, userId: string, userName: string, type: 'read' | 'like') => {
+// ... existing code ...
     if (!supabase) return;
     if (type === 'read') {
         await supabase.from('announcement_interactions').insert({ announcement_id: announcementId, user_id: userId, interaction_type: 'read' }).select();
@@ -856,6 +890,7 @@ export const interactAnnouncementSQL = async (announcementId: string, userId: st
 };
 
 export const createAnnouncementSQL = async (ministryId: string, ann: { title: string, message: string, type: string, expirationDate: string }, authorName: string) => {
+// ... existing code ...
     if (!supabase) return;
     await supabase.from('announcements').insert({
         ministry_id: ministryId,
@@ -868,6 +903,7 @@ export const createAnnouncementSQL = async (ministryId: string, ann: { title: st
 };
 
 export const saveMinistrySettings = async (ministryId: string, displayName?: string, roles?: string[], availabilityStart?: string, availabilityEnd?: string, spotifyClientId?: string, spotifyClientSecret?: string) => {
+// ... existing code ...
     if (!supabase) return;
     const updates: any = {};
     if (displayName) updates.display_name = displayName;
@@ -881,17 +917,20 @@ export const saveMinistrySettings = async (ministryId: string, displayName?: str
 };
 
 export const markNotificationsReadSQL = async (notificationIds: string[], userId: string) => {
+// ... existing code ...
     if (!supabase) return;
     const inserts = notificationIds.map(id => ({ notification_id: id, user_id: userId }));
     await supabase.from('notification_reads').insert(inserts);
 };
 
 export const clearAllNotificationsSQL = async (ministryId: string) => {
+// ... existing code ...
     if (!supabase) return;
     await supabase.from('notifications').delete().eq('ministry_id', ministryId);
 };
 
 export const addToRepertoire = async (ministryId: string, item: { title: string, link: string, date: string, addedBy: string }) => {
+// ... existing code ...
     if (!supabase) return true;
     const { error } = await supabase.from('repertoire').insert({
         ministry_id: ministryId,
@@ -904,11 +943,13 @@ export const addToRepertoire = async (ministryId: string, item: { title: string,
 };
 
 export const deleteFromRepertoire = async (itemId: string) => {
+// ... existing code ...
     if (!supabase) return;
     await supabase.from('repertoire').delete().eq('id', itemId);
 };
 
 export const saveSubscriptionSQL = async (ministryId: string, subscription: PushSubscription) => {
+// ... existing code ...
     if (!supabase) return;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;

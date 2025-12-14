@@ -26,7 +26,9 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
   const [availableRoles, setAvailableRoles] = useState<string[]>([]);
   const [loadingRoles, setLoadingRoles] = useState(false);
   
-  const [localLoading, setLocalLoading] = useState(false);
+  // Specific loading state to differentiate between actions
+  const [loadingAction, setLoadingAction] = useState<'email' | 'google' | null>(null);
+  
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [legalDoc, setLegalDoc] = useState<LegalDocType>(null);
@@ -61,22 +63,22 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return;
-    setLocalLoading(true);
+    setLoadingAction('email');
     setErrorMsg("");
     const result = await loginWithEmail(email.trim(), password.trim());
     if (!result.success) {
       setErrorMsg(result.message);
-      setLocalLoading(false);
+      setLoadingAction(null);
     }
   };
 
   const handleGoogleLogin = async () => {
-    setLocalLoading(true);
+    setLoadingAction('google');
     setErrorMsg("");
     const result = await loginWithGoogle();
     if (!result.success) {
         setErrorMsg(result.message);
-        setLocalLoading(false);
+        setLoadingAction(null);
     }
   };
 
@@ -86,7 +88,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
           setErrorMsg("Preencha todos os campos e selecione ao menos um ministério.");
           return;
       }
-      setLocalLoading(true);
+      setLoadingAction('email');
       setErrorMsg("");
       const result = await registerWithEmail(regEmail.trim(), regPassword.trim(), regName.trim(), regSelectedMinistries, undefined, regSelectedRoles);
       if (result.success) {
@@ -97,17 +99,17 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
       } else {
           setErrorMsg(result.message);
       }
-      setLocalLoading(false);
+      setLoadingAction(null);
   };
 
   const handleForgotSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!email) { setErrorMsg("Digite seu e-mail."); return; }
-      setLocalLoading(true);
+      setLoadingAction('email');
       setErrorMsg("");
       const result = await sendPasswordResetEmail(email.trim());
       if (result.success) setSuccessMsg(result.message); else setErrorMsg(result.message);
-      setLocalLoading(false);
+      setLoadingAction(null);
   };
 
   const toggleRole = (role: string) => {
@@ -117,6 +119,8 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
   const toggleMinistry = (id: string) => {
       setRegSelectedMinistries(prev => prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id]);
   };
+
+  const isGlobalLoading = !!loadingAction || isLoading;
 
   return (
     <div className="fixed inset-0 z-50 w-full h-full bg-[#050505] flex flex-col items-center justify-center font-sans overflow-hidden">
@@ -171,7 +175,8 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                                         value={email} 
                                         onChange={e => setEmail(e.target.value)} 
                                         placeholder="seu@email.com" 
-                                        className="w-full bg-[#18181b]/50 border border-white/5 focus:border-teal-500/50 text-white rounded-xl py-3.5 pl-11 pr-4 outline-none transition-all placeholder:text-zinc-600 text-sm focus:bg-[#18181b] shadow-inner focus:ring-1 focus:ring-teal-500/50" 
+                                        disabled={isGlobalLoading}
+                                        className="w-full bg-[#18181b]/50 border border-white/5 focus:border-teal-500/50 text-white rounded-xl py-3.5 pl-11 pr-4 outline-none transition-all placeholder:text-zinc-600 text-sm focus:bg-[#18181b] shadow-inner focus:ring-1 focus:ring-teal-500/50 disabled:opacity-50" 
                                     />
                                 </div>
                             </div>
@@ -188,7 +193,8 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                                         value={password} 
                                         onChange={e => setPassword(e.target.value)} 
                                         placeholder="••••••••" 
-                                        className="w-full bg-[#18181b]/50 border border-white/5 focus:border-teal-500/50 text-white rounded-xl py-3.5 pl-11 pr-11 outline-none transition-all placeholder:text-zinc-600 text-sm focus:bg-[#18181b] shadow-inner focus:ring-1 focus:ring-teal-500/50" 
+                                        disabled={isGlobalLoading}
+                                        className="w-full bg-[#18181b]/50 border border-white/5 focus:border-teal-500/50 text-white rounded-xl py-3.5 pl-11 pr-11 outline-none transition-all placeholder:text-zinc-600 text-sm focus:bg-[#18181b] shadow-inner focus:ring-1 focus:ring-teal-500/50 disabled:opacity-50" 
                                     />
                                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 pr-4 flex items-center text-zinc-500 hover:text-zinc-300">
                                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -201,10 +207,10 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
 
                             <button 
                                 type="submit" 
-                                disabled={localLoading || isLoading} 
+                                disabled={isGlobalLoading} 
                                 className="w-full bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold py-4 rounded-xl transition-all shadow-[0_0_20px_-5px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_-5px_rgba(16,185,129,0.5)] flex items-center justify-center gap-2 mt-4 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed group border border-white/10"
                             >
-                                {localLoading ? <Loader2 className="animate-spin" size={20} /> : <>Entrar <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" /></>}
+                                {loadingAction === 'email' ? <Loader2 className="animate-spin" size={20} /> : <>Entrar <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" /></>}
                             </button>
                         </form>
 
@@ -217,11 +223,17 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                         <button 
                             type="button" 
                             onClick={handleGoogleLogin} 
-                            disabled={localLoading || isLoading} 
-                            className="w-full bg-white text-black hover:bg-zinc-200 font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-3 active:scale-[0.98] disabled:opacity-50 shadow-sm"
+                            disabled={isGlobalLoading} 
+                            className="w-full bg-white hover:bg-zinc-100 text-zinc-900 font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-3 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed shadow-lg shadow-white/5 relative overflow-hidden"
                         >
-                            <svg className="w-5 h-5" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-                            Continuar com Google
+                            {loadingAction === 'google' ? (
+                                <Loader2 className="animate-spin text-zinc-900" size={20} />
+                            ) : (
+                                <>
+                                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                                    <span>Continuar com Google</span>
+                                </>
+                            )}
                         </button>
                         
                         <div className="pt-2 text-center">
@@ -253,15 +265,16 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                                     value={email} 
                                     onChange={e => setEmail(e.target.value)} 
                                     placeholder="seu@email.com" 
-                                    className="w-full bg-[#18181b]/50 border border-white/5 focus:border-teal-500/50 text-white rounded-xl py-3.5 pl-11 pr-4 outline-none transition-all placeholder:text-zinc-600 text-sm focus:bg-[#18181b] shadow-inner focus:ring-1 focus:ring-teal-500/50" 
+                                    disabled={isGlobalLoading}
+                                    className="w-full bg-[#18181b]/50 border border-white/5 focus:border-teal-500/50 text-white rounded-xl py-3.5 pl-11 pr-4 outline-none transition-all placeholder:text-zinc-600 text-sm focus:bg-[#18181b] shadow-inner focus:ring-1 focus:ring-teal-500/50 disabled:opacity-50" 
                                 />
                             </div>
                         </div>
                         {successMsg && <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs text-center font-medium flex items-center justify-center gap-2 backdrop-blur-md"><Check size={14}/> {successMsg}</div>}
                         {errorMsg && <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs text-center font-medium backdrop-blur-md">{errorMsg}</div>}
                         
-                        <button type="submit" disabled={localLoading} className="w-full bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 mt-4 active:scale-95 disabled:opacity-50">
-                            {localLoading ? <Loader2 className="animate-spin" size={20} /> : <>Enviar Link <KeyRound size={18} /></>}
+                        <button type="submit" disabled={isGlobalLoading} className="w-full bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 mt-4 active:scale-95 disabled:opacity-50">
+                            {loadingAction === 'email' ? <Loader2 className="animate-spin" size={20} /> : <>Enviar Link <KeyRound size={18} /></>}
                         </button>
                         <button type="button" onClick={() => setView('login')} className="w-full text-zinc-400 hover:text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors py-2">
                             <ArrowLeft size={16}/> Voltar para Login
@@ -274,11 +287,11 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-1.5">
                                 <label className="text-[10px] uppercase text-zinc-500 font-bold ml-1">Nome</label>
-                                <input value={regName} onChange={e => setRegName(e.target.value)} placeholder="Seu nome" className="w-full bg-[#18181b]/50 border border-white/5 focus:border-teal-500/50 text-white rounded-xl py-3 px-3 text-sm outline-none transition-all placeholder:text-zinc-600 focus:bg-[#18181b]" />
+                                <input value={regName} onChange={e => setRegName(e.target.value)} disabled={isGlobalLoading} placeholder="Seu nome" className="w-full bg-[#18181b]/50 border border-white/5 focus:border-teal-500/50 text-white rounded-xl py-3 px-3 text-sm outline-none transition-all placeholder:text-zinc-600 focus:bg-[#18181b] disabled:opacity-50" />
                             </div>
                             <div className="space-y-1.5">
                                 <label className="text-[10px] uppercase text-zinc-500 font-bold ml-1">E-mail</label>
-                                <input type="email" value={regEmail} onChange={e => setRegEmail(e.target.value)} placeholder="joao@gmail.com" className="w-full bg-[#18181b]/50 border border-white/5 focus:border-teal-500/50 text-white rounded-xl py-3 px-3 text-sm outline-none transition-all placeholder:text-zinc-600 focus:bg-[#18181b]" />
+                                <input type="email" value={regEmail} onChange={e => setRegEmail(e.target.value)} disabled={isGlobalLoading} placeholder="joao@gmail.com" className="w-full bg-[#18181b]/50 border border-white/5 focus:border-teal-500/50 text-white rounded-xl py-3 px-3 text-sm outline-none transition-all placeholder:text-zinc-600 focus:bg-[#18181b] disabled:opacity-50" />
                             </div>
                         </div>
 
@@ -288,7 +301,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                                 {MINISTRIES.map(m => {
                                     const isSelected = regSelectedMinistries.includes(m.id);
                                     return (
-                                        <button key={m.id} type="button" onClick={() => toggleMinistry(m.id)} className={`flex items-center justify-between p-2.5 rounded-lg border text-xs font-medium transition-all ${isSelected ? 'bg-teal-500/20 border-teal-500/40 text-teal-300' : 'bg-transparent border-transparent text-zinc-400 hover:bg-white/5'}`}>
+                                        <button key={m.id} type="button" onClick={() => toggleMinistry(m.id)} disabled={isGlobalLoading} className={`flex items-center justify-between p-2.5 rounded-lg border text-xs font-medium transition-all ${isSelected ? 'bg-teal-500/20 border-teal-500/40 text-teal-300' : 'bg-transparent border-transparent text-zinc-400 hover:bg-white/5'}`}>
                                             <span>{m.label}</span>
                                             {isSelected && <Check size={14} className="text-teal-400"/>}
                                         </button>
@@ -306,7 +319,7 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                                     {availableRoles.map(role => {
                                         const isSelected = regSelectedRoles.includes(role);
                                         return (
-                                            <button key={role} type="button" onClick={() => toggleRole(role)} className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1 ${isSelected ? 'bg-teal-600 text-white border-teal-500 shadow-lg shadow-teal-500/20' : 'bg-[#18181b] text-zinc-400 border-white/5 hover:border-white/20'}`}>
+                                            <button key={role} type="button" onClick={() => toggleRole(role)} disabled={isGlobalLoading} className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1 ${isSelected ? 'bg-teal-600 text-white border-teal-500 shadow-lg shadow-teal-500/20' : 'bg-[#18181b] text-zinc-400 border-white/5 hover:border-white/20'}`}>
                                                 {role} {isSelected && <Check size={10} />}
                                             </button>
                                         )
@@ -317,15 +330,15 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
 
                         <div className="space-y-1.5">
                             <label className="text-[10px] uppercase text-zinc-500 font-bold ml-1">Senha</label>
-                            <input type="password" value={regPassword} onChange={e => setRegPassword(e.target.value)} placeholder="Senha segura" className="w-full bg-[#18181b]/50 border border-white/5 focus:border-teal-500/50 text-white rounded-xl py-3 px-3 text-sm outline-none transition-all placeholder:text-zinc-600 focus:bg-[#18181b]" />
+                            <input type="password" value={regPassword} onChange={e => setRegPassword(e.target.value)} disabled={isGlobalLoading} placeholder="Senha segura" className="w-full bg-[#18181b]/50 border border-white/5 focus:border-teal-500/50 text-white rounded-xl py-3 px-3 text-sm outline-none transition-all placeholder:text-zinc-600 focus:bg-[#18181b] disabled:opacity-50" />
                         </div>
 
                         {errorMsg && <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs text-center font-medium animate-fade-in backdrop-blur-md">{errorMsg}</div>}
 
                         <div className="flex gap-3 mt-2">
-                            <button type="button" onClick={() => setView('login')} className="p-3.5 bg-white/5 text-zinc-400 rounded-xl hover:text-white hover:bg-white/10 transition-colors"><ArrowLeft size={20}/></button>
-                            <button type="submit" disabled={localLoading} className="flex-1 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-teal-900/30 flex justify-center items-center gap-2 transition-all active:scale-95 disabled:opacity-50 border border-white/10">
-                                {localLoading ? <Loader2 className="animate-spin" size={20}/> : <><UserPlus size={18}/> Criar Conta</>}
+                            <button type="button" onClick={() => setView('login')} disabled={isGlobalLoading} className="p-3.5 bg-white/5 text-zinc-400 rounded-xl hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50"><ArrowLeft size={20}/></button>
+                            <button type="submit" disabled={isGlobalLoading} className="flex-1 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-teal-900/30 flex justify-center items-center gap-2 transition-all active:scale-95 disabled:opacity-50 border border-white/10">
+                                {loadingAction === 'email' ? <Loader2 className="animate-spin" size={20}/> : <><UserPlus size={18}/> Criar Conta</>}
                             </button>
                         </div>
                     </form>
