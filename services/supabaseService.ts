@@ -540,11 +540,7 @@ export const fetchRankingData = async (ministryId: string): Promise<RankingEntry
 
 // --- NEW FUNCTION: Report Stats ---
 export const fetchMonthlyStatsReport = async (ministryId: string, monthIso: string): Promise<MemberMonthlyStat[]> => {
-    // 1. Setup Mock Data if needed
-    if (!supabase) {
-        // ... (mock data removed for brevity in recreation, but logic should be here if offline)
-        return [];
-    }
+    if (!supabase) return [];
 
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     const startDate = `${monthIso}-01T00:00:00`;
@@ -579,6 +575,7 @@ export const fetchMonthlyStatsReport = async (ministryId: string, monthIso: stri
 
         // 5. Fetch Swap Requests in Month (using event date reference)
         let swaps: any[] = [];
+        // Note: Checking swaps based on event_iso which is stored as string in this schema
         const { data: swapsData } = await supabase.from('swap_requests')
             .select('requester_id')
             .eq('ministry_id', cleanMid)

@@ -17,19 +17,26 @@ export const AdminReportsScreen: React.FC<Props> = ({ ministryId, currentMonth, 
 
   const loadReport = async () => {
     setLoading(true);
-    const data = await fetchMonthlyStatsReport(ministryId, currentMonth);
-    setStats(data);
-    setLoading(false);
+    try {
+        const data = await fetchMonthlyStatsReport(ministryId, currentMonth);
+        setStats(data || []);
+    } catch (e) {
+        console.error(e);
+        setStats([]);
+    } finally {
+        setLoading(false);
+    }
   };
 
   useEffect(() => {
     loadReport();
   }, [ministryId, currentMonth]);
 
-  // Aggregates
-  const totalScales = stats.reduce((acc, curr) => acc + curr.totalScheduled, 0);
-  const totalAbsences = stats.reduce((acc, curr) => acc + (curr.totalScheduled - curr.totalConfirmed), 0);
-  const totalSwaps = stats.reduce((acc, curr) => acc + curr.swapsRequested, 0);
+  // Aggregates - Safe checks added
+  const safeStats = Array.isArray(stats) ? stats : [];
+  const totalScales = safeStats.reduce((acc, curr) => acc + (curr.totalScheduled || 0), 0);
+  const totalAbsences = safeStats.reduce((acc, curr) => acc + ((curr.totalScheduled || 0) - (curr.totalConfirmed || 0)), 0);
+  const totalSwaps = safeStats.reduce((acc, curr) => acc + (curr.swapsRequested || 0), 0);
   const globalAttendance = totalScales > 0 ? Math.round(((totalScales - totalAbsences) / totalScales) * 100) : 0;
 
   const handlePrint = () => {
@@ -123,10 +130,10 @@ export const AdminReportsScreen: React.FC<Props> = ({ ministryId, currentMonth, 
                   <tbody className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
                       {loading ? (
                           <tr><td colSpan={6} className="px-6 py-12 text-center text-zinc-400">Carregando dados...</td></tr>
-                      ) : stats.length === 0 ? (
+                      ) : safeStats.length === 0 ? (
                           <tr><td colSpan={6} className="px-6 py-12 text-center text-zinc-400">Nenhum dado encontrado para este mês.</td></tr>
                       ) : (
-                          stats.map((stat) => (
+                          safeStats.map((stat) => (
                               <tr key={stat.memberId} className="hover:bg-zinc-50 dark:hover:bg-zinc-700/20 transition-colors">
                                   <td className="px-6 py-4">
                                       <div className="flex items-center gap-3">
@@ -134,7 +141,7 @@ export const AdminReportsScreen: React.FC<Props> = ({ ministryId, currentMonth, 
                                               <img src={stat.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover border border-zinc-200 dark:border-zinc-700" />
                                           ) : (
                                               <div className="w-9 h-9 rounded-full bg-zinc-100 dark:bg-zinc-700 flex items-center justify-center text-zinc-500 font-bold text-xs">
-                                                  {stat.name.charAt(0)}
+                                                  {stat.name ? stat.name.charAt(0) : '?'}
                                               </div>
                                           )}
                                           <div>
