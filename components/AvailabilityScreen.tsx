@@ -31,7 +31,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
   
   // State
   const [selectedMember, setSelectedMember] = useState<string>("");
-  const [tempDates, setTempDates] = useState<string[]>([]); 
+  const [tempDates, setTempDates] = useState<string[]>([]); // Estado local de edição
   const [generalNote, setGeneralNote] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -101,8 +101,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
       setHasUnsavedChanges(true);
 
       if (isBlockedMonth) {
+          // Desbloquear: Limpa a tag BLK
           setTempDates([]);
       } else {
+          // Bloquear: Define APENAS a tag BLK
           setTempDates([`${currentMonth}-BLK`]);
       }
   };
@@ -116,6 +118,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
       setHasUnsavedChanges(true);
       const dateBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
       
+      // Determine if it is Sunday
       const dateObj = new Date(year, month - 1, day);
       const isSunday = dateObj.getDay() === 0;
 
@@ -130,21 +133,22 @@ export const AvailabilityScreen: React.FC<Props> = ({
       const hasMorning = newDates.includes(morning);
       const hasNight = newDates.includes(night);
 
-      // Remove qualquer estado anterior para este dia
+      // Remove current state for this day
       newDates = newDates.filter(d => d !== full && d !== morning && d !== night);
 
       if (isSunday) {
           // Cycle: None -> Full -> Morning -> Night -> None
-          if (!hasFull && !hasMorning && !hasNight) {
-              newDates.push(full);
-          } else if (hasFull) {
+          if (hasFull) {
               newDates.push(morning);
           } else if (hasMorning) {
               newDates.push(night);
+          } else if (hasNight) {
+              // Back to none
+          } else {
+              newDates.push(full);
           }
-          // Se era Night, remove tudo (já removido no filtro acima)
       } else {
-          // Cycle: None -> Full -> None
+          // Cycle: None -> Full -> None (For non-Sundays)
           if (!hasFull) {
               newDates.push(full);
           }

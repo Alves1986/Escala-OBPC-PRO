@@ -39,7 +39,7 @@ const safeParseArray = (value: any): string[] => {
     return [];
 };
 
-// ... (Mantenha as funções de Auth, Profiles e Schedule existentes sem alterações até chegar em AVAILABILITY) ...
+// ... (Mantenha as funções de Auth, Profiles e Schedule existentes sem alterações) ...
 export const loginWithEmail = async (email: string, pass: string) => {
     if (!supabase) return { success: true, message: "Demo Login" };
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
@@ -115,17 +115,14 @@ export const toggleAssignmentConfirmation = async (ministryId: string, key: stri
 export const clearScheduleForMonth = async (ministryId: string, month: string) => { if (!supabase) return; const startDate = `${month}-01T00:00:00`; const [y, m] = month.split('-').map(Number); const nextMonth = new Date(y, m, 1).toISOString(); const { data: events } = await supabase.from('events').select('id').eq('ministry_id', ministryId).gte('date_time', startDate).lt('date_time', nextMonth); const eventIds = events?.map((e: any) => e.id) || []; if (eventIds.length > 0) { await supabase.from('schedule_assignments').delete().in('event_id', eventIds); } };
 export const resetToDefaultEvents = async (ministryId: string, month: string) => { if (!supabase) return; const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-'); const [y, m] = month.split('-').map(Number); const startDate = `${month}-01T00:00:00`; const nextMonth = new Date(y, m, 1).toISOString(); try { await clearScheduleForMonth(cleanMid, month); const { error: deleteError } = await supabase.from('events').delete().eq('ministry_id', cleanMid).gte('date_time', startDate).lt('date_time', nextMonth); if (deleteError) throw deleteError; const daysInMonth = new Date(y, m, 0).getDate(); const eventsToInsert = []; for (let d = 1; d <= daysInMonth; d++) { const date = new Date(y, m - 1, d, 12, 0, 0); const dayOfWeek = date.getDay(); const dateStr = `${month}-${String(d).padStart(2, '0')}`; if (dayOfWeek === 0) { eventsToInsert.push({ ministry_id: cleanMid, title: "Culto da Família", date_time: `${dateStr}T18:00:00` }); } else if (dayOfWeek === 3) { eventsToInsert.push({ ministry_id: cleanMid, title: "Culto de Doutrina", date_time: `${dateStr}T19:30:00` }); } } if (eventsToInsert.length > 0) { await supabase.from('events').insert(eventsToInsert); } } catch (error) { console.error("Erro ao restaurar eventos:", error); } };
 
-// --- CORRIGIDO: LÓGICA DE DISPONIBILIDADE ---
+// --- LÓGICA DE DISPONIBILIDADE CORRIGIDA ---
 
 export const fetchMinistryAvailability = async (ministryId: string) => {
     if (!supabase) return { availability: {}, notes: {} };
     
-    // 1. Pegar membros do ministério
     const { data: profiles } = await supabase.from('profiles').select('id, name, allowed_ministries, ministry_id');
-    
     if (!profiles) return { availability: {}, notes: {} };
 
-    // Filtra perfis do ministério atual
     const filteredProfiles = profiles.filter((p: any) => {
         const allowed = safeParseArray(p.allowed_ministries);
         return allowed.includes(ministryId) || p.ministry_id === ministryId;
@@ -134,11 +131,11 @@ export const fetchMinistryAvailability = async (ministryId: string) => {
     const memberIds = filteredProfiles.map((p: any) => p.id);
     if (memberIds.length === 0) return { availability: {}, notes: {} };
 
-    // 2. Pegar disponibilidades usando member_id
+    // CORREÇÃO: Usando 'member_id' que é o padrão da tabela availability
     const { data: avails } = await supabase
         .from('availability')
         .select('*')
-        .in('member_id', memberIds); // CORRIGIDO: user_id -> member_id
+        .in('member_id', memberIds); 
     
     const availability: AvailabilityMap = {};
     const notes: AvailabilityNotesMap = {};
@@ -146,18 +143,12 @@ export const fetchMinistryAvailability = async (ministryId: string) => {
     (avails || []).forEach((a: any) => {
         const profile = filteredProfiles.find((p: any) => p.id === a.member_id);
         if (profile) {
-            // Inicializa array se não existir
             if (!availability[profile.name]) availability[profile.name] = [];
-            
-            // Adiciona datas (parseando se for string JSON)
             const dates = safeParseArray(a.dates);
             availability[profile.name].push(...dates);
             
-            // Adiciona notas
             if (a.notes) {
                 Object.entries(a.notes).forEach(([dayKey, note]) => {
-                    // Nota: a chave no DB pode ser "2023-10-05"
-                    // No app usamos "NomeMembro_2023-10-05" para o AvailabilityNotesMap global
                     notes[`${profile.name}_${dayKey}`] = note as string; 
                 });
             }
@@ -177,7 +168,6 @@ export const saveMemberAvailability = async (
     if (!supabase) return { error: { message: "Sem conexão com banco de dados." } };
 
     try {
-        // Filtra apenas as datas que pertencem ao mês alvo
         const monthDates = dates.filter(d => d.startsWith(targetMonth));
         
         // Filtra notas que pertencem ao mês alvo
@@ -188,7 +178,7 @@ export const saveMemberAvailability = async (
             }
         });
 
-        // 1. Verifica se já existe registro para este membro neste mês
+        // 1. Verifica se já existe registro (Mais seguro contra duplicidade)
         const { data: existing } = await supabase
             .from('availability')
             .select('id')
@@ -228,7 +218,7 @@ export const saveMemberAvailability = async (
     }
 };
 
-// ... (Mantenha o restante das funções: fetchNotificationsSQL, etc.) ...
+// ... (Rest of functions remain unchanged) ...
 export const fetchNotificationsSQL = async (ministryIds: string[], userId: string): Promise<AppNotification[]> => { if (!supabase) return []; const { data: notifs } = await supabase.from('notifications').select('*').in('ministry_id', ministryIds).order('created_at', { ascending: false }).limit(20); const { data: reads } = await supabase.from('notification_reads').select('notification_id').eq('user_id', userId); const readSet = new Set(reads?.map((r: any) => r.notification_id)); return (notifs || []).map((n: any) => ({ id: n.id, ministryId: n.ministry_id, title: n.title, message: n.message, type: n.type, actionLink: n.action_link, timestamp: n.created_at, read: readSet.has(n.id) })); };
 export const sendNotificationSQL = async (ministryId: string, notification: { title: string, message: string, type?: string, actionLink?: string }) => { if (!supabase) return; const { data, error } = await supabase.from('notifications').insert({ ministry_id: ministryId, title: notification.title, message: notification.message, type: notification.type || 'info', action_link: notification.actionLink }).select(); await supabase.functions.invoke('push-notification', { body: { ministryId, title: notification.title, message: notification.message, type: notification.type, actionLink: notification.actionLink } }); return !error; };
 export const markNotificationsReadSQL = async (ids: string[], userId: string) => { if (!supabase) return; const inserts = ids.map(id => ({ notification_id: id, user_id: userId })); await supabase.from('notification_reads').insert(inserts); };
