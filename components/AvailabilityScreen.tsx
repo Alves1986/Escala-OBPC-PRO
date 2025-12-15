@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AvailabilityMap, AvailabilityNotesMap, User } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
 import { ChevronLeft, ChevronRight, Save, CheckCircle2, Moon, Sun, Lock, FileText, Info, Ban, Unlock } from 'lucide-react';
@@ -35,6 +35,9 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const [generalNote, setGeneralNote] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  
+  // Track context to allow forcing updates when switching member/month
+  const viewContextRef = useRef(`${selectedMember}-${currentMonth}`);
 
   const isAdmin = currentUser?.role === 'admin';
   const isBlockedMonth = tempDates.includes(`${currentMonth}-BLK`);
@@ -71,21 +74,29 @@ export const AvailabilityScreen: React.FC<Props> = ({
     }
   }, [currentUser, allMembersList]);
 
-  // Carregamento de Dados (Apenas quando muda membro ou mês, IGNORA updates do pai se tiver alterações não salvas)
+  // Carregamento de Dados
   useEffect(() => {
     if (!selectedMember) return;
 
-    // Reseta o estado local com o que vem do banco
-    const storedDates = availability[selectedMember] || [];
-    const monthDates = storedDates.filter(d => d.startsWith(currentMonth));
-    
-    setTempDates(monthDates);
-    
-    const genKey = `${selectedMember}_${currentMonth}-00`;
-    setGeneralNote(availabilityNotes?.[genKey] || "");
-    setHasUnsavedChanges(false);
+    const currentContext = `${selectedMember}-${currentMonth}`;
+    const contextChanged = viewContextRef.current !== currentContext;
 
-  }, [selectedMember, currentMonth, availability]); // Dependências controladas
+    // Se mudou o contexto (membro ou mês) OU se não temos alterações não salvas, atualizamos os dados.
+    if (contextChanged || !hasUnsavedChanges) {
+        viewContextRef.current = currentContext;
+        
+        const storedDates = availability[selectedMember] || [];
+        const monthDates = storedDates.filter(d => d.startsWith(currentMonth));
+        
+        setTempDates(monthDates);
+        
+        const genKey = `${selectedMember}_${currentMonth}-00`;
+        setGeneralNote(availabilityNotes?.[genKey] || "");
+        
+        // Se mudou o contexto, resetamos o flag de unsaved
+        if (contextChanged) setHasUnsavedChanges(false);
+    }
+  }, [selectedMember, currentMonth, availability, availabilityNotes, hasUnsavedChanges]);
 
   const handleToggleBlockMonth = () => {
       if (!isWindowOpen) return;
@@ -143,9 +154,9 @@ export const AvailabilityScreen: React.FC<Props> = ({
           
           await onSaveAvailability(selectedMember, tempDates, notesPayload, currentMonth);
           setHasUnsavedChanges(false);
-          // Não precisamos recarregar tempDates aqui, pois o onSaveAvailability atualiza o pai
-          // e o useEffect acima sincroniza tudo.
+          addToast("Disponibilidade salva!", "success");
       } catch (e) {
+          console.error(e);
           addToast("Erro ao salvar.", "error");
       } finally {
           setIsSaving(false);

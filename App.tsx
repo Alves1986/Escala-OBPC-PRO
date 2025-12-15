@@ -584,8 +584,7 @@ const InnerApp = () => {
                                 });
                                 // 2. Async Save
                                 await Supabase.saveMemberAvailability(p.id, member, dates, targetMonth, notes); 
-                                // 3. Sync
-                                loadData(false);
+                                // 3. No immediate loadData to avoid race condition revert
                             }
                         }} 
                         availabilityWindow={availabilityWindow} 
