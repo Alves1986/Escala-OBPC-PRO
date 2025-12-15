@@ -198,11 +198,9 @@ export const DEFAULT_ROLES: Record<string, string[]> = {
 // SECURITY CONFIGURATION
 // ============================================================================
 
-// Globals injected by Vite via define
 declare const __SUPABASE_URL__: string;
 declare const __SUPABASE_KEY__: string;
 
-// 1. Try Injected Globals (Build-time env vars - MOST ROBUST)
 let injectedUrl = '';
 let injectedKey = '';
 try {
@@ -212,7 +210,6 @@ try {
     if (typeof __SUPABASE_KEY__ !== 'undefined') injectedKey = __SUPABASE_KEY__;
 } catch(e) {}
 
-// 2. Try import.meta.env (Vite Standard)
 let metaUrl = '';
 let metaKey = '';
 try {
@@ -224,12 +221,5 @@ try {
   }
 } catch (e) {}
 
-// Priority: Injected Globals > Import Meta
-// LocalStorage is no longer used for security reasons.
 export const SUPABASE_URL = injectedUrl || metaUrl || "";
 export const SUPABASE_KEY = injectedKey || metaKey || "";
-
-// Debug Log (Optional - remove in production)
-if ((!SUPABASE_URL || !SUPABASE_KEY) && typeof window !== 'undefined' && window.location.pathname !== '/setup') {
-  console.warn("⚠️ Sistema aguardando credenciais. Verifique o arquivo .env na raiz.");
-}

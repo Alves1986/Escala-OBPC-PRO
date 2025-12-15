@@ -1,8 +1,9 @@
+
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import {
-    SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap,
-    AppNotification, TeamMemberProfile, AvailabilityMap, SwapRequest,
-    ScheduleMap, RepertoireItem, Announcement, GlobalConflictMap,
+import { 
+    SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, 
+    AppNotification, TeamMemberProfile, AvailabilityMap, SwapRequest, 
+    ScheduleMap, RepertoireItem, Announcement, GlobalConflictMap, 
     GlobalConflict, DEFAULT_ROLES, AttendanceMap, AuditLogEntry, MinistrySettings,
     RankingEntry, AvailabilityNotesMap, CustomEvent
 } from '../types';
@@ -43,7 +44,6 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
     if (error) return { success: false, message: error.message };
     
     if (data.user) {
-        // Create profile
         await supabase.from('profiles').upsert({
             id: data.user.id,
             email,
@@ -85,13 +85,10 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
         updated_at: new Date().toISOString() 
     };
     if (avatar_url) updates.avatar_url = avatar_url;
-    if (functions) updates.functions = functions; // For compatibility if column exists
+    if (functions) updates.functions = functions; 
     if (birthDate) updates.birth_date = birthDate;
     
-    // Also update roles in the current ministry context if needed (schema dependent)
     if (functions && ministryId) {
-        // If roles are stored per ministry in a separate table or jsonb, update there.
-        // Assuming 'roles' column on profiles is global or current ministry roles.
         updates.roles = functions;
     }
 
@@ -101,7 +98,6 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
 
 export const toggleAdminSQL = async (email: string, status: boolean, ministryId: string) => {
     if (!supabase) return;
-    // Uses edge function to bypass RLS if needed, or RLS allows admins to update
     await supabase.functions.invoke('push-notification', {
         body: { action: 'toggle_admin', targetEmail: email, status, ministryId }
     });
@@ -127,8 +123,8 @@ export const joinMinistry = async (ministryId: string, roles: string[]) => {
         const newAllowed = [...currentAllowed, ministryId];
         const { error } = await supabase.from('profiles').update({ 
             allowed_ministries: newAllowed,
-            ministry_id: ministryId, // Switch to new
-            roles: roles // Update roles for this context
+            ministry_id: ministryId,
+            roles: roles
         }).eq('id', user.id);
         
         if (error) return { success: false, message: error.message };
@@ -142,7 +138,7 @@ export const fetchMinistryMembers = async (ministryId: string): Promise<{ member
     
     const { data } = await supabase.from('profiles')
         .select('*')
-        .contains('allowed_ministries', [ministryId]); // Assuming array column
+        .contains('allowed_ministries', [ministryId]); 
 
     const publicList: TeamMemberProfile[] = (data || []).map((p: any) => ({
         id: p.id,
@@ -150,7 +146,7 @@ export const fetchMinistryMembers = async (ministryId: string): Promise<{ member
         email: p.email,
         whatsapp: p.whatsapp,
         avatar_url: p.avatar_url,
-        roles: p.roles, // Should be array
+        roles: p.roles, 
         isAdmin: p.is_admin,
         birthDate: p.birth_date
     })).sort((a: any, b: any) => a.name.localeCompare(b.name));
@@ -198,9 +194,7 @@ export const saveMinistrySettings = async (ministryId: string, displayName?: str
 export const fetchMinistrySchedule = async (ministryId: string, month: string) => {
     if (!supabase) return { events: [], schedule: {}, attendance: {} };
     
-    // Events
     const start = `${month}-01`;
-    // Calculate end of month roughly or next month start
     const [y, m] = month.split('-').map(Number);
     const nextMonth = new Date(y, m, 1);
     const end = nextMonth.toISOString().split('T')[0];
@@ -213,7 +207,7 @@ export const fetchMinistrySchedule = async (ministryId: string, month: string) =
         .order('date_time');
 
     const events = (eventsData || []).map((e: any) => {
-        const iso = e.date_time.slice(0, 16); // YYYY-MM-DDTHH:mm
+        const iso = e.date_time.slice(0, 16); 
         const [date, time] = iso.split('T');
         const [yr, mo, dy] = date.split('-');
         return {
@@ -226,7 +220,6 @@ export const fetchMinistrySchedule = async (ministryId: string, month: string) =
         };
     });
 
-    // Schedule
     if (events.length === 0) return { events: [], schedule: {}, attendance: {} };
     const eventIds = events.map(e => e.id);
     
@@ -251,17 +244,14 @@ export const fetchMinistrySchedule = async (ministryId: string, month: string) =
 
 export const saveScheduleAssignment = async (ministryId: string, key: string, memberName: string) => {
     if (!supabase) return false;
-    // Key format: YYYY-MM-DDTHH:mm_Role
     const separatorIndex = key.lastIndexOf('_');
     const iso = key.substring(0, separatorIndex);
     const role = key.substring(separatorIndex + 1);
-    const dateTime = iso.length === 16 ? iso + ':00' : iso; // Ensure seconds for DB match
+    const dateTime = iso.length === 16 ? iso + ':00' : iso; 
 
     try {
-        // 1. Get Event ID
         let { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', dateTime).single();
         
-        // Auto-create event if missing (robustness)
         if (!event) {
              const { data: newEvent } = await supabase.from('events').insert({ 
                  ministry_id: ministryId, 
@@ -272,18 +262,13 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
         }
         if (!event) return false;
 
-        // 2. Get Member ID (if adding) or null (if removing)
         let memberId = null;
         if (memberName) {
             const { data: profile } = await supabase.from('profiles').select('id').eq('name', memberName).limit(1).maybeSingle();
             if (profile) memberId = profile.id;
-            else {
-                // Warning: Member not found in DB
-                return false;
-            }
+            else return false;
         }
 
-        // 3. Upsert or Delete
         if (memberId) {
             await supabase.from('schedule_assignments').upsert({
                 event_id: event.id,
@@ -303,7 +288,6 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
 
 export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap, isAi: boolean = false) => {
     if (!supabase) return false;
-    // Basic implementation: iterate. In production, use RPC or bulk upsert if optimized.
     for (const [key, value] of Object.entries(schedule)) {
         await saveScheduleAssignment(ministryId, key, value);
     }
@@ -312,7 +296,6 @@ export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap
 
 export const clearScheduleForMonth = async (ministryId: string, month: string) => {
     if (!supabase) return;
-    // Get event IDs
     const start = `${month}-01`;
     const [y, m] = month.split('-').map(Number);
     const nextMonth = new Date(y, m, 1);
@@ -328,27 +311,21 @@ export const clearScheduleForMonth = async (ministryId: string, month: string) =
 
 export const resetToDefaultEvents = async (ministryId: string, month: string) => {
     if (!supabase) return;
-    // 1. Clear assignments
     await clearScheduleForMonth(ministryId, month);
     
-    // 2. Clear events? Maybe not, just assignments? Or reset events to Sunday defaults.
-    // Let's assume we delete all events for month and re-create Sundays.
     const start = `${month}-01`;
     const [y, m] = month.split('-').map(Number);
     const date = new Date(y, m - 1, 1);
     
-    // Delete existing events
     const nextMonth = new Date(y, m, 1);
     const end = nextMonth.toISOString().split('T')[0];
     await supabase.from('events').delete().eq('ministry_id', ministryId).gte('date_time', start).lt('date_time', end);
 
-    // Create Sundays
     const eventsToInsert = [];
     while (date.getMonth() === m - 1) {
-        if (date.getDay() === 0) { // Sunday
+        if (date.getDay() === 0) { // Domingo
             const dayStr = date.toISOString().split('T')[0];
             eventsToInsert.push({ ministry_id: ministryId, title: 'Culto da Família', date_time: `${dayStr}T18:00:00` });
-            // Add Tuesday/Thursday if needed? For now just Sunday based on typical request.
         }
         date.setDate(date.getDate() + 1);
     }
@@ -371,17 +348,9 @@ export const updateMinistryEvent = async (ministryId: string, oldIso: string, ne
     const oldDateTime = oldIso.length === 16 ? oldIso + ':00' : oldIso;
     const newDateTime = newIso.length === 16 ? newIso + ':00' : newIso;
 
-    // Find ID
     const { data: evt } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', oldDateTime).single();
     if (evt) {
         await supabase.from('events').update({ title: newTitle, date_time: newDateTime }).eq('id', evt.id);
-        
-        if (applyToAll) {
-            // Update future events with same OLD title or just all future events on same weekday?
-            // Simple logic: Update all future events of this ministry that match weekday and old time?
-            // For safety, let's just update this one as "applyToAll" logic is complex without recurring pattern ID.
-            // Or maybe update all future events with same title.
-        }
     }
 };
 
@@ -401,7 +370,6 @@ export const toggleAssignmentConfirmation = async (ministryId: string, key: stri
     const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', dateTime).single();
     if (!event) return false;
 
-    // Fetch current confirmation status
     const { data: assignment } = await supabase.from('schedule_assignments').select('confirmed').eq('event_id', event.id).eq('role', role).single();
     
     if (assignment) {
@@ -411,7 +379,7 @@ export const toggleAssignmentConfirmation = async (ministryId: string, key: stri
     return false;
 };
 
-// ... (rest of the file: availability, notifications, swaps, repertoire, ranking, push) ...
+// --- AVAILABILITY ---
 
 export const fetchMinistryAvailability = async (ministryId: string) => {
     if (!supabase) return { availability: {}, notes: {} };
@@ -614,16 +582,16 @@ export const createSwapRequestSQL = async (ministryId: string, request: SwapRequ
 };
 
 export const performSwapSQL = async (ministryId: string, reqId: string, takerName: string, takerId: string) => {
-    if (!supabase) return { success: true, message: "Demo" };
+    if (!supabase) return { success: false, message: "Sem conexão com o banco de dados." };
     
     const { data: req } = await supabase.from('swap_requests').select('*').eq('id', reqId).single();
-    if (!req || req.status !== 'pending') return { success: false, message: "Inválido" };
+    if (!req || req.status !== 'pending') return { success: false, message: "Solicitação inválida ou já atendida." };
 
     const iso = req.event_iso;
     const dateTime = iso.length === 16 ? iso + ':00' : iso;
 
     const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', dateTime).single();
-    if (!event) return { success: false, message: "Evento não encontrado" };
+    if (!event) return { success: false, message: "Evento não encontrado na base de dados." };
 
     const { error: assignError } = await supabase.from('schedule_assignments')
         .update({ member_id: takerId, confirmed: false })
@@ -631,7 +599,7 @@ export const performSwapSQL = async (ministryId: string, reqId: string, takerNam
         .eq('role', req.role)
         .eq('member_id', req.requester_id);
 
-    if (assignError) return { success: false, message: "Erro ao atualizar escala" };
+    if (assignError) return { success: false, message: "Erro ao atualizar escala." };
 
     await supabase.from('swap_requests').update({ status: 'completed', taken_by_name: takerName }).eq('id', reqId);
 
@@ -641,7 +609,7 @@ export const performSwapSQL = async (ministryId: string, reqId: string, takerNam
         type: 'success'
     });
 
-    return { success: true, message: "Troca realizada!" };
+    return { success: true, message: "Troca realizada com sucesso!" };
 };
 
 export const fetchRepertoire = async (ministryId: string): Promise<RepertoireItem[]> => {
