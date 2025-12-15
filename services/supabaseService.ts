@@ -79,15 +79,25 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
 
     if (error) return { success: false, message: error.message };
     if (data.user) {
+        const mainMinistry = ministries[0] || 'midia';
+        
         // Create Profile
         await supabase.from('profiles').insert({
             id: data.user.id,
             email,
             name,
-            ministry_id: ministries[0],
+            ministry_id: mainMinistry,
             allowed_ministries: ministries,
             whatsapp: phone,
             functions: functions || []
+        });
+
+        // NOTIFY: Inform the team about the new member
+        await sendNotificationSQL(mainMinistry, {
+            title: "Novo Membro",
+            message: `${name} acabou de se cadastrar na equipe! Dê as boas-vindas.`,
+            type: 'success',
+            actionLink: 'members'
         });
     }
     return { success: true, message: "Cadastro realizado!" };
@@ -175,7 +185,12 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar: 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false };
 
-    const updates: any = { name, whatsapp, birth_date: birthDate };
+    // FIX: Ensure empty string dates are converted to NULL to prevent SQL Error "invalid input syntax for type date"
+    const updates: any = { name, whatsapp };
+    
+    if (birthDate) updates.birth_date = birthDate;
+    else updates.birth_date = null; // Explicitly set null if empty string
+
     if (avatar) updates.avatar_url = avatar;
     if (functions) updates.functions = functions;
 
