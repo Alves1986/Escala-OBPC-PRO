@@ -575,35 +575,22 @@ const InnerApp = () => {
                         onMonthChange={setCurrentMonth} 
                         currentUser={currentUser} 
                         onSaveAvailability={async (member, dates, notes, targetMonth) => { 
-                            let targetId = '';
-                            // 1. Tenta usar o ID do usuário logado se o nome coincidir (Mais seguro para novos usuários)
-                            if (currentUser && currentUser.name === member) {
-                                targetId = currentUser.id || "";
-                            }
+                            // 1. Optimistic Update (Immediate Feedback)
+                            setAvailability(prev => {
+                                const oldDates = prev[member] || [];
+                                const otherMonthDates = oldDates.filter(d => !d.startsWith(targetMonth) && !d.startsWith(`${targetMonth}-BLK`));
+                                return {
+                                    ...prev,
+                                    [member]: [...otherMonthDates, ...dates]
+                                };
+                            });
+                            // 2. Async Save - Service resolves ID internally
+                            const result = await Supabase.saveMemberAvailability(member, dates, notes, targetMonth); 
                             
-                            // 2. Se não for o próprio usuário (Admin editando outro), busca na lista pública
-                            if (!targetId) {
-                                const p = publicMembers.find(pm => pm.name === member); 
-                                if (p) targetId = p.id;
+                            if (result.error) {
+                                throw new Error(result.error.message);
                             }
-
-                            if (targetId) { 
-                                // 1. Optimistic Update (Immediate Feedback)
-                                setAvailability(prev => {
-                                    const oldDates = prev[member] || [];
-                                    const otherMonthDates = oldDates.filter(d => !d.startsWith(targetMonth) && !d.startsWith(`${targetMonth}-BLK`));
-                                    return {
-                                        ...prev,
-                                        [member]: [...otherMonthDates, ...dates]
-                                    };
-                                });
-                                // 2. Async Save
-                                const result = await Supabase.saveMemberAvailability(targetId, member, dates, targetMonth, notes); 
-                                if (result.error) throw new Error(result.error.message);
-                                // 3. No immediate loadData to avoid race condition revert
-                            } else {
-                                throw new Error("Erro ao identificar membro. Tente recarregar a página.");
-                            }
+                            // 3. No immediate loadData to avoid race condition revert
                         }} 
                         availabilityWindow={availabilityWindow} 
                     />
@@ -653,7 +640,7 @@ const InnerApp = () => {
 
             {/* Modals & Global UI */}
             <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ ...e, iso: e.iso }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, e); loadData(); }} onRemove={async (id) => { loadData(); }} />
-            <AvailabilityModal isOpen={isAvailModalOpen} onClose={() => setAvailModalOpen(false)} members={publicMembers.map(m => m.name)} availability={availability} onUpdate={async (member, dates) => { const p = publicMembers.find(pm => pm.name === member); if (p) { await Supabase.saveMemberAvailability(p.id, member, dates, currentMonth, {}); loadData(); }}} currentMonth={currentMonth} />
+            <AvailabilityModal isOpen={isAvailModalOpen} onClose={() => setAvailModalOpen(false)} members={publicMembers.map(m => m.name)} availability={availability} onUpdate={async (member, dates) => { const p = publicMembers.find(pm => pm.name === member); if (p) { await Supabase.saveMemberAvailability(member, dates, {}, currentMonth); loadData(); }}} currentMonth={currentMonth} />
             <RolesModal isOpen={isRolesModalOpen} onClose={() => setRolesModalOpen(false)} roles={roles} onUpdate={async (newRoles) => { await Supabase.saveMinistrySettings(ministryId, undefined, newRoles); loadData(); }} />
             <InstallBanner isVisible={showInstallBanner} onInstall={handleInstallApp} onDismiss={() => setShowInstallBanner(false)} appName={ministryTitle || "Gestão Escala"} />
             <InstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />

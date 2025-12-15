@@ -144,16 +144,23 @@ export const AvailabilityScreen: React.FC<Props> = ({
       setIsSaving(true);
       try {
           const notesPayload: Record<string, string> = {};
+          
           if (generalNote.trim()) {
               notesPayload[`${currentMonth}-00`] = generalNote.trim();
           }
 
+          // AQUI: A ordem dos argumentos agora bate certo com a correção no Service
+          // 1. selectedMember (Nome)
+          // 2. tempDates (Array de Strings)
+          // 3. notesPayload (Objeto)
+          // 4. currentMonth (String)
           await onSaveAvailability(selectedMember, tempDates, notesPayload, currentMonth);
+          
           setHasUnsavedChanges(false);
-          addToast("Disponibilidade salva com sucesso!", "success");
+          addToast("Disponibilidade enviada com sucesso!", "success");
       } catch (e) {
           console.error(e);
-          addToast("Erro ao salvar. Verifique sua conexão.", "error");
+          addToast("Erro ao salvar. Tente novamente.", "error");
       } finally {
           setIsSaving(false);
       }
