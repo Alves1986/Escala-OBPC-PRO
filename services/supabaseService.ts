@@ -1,4 +1,5 @@
 
+// ... existing imports ...
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
     SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, 
@@ -50,8 +51,7 @@ const safeParseArray = (value: any): string[] => {
     return [];
 };
 
-// --- AUTHENTICATION ---
-
+// ... (Authentication functions remain the same) ...
 export const loginWithEmail = async (email: string, pass: string) => {
     if (!supabase) return { success: true, message: "Demo Login" };
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
@@ -114,19 +114,14 @@ export const sendPasswordResetEmail = async (email: string) => {
     return { success: !error, message: error ? error.message : "Email enviado!" };
 };
 
-// --- PROFILE & MEMBERS ---
-
+// ... (Profile functions remain the same) ...
 export const fetchMinistryMembers = async (ministryId: string): Promise<{ memberMap: MemberMap, publicList: TeamMemberProfile[] }> => {
     if (!supabase) return { memberMap: {}, publicList: [] };
     
-    // Traz todos para filtrar no cliente se necessário (mais seguro contra dados sujos)
     const { data } = await supabase.from('profiles').select('*');
     
-    // Filtra no JS para garantir robustez
     const filteredData = (data || []).filter((p: any) => {
         const allowed = safeParseArray(p.allowed_ministries);
-        // CORREÇÃO: Removemos p.is_admin da condição OR.
-        // O membro só aparece se estiver explicitamente vinculado ao ministério atual.
         return allowed.includes(ministryId) || p.ministry_id === ministryId;
     });
     
@@ -136,7 +131,7 @@ export const fetchMinistryMembers = async (ministryId: string): Promise<{ member
         email: p.email,
         whatsapp: p.whatsapp,
         avatar_url: p.avatar_url,
-        roles: safeParseArray(p.functions), // Usa o parser seguro
+        roles: safeParseArray(p.functions),
         birthDate: p.birth_date,
         isAdmin: p.is_admin
     }));
@@ -169,7 +164,7 @@ export const joinMinistry = async (ministryId: string, roles: string[]) => {
     const { error } = await supabase.from('profiles').update({ 
         allowed_ministries: newAllowed,
         functions: newFunctions,
-        ministry_id: ministryId // Switch to new one
+        ministry_id: ministryId 
     }).eq('id', user.id);
 
     return { success: !error, message: error ? error.message : "Entrou no ministério!" };
@@ -185,11 +180,9 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar: 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false };
 
-    // FIX: Ensure empty string dates are converted to NULL to prevent SQL Error "invalid input syntax for type date"
     const updates: any = { name, whatsapp };
-    
     if (birthDate) updates.birth_date = birthDate;
-    else updates.birth_date = null; // Explicitly set null if empty string
+    else updates.birth_date = null;
 
     if (avatar) updates.avatar_url = avatar;
     if (functions) updates.functions = functions;
@@ -198,7 +191,6 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar: 
     return { success: !error, message: error ? error.message : "Perfil atualizado!" };
 };
 
-// Nova função para Admin editar membros
 export const updateMemberData = async (memberId: string, data: { name?: string, roles?: string[], whatsapp?: string }) => {
     if (!supabase) return { success: false, message: "Offline" };
     const updates: any = {};
@@ -212,7 +204,6 @@ export const updateMemberData = async (memberId: string, data: { name?: string, 
 
 export const toggleAdminSQL = async (email: string, status: boolean, ministryId: string) => {
     if (!supabase) return;
-    // Usually admin toggle is protected or done via edge function
     await supabase.functions.invoke('push-notification', {
         body: { action: 'toggle_admin', targetEmail: email, status, ministryId }
     });
@@ -226,8 +217,7 @@ export const deleteMember = async (ministryId: string, memberId: string, name: s
     return { success: !error, message: error ? "Erro" : "Removido" };
 };
 
-// --- MINISTRY SETTINGS ---
-
+// ... (Ministry Settings functions) ...
 export const fetchMinistrySettings = async (ministryId: string): Promise<MinistrySettings> => {
     if (!supabase) return { displayName: '', roles: [] };
     const { data } = await supabase.from('ministry_settings').select('*').eq('ministry_id', ministryId).single();
@@ -255,14 +245,11 @@ export const saveMinistrySettings = async (ministryId: string, displayName?: str
     await supabase.from('ministry_settings').upsert({ ministry_id: ministryId, ...updates });
 };
 
-// --- SCHEDULE & EVENTS ---
-
+// ... (Schedule & Events functions) ...
 export const fetchMinistrySchedule = async (ministryId: string, month: string) => {
     if (!supabase) return { events: [], schedule: {}, attendance: {} };
     
-    // Fetch Events
     const startDate = `${month}-01`;
-    // Simple way to get next month
     const [y, m] = month.split('-').map(Number);
     const nextMonth = new Date(y, m, 1).toISOString().slice(0, 7);
     
@@ -282,7 +269,6 @@ export const fetchMinistrySchedule = async (ministryId: string, month: string) =
         dateDisplay: e.date_time.slice(0, 10).split('-').reverse().slice(0, 2).join('/')
     }));
 
-    // Fetch Schedule
     const eventIds = events.map(e => e.id);
     const schedule: ScheduleMap = {};
     const attendance: AttendanceMap = {};
@@ -316,7 +302,6 @@ export const createMinistryEvent = async (ministryId: string, event: { title: st
 
 export const updateMinistryEvent = async (ministryId: string, oldIso: string, newTitle: string, newIso: string, applyToAll: boolean) => {
     if (!supabase) return;
-    // Simple update for single event
     const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', oldIso + ':00').single();
     if (event) {
         await supabase.from('events').update({ title: newTitle, date_time: newIso + ':00' }).eq('id', event.id);
@@ -325,7 +310,6 @@ export const updateMinistryEvent = async (ministryId: string, oldIso: string, ne
 
 export const deleteMinistryEvent = async (ministryId: string, iso: string) => {
     if (!supabase) return;
-    // Assuming ISO comes as YYYY-MM-DDTHH:mm
     const date_time = iso.length === 16 ? iso + ':00' : iso;
     await supabase.from('events').delete().eq('ministry_id', ministryId).eq('date_time', date_time);
 };
@@ -336,11 +320,9 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
     const role = roleParts.join('_');
     const date_time = iso + ':00';
 
-    // Get Event ID
     const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', date_time).single();
     if (!event) return false;
 
-    // Get Member ID
     let memberId = null;
     if (memberName) {
         const { data: member } = await supabase.from('profiles').select('id').eq('name', memberName).single();
@@ -348,10 +330,8 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
     }
 
     if (!memberId) {
-        // Delete assignment
         await supabase.from('schedule_assignments').delete().eq('event_id', event.id).eq('role', role);
     } else {
-        // Upsert
         await supabase.from('schedule_assignments').upsert({
             event_id: event.id,
             role,
@@ -441,12 +421,10 @@ export const resetToDefaultEvents = async (ministryId: string, month: string) =>
 export const fetchMinistryAvailability = async (ministryId: string) => {
     if (!supabase) return { availability: {}, notes: {} };
     
-    // Traz todos e filtra no cliente, mais seguro
     const { data: profiles } = await supabase.from('profiles').select('id, name, allowed_ministries, ministry_id');
     
     if (!profiles) return { availability: {}, notes: {} };
 
-    // CORREÇÃO CRÍTICA: Filtragem agora considera o ministry_id principal
     const filteredProfiles = profiles.filter((p: any) => {
         const allowed = safeParseArray(p.allowed_ministries);
         return allowed.includes(ministryId) || p.ministry_id === ministryId;
@@ -468,7 +446,7 @@ export const fetchMinistryAvailability = async (ministryId: string) => {
             
             if (a.notes) {
                 Object.entries(a.notes).forEach(([day, note]) => {
-                    notes[`${profile.name}_${day}`] = note as string; // key: Name_YYYY-MM-DD
+                    notes[`${profile.name}_${day}`] = note as string; 
                 });
             }
         }
@@ -478,18 +456,18 @@ export const fetchMinistryAvailability = async (ministryId: string) => {
 };
 
 export const saveMemberAvailability = async (userId: string, memberName: string, dates: string[], targetMonth: string, notes: Record<string, string>) => {
-    if (!supabase) return;
+    if (!supabase) return { error: { message: "Supabase not initialized" } };
     const monthDates = dates.filter(d => d.startsWith(targetMonth));
-    await supabase.from('availability').upsert({
+    const { error } = await supabase.from('availability').upsert({
         user_id: userId,
         month: targetMonth,
         dates: monthDates,
         notes: notes
     }, { onConflict: 'user_id,month' });
+    return { error };
 };
 
-// --- NOTIFICATIONS & ANNOUNCEMENTS ---
-
+// ... (Notifications & other functions remain the same) ...
 export const fetchNotificationsSQL = async (ministryIds: string[], userId: string): Promise<AppNotification[]> => {
     if (!supabase) return [];
     
@@ -520,7 +498,6 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
 export const sendNotificationSQL = async (ministryId: string, notification: { title: string, message: string, type?: string, actionLink?: string }) => {
     if (!supabase) return;
     
-    // 1. Insert DB
     const { data, error } = await supabase.from('notifications').insert({
         ministry_id: ministryId,
         title: notification.title,
@@ -529,7 +506,6 @@ export const sendNotificationSQL = async (ministryId: string, notification: { ti
         action_link: notification.actionLink
     }).select();
 
-    // 2. Trigger Push
     await supabase.functions.invoke('push-notification', {
         body: {
             ministryId,
@@ -608,8 +584,6 @@ export const interactAnnouncementSQL = async (announcementId: string, userId: st
     }
 };
 
-// --- SWAPS ---
-
 export const fetchSwapRequests = async (ministryId: string): Promise<SwapRequest[]> => {
     if (!supabase) return [];
     const { data } = await supabase.from('swap_requests').select('*').eq('ministry_id', ministryId).order('created_at', { ascending: false });
@@ -654,7 +628,6 @@ export const performSwapSQL = async (ministryId: string, reqId: string, takerNam
     const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', dateTime).single();
     if (!event) return { success: false, message: "Evento não encontrado" };
 
-    // Update Schedule
     const { error: assignError } = await supabase.from('schedule_assignments')
         .update({ member_id: takerId, confirmed: false })
         .eq('event_id', event.id)
@@ -663,10 +636,8 @@ export const performSwapSQL = async (ministryId: string, reqId: string, takerNam
 
     if (assignError) return { success: false, message: "Erro ao atualizar escala" };
 
-    // Update Request
     await supabase.from('swap_requests').update({ status: 'completed', taken_by_name: takerName }).eq('id', reqId);
 
-    // Notify
     await sendNotificationSQL(ministryId, {
         title: "Troca Aceita",
         message: `${takerName} assumiu sua escala de ${req.event_title}.`,
@@ -675,8 +646,6 @@ export const performSwapSQL = async (ministryId: string, reqId: string, takerNam
 
     return { success: true, message: "Troca realizada!" };
 };
-
-// --- REPERTOIRE ---
 
 export const fetchRepertoire = async (ministryId: string): Promise<RepertoireItem[]> => {
     if (!supabase) return [];
@@ -709,8 +678,6 @@ export const deleteFromRepertoire = async (itemId: string) => {
     await supabase.from('repertoire').delete().eq('id', itemId);
 };
 
-// --- GLOBAL & RANKING ---
-
 export const fetchGlobalSchedules = async (month: string, currentMinistryId: string): Promise<GlobalConflictMap> => {
     return {};
 };
@@ -718,13 +685,10 @@ export const fetchGlobalSchedules = async (month: string, currentMinistryId: str
 export const fetchRankingData = async (ministryId: string): Promise<RankingEntry[]> => {
     if (!supabase) return [];
 
-    // 1. Get Members associated with ministry
-    // Reusing fetchMinistryMembers logic implicitly or directly query profiles
     const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, name, avatar_url, allowed_ministries, ministry_id'); // We need ID for joining
+        .select('id, name, avatar_url, allowed_ministries, ministry_id');
 
-    // Filter relevant members locally to ensure robust parsing of allowed_ministries
     const members = (profiles || []).filter((p: any) => {
         const allowed = safeParseArray(p.allowed_ministries);
         return allowed.includes(ministryId) || p.ministry_id === ministryId;
@@ -733,12 +697,9 @@ export const fetchRankingData = async (ministryId: string): Promise<RankingEntry
     const memberIds = members.map((m: any) => m.id);
     if (memberIds.length === 0) return [];
 
-    // 2. Fetch Data for Current Year
     const currentYear = new Date().getFullYear();
     const startOfYear = `${currentYear}-01-01T00:00:00`;
 
-    // A. Confirmed Events (Points: +100)
-    // We need assignments for events in this ministry, this year
     const { data: events } = await supabase
         .from('events')
         .select('id')
@@ -754,11 +715,10 @@ export const fetchRankingData = async (ministryId: string): Promise<RankingEntry
             .select('member_id, confirmed')
             .in('event_id', eventIds)
             .in('member_id', memberIds)
-            .eq('confirmed', true); // Only confirmed counts for positive points usually
+            .eq('confirmed', true);
         assignments = data || [];
     }
 
-    // B. Swap Requests (Points: -50)
     const { data: swaps } = await supabase
         .from('swap_requests')
         .select('requester_id')
@@ -766,8 +726,6 @@ export const fetchRankingData = async (ministryId: string): Promise<RankingEntry
         .gte('created_at', startOfYear)
         .in('requester_id', memberIds);
 
-    // C. Announcement Interactions (Read: +5, Like: +10)
-    // Filter by announcement ministry_id
     const { data: announcements } = await supabase
         .from('announcements')
         .select('id')
@@ -786,7 +744,6 @@ export const fetchRankingData = async (ministryId: string): Promise<RankingEntry
         interactions = data || [];
     }
 
-    // 3. Aggregate Scores
     const rankingMap: Record<string, RankingEntry> = {};
 
     members.forEach((m: any) => {
@@ -831,7 +788,6 @@ export const fetchRankingData = async (ministryId: string): Promise<RankingEntry
         }
     });
 
-    // 4. Return sorted array
     return Object.values(rankingMap)
         .sort((a, b) => b.points - a.points);
 };

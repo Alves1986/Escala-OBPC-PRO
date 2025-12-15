@@ -598,10 +598,11 @@ const InnerApp = () => {
                                     };
                                 });
                                 // 2. Async Save
-                                await Supabase.saveMemberAvailability(targetId, member, dates, targetMonth, notes); 
+                                const result = await Supabase.saveMemberAvailability(targetId, member, dates, targetMonth, notes); 
+                                if (result.error) throw new Error(result.error.message);
                                 // 3. No immediate loadData to avoid race condition revert
                             } else {
-                                addToast("Erro ao identificar membro. Tente recarregar a página.", "error");
+                                throw new Error("Erro ao identificar membro. Tente recarregar a página.");
                             }
                         }} 
                         availabilityWindow={availabilityWindow} 
