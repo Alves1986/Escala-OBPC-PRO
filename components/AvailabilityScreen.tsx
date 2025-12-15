@@ -42,6 +42,13 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const isAdmin = currentUser?.role === 'admin';
   const isBlockedMonth = tempDates.includes(`${currentMonth}-BLK`);
 
+  // Parse Month for Calculations
+  const [year, month] = currentMonth.split('-').map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const firstDayOfWeek = new Date(year, month - 1, 1).getDay();
+  const blanks = Array.from({ length: firstDayOfWeek });
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
   // Verifica janela de disponibilidade
   const isWindowOpen = React.useMemo(() => {
       if (isAdmin) return true;
@@ -120,7 +127,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
       setHasUnsavedChanges(true);
       const dateBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
       
-      // Cycle: None -> Full -> Morning -> Night -> None
+      // Determine if it is Sunday
+      const dateObj = new Date(year, month - 1, day);
+      const isSunday = dateObj.getDay() === 0;
+
       const full = dateBase;
       const morning = `${dateBase}_M`;
       const night = `${dateBase}_N`;
@@ -128,16 +138,29 @@ export const AvailabilityScreen: React.FC<Props> = ({
       // Se estava bloqueado, limpa o bloqueio ao clicar numa data
       let newDates = isBlockedMonth ? [] : [...tempDates];
       
-      if (newDates.includes(full)) {
-          newDates = newDates.filter(d => d !== full);
-          newDates.push(morning);
-      } else if (newDates.includes(morning)) {
-          newDates = newDates.filter(d => d !== morning);
-          newDates.push(night);
-      } else if (newDates.includes(night)) {
-          newDates = newDates.filter(d => d !== night);
+      const hasFull = newDates.includes(full);
+      const hasMorning = newDates.includes(morning);
+      const hasNight = newDates.includes(night);
+
+      // Remove current state for this day
+      newDates = newDates.filter(d => d !== full && d !== morning && d !== night);
+
+      if (isSunday) {
+          // Cycle: None -> Full -> Morning -> Night -> None
+          if (hasFull) {
+              newDates.push(morning);
+          } else if (hasMorning) {
+              newDates.push(night);
+          } else if (hasNight) {
+              // Back to none
+          } else {
+              newDates.push(full);
+          }
       } else {
-          newDates.push(full);
+          // Cycle: None -> Full -> None (For non-Sundays)
+          if (!hasFull) {
+              newDates.push(full);
+          }
       }
       
       setTempDates(newDates);
@@ -171,12 +194,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
       if (tempDates.includes(`${dateBase}_N`)) return 'night';
       return 'none';
   };
-
-  const [year, month] = currentMonth.split('-').map(Number);
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const firstDayOfWeek = new Date(year, month - 1, 1).getDay();
-  const blanks = Array.from({ length: firstDayOfWeek });
-  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
   return (
     <div className="space-y-6 animate-fade-in max-w-4xl mx-auto pb-32">
@@ -337,7 +354,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                 />
                 <div className="mt-3 flex items-center gap-2 text-xs text-zinc-400">
                     <Info size={14} />
-                    <span>Clique nos dias para alternar status (Dia Todo &rarr; Manhã &rarr; Noite &rarr; Livre).</span>
+                    <span>Clique nos dias para alternar status. Opções de turno (Manhã/Noite) disponíveis apenas aos <strong>Domingos</strong>.</span>
                 </div>
             </div>
         </div>
