@@ -170,12 +170,28 @@ export const AvailabilityScreen: React.FC<Props> = ({
       if (!selectedMember) return;
       setIsSaving(true);
       try {
-          const notesPayload: Record<string, string> = {};
+          // 1. Reconstruir objeto de notas existentes para este membro neste mês
+          // Isso evita que apaguemos notas de dias específicos ao salvar a nota geral
+          const existingNotes: Record<string, string> = {};
+          
+          Object.entries(availabilityNotes).forEach(([key, note]) => {
+              // A chave vem como "NomeMembro_YYYY-MM-DD"
+              if (key.startsWith(`${selectedMember}_`)) {
+                  const datePart = key.replace(`${selectedMember}_`, ''); // YYYY-MM-DD
+                  if (datePart.startsWith(currentMonth)) {
+                      existingNotes[datePart] = note as string;
+                  }
+              }
+          });
+
+          // 2. Atualizar a nota geral (dia 00)
           if (generalNote.trim()) {
-              notesPayload[`${currentMonth}-00`] = generalNote;
+              existingNotes[`${currentMonth}-00`] = generalNote;
+          } else {
+              delete existingNotes[`${currentMonth}-00`];
           }
           
-          await onSaveAvailability(selectedMember, tempDates, notesPayload, currentMonth);
+          await onSaveAvailability(selectedMember, tempDates, existingNotes, currentMonth);
           setHasUnsavedChanges(false);
           addToast("Disponibilidade salva!", "success");
       } catch (e) {

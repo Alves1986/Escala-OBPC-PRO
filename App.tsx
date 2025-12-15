@@ -349,6 +349,7 @@ const InnerApp = () => {
                   ministryId
               });
               setSchedule(generatedSchedule);
+              // Wait for completion before showing success
               await Supabase.saveScheduleBulk(ministryId, generatedSchedule, true);
               addToast("Escala gerada com sucesso!", "success");
               await Supabase.sendNotificationSQL(ministryId, { title: "Escala Disponível", message: `Escala de ${getMonthName(currentMonth)} gerada com IA.`, type: 'info', actionLink: 'calendar' });

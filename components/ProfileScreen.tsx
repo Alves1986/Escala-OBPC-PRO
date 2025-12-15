@@ -37,8 +37,8 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
         img.src = event.target?.result as string;
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 300;
-          const MAX_HEIGHT = 300;
+          const MAX_WIDTH = 250; // Reduced for performance
+          const MAX_HEIGHT = 250;
           let width = img.width;
           let height = img.height;
 
@@ -59,7 +59,8 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
           
-          resolve(canvas.toDataURL('image/jpeg', 0.8));
+          // Use stricter compression (0.6 quality)
+          resolve(canvas.toDataURL('image/jpeg', 0.6));
         };
         img.onerror = (err) => reject(err);
       };
@@ -70,8 +71,9 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      if (file.size > 5 * 1024 * 1024) {
-        addToast("A imagem deve ter no máximo 5MB.", "error");
+      // Limit file size to 2MB to prevent browser freezing
+      if (file.size > 2 * 1024 * 1024) {
+        addToast("A imagem deve ter no máximo 2MB.", "error");
         return;
       }
 

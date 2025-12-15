@@ -442,16 +442,19 @@ export const fetchMinistryAvailability = async (ministryId: string) => {
     if (!supabase) return { availability: {}, notes: {} };
     
     // Traz todos e filtra no cliente, mais seguro
-    const { data: profiles } = await supabase.from('profiles').select('id, name, allowed_ministries');
+    const { data: profiles } = await supabase.from('profiles').select('id, name, allowed_ministries, ministry_id');
     
     if (!profiles) return { availability: {}, notes: {} };
 
+    // CORREÇÃO CRÍTICA: Filtragem agora considera o ministry_id principal
     const filteredProfiles = profiles.filter((p: any) => {
         const allowed = safeParseArray(p.allowed_ministries);
-        return allowed.includes(ministryId);
+        return allowed.includes(ministryId) || p.ministry_id === ministryId;
     });
 
     const ids = filteredProfiles.map((p: any) => p.id);
+    if (ids.length === 0) return { availability: {}, notes: {} };
+
     const { data: avails } = await supabase.from('availability').select('*').in('user_id', ids);
     
     const availability: AvailabilityMap = {};
