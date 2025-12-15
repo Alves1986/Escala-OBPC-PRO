@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, Suspense } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useMinistryData } from '../hooks/useMinistryData';
@@ -9,7 +8,8 @@ import { LoginScreen } from './LoginScreen';
 import { SetupScreen } from './SetupScreen';
 import { getLocalDateISOString } from '../utils/dateUtils';
 import * as Supabase from '../services/supabaseService';
-import { useToast } from './Toast';
+import { useToast, ToastProvider } from './Toast';
+import { ErrorBoundary } from './ErrorBoundary';
 // Import all screens
 import { EventsScreen } from './EventsScreen';
 import { AvailabilityScreen } from './AvailabilityScreen';
@@ -42,7 +42,7 @@ import { EventDetailsModal } from './EventDetailsModal';
 import { generateScheduleWithAI } from '../services/aiService';
 import { AppNotification, ThemeMode } from '../types';
 
-export default function App() {
+const InnerApp = () => {
   const { currentUser, setCurrentUser, loadingAuth } = useAuth();
   const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -267,5 +267,15 @@ export default function App() {
         {showInstallBanner && <InstallBanner isVisible={true} onInstall={() => setInstallModalOpen(true)} onDismiss={() => setShowInstallBanner(false)} appName="Gestão Escala" />}
         <InstallModal isOpen={isInstallModalOpen} onClose={() => setInstallModalOpen(false)} />
     </DashboardLayout>
+  );
+};
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <ToastProvider>
+        <InnerApp />
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }
