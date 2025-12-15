@@ -337,7 +337,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                 />
                 <div className="mt-3 flex items-center gap-2 text-xs text-zinc-400">
                     <Info size={14} />
-                    <span>Clique nos dias para alternar status (Dia Todo -> Manhã -> Noite -> Livre).</span>
+                    <span>Clique nos dias para alternar status (Dia Todo &rarr; Manhã &rarr; Noite &rarr; Livre).</span>
                 </div>
             </div>
         </div>
