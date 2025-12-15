@@ -1,6 +1,6 @@
 
-import React, { ReactNode, useState, useRef, useEffect } from 'react';
-import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import React, { ReactNode, useState, useRef } from 'react';
+import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles, Building2 } from 'lucide-react';
 import { User, AppNotification } from '../types';
 import { NotificationCenter } from './NotificationCenter';
 import { useClickOutside } from '../hooks/useClickOutside';
@@ -50,26 +50,11 @@ export const DashboardLayout: React.FC<Props> = ({
   const [imgError, setImgError] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [ministryMenuOpen, setMinistryMenuOpen] = useState(false);
-  
-  // Estado para controlar se o menu está recolhido (apenas desktop)
-  const [isCollapsed, setIsCollapsed] = useState(() => {
-      if (typeof window !== 'undefined') {
-          return localStorage.getItem('sidebar_collapsed') === 'true';
-      }
-      return false;
-  });
-
   const ministryMenuRef = useRef<HTMLDivElement>(null);
 
   useClickOutside(ministryMenuRef, () => {
     if (ministryMenuOpen) setMinistryMenuOpen(false);
   });
-
-  const toggleCollapse = () => {
-      const newState = !isCollapsed;
-      setIsCollapsed(newState);
-      localStorage.setItem('sidebar_collapsed', String(newState));
-  };
 
   const activeItem = [...mainNavItems, ...managementNavItems].find(item => item.id === currentTab);
   const activeLabel = activeItem ? activeItem.label : (currentTab === 'profile' ? 'Meu Perfil' : 'Visão Geral');
@@ -102,23 +87,17 @@ export const DashboardLayout: React.FC<Props> = ({
       <button
         key={item.id}
         onClick={() => { onTabChange(item.id); setSidebarOpen(false); }}
-        title={isCollapsed ? item.label : ''} // Tooltip nativo quando recolhido
-        className={`relative flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 group mb-1 ${
+        className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 group mb-1 ${
           isActive 
             ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm ring-1 ring-zinc-200 dark:ring-zinc-700' 
             : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-200'
-        } ${isCollapsed ? 'justify-center' : ''}`}
+        }`}
       >
-        <span className={`transition-colors duration-200 shrink-0 ${isActive ? 'text-teal-600 dark:text-teal-400' : 'text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300'}`}>
-          {React.cloneElement(item.icon as React.ReactElement, { size: 20, strokeWidth: isActive ? 2.5 : 2 })}
+        <span className={`transition-colors duration-200 ${isActive ? 'text-teal-600 dark:text-teal-400' : 'text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300'}`}>
+          {React.cloneElement(item.icon as React.ReactElement, { size: 18, strokeWidth: isActive ? 2.5 : 2 })}
         </span>
-        
-        {!isCollapsed && (
-            <span className="flex-1 text-left tracking-tight animate-fade-in truncate">{item.label}</span>
-        )}
-        
-        {isActive && !isCollapsed && <div className="w-1.5 h-1.5 rounded-full bg-teal-500" />}
-        {isActive && isCollapsed && <div className="absolute left-0 w-1 h-6 bg-teal-500 rounded-r-full" />}
+        <span className="flex-1 text-left tracking-tight">{item.label}</span>
+        {isActive && <div className="w-1.5 h-1.5 rounded-full bg-teal-500" />}
       </button>
     );
   };
@@ -126,11 +105,11 @@ export const DashboardLayout: React.FC<Props> = ({
   const renderUserAvatar = () => {
     if (currentUser?.avatar_url) {
       return (
-        <img src={currentUser.avatar_url} alt={currentUser.name} className="w-9 h-9 rounded-full object-cover border border-zinc-200 dark:border-zinc-700 shadow-sm shrink-0" />
+        <img src={currentUser.avatar_url} alt={currentUser.name} className="w-9 h-9 rounded-full object-cover border border-zinc-200 dark:border-zinc-700 shadow-sm" />
       );
     }
     return (
-      <div className="w-9 h-9 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-300 font-bold text-xs border border-zinc-200 dark:border-zinc-700 shrink-0">
+      <div className="w-9 h-9 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-300 font-bold text-xs border border-zinc-200 dark:border-zinc-700">
          {currentUser?.name.charAt(0).toUpperCase()}
       </div>
     );
@@ -148,25 +127,15 @@ export const DashboardLayout: React.FC<Props> = ({
         <div className="fixed inset-0 z-40 bg-zinc-900/40 backdrop-blur-[2px] lg:hidden transition-opacity duration-300" onClick={() => setSidebarOpen(false)} />
       )}
 
-      {/* Sidebar - Clean & Professional & Collapsible */}
+      {/* Sidebar - Clean & Professional */}
       <aside 
-        className={`
-            fixed inset-y-0 left-0 z-50 
-            bg-zinc-50/90 dark:bg-[#0c0c0e]/95 backdrop-blur-xl 
-            border-r border-zinc-200/80 dark:border-zinc-800/80 
-            transform transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] 
-            flex flex-col shadow-2xl lg:shadow-none
-            ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
-            lg:translate-x-0 lg:static lg:inset-0
-            ${isCollapsed ? 'lg:w-20' : 'lg:w-72'}
-            w-72
-        `}
+        className={`fixed inset-y-0 left-0 z-50 w-72 bg-zinc-50/90 dark:bg-[#0c0c0e]/95 backdrop-blur-xl border-r border-zinc-200/80 dark:border-zinc-800/80 transform transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] lg:translate-x-0 lg:static lg:inset-0 flex flex-col shadow-2xl lg:shadow-none ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         
         {/* Header */}
-        <div className={`px-4 py-5 shrink-0 flex items-center ${isCollapsed ? 'lg:justify-center' : 'justify-between'}`}>
-           <div className="flex items-center gap-3 w-full relative">
-               <div className="w-9 h-9 rounded-xl bg-white dark:bg-zinc-900 flex items-center justify-center shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden shrink-0 transition-transform hover:scale-105">
+        <div className="px-5 py-6 shrink-0">
+           <div className="flex items-center gap-3">
+               <div className="w-9 h-9 rounded-xl bg-white dark:bg-zinc-900 flex items-center justify-center shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden shrink-0">
                   {imgError ? (
                       <Layout size={18} className="text-zinc-500" />
                   ) : (
@@ -179,8 +148,7 @@ export const DashboardLayout: React.FC<Props> = ({
                   )}
                </div>
                
-               {/* Dropdown Menu - Só mostra se não estiver recolhido (Desktop) ou sempre no Mobile */}
-               <div className={`flex-1 min-w-0 relative transition-opacity duration-200 ${isCollapsed ? 'lg:hidden opacity-0 w-0' : 'opacity-100'}`} ref={ministryMenuRef}>
+               <div className="flex-1 min-w-0 relative" ref={ministryMenuRef}>
                  <button 
                     onClick={() => setMinistryMenuOpen(!ministryMenuOpen)}
                     className="flex items-center justify-between w-full group cursor-pointer p-1.5 -ml-1.5 rounded-lg hover:bg-zinc-200/50 dark:hover:bg-zinc-800 transition-colors"
@@ -192,7 +160,7 @@ export const DashboardLayout: React.FC<Props> = ({
                      <ChevronDown size={14} className="text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-transform duration-200" style={{ transform: ministryMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />
                  </button>
 
-                 {/* Dropdown Content */}
+                 {/* Dropdown Menu - Ministry Switcher */}
                  {ministryMenuOpen && (
                     <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-zinc-900 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-800 z-50 overflow-hidden animate-slide-up ring-1 ring-black/5 divide-y divide-zinc-100 dark:divide-zinc-800 min-w-[220px]">
                        <div className="px-3 py-2 bg-zinc-50 dark:bg-zinc-900/50">
@@ -230,24 +198,14 @@ export const DashboardLayout: React.FC<Props> = ({
                  )}
                </div>
                
-               {/* Mobile Close Button */}
                <button onClick={() => setSidebarOpen(false)} className="lg:hidden ml-auto p-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"><X size={20}/></button>
            </div>
         </div>
 
-        {/* Toggle Collapse Button (Desktop Only) - Located at top right of sidebar or bottom */}
-        <button 
-            onClick={toggleCollapse}
-            className="hidden lg:flex absolute -right-3 top-20 z-50 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-400 hover:text-teal-500 rounded-full p-1 shadow-sm hover:shadow-md transition-all items-center justify-center w-6 h-6"
-            title={isCollapsed ? "Expandir Menu" : "Recolher Menu"}
-        >
-            {isCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
-        </button>
-
         {/* Navigation */}
-        <div className={`flex-1 overflow-y-auto py-2 custom-scrollbar space-y-6 ${isCollapsed ? 'px-2' : 'px-3'}`}>
+        <div className="flex-1 overflow-y-auto px-3 py-2 custom-scrollbar space-y-6">
           <div>
-            {!isCollapsed && <p className="px-3 text-[10px] font-bold text-zinc-400/80 uppercase tracking-widest mb-2 animate-fade-in">Principal</p>}
+            <p className="px-3 text-[10px] font-bold text-zinc-400/80 uppercase tracking-widest mb-2">Principal</p>
             <div className="space-y-0.5">
                 {mainNavItems.map(item => renderNavButton(item))}
             </div>
@@ -255,8 +213,7 @@ export const DashboardLayout: React.FC<Props> = ({
 
           {managementNavItems.length > 0 && (
             <div>
-                {!isCollapsed && <p className="px-3 text-[10px] font-bold text-zinc-400/80 uppercase tracking-widest mb-2 animate-fade-in">Administração</p>}
-                {isCollapsed && <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-2 mx-2"></div>}
+                <p className="px-3 text-[10px] font-bold text-zinc-400/80 uppercase tracking-widest mb-2">Administração</p>
                 <div className="space-y-0.5">
                     {managementNavItems.map(item => renderNavButton(item))}
                 </div>
@@ -265,53 +222,46 @@ export const DashboardLayout: React.FC<Props> = ({
         </div>
 
         {/* Footer Profile */}
-        <div className={`p-3 bg-zinc-50/50 dark:bg-zinc-900/30 border-t border-zinc-200 dark:border-zinc-800 transition-all ${isCollapsed ? 'flex flex-col items-center' : ''}`}>
+        <div className="p-3 bg-zinc-50/50 dark:bg-zinc-900/30 border-t border-zinc-200 dark:border-zinc-800">
             <button 
                 onClick={() => onTabChange('profile')}
-                title="Meu Perfil"
-                className={`flex items-center gap-3 w-full p-2 rounded-xl hover:bg-white dark:hover:bg-zinc-800 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 transition-all group shadow-sm hover:shadow ${isCollapsed ? 'justify-center px-0' : ''}`}
+                className="flex items-center gap-3 w-full p-2 rounded-xl hover:bg-white dark:hover:bg-zinc-800 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 transition-all group shadow-sm hover:shadow"
             >
                 {renderUserAvatar()}
-                {!isCollapsed && (
-                    <>
-                        <div className="flex-1 min-w-0 text-left animate-fade-in">
-                            <p className="text-xs font-bold text-zinc-800 dark:text-white truncate">{currentUser?.name}</p>
-                            <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">
-                                {currentUser?.role === 'admin' ? 'Administrador' : 'Membro'}
-                            </p>
-                        </div>
-                        <Settings size={14} className="text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300" />
-                    </>
-                )}
+                <div className="flex-1 min-w-0 text-left">
+                    <p className="text-xs font-bold text-zinc-800 dark:text-white truncate">{currentUser?.name}</p>
+                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">
+                        {currentUser?.role === 'admin' ? 'Administrador' : 'Membro'}
+                    </p>
+                </div>
+                <Settings size={14} className="text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300" />
             </button>
             
-            <div className={`grid gap-2 mt-2 ${isCollapsed ? 'grid-cols-1 w-full' : 'grid-cols-2'}`}>
+            <div className="grid grid-cols-2 gap-2 mt-2">
                 <button 
                     onClick={onLogout} 
-                    title={isCollapsed ? "Sair" : ""}
-                    className={`flex items-center justify-center gap-1.5 py-1.5 text-[10px] font-bold text-zinc-500 hover:text-red-600 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:border-red-200 dark:hover:border-red-900/30 rounded-lg transition-colors shadow-sm`}
+                    className="flex items-center justify-center gap-1.5 py-1.5 text-[10px] font-bold text-zinc-500 hover:text-red-600 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:border-red-200 dark:hover:border-red-900/30 rounded-lg transition-colors shadow-sm"
                 >
-                    <LogOut size={12} /> {!isCollapsed && "Sair"}
+                    <LogOut size={12} /> Sair
                 </button>
                 <button
                     onClick={toggleTheme}
-                    title={isCollapsed ? "Alternar Tema" : ""}
-                    className={`flex items-center justify-center gap-1.5 py-1.5 text-[10px] font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg transition-colors shadow-sm`}
+                    className="flex items-center justify-center gap-1.5 py-1.5 text-[10px] font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg transition-colors shadow-sm"
                 >
-                    {theme === 'dark' ? <Sun size={12} /> : <Moon size={12} />} {!isCollapsed && "Tema"}
+                    {theme === 'dark' ? <Sun size={12} /> : <Moon size={12} />} Tema
                 </button>
             </div>
             
-            {onInstall && !isStandalone && !isCollapsed && (
+            {onInstall && !isStandalone && (
                 <button 
                     onClick={onInstall}
-                    className="w-full mt-2 flex items-center justify-center gap-2 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg text-[10px] font-bold shadow hover:opacity-90 transition-opacity animate-fade-in"
+                    className="w-full mt-2 flex items-center justify-center gap-2 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg text-[10px] font-bold shadow hover:opacity-90 transition-opacity"
                 >
                     <Download size={12} /> Instalar App
                 </button>
             )}
             
-            {isUpdating && !isCollapsed && (
+            {isUpdating && (
                 <div className="mt-2 text-center text-[9px] text-zinc-400 flex items-center justify-center gap-1 animate-pulse">
                     <RefreshCw size={8} className="animate-spin" /> Atualizando...
                 </div>
