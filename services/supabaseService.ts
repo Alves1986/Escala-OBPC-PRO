@@ -316,47 +316,74 @@ export const resetToDefaultEvents = async (ministryId: string, monthIso: string)
     const startFilter = `${monthIso}-01T00:00:00`;
     const endFilter = `${monthIso}-${String(lastDay).padStart(2, '0')}T23:59:59`;
 
-    // 1. Limpa eventos existentes para não duplicar
-    await supabase.from('events')
-        .delete()
-        .eq('ministry_id', cleanMid)
-        .gte('date_time', startFilter)
-        .lte('date_time', endFilter);
+    try {
+        // 1. PRIMEIRO: Busca os IDs dos eventos desse mês para limpar as escalas vinculadas
+        // (Isso previne erro de chave estrangeira ao tentar deletar eventos com escalas)
+        const { data: eventsToDelete } = await supabase
+            .from('events')
+            .select('id')
+            .eq('ministry_id', cleanMid)
+            .gte('date_time', startFilter)
+            .lte('date_time', endFilter);
 
-    // 2. Gera eventos com base no padrão solicitado (Quarta 20h, Domingo 9:30 e 19:00)
-    const eventsToInsert = [];
-    for (let d = 1; d <= lastDay; d++) {
-        // month é 1-indexado vindo do input, mas Date constructor usa 0-indexado
-        const date = new Date(year, month - 1, d);
-        const dayOfWeek = date.getDay(); // 0 = Domingo, 3 = Quarta
-        const dayStr = String(d).padStart(2, '0');
-        const dateStr = `${monthIso}-${dayStr}`;
+        const eventIds = eventsToDelete?.map((e: any) => e.id) || [];
 
-        if (dayOfWeek === 0) { // Domingo
-            eventsToInsert.push({
-                ministry_id: cleanMid,
-                title: 'Domingo - Manhã',
-                date_time: `${dateStr}T09:30:00`,
-                type: 'default'
-            });
-            eventsToInsert.push({
-                ministry_id: cleanMid,
-                title: 'Domingo - Noite',
-                date_time: `${dateStr}T19:00:00`,
-                type: 'default'
-            });
-        } else if (dayOfWeek === 3) { // Quarta
-            eventsToInsert.push({
-                ministry_id: cleanMid,
-                title: 'Quarta',
-                date_time: `${dateStr}T20:00:00`,
-                type: 'default'
-            });
+        // 2. Limpa as escalas (pessoas) desses eventos
+        if (eventIds.length > 0) {
+            await supabase
+                .from('schedule_assignments')
+                .delete()
+                .in('event_id', eventIds);
         }
-    }
 
-    if (eventsToInsert.length > 0) {
-        await supabase.from('events').insert(eventsToInsert);
+        // 3. Remove os eventos antigos
+        const { error: deleteError } = await supabase
+            .from('events')
+            .delete()
+            .eq('ministry_id', cleanMid)
+            .gte('date_time', startFilter)
+            .lte('date_time', endFilter);
+
+        if (deleteError) throw deleteError;
+
+        // 4. Gera novos eventos padrão (Domingos e Quartas)
+        const eventsToInsert = [];
+        for (let d = 1; d <= lastDay; d++) {
+            const date = new Date(year, month - 1, d);
+            const dayOfWeek = date.getDay(); // 0 = Domingo, 3 = Quarta
+            const dayStr = String(d).padStart(2, '0');
+            const dateStr = `${monthIso}-${dayStr}`;
+
+            if (dayOfWeek === 0) { // Domingo
+                eventsToInsert.push({
+                    ministry_id: cleanMid,
+                    title: 'Domingo - Manhã',
+                    date_time: `${dateStr}T09:30:00`,
+                    type: 'default'
+                });
+                eventsToInsert.push({
+                    ministry_id: cleanMid,
+                    title: 'Domingo - Noite',
+                    date_time: `${dateStr}T19:00:00`,
+                    type: 'default'
+                });
+            } else if (dayOfWeek === 3) { // Quarta
+                eventsToInsert.push({
+                    ministry_id: cleanMid,
+                    title: 'Quarta',
+                    date_time: `${dateStr}T20:00:00`,
+                    type: 'default'
+                });
+            }
+        }
+
+        if (eventsToInsert.length > 0) {
+            const { error: insertError } = await supabase.from('events').insert(eventsToInsert);
+            if (insertError) throw insertError;
+        }
+
+    } catch (error) {
+        console.error("Erro ao restaurar eventos:", error);
     }
 };
 
