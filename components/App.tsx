@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect, Suspense, useRef } from 'react';
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
   Megaphone, Settings, FileBarChart, CalendarDays,
   Users, Edit, Send, ListMusic, Clock, ArrowLeft, ArrowRight,
-  Calendar as CalendarIcon, Trophy, Loader2, ShieldAlert, Share2, Sparkles, ChevronRight, FileText
+  Calendar as CalendarIcon, Trophy, Loader2, ShieldAlert, Share2, Sparkles, ChevronRight
 } from 'lucide-react';
 import { ToastProvider, useToast } from './Toast';
 import { LoginScreen } from './LoginScreen';
@@ -43,7 +44,6 @@ const RepertoireScreen = React.lazy(() => import('./RepertoireScreen').then(modu
 const AnnouncementsScreen = React.lazy(() => import('./AnnouncementsScreen').then(module => ({ default: module.AnnouncementsScreen })));
 const AlertsManager = React.lazy(() => import('./AlertsManager').then(module => ({ default: module.AlertsManager })));
 const AvailabilityReportScreen = React.lazy(() => import('./AvailabilityReportScreen').then(module => ({ default: module.AvailabilityReportScreen })));
-const MonthlyReportScreen = React.lazy(() => import('./MonthlyReportScreen').then(module => ({ default: module.MonthlyReportScreen })));
 const SettingsScreen = React.lazy(() => import('./SettingsScreen').then(module => ({ default: module.SettingsScreen })));
 const ProfileScreen = React.lazy(() => import('./ProfileScreen').then(module => ({ default: module.ProfileScreen })));
 const EventsScreen = React.lazy(() => import('./EventsScreen').then(module => ({ default: module.EventsScreen })));
@@ -396,7 +396,6 @@ const InnerApp = () => {
 
   const MANAGEMENT_NAV = [
     { id: 'schedule-editor', label: 'Editor de Escala', icon: <Edit size={20}/> },
-    { id: 'monthly-report', label: 'Relatório Mensal', icon: <FileText size={20}/> },
     { id: 'repertoire-manager', label: 'Gerenciar Repertório', icon: <ListMusic size={20}/> },
     { id: 'report', label: 'Relat. Disponibilidade', icon: <FileBarChart size={20}/> },
     { id: 'events', label: 'Eventos', icon: <CalendarDays size={20}/> },
@@ -566,21 +565,9 @@ const InnerApp = () => {
                     </div>
                 )}
 
-                {currentTab === 'monthly-report' && isAdmin && (
-                    <MonthlyReportScreen 
-                        currentMonth={currentMonth}
-                        onMonthChange={setCurrentMonth}
-                        schedule={schedule}
-                        attendance={attendance}
-                        swapRequests={swapRequests}
-                        members={publicMembers}
-                        events={events}
-                    />
-                )}
-
                 {/* Other Tabs Mapped to Lazy Components */}
                 {currentTab === 'events' && isAdmin && <EventsScreen customEvents={events.map(e => ({ ...e, iso: e.iso }))} onCreateEvent={async (evt) => { await Supabase.createMinistryEvent(ministryId, evt); loadData(); }} onDeleteEvent={async (iso) => { await Supabase.deleteMinistryEvent(ministryId, iso); loadData(); }} currentMonth={currentMonth} onMonthChange={setCurrentMonth} />}
-                {currentTab === 'availability' && <AvailabilityScreen availability={availability} availabilityNotes={availabilityNotes} setAvailability={setAvailability} allMembersList={publicMembers.map(m => m.name)} currentMonth={currentMonth} onMonthChange={setCurrentMonth} currentUser={currentUser} onSaveAvailability={async (member, dates, notes, targetMonth) => { const p = publicMembers.find(pm => pm.name === member); if (p) { await Supabase.saveMemberAvailability(p.id, member, dates, targetMonth, ministryId, notes); loadData(); }}} availabilityWindow={availabilityWindow} />}
+                {currentTab === 'availability' && <AvailabilityScreen availability={availability} availabilityNotes={availabilityNotes} setAvailability={setAvailability} allMembersList={publicMembers.map(m => m.name)} currentMonth={currentMonth} onMonthChange={setCurrentMonth} currentUser={currentUser} onSaveAvailability={async (member, dates, notes, targetMonth) => { const p = publicMembers.find(pm => pm.name === member); if (p) { await Supabase.saveMemberAvailability(p.id, member, dates, targetMonth, notes); loadData(); }}} availabilityWindow={availabilityWindow} />}
                 {currentTab === 'swaps' && <SwapRequestsScreen schedule={schedule} currentUser={currentUser} requests={swapRequests} visibleEvents={events} onCreateRequest={async (role, iso, title) => { const success = await Supabase.createSwapRequestSQL(ministryId, { id: '', ministryId, requesterName: currentUser.name, requesterId: currentUser.id, role, eventIso: iso, eventTitle: title, status: 'pending', createdAt: new Date().toISOString() }); if(success) { addToast("Solicitação criada!", "success"); loadData(); }}} onAcceptRequest={async (reqId) => { const result = await Supabase.performSwapSQL(ministryId, reqId, currentUser.name, currentUser.id!); if(result.success) { addToast(result.message, "success"); loadData(); } else { addToast(result.message, "error"); }}} />}
                 {currentTab === 'ranking' && <RankingScreen ministryId={ministryId} currentUser={currentUser} />}
                 {(currentTab === 'repertoire' || (currentTab === 'repertoire-manager' && isAdmin)) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { await loadData(); }} currentUser={currentUser} mode={currentTab === 'repertoire-manager' ? 'manage' : 'view'} ministryId={ministryId} />}
@@ -626,7 +613,7 @@ const InnerApp = () => {
 
             {/* Modals & Global UI */}
             <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ ...e, iso: e.iso }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, e); loadData(); }} onRemove={async (id) => { loadData(); }} />
-            <AvailabilityModal isOpen={isAvailModalOpen} onClose={() => setAvailModalOpen(false)} members={publicMembers.map(m => m.name)} availability={availability} onUpdate={async (member, dates) => { const p = publicMembers.find(pm => pm.name === member); if (p) { await Supabase.saveMemberAvailability(p.id, member, dates, currentMonth, ministryId, {}); loadData(); }}} currentMonth={currentMonth} />
+            <AvailabilityModal isOpen={isAvailModalOpen} onClose={() => setAvailModalOpen(false)} members={publicMembers.map(m => m.name)} availability={availability} onUpdate={async (member, dates) => { const p = publicMembers.find(pm => pm.name === member); if (p) { await Supabase.saveMemberAvailability(p.id, member, dates, currentMonth, {}); loadData(); }}} currentMonth={currentMonth} />
             <RolesModal isOpen={isRolesModalOpen} onClose={() => setRolesModalOpen(false)} roles={roles} onUpdate={async (newRoles) => { await Supabase.saveMinistrySettings(ministryId, undefined, newRoles); loadData(); }} />
             <InstallBanner isVisible={showInstallBanner} onInstall={handleInstallApp} onDismiss={() => setShowInstallBanner(false)} appName={ministryTitle || "Gestão Escala"} />
             <InstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />
