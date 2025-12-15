@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { AvailabilityMap, AvailabilityNotesMap, User } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
-import { ChevronLeft, ChevronRight, Save, CheckCircle2, Moon, Sun, Lock, FileText, Info, Ban, Unlock, RefreshCw, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Save, CheckCircle2, Moon, Sun, Lock, FileText, Info, Ban, Unlock, RefreshCw, Check, ShieldAlert } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface Props {
@@ -34,7 +34,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const [tempDates, setTempDates] = useState<string[]>([]); 
   const [generalNote, setGeneralNote] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false); // New success state
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   
   const isAdmin = currentUser?.role === 'admin';
@@ -47,22 +47,26 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const blanks = Array.from({ length: firstDayOfWeek });
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
-  // Check Window Status
-  const isWindowOpen = React.useMemo(() => {
-      if (isAdmin) return true;
+  // Check Window Status (Pure Logic - Is it open for REGULAR members?)
+  const isWindowOpenForMembers = React.useMemo(() => {
+      // Se não houver configuração, assume aberto
       if (!availabilityWindow?.start && !availabilityWindow?.end) return true;
       
+      // Verifica bloqueio manual (1970)
+      if (availabilityWindow.start?.includes('1970')) return false;
+
       const now = new Date();
       let start = new Date(0);
       let end = new Date(8640000000000000); 
 
-      if (availabilityWindow.start && !availabilityWindow.start.includes('1970')) start = new Date(availabilityWindow.start);
-      if (availabilityWindow.end && !availabilityWindow.end.includes('1970')) end = new Date(availabilityWindow.end);
+      if (availabilityWindow.start) start = new Date(availabilityWindow.start);
+      if (availabilityWindow.end) end = new Date(availabilityWindow.end);
       
-      if (availabilityWindow.start?.includes('1970')) return false; // Bloqueio manual
-
       return now >= start && now <= end;
-  }, [availabilityWindow, isAdmin]);
+  }, [availabilityWindow]);
+
+  // Can the current user edit? (Admins bypass the lock)
+  const canEdit = isAdmin || isWindowOpenForMembers;
 
   // Init Member Selection
   useEffect(() => {
@@ -93,7 +97,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
   }, [selectedMember, currentMonth, availability, availabilityNotes]);
 
   const handleToggleBlockMonth = () => {
-      if (!isWindowOpen) return;
+      if (!canEdit) return;
       setHasUnsavedChanges(true);
       setSaveSuccess(false);
 
@@ -105,8 +109,8 @@ export const AvailabilityScreen: React.FC<Props> = ({
   };
 
   const handleToggleDate = (day: number) => {
-      if (!isWindowOpen) {
-          addToast("Edição fechada pela liderança.", "warning");
+      if (!canEdit) {
+          addToast("O período de envio está fechado.", "warning");
           return;
       }
 
@@ -157,14 +161,11 @@ export const AvailabilityScreen: React.FC<Props> = ({
           
           setHasUnsavedChanges(false);
           setSaveSuccess(true);
-          
-          // Auto hide success state after a delay
           setTimeout(() => setSaveSuccess(false), 3000);
           
           addToast("Disponibilidade enviada com sucesso!", "success");
       } catch (e: any) {
           console.error(e);
-          // Mensagem de erro mais específica para o usuário
           const msg = e.message || "Erro desconhecido";
           addToast(`Erro: ${msg}`, "error");
       } finally {
@@ -189,19 +190,19 @@ export const AvailabilityScreen: React.FC<Props> = ({
   };
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-4xl mx-auto pb-32">
+    <div className="space-y-4 animate-fade-in max-w-4xl mx-auto pb-32">
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
             <div>
-                <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+                <h2 className="text-xl md:text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
                     <CheckCircle2 className="text-emerald-500"/> Minha Disponibilidade
                 </h2>
-                <p className="text-zinc-500 text-sm mt-1">
-                    Informe os dias em que você pode servir neste mês.
+                <p className="text-zinc-500 text-xs md:text-sm mt-1">
+                    Toque nos dias para marcar (Dom: Dia/Manhã/Noite).
                 </p>
             </div>
             
-            <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
+            <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end bg-zinc-50 dark:bg-zinc-900/50 p-1.5 rounded-xl border border-zinc-100 dark:border-zinc-800">
                 {isAdmin && (
                     <select 
                         value={selectedMember} 
@@ -209,149 +210,156 @@ export const AvailabilityScreen: React.FC<Props> = ({
                             if(hasUnsavedChanges && !confirm("Descartar alterações?")) return;
                             setSelectedMember(e.target.value);
                         }}
-                        className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg py-1.5 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg py-1.5 px-3 text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none max-w-[140px]"
                     >
                         {allMembersList.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
                 )}
                 
-                <div className="flex items-center gap-2 bg-white dark:bg-zinc-800 p-1 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm">
-                    <button onClick={() => handleMonthNav(-1)} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md"><ChevronLeft size={16}/></button>
-                    <span className="text-sm font-bold min-w-[100px] text-center capitalize">{getMonthName(currentMonth)}</span>
-                    <button onClick={() => handleMonthNav(1)} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md"><ChevronRight size={16}/></button>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => handleMonthNav(-1)} className="p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-300"><ChevronLeft size={16}/></button>
+                    <span className="text-xs md:text-sm font-bold min-w-[70px] text-center capitalize">{getMonthName(currentMonth)}</span>
+                    <button onClick={() => handleMonthNav(1)} className="p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-300"><ChevronRight size={16}/></button>
                 </div>
             </div>
         </div>
 
-        {/* Lock Status */}
-        {!isWindowOpen && (
-            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/30 p-4 rounded-xl flex items-center gap-3 text-amber-800 dark:text-amber-200 animate-slide-up">
-                <Lock size={20} />
+        {/* --- STATUS WARNINGS --- */}
+        
+        {/* Caso 1: Fechado para membros, mas Admin vendo */}
+        {!isWindowOpenForMembers && isAdmin && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/30 p-3 rounded-xl flex items-center gap-3 text-blue-800 dark:text-blue-200 animate-slide-up">
+                <ShieldAlert size={20} className="shrink-0" />
                 <div>
-                    <p className="font-bold text-sm">Edição Fechada</p>
-                    <p className="text-xs opacity-80">O período para envio foi encerrado pela liderança.</p>
+                    <p className="font-bold text-xs md:text-sm">Modo Admin Ativo</p>
+                    <p className="text-[10px] md:text-xs opacity-80">A janela está <strong>fechada</strong> para membros, mas você tem permissão para editar.</p>
+                </div>
+            </div>
+        )}
+
+        {/* Caso 2: Fechado para membro comum */}
+        {!isWindowOpenForMembers && !isAdmin && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 p-3 rounded-xl flex items-center gap-3 text-red-800 dark:text-red-200 animate-slide-up">
+                <Lock size={20} className="shrink-0" />
+                <div>
+                    <p className="font-bold text-xs md:text-sm">Edição Encerrada</p>
+                    <p className="text-[10px] md:text-xs opacity-80">O prazo para envio de disponibilidade já terminou. Contate a liderança.</p>
                 </div>
             </div>
         )}
 
         {/* Calendar Area */}
-        <div className={`transition-opacity duration-300 ${!isWindowOpen ? 'opacity-60 pointer-events-none grayscale-[0.5]' : ''}`}>
+        <div className={`transition-opacity duration-300 ${!canEdit ? 'opacity-60 pointer-events-none grayscale-[0.5]' : ''}`}>
             
             {/* Block Month Toggle */}
             <button 
                 onClick={handleToggleBlockMonth}
-                className={`w-full mb-6 p-4 rounded-xl border-2 flex items-center justify-center gap-3 transition-all transform active:scale-[0.99] ${
+                className={`w-full mb-4 py-3 px-4 rounded-xl border flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
                     isBlockedMonth 
-                    ? 'bg-red-50 dark:bg-red-900/20 border-red-500 text-red-600 dark:text-red-400 shadow-inner'
-                    : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 hover:border-red-300 dark:hover:border-red-800/50 text-zinc-500'
+                    ? 'bg-red-50 dark:bg-red-900/20 border-red-500 text-red-600 dark:text-red-400'
+                    : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                 }`}
             >
-                {isBlockedMonth ? (
-                    <>
-                        <Ban size={20} />
-                        <span className="font-bold text-sm">VOCÊ NÃO ESTÁ DISPONÍVEL NESTE MÊS</span>
-                    </>
-                ) : (
-                    <>
-                        <Ban size={20} />
-                        <span className="font-medium text-sm">Marcar mês inteiro como indisponível</span>
-                    </>
-                )}
+                <Ban size={16} />
+                <span className="text-xs md:text-sm font-bold">
+                    {isBlockedMonth ? 'MÊS BLOQUEADO (Toque para liberar)' : 'Marcar mês inteiro como indisponível'}
+                </span>
             </button>
 
-            <div className={`bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 p-4 md:p-6 relative overflow-hidden transition-all duration-300 ${isBlockedMonth ? 'ring-2 ring-red-500/20' : ''}`}>
+            <div className={`bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 p-3 md:p-6 relative overflow-hidden transition-all duration-300 ${isBlockedMonth ? 'ring-2 ring-red-500/20 opacity-50' : ''}`}>
                 
                 {/* Blocked Overlay */}
                 {isBlockedMonth && (
-                    <div className="absolute inset-0 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center text-center p-6 animate-fade-in">
-                        <div className="bg-red-100 dark:bg-red-900/30 p-4 rounded-full mb-3 text-red-500">
-                            <Ban size={32} />
+                    <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+                        <div className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm p-4 rounded-2xl border border-red-200 dark:border-red-900 shadow-xl">
+                            <p className="text-red-500 font-bold text-sm flex items-center gap-2"><Ban size={16}/> Indisponível este mês</p>
                         </div>
-                        <h3 className="text-lg font-bold text-zinc-800 dark:text-white">Mês Bloqueado</h3>
-                        <p className="text-sm text-zinc-500 max-w-xs mb-4">Você sinalizou que não pode servir em nenhuma data de {getMonthName(currentMonth)}.</p>
-                        <button 
-                            onClick={handleToggleBlockMonth}
-                            className="px-4 py-2 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 rounded-lg text-sm font-bold hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
-                        >
-                            <Unlock size={14}/> Desbloquear e Selecionar Datas
-                        </button>
                     </div>
                 )}
 
                 {/* Grid */}
-                <div className="grid grid-cols-7 gap-2 mb-2">
+                <div className="grid grid-cols-7 gap-1 mb-2">
                     {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(d => (
-                        <div key={d} className="text-center text-xs font-bold text-zinc-400 py-2">{d}</div>
+                        <div key={d} className="text-center text-[10px] md:text-xs font-bold text-zinc-400 py-1">{d}</div>
                     ))}
                 </div>
                 
-                <div className="grid grid-cols-7 gap-2 md:gap-3">
+                {/* Mobile Optimized Grid: Gap-1 for tightness, larger buttons on desktop */}
+                <div className="grid grid-cols-7 gap-1 md:gap-3">
                     {blanks.map((_, i) => <div key={`blank-${i}`} />)}
                     {days.map(day => {
                         const status = getDayStatus(day);
-                        let btnClass = "bg-zinc-50 dark:bg-zinc-900 text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600";
-                        let icon = null;
+                        let btnClass = "bg-zinc-50 dark:bg-zinc-900/50 text-zinc-400 border-zinc-200 dark:border-zinc-700";
+                        let content = <span className="text-xs md:text-sm font-bold">{day}</span>;
 
                         if (status === 'full') {
-                            btnClass = "bg-emerald-500 text-white border-emerald-600 shadow-md shadow-emerald-500/30";
-                            icon = <CheckCircle2 size={14} className="mb-1" />;
+                            btnClass = "bg-emerald-500 text-white border-emerald-600 shadow-sm";
+                            content = (
+                                <>
+                                    <CheckCircle2 size={12} className="mb-0.5 md:mb-1" />
+                                    <span className="text-xs md:text-sm font-bold leading-none">{day}</span>
+                                </>
+                            );
                         } else if (status === 'morning') {
-                            btnClass = "bg-amber-400 text-white border-amber-500 shadow-md shadow-amber-400/30";
-                            icon = <Sun size={14} className="mb-1" />;
+                            btnClass = "bg-amber-400 text-white border-amber-500 shadow-sm";
+                            content = (
+                                <>
+                                    <Sun size={12} className="mb-0.5 md:mb-1" />
+                                    <span className="text-xs md:text-sm font-bold leading-none">{day}</span>
+                                </>
+                            );
                         } else if (status === 'night') {
-                            btnClass = "bg-indigo-500 text-white border-indigo-600 shadow-md shadow-indigo-500/30";
-                            icon = <Moon size={14} className="mb-1" />;
+                            btnClass = "bg-indigo-500 text-white border-indigo-600 shadow-sm";
+                            content = (
+                                <>
+                                    <Moon size={12} className="mb-0.5 md:mb-1" />
+                                    <span className="text-xs md:text-sm font-bold leading-none">{day}</span>
+                                </>
+                            );
                         }
 
                         return (
                             <button
                                 key={day}
                                 onClick={() => handleToggleDate(day)}
-                                className={`aspect-square rounded-xl border flex flex-col items-center justify-center transition-all active:scale-95 ${btnClass}`}
+                                className={`aspect-square rounded-lg md:rounded-xl border flex flex-col items-center justify-center transition-all active:scale-90 ${btnClass}`}
                             >
-                                {icon}
-                                <span className="text-sm font-bold">{day}</span>
-                                {status === 'morning' && <span className="text-[9px] uppercase font-bold">Manhã</span>}
-                                {status === 'night' && <span className="text-[9px] uppercase font-bold">Noite</span>}
+                                {content}
                             </button>
                         );
                     })}
                 </div>
 
-                <div className="flex flex-wrap gap-4 mt-6 justify-center bg-zinc-50 dark:bg-zinc-900/50 p-3 rounded-xl border border-zinc-100 dark:border-zinc-800">
-                    <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
-                        <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm"></div> Livre (Dia Todo)
+                <div className="flex flex-wrap gap-2 md:gap-4 mt-6 justify-center bg-zinc-50 dark:bg-zinc-900/50 p-2 md:p-3 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                    <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-zinc-600 dark:text-zinc-400">
+                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm"></div> Livre
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
-                        <div className="w-3 h-3 rounded-full bg-amber-400 shadow-sm"></div> Apenas Manhã
+                    <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-zinc-600 dark:text-zinc-400">
+                        <div className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm"></div> Manhã
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
-                        <div className="w-3 h-3 rounded-full bg-indigo-500 shadow-sm"></div> Apenas Noite
+                    <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-zinc-600 dark:text-zinc-400">
+                        <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-sm"></div> Noite
                     </div>
                 </div>
             </div>
 
             {/* Notes */}
-            <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 p-6 mt-6">
-                <div className="flex items-center gap-2 mb-3">
-                    <FileText size={18} className="text-zinc-400" />
-                    <h3 className="text-sm font-bold text-zinc-700 dark:text-zinc-300">Observações (Opcional)</h3>
+            <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 p-4 mt-4">
+                <div className="flex items-center gap-2 mb-2">
+                    <FileText size={16} className="text-zinc-400" />
+                    <h3 className="text-xs md:text-sm font-bold text-zinc-700 dark:text-zinc-300">Observações (Opcional)</h3>
                 </div>
                 <textarea 
                     value={generalNote}
                     onChange={e => { setGeneralNote(e.target.value); setHasUnsavedChanges(true); setSaveSuccess(false); }}
                     placeholder="Ex: Chego atrasado no dia 15..."
-                    className="w-full h-20 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none placeholder:text-zinc-400 text-zinc-800 dark:text-zinc-200"
-                    disabled={!isWindowOpen}
+                    className="w-full h-16 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none placeholder:text-zinc-400 text-zinc-800 dark:text-zinc-200"
+                    disabled={!canEdit}
                 />
-                <div className="mt-3 flex items-center gap-2 text-xs text-zinc-400">
-                    <Info size={14} />
-                    <span>Clique repetidamente nos <strong>Domingos</strong> para alternar entre Manhã/Noite/Dia Todo.</span>
-                </div>
             </div>
         </div>
 
-        {/* Floating Action Bar - Professional Style */}
+        {/* Floating Action Bar */}
         <div className={`fixed bottom-6 left-0 right-0 z-50 flex justify-center pointer-events-none transition-all duration-500 ease-out transform ${hasUnsavedChanges || saveSuccess ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}`}>
             <div className={`
                 backdrop-blur-xl rounded-2xl shadow-2xl p-2 pl-5 pr-2 w-[90%] max-w-sm flex items-center justify-between pointer-events-auto border ring-1 ring-black/5 transition-colors duration-300
