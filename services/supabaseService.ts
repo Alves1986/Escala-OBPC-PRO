@@ -187,11 +187,10 @@ export const fetchMinistrySchedule = async (ministryId: string, monthIso: string
     if (!supabase) return { events: [], schedule: {}, attendance: {} };
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     
-    // Calculate start and end dates for the month to safely filter timestamps
-    // ISO format: YYYY-MM
     const [year, month] = monthIso.split('-').map(Number);
     const lastDay = new Date(year, month, 0).getDate();
     
+    // Filtro mais robusto de string ISO
     const startFilter = `${monthIso}-01T00:00:00`;
     const endFilter = `${monthIso}-${String(lastDay).padStart(2, '0')}T23:59:59`;
 
@@ -239,10 +238,9 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
     if (!supabase) return false;
     const [iso, role] = key.split('_'); 
     
-    // Attempt to find event by exact match or start of ISO string (handling different timezone formats)
+    // Tenta encontrar o evento pela data ISO exata ou prefixo
     let { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', iso).maybeSingle();
     
-    // Fallback: try finding by prefix if exact match fails (e.g. seconds difference)
     if (!event) {
         const { data: fallbackEvent } = await supabase.from('events').select('id').eq('ministry_id', ministryId).like('date_time', `${iso}%`).maybeSingle();
         event = fallbackEvent;
@@ -316,40 +314,39 @@ export const resetToDefaultEvents = async (ministryId: string, monthIso: string)
     const startFilter = `${monthIso}-01T00:00:00`;
     const endFilter = `${monthIso}-${String(lastDay).padStart(2, '0')}T23:59:59`;
 
-    // 1. Delete existing events for this month to avoid duplicates
+    // 1. Limpa eventos existentes para não duplicar
     await supabase.from('events')
         .delete()
         .eq('ministry_id', cleanMid)
         .gte('date_time', startFilter)
         .lte('date_time', endFilter);
 
-    // 2. Generate recurring events
+    // 2. Gera eventos com base no padrão solicitado (Quarta 20h, Domingo 9:30 e 19:00)
     const eventsToInsert = [];
     for (let d = 1; d <= lastDay; d++) {
+        // month é 1-indexado vindo do input, mas Date constructor usa 0-indexado
         const date = new Date(year, month - 1, d);
-        const dayOfWeek = date.getDay(); // 0 = Sunday, 3 = Wednesday
+        const dayOfWeek = date.getDay(); // 0 = Domingo, 3 = Quarta
         const dayStr = String(d).padStart(2, '0');
         const dateStr = `${monthIso}-${dayStr}`;
 
         if (dayOfWeek === 0) { // Domingo
-            // Manhã
             eventsToInsert.push({
                 ministry_id: cleanMid,
-                title: 'Culto da Manhã',
+                title: 'Domingo - Manhã',
                 date_time: `${dateStr}T09:30:00`,
                 type: 'default'
             });
-            // Noite
             eventsToInsert.push({
                 ministry_id: cleanMid,
-                title: 'Culto da Família',
+                title: 'Domingo - Noite',
                 date_time: `${dateStr}T19:00:00`,
                 type: 'default'
             });
         } else if (dayOfWeek === 3) { // Quarta
             eventsToInsert.push({
                 ministry_id: cleanMid,
-                title: 'Culto de Ensino',
+                title: 'Quarta',
                 date_time: `${dateStr}T20:00:00`,
                 type: 'default'
             });
@@ -374,7 +371,6 @@ export const createMinistryEvent = async (ministryId: string, event: Partial<Cus
 
 export const updateMinistryEvent = async (ministryId: string, oldIso: string, newTitle: string, newIso: string, applyToAll: boolean) => {
     if (!supabase) return;
-    // Handle potentially missing ID by finding event first
     const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).like('date_time', `${oldIso}%`).maybeSingle();
     
     if (event) {
