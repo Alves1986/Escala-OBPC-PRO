@@ -158,9 +158,15 @@ export const AvailabilityScreen: React.FC<Props> = ({
           
           setHasUnsavedChanges(false);
           addToast("Disponibilidade enviada com sucesso!", "success");
-      } catch (e) {
+      } catch (e: any) {
           console.error(e);
-          addToast("Erro ao salvar. Tente novamente.", "error");
+          // Mensagem de erro mais específica para o usuário
+          const msg = e.message || "Erro desconhecido";
+          if (msg.includes("month")) {
+              addToast("⚠️ ERRO DE BANCO: Execute o script SQL no Supabase.", "error");
+          } else {
+              addToast(`Erro: ${msg}`, "error");
+          }
       } finally {
           setIsSaving(false);
       }
