@@ -91,10 +91,6 @@ const InnerApp = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
   
-  // ========================================================================
-  // LÓGICA DE ROTEAMENTO (Login Google vs Spotify)
-  // ========================================================================
-  
   // 1. Auxiliar para detectar callback do Spotify
   const isSpotifyCallback = () => {
       if (typeof window === 'undefined') return false;
@@ -104,9 +100,7 @@ const InnerApp = () => {
   // 2. Estado inicial da aba
   const [currentTab, setCurrentTab] = useState(() => {
       if (typeof window !== 'undefined') {
-          // Só vai para o repertório se for callback do Spotify
           if (isSpotifyCallback()) return 'repertoire-manager'; 
-          
           const params = new URLSearchParams(window.location.search);
           return params.get('tab') || 'dashboard';
       }
@@ -141,29 +135,17 @@ const InnerApp = () => {
 
   // --- EFFECTS ---
 
-  // 3. Gerenciamento de Login e Limpeza de URL
   useEffect(() => {
-      // Caso 1: Retorno do Spotify (vai para repertório)
       if (isSpotifyCallback() && currentUser) {
           const target = currentUser.role === 'admin' ? 'repertoire-manager' : 'repertoire';
           if (currentTab !== target) setCurrentTab(target);
           return;
       }
-      
-      // Caso 2: Login Google/Supabase (vai para dashboard e limpa URL)
-      // CORREÇÃO CRÍTICA: "&& currentUser" garante que só limpamos a URL APÓS o login ter sido processado.
       if (currentUser && window.location.hash.includes('access_token') && !isSpotifyCallback()) {
-          // Limpa a URL visualmente
-          try {
-              window.history.replaceState(null, '', window.location.pathname + window.location.search);
-          } catch(e) {}
-          
-          // Se estiver na aba errada (devido à hash inicial), corrige para dashboard
-          if (currentTab === 'repertoire-manager') {
-              setCurrentTab('dashboard');
-          }
+          try { window.history.replaceState(null, '', window.location.pathname + window.location.search); } catch(e) {}
+          if (currentTab === 'repertoire-manager') setCurrentTab('dashboard');
       }
-  }, [currentUser]); // Executa quando currentUser muda (de null para logado)
+  }, [currentUser]); 
 
   useEffect(() => {
       if (!loadingAuth && !loadingData) {
@@ -182,11 +164,9 @@ const InnerApp = () => {
       return () => window.removeEventListener('focus', handleFocus);
   }, [currentUser, ministryId, loadData]);
 
-  // Sync URL with Tab
   useEffect(() => {
       const url = new URL(window.location.href);
       if (url.searchParams.get('tab') !== currentTab) {
-          // Evita sujar a URL se tiver hash importante
           if (!window.location.hash.includes('access_token') && !isSpotifyCallback()) {
               url.searchParams.set('tab', currentTab);
               try { window.history.replaceState({}, '', url.toString()); } catch (e) {}
@@ -579,9 +559,38 @@ const InnerApp = () => {
                     />
                 )}
 
-                {/* Other Tabs Mapped to Lazy Components */}
+                {/* Other Tabs */}
                 {currentTab === 'events' && isAdmin && <EventsScreen customEvents={events.map(e => ({ ...e, iso: e.iso }))} onCreateEvent={async (evt) => { await Supabase.createMinistryEvent(ministryId, evt); loadData(); }} onDeleteEvent={async (iso) => { await Supabase.deleteMinistryEvent(ministryId, iso); loadData(); }} currentMonth={currentMonth} onMonthChange={setCurrentMonth} />}
-                {currentTab === 'availability' && <AvailabilityScreen availability={availability} availabilityNotes={availabilityNotes} setAvailability={setAvailability} allMembersList={publicMembers.map(m => m.name)} currentMonth={currentMonth} onMonthChange={setCurrentMonth} currentUser={currentUser} onSaveAvailability={async (member, dates, notes, targetMonth) => { const p = publicMembers.find(pm => pm.name === member); if (p) { await Supabase.saveMemberAvailability(p.id, member, dates, targetMonth, notes); loadData(); }}} availabilityWindow={availabilityWindow} />}
+                {currentTab === 'availability' && (
+                    <AvailabilityScreen 
+                        availability={availability} 
+                        availabilityNotes={availabilityNotes} 
+                        setAvailability={setAvailability} 
+                        allMembersList={publicMembers.map(m => m.name)} 
+                        currentMonth={currentMonth} 
+                        onMonthChange={setCurrentMonth} 
+                        currentUser={currentUser} 
+                        onSaveAvailability={async (member, dates, notes, targetMonth) => { 
+                            const p = publicMembers.find(pm => pm.name === member); 
+                            if (p) { 
+                                // 1. Optimistic Update (Immediate Feedback)
+                                setAvailability(prev => {
+                                    const oldDates = prev[member] || [];
+                                    const otherMonthDates = oldDates.filter(d => !d.startsWith(targetMonth) && !d.startsWith(`${targetMonth}-BLK`));
+                                    return {
+                                        ...prev,
+                                        [member]: [...otherMonthDates, ...dates]
+                                    };
+                                });
+                                // 2. Async Save
+                                await Supabase.saveMemberAvailability(p.id, member, dates, targetMonth, notes); 
+                                // 3. Sync
+                                loadData(false);
+                            }
+                        }} 
+                        availabilityWindow={availabilityWindow} 
+                    />
+                )}
                 {currentTab === 'swaps' && <SwapRequestsScreen schedule={schedule} currentUser={currentUser} requests={swapRequests} visibleEvents={events} onCreateRequest={async (role, iso, title) => { const success = await Supabase.createSwapRequestSQL(ministryId, { id: '', ministryId, requesterName: currentUser.name, requesterId: currentUser.id, role, eventIso: iso, eventTitle: title, status: 'pending', createdAt: new Date().toISOString() }); if(success) { addToast("Solicitação criada!", "success"); loadData(); }}} onAcceptRequest={async (reqId) => { const result = await Supabase.performSwapSQL(ministryId, reqId, currentUser.name, currentUser.id!); if(result.success) { addToast(result.message, "success"); loadData(); } else { addToast(result.message, "error"); }}} />}
                 {currentTab === 'ranking' && <RankingScreen ministryId={ministryId} currentUser={currentUser} />}
                 {(currentTab === 'repertoire' || (currentTab === 'repertoire-manager' && isAdmin)) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { await loadData(); }} currentUser={currentUser} mode={currentTab === 'repertoire-manager' ? 'manage' : 'view'} ministryId={ministryId} />}
