@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { RefreshCcw, User, Calendar, ArrowRight, CheckCircle2, Clock, Info } from 'lucide-react';
+import { RefreshCcw, User, Calendar, ArrowRight, CheckCircle2, Clock, Info, FilterX } from 'lucide-react';
 import { SwapRequest, User as UserType, ScheduleMap } from '../types';
 import { useToast } from './Toast';
 
@@ -20,9 +20,6 @@ export const SwapRequestsScreen: React.FC<Props> = ({
   const [activeTab, setActiveTab] = useState<'mine' | 'wall'>('wall');
   const { confirmAction } = useToast();
 
-  // Filter pending requests for the wall
-  const pendingRequests = requests.filter(r => r.status === 'pending');
-  
   // Find my upcoming schedules
   const mySchedules = visibleEvents.map(evt => {
       // Find all roles I am assigned to in this event
@@ -45,6 +42,20 @@ export const SwapRequestsScreen: React.FC<Props> = ({
           r.status === 'pending'
       );
   };
+
+  // Filter requests for the Wall
+  // 1. Must be pending
+  // 2. Must NOT be my own request
+  // 3. Must match one of my functions OR I must be admin
+  const visibleRequests = requests.filter(req => {
+      if (req.status !== 'pending') return false;
+      if (req.requesterName === currentUser.name) return false;
+
+      const isAdmin = currentUser.role === 'admin';
+      const hasRole = currentUser.functions?.includes(req.role);
+
+      return isAdmin || hasRole;
+  });
 
   return (
     <div className="space-y-6 animate-fade-in max-w-5xl mx-auto">
@@ -72,6 +83,7 @@ export const SwapRequestsScreen: React.FC<Props> = ({
                 className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'wall' ? 'bg-white dark:bg-zinc-700 shadow text-zinc-900 dark:text-white' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
             >
                 Mural de Trocas
+                {visibleRequests.length > 0 && <span className="ml-2 bg-amber-500 text-white text-[10px] px-1.5 rounded-full">{visibleRequests.length}</span>}
             </button>
         </div>
 
@@ -81,7 +93,7 @@ export const SwapRequestsScreen: React.FC<Props> = ({
                 <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800/30 flex items-start gap-3">
                     <Info className="text-blue-500 shrink-0 mt-0.5" size={18} />
                     <p className="text-sm text-blue-700 dark:text-blue-300">
-                        Abaixo estão os eventos onde você está escalado. Clique em "Solicitar Troca" para disponibilizar sua vaga no mural para outros membros.
+                        Abaixo estão os eventos onde você está escalado. Clique em "Solicitar Troca" para disponibilizar sua vaga no mural para outros membros da mesma função.
                     </p>
                 </div>
 
@@ -139,27 +151,25 @@ export const SwapRequestsScreen: React.FC<Props> = ({
                  <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-xl border border-green-100 dark:border-green-800/30 flex items-start gap-3">
                     <CheckCircle2 className="text-green-500 shrink-0 mt-0.5" size={18} />
                     <p className="text-sm text-green-700 dark:text-green-300">
-                        Aqui aparecem pedidos de troca de outros membros. Se você tiver a mesma função e estiver disponível, clique em "Assumir Escala" para realizar a troca automaticamente.
+                        Aqui aparecem pedidos de troca <strong>compatíveis com suas funções</strong>. Se você estiver disponível, clique em "Assumir Escala" para realizar a troca automaticamente.
                     </p>
                 </div>
 
-                {pendingRequests.length === 0 ? (
-                    <div className="text-center py-12 text-zinc-400">
-                        <CheckCircle2 className="mx-auto mb-3 opacity-20" size={48}/>
-                        <p>Nenhuma solicitação de troca pendente no momento.</p>
+                {visibleRequests.length === 0 ? (
+                    <div className="text-center py-12 text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
+                        <FilterX className="mx-auto mb-3 opacity-20" size={48}/>
+                        <p className="font-medium text-zinc-500">Nenhum pedido compatível.</p>
+                        <p className="text-xs text-zinc-400 mt-1">Não há trocas pendentes para suas funções no momento.</p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {pendingRequests.map(req => {
+                        {visibleRequests.map(req => {
                             const dateDisplay = req.eventIso.split('T')[0].split('-').reverse().join('/');
                             const timeDisplay = req.eventIso.split('T')[1];
                             const isMyRole = currentUser.functions?.includes(req.role);
-                            const isMe = req.requesterName === currentUser.name;
-
-                            if (isMe) return null; // Don't show my own requests here
 
                             return (
-                                <div key={req.id} className="bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm relative overflow-hidden">
+                                <div key={req.id} className="bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm relative overflow-hidden animate-slide-up">
                                     <div className="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
                                     
                                     <div className="flex items-center gap-3 mb-4">
@@ -195,18 +205,9 @@ export const SwapRequestsScreen: React.FC<Props> = ({
                                                 () => onAcceptRequest(req.id)
                                             );
                                         }}
-                                        disabled={!isMyRole}
-                                        className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${
-                                            isMyRole 
-                                            ? 'bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-600/20 active:scale-95' 
-                                            : 'bg-zinc-100 dark:bg-zinc-700 text-zinc-400 cursor-not-allowed'
-                                        }`}
+                                        className="w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-600/20 active:scale-95"
                                     >
-                                        {isMyRole ? (
-                                            <>Assumir Escala <ArrowRight size={18}/></>
-                                        ) : (
-                                            <span className="text-xs">Função incompatível</span>
-                                        )}
+                                        Assumir Escala <ArrowRight size={18}/>
                                     </button>
                                 </div>
                             );

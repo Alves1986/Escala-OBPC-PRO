@@ -39,7 +39,7 @@ const safeParseArray = (value: any): string[] => {
     return [];
 };
 
-// ... (previous functions remain unchanged until performSwapSQL) ...
+// ... (existing functions until createSwapRequestSQL) ...
 export const loginWithEmail = async (email: string, pass: string) => {
     if (!supabase) return { success: true, message: "Demo Login" };
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
@@ -172,7 +172,33 @@ export const fetchAnnouncementsSQL = async (ministryId: string): Promise<Announc
 export const createAnnouncementSQL = async (ministryId: string, ann: { title: string, message: string, type: string, expirationDate: string }, authorName: string) => { if (!supabase) return; await supabase.from('announcements').insert({ ministry_id: ministryId, title: ann.title, message: ann.message, type: ann.type, expiration_date: ann.expirationDate, author_name: authorName }); };
 export const interactAnnouncementSQL = async (announcementId: string, userId: string, userName: string, type: 'read' | 'like') => { if (!supabase) return; if (type === 'read') { await supabase.from('announcement_interactions').insert({ announcement_id: announcementId, user_id: userId, interaction_type: 'read' }).select(); } else { const { data } = await supabase.from('announcement_interactions').select('id').eq('announcement_id', announcementId).eq('user_id', userId).eq('interaction_type', 'like'); if (data && data.length > 0) { await supabase.from('announcement_interactions').delete().eq('id', data[0].id); } else { await supabase.from('announcement_interactions').insert({ announcement_id: announcementId, user_id: userId, interaction_type: 'like' }); } } };
 export const fetchSwapRequests = async (ministryId: string): Promise<SwapRequest[]> => { if (!supabase) return []; const { data } = await supabase.from('swap_requests').select('*').eq('ministry_id', ministryId).order('created_at', { ascending: false }); return (data || []).map((r: any) => ({ id: r.id, ministryId: r.ministry_id, requesterName: r.requester_name, requesterId: r.requester_id, role: r.role, eventIso: r.event_iso, eventTitle: r.event_title, status: r.status, createdAt: r.created_at, takenByName: r.taken_by_name })); };
-export const createSwapRequestSQL = async (ministryId: string, request: SwapRequest) => { if (!supabase) return true; const { error } = await supabase.from('swap_requests').insert({ ministry_id: ministryId, requester_id: request.requesterId, requester_name: request.requesterName, role: request.role, event_iso: request.eventIso, event_title: request.eventTitle, status: 'pending' }); return !error; };
+
+export const createSwapRequestSQL = async (ministryId: string, request: SwapRequest) => { 
+    if (!supabase) return true; 
+    const { error } = await supabase.from('swap_requests').insert({ 
+        ministry_id: ministryId, 
+        requester_id: request.requesterId, 
+        requester_name: request.requesterName, 
+        role: request.role, 
+        event_iso: request.eventIso, 
+        event_title: request.eventTitle, 
+        status: 'pending' 
+    }); 
+    
+    if (!error) {
+        // Envia notificação para todos do ministério (filtragem visual no front)
+        // Isso permite que todos saibam que há uma vaga, incentivando a troca
+        const dateDisplay = request.eventIso.split('T')[0].split('-').reverse().slice(0, 2).join('/');
+        await sendNotificationSQL(ministryId, {
+            title: "🔄 Pedido de Troca",
+            message: `${request.requesterName} solicitou troca para ${request.role} no dia ${dateDisplay}.`,
+            type: 'warning',
+            actionLink: 'swaps'
+        });
+    }
+
+    return !error; 
+};
 
 // --- UPDATED PERFORM SWAP FUNCTION (Using RPC) ---
 export const performSwapSQL = async (ministryId: string, reqId: string, takerName: string, takerId: string) => {
@@ -188,8 +214,19 @@ export const performSwapSQL = async (ministryId: string, reqId: string, takerNam
 
         if (error) throw error;
         
-        // The RPC returns a JSON object { success: boolean, message: string }
-        return data as { success: boolean, message: string };
+        const result = data as { success: boolean, message: string };
+
+        if (result.success) {
+            // Notifica o sucesso da troca
+            await sendNotificationSQL(ministryId, { 
+                title: "✅ Troca Realizada", 
+                message: `${takerName} assumiu a escala. O pedido foi finalizado com sucesso.`, 
+                type: 'success',
+                actionLink: 'calendar'
+            });
+        }
+
+        return result;
 
     } catch (err: any) {
         console.error("Erro na troca (RPC):", err);
