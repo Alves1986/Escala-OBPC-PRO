@@ -29,16 +29,18 @@ export const MembersScreen: React.FC<Props> = ({
   const [editingMember, setEditingMember] = useState<TeamMemberProfile | null>(null);
 
   const filteredMembers = useMemo(() => {
-      return members.filter(member => {
-          const matchesSearch = member.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                                (member.email && member.email.toLowerCase().includes(searchTerm.toLowerCase()));
-          
-          const matchesRole = selectedRole === "Todos" || (member.roles && member.roles.includes(selectedRole));
-          
-          const matchesOnline = showOnlineOnly ? onlineUsers.includes(member.id) : true;
+      return members
+        .filter(member => {
+            const matchesSearch = member.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                  (member.email && member.email.toLowerCase().includes(searchTerm.toLowerCase()));
+            
+            const matchesRole = selectedRole === "Todos" || (member.roles && member.roles.includes(selectedRole));
+            
+            const matchesOnline = showOnlineOnly ? onlineUsers.includes(member.id) : true;
 
-          return matchesSearch && matchesRole && matchesOnline;
-      });
+            return matchesSearch && matchesRole && matchesOnline;
+        })
+        .sort((a, b) => a.name.localeCompare(b.name)); // Ordenação alfabética
   }, [members, searchTerm, selectedRole, showOnlineOnly, onlineUsers]);
 
   return (
