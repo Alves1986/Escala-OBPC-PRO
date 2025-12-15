@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis, GlobalConflictMap, TeamMemberProfile } from '../types';
@@ -68,11 +69,11 @@ const SelectorDropdown = ({
 
     return createPortal(
         <>
-            {isMobile && <div className="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-sm transition-opacity" onClick={onClose} />}
+            {isMobile && <div className="fixed inset-0 z-[99998] bg-black/60 backdrop-blur-sm transition-opacity" onClick={onClose} />}
             <div 
                 ref={dropdownRef}
                 id="member-selector-portal"
-                className={`fixed z-[9999] bg-white dark:bg-zinc-800 flex flex-col overflow-hidden animate-fade-in
+                className={`fixed z-[99999] bg-white dark:bg-zinc-800 flex flex-col overflow-hidden animate-fade-in
                     ${isMobile 
                         ? 'bottom-0 left-0 w-full rounded-t-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.3)] max-h-[85vh] border-t border-zinc-200 dark:border-zinc-700' 
                         : 'rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-700 max-h-[320px] ring-1 ring-black/5'
@@ -153,10 +154,18 @@ const MemberSelector = ({
             const rect = triggerRef.current.getBoundingClientRect();
             const spaceBelow = window.innerHeight - rect.bottom;
             const openUp = spaceBelow < 320; 
+            
+            // Ajuste para não sair da tela horizontalmente
+            let leftPos = rect.left;
+            const minWidth = Math.max(rect.width, 240);
+            if (leftPos + minWidth > window.innerWidth) {
+                leftPos = window.innerWidth - minWidth - 20;
+            }
+
             setPosition({
                 top: openUp ? rect.top - 320 : rect.bottom + 5,
-                left: rect.left,
-                width: Math.max(rect.width, 240)
+                left: leftPos,
+                width: minWidth
             });
         }
     }, [isOpen]);

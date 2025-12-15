@@ -236,7 +236,7 @@ export const saveMinistrySettings = async (ministryId: string, displayName?: str
     await supabase.from('ministry_settings').upsert({ ministry_id: ministryId, ...updates });
 };
 
-// ... (Keep Schedule functions, but updated `saveScheduleAssignment` below) ...
+// ... (Keep Schedule functions) ...
 export const fetchMinistrySchedule = async (ministryId: string, month: string) => {
     if (!supabase) return { events: [], schedule: {}, attendance: {} };
     
@@ -414,7 +414,7 @@ export const resetToDefaultEvents = async (ministryId: string, month: string) =>
     }
 };
 
-// --- AVAILABILITY ---
+// --- AVAILABILITY (CORRECTED) ---
 
 export const fetchMinistryAvailability = async (ministryId: string) => {
     if (!supabase) return { availability: {}, notes: {} };
@@ -431,13 +431,14 @@ export const fetchMinistryAvailability = async (ministryId: string) => {
     const ids = filteredProfiles.map((p: any) => p.id);
     if (ids.length === 0) return { availability: {}, notes: {} };
 
-    const { data: avails } = await supabase.from('availability').select('*').in('user_id', ids);
+    // Correção: usar 'member_id' em vez de 'user_id'
+    const { data: avails } = await supabase.from('availability').select('*').in('member_id', ids);
     
     const availability: AvailabilityMap = {};
     const notes: AvailabilityNotesMap = {};
 
     (avails || []).forEach((a: any) => {
-        const profile = filteredProfiles.find((p: any) => p.id === a.user_id);
+        const profile = filteredProfiles.find((p: any) => p.id === a.member_id);
         if (profile) {
             if (!availability[profile.name]) availability[profile.name] = [];
             availability[profile.name].push(...safeParseArray(a.dates));
@@ -461,10 +462,11 @@ export const saveMemberAvailability = async (userId: string, memberName: string,
         const monthDates = dates.filter(d => d.startsWith(targetMonth));
         
         // 1. Tenta verificar existência primeiro (Mais seguro contra conflitos)
+        // Correção: usar 'member_id'
         const { data: existing, error: selectError } = await supabase
             .from('availability')
             .select('id')
-            .eq('user_id', userId)
+            .eq('member_id', userId)
             .eq('month', targetMonth)
             .maybeSingle();
 
@@ -483,11 +485,11 @@ export const saveMemberAvailability = async (userId: string, memberName: string,
                 .eq('id', existing.id)
                 .select();
         } else {
-            // Insert
+            // Insert - Correção: usar 'member_id'
             result = await supabase
                 .from('availability')
                 .insert({
-                    user_id: userId,
+                    member_id: userId,
                     month: targetMonth,
                     dates: monthDates,
                     notes: notes
@@ -504,7 +506,7 @@ export const saveMemberAvailability = async (userId: string, memberName: string,
     }
 };
 
-// ... (Rest of functions remain same but we assume they work as they are generally simpler) ...
+// ... (Rest of functions remain same) ...
 export const fetchNotificationsSQL = async (ministryIds: string[], userId: string): Promise<AppNotification[]> => {
     if (!supabase) return [];
     
