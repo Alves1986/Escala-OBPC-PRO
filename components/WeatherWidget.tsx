@@ -9,7 +9,7 @@ interface WeatherData {
   timestamp: number;
 }
 
-const CACHE_KEY = 'widget_weather_data_v2'; // Bumped version to invalidate old potentially wrong cache
+const CACHE_KEY = 'widget_weather_data_v2';
 const CACHE_EXPIRATION = 1000 * 60 * 30; // 30 Minutos
 
 export const WeatherWidget: React.FC = () => {
@@ -38,84 +38,75 @@ export const WeatherWidget: React.FC = () => {
     return "Ensolarado";
   };
 
-  const fetchWeatherData = async (lat: number, lon: number) => {
-      try {
-          // Executa em paralelo para ser mais rápido
-          // Zoom 12 captures Town/City better than 10 (which might get Region)
-          const [weatherRes, cityRes] = await Promise.all([
-             fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`),
-             fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=12&accept-language=pt`)
-          ]);
-
-          if (!weatherRes.ok) throw new Error("Weather API Error");
-          const weatherJson = await weatherRes.json();
-          
-          let city = "Localização";
-          if (cityRes.ok) {
-              const cityJson = await cityRes.json();
-              const addr = cityJson.address;
-              // Ordem de prioridade aprimorada para capturar o nome da cidade corretamente
-              city = addr?.city || addr?.town || addr?.municipality || addr?.village || addr?.suburb || "Local";
-              
-              // Limpeza comum de nomes
-              city = city.replace("Município de ", "").replace("Distrito de ", "").trim();
-          }
-
-          const newData: WeatherData = {
-              temperature: weatherJson.current_weather.temperature,
-              weatherCode: weatherJson.current_weather.weathercode,
-              city,
-              timestamp: Date.now()
-          };
-
-          setWeather(newData);
-          localStorage.setItem(CACHE_KEY, JSON.stringify(newData));
-          setError(false);
-
-      } catch (e) {
-          console.error("Erro ao atualizar clima:", e);
-          setError(true);
-      } finally {
-          setLoading(false);
-          setRefreshing(false);
-      }
-  };
-
-  const getLocationAndFetch = () => {
-      if (!navigator.geolocation) {
-          setLoading(false);
-          setError(true);
-          return;
-      }
-
-      navigator.geolocation.getCurrentPosition(
-          (pos) => {
-              fetchWeatherData(pos.coords.latitude, pos.coords.longitude);
-          },
-          (err) => {
-              console.warn("Erro de geolocalização:", err);
-              // Fallback para coordenadas padrão (Brasília) se negar permissão, ou mostrar erro
-              // fetchWeatherData(-15.7975, -47.8919); 
-              setLoading(false);
-              setRefreshing(false);
-              setError(true);
-          },
-          { 
-              enableHighAccuracy: true, // Força uso de GPS/WIFI preciso
-              timeout: 10000, 
-              maximumAge: 0 // Não aceita cache do navegador
-          }
-      );
-  };
-
-  const handleRefresh = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      setRefreshing(true);
-      // Pequeno delay visual para o usuário perceber o clique
-      setTimeout(() => getLocationAndFetch(), 300);
-  };
-
   useEffect(() => {
+      let isMounted = true;
+
+      const fetchWeatherData = async (lat: number, lon: number) => {
+          try {
+              // Executa em paralelo para ser mais rápido
+              const [weatherRes, cityRes] = await Promise.all([
+                 fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`),
+                 fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=12&accept-language=pt`)
+              ]);
+
+              if (!weatherRes.ok) throw new Error("Weather API Error");
+              const weatherJson = await weatherRes.json();
+              
+              let city = "Localização";
+              if (cityRes.ok) {
+                  const cityJson = await cityRes.json();
+                  const addr = cityJson.address;
+                  city = addr?.city || addr?.town || addr?.municipality || addr?.village || addr?.suburb || "Local";
+                  city = city.replace("Município de ", "").replace("Distrito de ", "").trim();
+              }
+
+              const newData: WeatherData = {
+                  temperature: weatherJson.current_weather.temperature,
+                  weatherCode: weatherJson.current_weather.weathercode,
+                  city,
+                  timestamp: Date.now()
+              };
+
+              if (isMounted) {
+                  setWeather(newData);
+                  localStorage.setItem(CACHE_KEY, JSON.stringify(newData));
+                  setError(false);
+              }
+
+          } catch (e) {
+              console.error("Erro ao atualizar clima:", e);
+              if (isMounted) setError(true);
+          } finally {
+              if (isMounted) {
+                  setLoading(false);
+                  setRefreshing(false);
+              }
+          }
+      };
+
+      const getLocationAndFetch = () => {
+          if (!navigator.geolocation) {
+              setLoading(false);
+              setError(true);
+              return;
+          }
+
+          navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                  fetchWeatherData(pos.coords.latitude, pos.coords.longitude);
+              },
+              (err) => {
+                  console.warn("Erro de geolocalização:", err);
+                  if (isMounted) {
+                      setLoading(false);
+                      setRefreshing(false);
+                      setError(true);
+                  }
+              },
+              { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+          );
+      };
+
       // 1. Tenta carregar do Cache
       const cached = localStorage.getItem(CACHE_KEY);
       let hasValidCache = false;
@@ -124,13 +115,13 @@ export const WeatherWidget: React.FC = () => {
           try {
               const parsed: WeatherData = JSON.parse(cached);
               setWeather(parsed);
-              setLoading(false); // Remove loading imediatamente
+              setLoading(false); 
               
               // Verifica se o cache é recente
               if (Date.now() - parsed.timestamp < CACHE_EXPIRATION) {
                   hasValidCache = true;
               } else {
-                  setRefreshing(true); // Indica que está atualizando em background
+                  setRefreshing(true); 
               }
           } catch (e) {
               localStorage.removeItem(CACHE_KEY);
@@ -138,13 +129,17 @@ export const WeatherWidget: React.FC = () => {
       }
 
       // 2. Se não tem cache válido, busca novos dados
-      if (!hasValidCache) {
-          getLocationAndFetch();
-      } else if (refreshing) {
-          // Se tem cache mas expirou, busca em background
+      if (!hasValidCache || refreshing) {
           getLocationAndFetch();
       }
-  }, []);
+
+      return () => { isMounted = false; };
+  }, [refreshing]);
+
+  const handleRefresh = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setRefreshing(true);
+  };
 
   if (loading && !weather) {
     return (

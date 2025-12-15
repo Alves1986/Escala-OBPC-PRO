@@ -50,8 +50,7 @@ const prepareMinifiedContext = (context: AIContext) => {
     .map(m => {
       const rawAvail = context.availability[m.name] || [];
       
-      // Critical check for NEW Block Tag (Updated to _BLK)
-      // If found, this member is forcefully unavailable for the whole month
+      // Critical check for Block Tag
       const isBlocked = rawAvail.some(d => d.startsWith(monthPrefix) && (d.includes('BLK') || d.includes('BLOCKED')));
       
       if (isBlocked) {
@@ -103,6 +102,10 @@ const prepareMinifiedContext = (context: AIContext) => {
   };
 };
 
+const cleanAiResponse = (text: string) => {
+    return text.replace(/```json\n?/g, "").replace(/```/g, "").trim();
+};
+
 export const generateScheduleWithAI = async (context: AIContext): Promise<ScheduleMap> => {
     try {
       const ai = getAiClient();
@@ -149,12 +152,15 @@ export const generateScheduleWithAI = async (context: AIContext): Promise<Schedu
           config: {
               systemInstruction: systemInstruction,
               responseMimeType: "application/json",
-              temperature: 0.0, // Zero temperature for deterministic output and strict rule adherence
+              temperature: 0.0, // Zero temperature for deterministic output
           }
       });
 
       if (!response.text) throw new Error("A IA não retornou uma escala válida.");
-      const rawSchedule = JSON.parse(response.text);
+      
+      // Clean potential markdown fences (```json) which cause crashes
+      const cleanJson = cleanAiResponse(response.text);
+      const rawSchedule = JSON.parse(cleanJson);
 
       const filteredSchedule: ScheduleMap = {};
       const validEventIds = new Set(inputData.e.map(evt => evt.id));
@@ -173,7 +179,7 @@ export const generateScheduleWithAI = async (context: AIContext): Promise<Schedu
       if (error.message?.includes("429") || error.message?.includes("Quota")) {
           throw new Error("Limite da IA excedido. Aguarde alguns instantes e tente novamente.");
       }
-      throw new Error(error.message || "Falha na geração inteligente.");
+      throw new Error("Falha na geração inteligente. Verifique os dados e tente novamente.");
     }
 };
 
@@ -200,7 +206,7 @@ export const suggestRepertoireAI = async (theme: string, style: string = "Contem
         });
 
         if (!response.text) return [];
-        return JSON.parse(response.text);
+        return JSON.parse(cleanAiResponse(response.text));
     } catch (e) {
         console.error(e);
         return [];
@@ -223,10 +229,9 @@ export const polishAnnouncementAI = async (text: string, tone: 'professional' | 
                 
                 STRICT RULES:
                 1. Return ONLY the rewritten text.
-                2. NO conversational filler (e.g., "Here is your text", "Sure!").
+                2. NO conversational filler.
                 3. Provide ONE single best version.
                 4. Language: Portuguese.
-                5. Keep emojis relevant but professional.
 
                 Original Text: "${text}"
             `,

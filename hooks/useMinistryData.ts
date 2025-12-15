@@ -37,7 +37,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
         return;
     }
 
-    // CORREÇÃO: Cache versionado para evitar erros de estrutura antiga
     const CACHE_KEY = `offline_data_${ministryId}_${currentMonth}_v2`;
 
     let hasCache = false;
@@ -91,7 +90,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
 
         const getValue = <T>(result: PromiseSettledResult<T>, fallback: T, label: string): T => {
             if (result.status === 'fulfilled') return result.value;
-            else { console.warn(`Sync Warn (${label}):`, result.reason); return fallback; }
+            else { console.debug(`Sync Debug (${label}):`, result.reason); return fallback; }
         };
 
         const settings = getValue(settingsResult, { displayName: '', roles: [] }, 'Configurações');

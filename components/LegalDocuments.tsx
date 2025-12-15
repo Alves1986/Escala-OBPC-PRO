@@ -79,7 +79,7 @@ const LegalContent: React.FC<{ type: LegalDocType }> = ({ type }) => {
           <p>Se você tiver dúvidas sobre esta Política de Privacidade, entre em contato conosco:</p>
           <div className="flex items-center gap-2 mt-2 p-3 bg-zinc-100 dark:bg-zinc-800 rounded-lg w-fit">
              <Mail size={16} className="text-zinc-500"/>
-             <span className="font-medium text-zinc-700 dark:text-zinc-300">cassia.andinho@gmail.com</span>
+             <span className="font-medium text-zinc-700 dark:text-zinc-300">contato@ministerio.com</span>
           </div>
         </div>
       );
@@ -133,41 +133,4 @@ export const LegalModal: React.FC<Props> = ({ isOpen, type, onClose }) => {
       </div>
     </div>
   );
-};
-
-// --- PÁGINA PÚBLICA (Uso Externo/Google Cloud) ---
-export const PublicLegalPage: React.FC<{ type: LegalDocType }> = ({ type }) => {
-    if (!type) return null;
-
-    return (
-        <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col items-center py-10 px-4">
-            <div className="w-full max-w-3xl bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
-                <div className="p-8 border-b border-zinc-200 dark:border-zinc-800 flex items-center gap-4 bg-zinc-50/50 dark:bg-zinc-900/50">
-                     <button 
-                        onClick={() => window.location.href = '/'}
-                        className="p-2 -ml-2 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full transition-colors"
-                        title="Voltar ao início"
-                     >
-                        <ArrowLeft size={24} className="text-zinc-500" />
-                     </button>
-                     <div>
-                        <h1 className="text-2xl font-bold">
-                            {type === 'terms' ? 'Termos de Uso' : 'Política de Privacidade'}
-                        </h1>
-                        <p className="text-sm text-zinc-500">Gestão de Escala OBPC</p>
-                     </div>
-                </div>
-                
-                <div className="p-8 md:p-12">
-                    <LegalContent type={type} />
-                </div>
-
-                <div className="p-6 bg-zinc-50 dark:bg-black/20 border-t border-zinc-200 dark:border-zinc-800 text-center">
-                    <p className="text-xs text-zinc-400">
-                        &copy; {new Date().getFullYear()} Gestão Escala OBPC. Todos os direitos reservados.
-                    </p>
-                </div>
-            </div>
-        </div>
-    );
 };
