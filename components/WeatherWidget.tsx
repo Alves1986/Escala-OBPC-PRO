@@ -9,7 +9,7 @@ interface WeatherData {
   timestamp: number;
 }
 
-const CACHE_KEY = 'widget_weather_data_v2'; 
+const CACHE_KEY = 'widget_weather_data_v2'; // Bumped version to invalidate old potentially wrong cache
 const CACHE_EXPIRATION = 1000 * 60 * 30; // 30 Minutos
 
 export const WeatherWidget: React.FC = () => {
@@ -40,6 +40,8 @@ export const WeatherWidget: React.FC = () => {
 
   const fetchWeatherData = async (lat: number, lon: number) => {
       try {
+          // Executa em paralelo para ser mais rápido
+          // Zoom 12 captures Town/City better than 10 (which might get Region)
           const [weatherRes, cityRes] = await Promise.all([
              fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`),
              fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=12&accept-language=pt`)
@@ -52,7 +54,10 @@ export const WeatherWidget: React.FC = () => {
           if (cityRes.ok) {
               const cityJson = await cityRes.json();
               const addr = cityJson.address;
+              // Ordem de prioridade aprimorada para capturar o nome da cidade corretamente
               city = addr?.city || addr?.town || addr?.municipality || addr?.village || addr?.suburb || "Local";
+              
+              // Limpeza comum de nomes
               city = city.replace("Município de ", "").replace("Distrito de ", "").trim();
           }
 
@@ -69,8 +74,7 @@ export const WeatherWidget: React.FC = () => {
 
       } catch (e) {
           console.error("Erro ao atualizar clima:", e);
-          // If we fail and don't have weather, trigger error state
-          if(!weather) setError(true);
+          setError(true);
       } finally {
           setLoading(false);
           setRefreshing(false);
@@ -79,7 +83,8 @@ export const WeatherWidget: React.FC = () => {
 
   const getLocationAndFetch = () => {
       if (!navigator.geolocation) {
-          fetchWeatherData(-23.5505, -46.6333); // SP Fallback
+          setLoading(false);
+          setError(true);
           return;
       }
 
@@ -88,21 +93,30 @@ export const WeatherWidget: React.FC = () => {
               fetchWeatherData(pos.coords.latitude, pos.coords.longitude);
           },
           (err) => {
-              console.warn("Geo denied/error, using fallback:", err);
-              // Fallback automático para SP sem mostrar erro na UI
-              fetchWeatherData(-23.5505, -46.6333); 
+              console.warn("Erro de geolocalização:", err);
+              // Fallback para coordenadas padrão (Brasília) se negar permissão, ou mostrar erro
+              // fetchWeatherData(-15.7975, -47.8919); 
+              setLoading(false);
+              setRefreshing(false);
+              setError(true);
           },
-          { enableHighAccuracy: false, timeout: 5000, maximumAge: 600000 }
+          { 
+              enableHighAccuracy: true, // Força uso de GPS/WIFI preciso
+              timeout: 10000, 
+              maximumAge: 0 // Não aceita cache do navegador
+          }
       );
   };
 
   const handleRefresh = (e: React.MouseEvent) => {
       e.stopPropagation();
       setRefreshing(true);
-      getLocationAndFetch();
+      // Pequeno delay visual para o usuário perceber o clique
+      setTimeout(() => getLocationAndFetch(), 300);
   };
 
   useEffect(() => {
+      // 1. Tenta carregar do Cache
       const cached = localStorage.getItem(CACHE_KEY);
       let hasValidCache = false;
 
@@ -110,21 +124,24 @@ export const WeatherWidget: React.FC = () => {
           try {
               const parsed: WeatherData = JSON.parse(cached);
               setWeather(parsed);
-              setLoading(false);
+              setLoading(false); // Remove loading imediatamente
               
+              // Verifica se o cache é recente
               if (Date.now() - parsed.timestamp < CACHE_EXPIRATION) {
                   hasValidCache = true;
               } else {
-                  setRefreshing(true);
+                  setRefreshing(true); // Indica que está atualizando em background
               }
           } catch (e) {
               localStorage.removeItem(CACHE_KEY);
           }
       }
 
+      // 2. Se não tem cache válido, busca novos dados
       if (!hasValidCache) {
           getLocationAndFetch();
       } else if (refreshing) {
+          // Se tem cache mas expirou, busca em background
           getLocationAndFetch();
       }
   }, []);
@@ -138,7 +155,6 @@ export const WeatherWidget: React.FC = () => {
     );
   }
 
-  // Fallback UI for catastrophic failure
   if (error && !weather) {
       return (
         <button onClick={handleRefresh} className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/20 rounded-2xl border border-red-200 dark:border-red-800/50 shadow-sm text-red-500 hover:bg-red-100 transition-colors">

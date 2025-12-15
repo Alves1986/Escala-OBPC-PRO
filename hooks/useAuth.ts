@@ -2,15 +2,31 @@
 import { useState, useEffect } from 'react';
 import { User } from '../types';
 import * as Supabase from '../services/supabaseService';
+import { SUPABASE_URL } from '../types';
 
 export function useAuth() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
 
   useEffect(() => {
+    // Modo Preview: Loga automaticamente com usuário fictício
+    if (SUPABASE_URL === 'https://preview.mode') {
+        setCurrentUser({
+            id: 'demo-user-123',
+            name: 'Usuário Demo',
+            email: 'demo@teste.com',
+            role: 'admin',
+            ministryId: 'midia',
+            allowedMinistries: ['midia'],
+            avatar_url: '',
+            whatsapp: '11999999999',
+            functions: ['Projeção']
+        });
+        setLoadingAuth(false);
+        return;
+    }
+
     const sb = Supabase.getSupabase();
-    
-    // Se não houver cliente Supabase configurado, encerra o loading
     if (!sb) {
         setLoadingAuth(false);
         return;
@@ -29,9 +45,10 @@ export function useAuth() {
             // Busca segura do perfil
             let { data: profile, error: fetchError } = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle();
             
-            // LÓGICA DE AUTO-CORREÇÃO (SELF-HEALING)
-            // Se o usuário autenticou mas não tem perfil (ex: erro na criação), tenta criar um básico.
+            // LÓGICA DE AUTO-CORREÇÃO (SELF-HEALING) ROBUSTA
             if (!profile || fetchError) {
+                console.warn("Perfil ausente ou erro de schema. Tentando recriar perfil básico.", user.email);
+                
                 const defaultMinistry = 'midia';
                 const metaName = user.user_metadata?.full_name || user.user_metadata?.name;
                 const emailName = user.email?.split('@')[0];
@@ -45,8 +62,10 @@ export function useAuth() {
                     ministry_id: defaultMinistry,
                     allowed_ministries: [defaultMinistry],
                     role: 'member',
+                    // Não enviamos created_at aqui se o banco tiver default now() para evitar erro de coluna
                 };
 
+                // Tenta inserir na tabela profiles manualmente
                 const { data: insertedProfile, error: insertError } = await sb
                     .from('profiles')
                     .upsert(newProfile)
@@ -55,12 +74,15 @@ export function useAuth() {
                 
                 if (insertError) {
                     console.error("Falha crítica ao criar perfil automático:", insertError.message);
+                    // Fallback de emergência: Objeto em memória para não travar o app
                     profile = { ...newProfile, is_admin: false }; 
                 } else {
+                    console.log("Perfil restaurado com sucesso.");
                     profile = insertedProfile;
                 }
             }
 
+            // Normalização de dados para evitar undefined
             if (profile) {
                 const userMinistry = profile.ministry_id || 'midia';
                 const safeAllowed = Array.isArray(profile.allowed_ministries) ? profile.allowed_ministries : [userMinistry];
@@ -80,7 +102,8 @@ export function useAuth() {
                 });
             }
         } catch (e) {
-            console.error("Erro na autenticação:", e);
+            console.error("Erro geral na autenticação:", e);
+            // Em caso de erro catastrófico, desloga para tentar limpar o estado
             await sb.auth.signOut();
             setCurrentUser(null);
         } finally {

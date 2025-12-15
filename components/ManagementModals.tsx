@@ -1,7 +1,7 @@
 
-import React, { useState } from 'react';
-import { CustomEvent, AvailabilityMap, AuditLogEntry, Role } from '../types';
-import { X, Plus, Trash2, Calendar, ShieldAlert, Undo2, ArrowUp, ArrowDown, GripVertical } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { CustomEvent, AvailabilityMap, AuditLogEntry, Role, TeamMemberProfile } from '../types';
+import { X, Plus, Trash2, Calendar, ShieldAlert, Undo2, ArrowUp, ArrowDown, GripVertical, User, Check, Briefcase, Hash } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface ModalProps {
@@ -233,6 +233,99 @@ export const RolesModal = ({ isOpen, onClose, roles, onUpdate }: {
       </div>
     </Modal>
   );
+};
+
+// --- Edit Member Modal ---
+export const EditMemberModal = ({ isOpen, onClose, member, availableRoles, onSave }: { 
+    isOpen: boolean; 
+    onClose: () => void; 
+    member: TeamMemberProfile | null;
+    availableRoles: string[];
+    onSave: (id: string, data: { name: string, whatsapp: string, roles: string[] }) => void;
+}) => {
+    const [name, setName] = useState("");
+    const [whatsapp, setWhatsapp] = useState("");
+    const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+
+    useEffect(() => {
+        if (member) {
+            setName(member.name);
+            setWhatsapp(member.whatsapp || "");
+            setSelectedRoles(member.roles || []);
+        }
+    }, [member]);
+
+    const toggleRole = (role: string) => {
+        if (selectedRoles.includes(role)) {
+            setSelectedRoles(selectedRoles.filter(r => r !== role));
+        } else {
+            setSelectedRoles([...selectedRoles, role]);
+        }
+    };
+
+    const handleSave = () => {
+        if (member) {
+            onSave(member.id, { name, whatsapp, roles: selectedRoles });
+            onClose();
+        }
+    };
+
+    if (!isOpen || !member) return null;
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Editar Membro">
+            <div className="space-y-5">
+                <div>
+                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-1.5 ml-1 flex items-center gap-1"><User size={12}/> Nome Completo</label>
+                    <input 
+                        value={name} 
+                        onChange={e => setName(e.target.value)} 
+                        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                </div>
+                <div>
+                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-1.5 ml-1 flex items-center gap-1"><Hash size={12}/> WhatsApp</label>
+                    <input 
+                        value={whatsapp} 
+                        onChange={e => setWhatsapp(e.target.value)} 
+                        placeholder="(00) 00000-0000"
+                        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                </div>
+                <div>
+                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-2 ml-1 flex items-center gap-1"><Briefcase size={12}/> Funções (Cargos)</label>
+                    <div className="flex flex-wrap gap-2">
+                        {availableRoles.map(role => {
+                            const isSelected = selectedRoles.includes(role);
+                            return (
+                                <button
+                                    key={role}
+                                    onClick={() => toggleRole(role)}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1 ${
+                                        isSelected 
+                                        ? 'bg-blue-600 text-white border-blue-500 shadow-md' 
+                                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-zinc-300'
+                                    }`}
+                                >
+                                    {role}
+                                    {isSelected && <Check size={12} />}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+                
+                <div className="pt-2">
+                    <button 
+                        onClick={handleSave} 
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-600/20 active:scale-95"
+                    >
+                        Salvar Alterações
+                    </button>
+                </div>
+            </div>
+        </Modal>
+    );
 };
 
 // --- Audit Log Modal ---

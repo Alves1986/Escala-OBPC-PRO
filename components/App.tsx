@@ -6,51 +6,51 @@ import {
   Users, Edit, Send, ListMusic, Clock, ArrowLeft, ArrowRight,
   Calendar as CalendarIcon, Trophy, Loader2, ShieldAlert, Share2, Sparkles, ChevronRight, FileText
 } from 'lucide-react';
-import { ToastProvider, useToast } from './Toast';
-import { LoginScreen } from './LoginScreen';
-import { SetupScreen } from './SetupScreen';
-import { LoadingScreen } from './LoadingScreen';
-import { DashboardLayout } from './DashboardLayout';
-import { NextEventCard } from './NextEventCard';
-import { BirthdayCard } from './BirthdayCard';
-import { WeatherWidget } from './WeatherWidget';
-import { InstallBanner } from './InstallBanner';
-import { InstallModal } from './InstallModal';
-import { JoinMinistryModal } from './JoinMinistryModal';
-import { ToolsMenu } from './ToolsMenu';
-import { EventDetailsModal } from './EventDetailsModal';
-import { StatsModal } from './StatsModal';
-import { ConfirmationModal } from './ConfirmationModal';
-import { EventsModal, AvailabilityModal, RolesModal } from './ManagementModals';
-import { ErrorBoundary } from './ErrorBoundary';
+import { ToastProvider, useToast } from './components/Toast';
+import { LoginScreen } from './components/LoginScreen';
+import { SetupScreen } from './components/SetupScreen';
+import { LoadingScreen } from './components/LoadingScreen';
+import { DashboardLayout } from './components/DashboardLayout';
+import { NextEventCard } from './components/NextEventCard';
+import { BirthdayCard } from './components/BirthdayCard';
+import { WeatherWidget } from './components/WeatherWidget';
+import { InstallBanner } from './components/InstallBanner';
+import { InstallModal } from './components/InstallModal';
+import { JoinMinistryModal } from './components/JoinMinistryModal';
+import { ToolsMenu } from './components/ToolsMenu';
+import { EventDetailsModal } from './components/EventDetailsModal';
+import { StatsModal } from './components/StatsModal';
+import { ConfirmationModal } from './components/ConfirmationModal';
+import { EventsModal, AvailabilityModal, RolesModal } from './components/ManagementModals';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
-import * as Supabase from '../services/supabaseService';
-import { generateScheduleWithAI } from '../services/aiService';
-import { ThemeMode, SUPABASE_URL, SUPABASE_KEY } from '../types';
-import { adjustMonth, getMonthName, getLocalDateISOString } from '../utils/dateUtils';
-import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from '../utils/pushUtils';
+import * as Supabase from './services/supabaseService';
+import { generateScheduleWithAI } from './services/aiService';
+import { ThemeMode, SUPABASE_URL, SUPABASE_KEY } from './types';
+import { adjustMonth, getMonthName, getLocalDateISOString } from './utils/dateUtils';
+import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from './utils/pushUtils';
 
 // Hooks
-import { useAuth } from '../hooks/useAuth';
-import { useMinistryData } from '../hooks/useMinistryData';
-import { useOnlinePresence } from '../hooks/useOnlinePresence';
+import { useAuth } from './hooks/useAuth';
+import { useMinistryData } from './hooks/useMinistryData';
+import { useOnlinePresence } from './hooks/useOnlinePresence';
 
 // --- Lazy Load Heavy Components (Code Splitting) ---
-const ScheduleTable = React.lazy(() => import('./ScheduleTable').then(module => ({ default: module.ScheduleTable })));
-const CalendarGrid = React.lazy(() => import('./CalendarGrid').then(module => ({ default: module.CalendarGrid })));
-const AvailabilityScreen = React.lazy(() => import('./AvailabilityScreen').then(module => ({ default: module.AvailabilityScreen })));
-const SwapRequestsScreen = React.lazy(() => import('./SwapRequestsScreen').then(module => ({ default: module.SwapRequestsScreen })));
-const RepertoireScreen = React.lazy(() => import('./RepertoireScreen').then(module => ({ default: module.RepertoireScreen })));
-const AnnouncementsScreen = React.lazy(() => import('./AnnouncementsScreen').then(module => ({ default: module.AnnouncementsScreen })));
-const AlertsManager = React.lazy(() => import('./AlertsManager').then(module => ({ default: module.AlertsManager })));
-const AvailabilityReportScreen = React.lazy(() => import('./AvailabilityReportScreen').then(module => ({ default: module.AvailabilityReportScreen })));
-const MonthlyReportScreen = React.lazy(() => import('./MonthlyReportScreen').then(module => ({ default: module.MonthlyReportScreen })));
-const SettingsScreen = React.lazy(() => import('./SettingsScreen').then(module => ({ default: module.SettingsScreen })));
-const ProfileScreen = React.lazy(() => import('./ProfileScreen').then(module => ({ default: module.ProfileScreen })));
-const EventsScreen = React.lazy(() => import('./EventsScreen').then(module => ({ default: module.EventsScreen })));
-const RankingScreen = React.lazy(() => import('./RankingScreen').then(module => ({ default: module.RankingScreen })));
-const MembersScreen = React.lazy(() => import('./MembersScreen').then(module => ({ default: module.MembersScreen })));
-const SocialMediaScreen = React.lazy(() => import('./SocialMediaScreen').then(module => ({ default: module.SocialMediaScreen })));
+const ScheduleTable = React.lazy(() => import('./components/ScheduleTable').then(module => ({ default: module.ScheduleTable })));
+const CalendarGrid = React.lazy(() => import('./components/CalendarGrid').then(module => ({ default: module.CalendarGrid })));
+const AvailabilityScreen = React.lazy(() => import('./components/AvailabilityScreen').then(module => ({ default: module.AvailabilityScreen })));
+const SwapRequestsScreen = React.lazy(() => import('./components/SwapRequestsScreen').then(module => ({ default: module.SwapRequestsScreen })));
+const RepertoireScreen = React.lazy(() => import('./components/RepertoireScreen').then(module => ({ default: module.RepertoireScreen })));
+const AnnouncementsScreen = React.lazy(() => import('./components/AnnouncementsScreen').then(module => ({ default: module.AnnouncementsScreen })));
+const AlertsManager = React.lazy(() => import('./components/AlertsManager').then(module => ({ default: module.AlertsManager })));
+const AvailabilityReportScreen = React.lazy(() => import('./components/AvailabilityReportScreen').then(module => ({ default: module.AvailabilityReportScreen })));
+const MonthlyReportScreen = React.lazy(() => import('./components/MonthlyReportScreen').then(module => ({ default: module.MonthlyReportScreen })));
+const SettingsScreen = React.lazy(() => import('./components/SettingsScreen').then(module => ({ default: module.SettingsScreen })));
+const ProfileScreen = React.lazy(() => import('./components/ProfileScreen').then(module => ({ default: module.ProfileScreen })));
+const EventsScreen = React.lazy(() => import('./components/EventsScreen').then(module => ({ default: module.EventsScreen })));
+const RankingScreen = React.lazy(() => import('./components/RankingScreen').then(module => ({ default: module.RankingScreen })));
+const MembersScreen = React.lazy(() => import('./components/MembersScreen').then(module => ({ default: module.MembersScreen })));
+const SocialMediaScreen = React.lazy(() => import('./components/SocialMediaScreen').then(module => ({ default: module.SocialMediaScreen })));
 
 // Loading Spinner para Lazy Components
 const LoadingFallback = () => (
@@ -447,7 +447,7 @@ const InnerApp = () => {
                                 </h1>
                                 <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">Bem-vindo ao painel do {ministryTitle}.</p>
                             </div>
-                            <div className="w-full md:w-auto">
+                            <div className="hidden md:block">
                                 <WeatherWidget />
                             </div>
                         </div>
@@ -577,10 +577,7 @@ const InnerApp = () => {
 
                 {/* Other Tabs Mapped to Lazy Components */}
                 {currentTab === 'events' && isAdmin && <EventsScreen customEvents={events.map(e => ({ ...e, iso: e.iso }))} onCreateEvent={async (evt) => { await Supabase.createMinistryEvent(ministryId, evt); loadData(); }} onDeleteEvent={async (iso) => { await Supabase.deleteMinistryEvent(ministryId, iso); loadData(); }} currentMonth={currentMonth} onMonthChange={setCurrentMonth} />}
-                
-                {/* CORREÇÃO: loadData(false) força a atualização via rede, evitando cache antigo */}
-                {currentTab === 'availability' && <AvailabilityScreen availability={availability} availabilityNotes={availabilityNotes} setAvailability={setAvailability} allMembersList={publicMembers.map(m => m.name)} currentMonth={currentMonth} onMonthChange={setCurrentMonth} currentUser={currentUser} onSaveAvailability={async (member, dates, notes, targetMonth) => { const p = publicMembers.find(pm => pm.name === member); if (p) { await Supabase.saveMemberAvailability(p.id, member, dates, targetMonth, notes); loadData(false); }}} availabilityWindow={availabilityWindow} />}
-                
+                {currentTab === 'availability' && <AvailabilityScreen availability={availability} availabilityNotes={availabilityNotes} setAvailability={setAvailability} allMembersList={publicMembers.map(m => m.name)} currentMonth={currentMonth} onMonthChange={setCurrentMonth} currentUser={currentUser} onSaveAvailability={async (member, dates, notes, targetMonth) => { const p = publicMembers.find(pm => pm.name === member); if (p) { await Supabase.saveMemberAvailability(p.id, member, dates, targetMonth, notes); loadData(); }}} availabilityWindow={availabilityWindow} />}
                 {currentTab === 'swaps' && <SwapRequestsScreen schedule={schedule} currentUser={currentUser} requests={swapRequests} visibleEvents={events} onCreateRequest={async (role, iso, title) => { const success = await Supabase.createSwapRequestSQL(ministryId, { id: '', ministryId, requesterName: currentUser.name, requesterId: currentUser.id, role, eventIso: iso, eventTitle: title, status: 'pending', createdAt: new Date().toISOString() }); if(success) { addToast("Solicitação criada!", "success"); loadData(); }}} onAcceptRequest={async (reqId) => { const result = await Supabase.performSwapSQL(ministryId, reqId, currentUser.name, currentUser.id!); if(result.success) { addToast(result.message, "success"); loadData(); } else { addToast(result.message, "error"); }}} />}
                 {currentTab === 'ranking' && <RankingScreen ministryId={ministryId} currentUser={currentUser} />}
                 {(currentTab === 'repertoire' || (currentTab === 'repertoire-manager' && isAdmin)) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { await loadData(); }} currentUser={currentUser} mode={currentTab === 'repertoire-manager' ? 'manage' : 'view'} ministryId={ministryId} />}
@@ -619,6 +616,15 @@ const InnerApp = () => {
                                     }
                                 }
                             );
+                        }}
+                        onUpdateMember={async (id, data) => {
+                            const res = await Supabase.updateMemberData(id, data);
+                            if(res.success) {
+                                addToast("Membro atualizado!", "success");
+                                loadData();
+                            } else {
+                                addToast("Erro ao atualizar.", "error");
+                            }
                         }}
                     />
                 )}

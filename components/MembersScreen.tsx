@@ -1,7 +1,8 @@
 
 import React, { useState, useMemo } from 'react';
-import { Users, Mail, Phone, Gift, ShieldCheck, Trash2, Search, Filter, Shield, Zap } from 'lucide-react';
+import { Users, Mail, Phone, Gift, ShieldCheck, Trash2, Search, Filter, Shield, Zap, Edit2 } from 'lucide-react';
 import { TeamMemberProfile, User } from '../types';
+import { EditMemberModal } from './ManagementModals';
 
 interface Props {
   members: TeamMemberProfile[];
@@ -9,6 +10,7 @@ interface Props {
   currentUser: User;
   onToggleAdmin: (email: string, currentStatus: boolean, name: string) => void;
   onRemoveMember: (id: string, name: string) => void;
+  onUpdateMember?: (id: string, data: { name: string, whatsapp: string, roles: string[] }) => void;
   availableRoles: string[];
 }
 
@@ -18,11 +20,13 @@ export const MembersScreen: React.FC<Props> = ({
   currentUser, 
   onToggleAdmin, 
   onRemoveMember,
+  onUpdateMember,
   availableRoles
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRole, setSelectedRole] = useState("Todos");
   const [showOnlineOnly, setShowOnlineOnly] = useState(false);
+  const [editingMember, setEditingMember] = useState<TeamMemberProfile | null>(null);
 
   const filteredMembers = useMemo(() => {
       return members.filter(member => {
@@ -142,6 +146,14 @@ export const MembersScreen: React.FC<Props> = ({
                         
                         {!isSelf && (
                             <div className="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                                <button
+                                    onClick={() => setEditingMember(member)}
+                                    className="p-2 rounded-lg text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                                    title="Editar Membro"
+                                >
+                                    <Edit2 size={16} />
+                                </button>
+
                                 <button 
                                     onClick={() => member.email && onToggleAdmin(member.email, !!member.isAdmin, member.name)} 
                                     className={`p-2 rounded-lg transition-colors ${member.isAdmin ? 'text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20' : 'text-zinc-400 hover:text-indigo-500 hover:bg-zinc-50 dark:hover:bg-zinc-800'}`} 
@@ -198,6 +210,15 @@ export const MembersScreen: React.FC<Props> = ({
             })}
             </div>
         )}
+
+        {/* Edit Modal */}
+        <EditMemberModal 
+            isOpen={!!editingMember}
+            onClose={() => setEditingMember(null)}
+            member={editingMember}
+            availableRoles={availableRoles}
+            onSave={(id, data) => { if(onUpdateMember) onUpdateMember(id, data); }}
+        />
     </div>
   );
 };
