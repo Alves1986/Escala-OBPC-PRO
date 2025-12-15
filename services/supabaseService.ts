@@ -698,7 +698,123 @@ export const fetchGlobalSchedules = async (month: string, currentMinistryId: str
 
 export const fetchRankingData = async (ministryId: string): Promise<RankingEntry[]> => {
     if (!supabase) return [];
-    return [];
+
+    // 1. Get Members associated with ministry
+    // Reusing fetchMinistryMembers logic implicitly or directly query profiles
+    const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name, avatar_url, allowed_ministries, ministry_id'); // We need ID for joining
+
+    // Filter relevant members locally to ensure robust parsing of allowed_ministries
+    const members = (profiles || []).filter((p: any) => {
+        const allowed = safeParseArray(p.allowed_ministries);
+        return allowed.includes(ministryId) || p.ministry_id === ministryId;
+    });
+
+    const memberIds = members.map((m: any) => m.id);
+    if (memberIds.length === 0) return [];
+
+    // 2. Fetch Data for Current Year
+    const currentYear = new Date().getFullYear();
+    const startOfYear = `${currentYear}-01-01T00:00:00`;
+
+    // A. Confirmed Events (Points: +100)
+    // We need assignments for events in this ministry, this year
+    const { data: events } = await supabase
+        .from('events')
+        .select('id')
+        .eq('ministry_id', ministryId)
+        .gte('date_time', startOfYear);
+    
+    const eventIds = events?.map((e: any) => e.id) || [];
+    
+    let assignments: any[] = [];
+    if (eventIds.length > 0) {
+        const { data } = await supabase
+            .from('schedule_assignments')
+            .select('member_id, confirmed')
+            .in('event_id', eventIds)
+            .in('member_id', memberIds)
+            .eq('confirmed', true); // Only confirmed counts for positive points usually
+        assignments = data || [];
+    }
+
+    // B. Swap Requests (Points: -50)
+    const { data: swaps } = await supabase
+        .from('swap_requests')
+        .select('requester_id')
+        .eq('ministry_id', ministryId)
+        .gte('created_at', startOfYear)
+        .in('requester_id', memberIds);
+
+    // C. Announcement Interactions (Read: +5, Like: +10)
+    // Filter by announcement ministry_id
+    const { data: announcements } = await supabase
+        .from('announcements')
+        .select('id')
+        .eq('ministry_id', ministryId)
+        .gte('created_at', startOfYear);
+    
+    const annIds = announcements?.map((a: any) => a.id) || [];
+    
+    let interactions: any[] = [];
+    if (annIds.length > 0) {
+        const { data } = await supabase
+            .from('announcement_interactions')
+            .select('user_id, interaction_type')
+            .in('announcement_id', annIds)
+            .in('user_id', memberIds);
+        interactions = data || [];
+    }
+
+    // 3. Aggregate Scores
+    const rankingMap: Record<string, RankingEntry> = {};
+
+    members.forEach((m: any) => {
+        rankingMap[m.id] = {
+            memberId: m.id,
+            name: m.name,
+            avatar_url: m.avatar_url,
+            points: 0,
+            stats: {
+                confirmedEvents: 0,
+                missedEvents: 0,
+                swapsRequested: 0,
+                announcementsRead: 0,
+                announcementsLiked: 0
+            }
+        };
+    });
+
+    assignments.forEach((a: any) => {
+        if (rankingMap[a.member_id]) {
+            rankingMap[a.member_id].points += 100;
+            rankingMap[a.member_id].stats.confirmedEvents++;
+        }
+    });
+
+    swaps?.forEach((s: any) => {
+        if (rankingMap[s.requester_id]) {
+            rankingMap[s.requester_id].points -= 50;
+            rankingMap[s.requester_id].stats.swapsRequested++;
+        }
+    });
+
+    interactions.forEach((i: any) => {
+        if (rankingMap[i.user_id]) {
+            if (i.interaction_type === 'read') {
+                rankingMap[i.user_id].points += 5;
+                rankingMap[i.user_id].stats.announcementsRead++;
+            } else if (i.interaction_type === 'like') {
+                rankingMap[i.user_id].points += 10;
+                rankingMap[i.user_id].stats.announcementsLiked++;
+            }
+        }
+    });
+
+    // 4. Return sorted array
+    return Object.values(rankingMap)
+        .sort((a, b) => b.points - a.points);
 };
 
 export const saveSubscriptionSQL = async (ministryId: string, subscription: PushSubscription) => {

@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { Trophy, Medal, Award, Crown, Info, X, RefreshCw, Star, User, Check } from 'lucide-react';
+import { Trophy, Medal, Award, Crown, Info, X, RefreshCw, Star, User, Check, Smile } from 'lucide-react';
 import { RankingEntry, User as UserType } from '../types';
 import { fetchRankingData } from '../services/supabaseService';
 
@@ -17,7 +17,9 @@ export const RankingScreen: React.FC<Props> = ({ ministryId, currentUser }) => {
   const loadData = async () => {
       setLoading(true);
       const data = await fetchRankingData(ministryId);
-      setRanking(data);
+      // Ensure data is sorted by points descending, just in case
+      const sorted = data.sort((a, b) => b.points - a.points);
+      setRanking(sorted);
       setLoading(false);
   };
 
@@ -66,6 +68,7 @@ export const RankingScreen: React.FC<Props> = ({ ministryId, currentUser }) => {
 
   const myRank = ranking.findIndex(r => r.memberId === currentUser.id);
   const myData = ranking[myRank];
+  const activeRanking = ranking.filter(r => r.points > 0);
 
   return (
     <div className="space-y-6 animate-fade-in max-w-4xl mx-auto pb-10">
@@ -97,67 +100,69 @@ export const RankingScreen: React.FC<Props> = ({ ministryId, currentUser }) => {
         </div>
 
         {/* Podium (Top 3) */}
-        {!loading && ranking.length > 0 && (
+        {!loading && activeRanking.length > 0 && (
             <div className="grid grid-cols-3 gap-2 md:gap-4 items-end mb-8 relative px-2">
                 {/* 2nd Place */}
-                {ranking[1] && (
+                {activeRanking[1] && (
                     <div className="flex flex-col items-center animate-slide-up" style={{ animationDelay: '0.1s' }}>
                         <div className="relative mb-2">
-                            {ranking[1].avatar_url ? (
-                                <img src={ranking[1].avatar_url} className="w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-zinc-300 object-cover shadow-lg" />
+                            {activeRanking[1].avatar_url ? (
+                                <img src={activeRanking[1].avatar_url} className="w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-zinc-300 object-cover shadow-lg" />
                             ) : (
                                 <div className="w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-zinc-300 bg-zinc-200 flex items-center justify-center text-zinc-500 font-bold text-xl shadow-lg">
-                                    {ranking[1].name.charAt(0)}
+                                    {activeRanking[1].name.charAt(0)}
                                 </div>
                             )}
                             <div className="absolute -bottom-2 -right-2 bg-zinc-400 text-white w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs border-2 border-white dark:border-zinc-800">2</div>
                         </div>
                         <div className="text-center">
-                            <p className="font-bold text-zinc-800 dark:text-white text-xs md:text-sm line-clamp-1">{ranking[1].name}</p>
-                            <p className="text-zinc-500 text-xs font-bold">{ranking[1].points} pts</p>
+                            <p className="font-bold text-zinc-800 dark:text-white text-xs md:text-sm line-clamp-1">{activeRanking[1].name}</p>
+                            <p className="text-zinc-500 text-xs font-bold">{activeRanking[1].points} pts</p>
                         </div>
                         <div className="h-16 md:h-24 w-full bg-gradient-to-t from-zinc-200 to-zinc-100 dark:from-zinc-800 dark:to-zinc-700 rounded-t-lg mt-2 opacity-80"></div>
                     </div>
                 )}
 
                 {/* 1st Place */}
-                {ranking[0] && (
+                {activeRanking[0] && (
                     <div className="flex flex-col items-center animate-slide-up z-10 w-full" style={{ animationDelay: '0s' }}>
                         <div className="relative mb-3">
                             <Crown className="absolute -top-6 left-1/2 -translate-x-1/2 text-yellow-500 drop-shadow-md animate-bounce" size={28} fill="currentColor"/>
-                            {ranking[0].avatar_url ? (
-                                <img src={ranking[0].avatar_url} className="w-20 h-20 md:w-24 md:h-24 rounded-full border-4 border-yellow-400 object-cover shadow-xl" />
+                            {activeRanking[0].avatar_url ? (
+                                <img src={activeRanking[0].avatar_url} className="w-20 h-20 md:w-24 md:h-24 rounded-full border-4 border-yellow-400 object-cover shadow-xl" />
                             ) : (
                                 <div className="w-20 h-20 md:w-24 md:h-24 rounded-full border-4 border-yellow-400 bg-yellow-100 flex items-center justify-center text-yellow-600 font-bold text-2xl shadow-xl">
-                                    {ranking[0].name.charAt(0)}
+                                    {activeRanking[0].name.charAt(0)}
                                 </div>
                             )}
                             <div className="absolute -bottom-3 -right-2 bg-yellow-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-md border-2 border-white dark:border-zinc-800">1</div>
                         </div>
                         <div className="text-center">
-                            <p className="font-bold text-zinc-900 dark:text-white text-sm md:text-base line-clamp-1">{ranking[0].name}</p>
-                            <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm md:text-lg">{ranking[0].points} pts</p>
+                            <p className="font-bold text-zinc-900 dark:text-white text-sm md:text-base line-clamp-1">{activeRanking[0].name}</p>
+                            <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm md:text-lg">{activeRanking[0].points} pts</p>
                         </div>
-                        <div className="h-24 md:h-32 w-full bg-gradient-to-t from-yellow-200 to-yellow-50 dark:from-yellow-900/40 dark:to-yellow-800/10 rounded-t-xl mt-2 border-x border-t border-yellow-200 dark:border-yellow-800/50"></div>
+                        <div className="h-24 md:h-32 w-full bg-gradient-to-t from-yellow-200 to-yellow-50 dark:from-yellow-900/40 dark:to-yellow-800/10 rounded-t-xl mt-2 border-x border-t border-yellow-200 dark:border-yellow-800/50 relative overflow-hidden">
+                            <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
+                        </div>
                     </div>
                 )}
 
                 {/* 3rd Place */}
-                {ranking[2] && (
+                {activeRanking[2] && (
                     <div className="flex flex-col items-center animate-slide-up" style={{ animationDelay: '0.2s' }}>
                         <div className="relative mb-2">
-                            {ranking[2].avatar_url ? (
-                                <img src={ranking[2].avatar_url} className="w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-amber-700/50 object-cover shadow-lg" />
+                            {activeRanking[2].avatar_url ? (
+                                <img src={activeRanking[2].avatar_url} className="w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-amber-700/50 object-cover shadow-lg" />
                             ) : (
                                 <div className="w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-amber-700/50 bg-amber-100 flex items-center justify-center text-amber-800 font-bold text-xl shadow-lg">
-                                    {ranking[2].name.charAt(0)}
+                                    {activeRanking[2].name.charAt(0)}
                                 </div>
                             )}
                             <div className="absolute -bottom-2 -right-2 bg-amber-700 text-white w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs border-2 border-white dark:border-zinc-800">3</div>
                         </div>
                         <div className="text-center">
-                            <p className="font-bold text-zinc-800 dark:text-white text-xs md:text-sm line-clamp-1">{ranking[2].name}</p>
-                            <p className="text-zinc-500 text-xs font-bold">{ranking[2].points} pts</p>
+                            <p className="font-bold text-zinc-800 dark:text-white text-xs md:text-sm line-clamp-1">{activeRanking[2].name}</p>
+                            <p className="text-zinc-500 text-xs font-bold">{activeRanking[2].points} pts</p>
                         </div>
                         <div className="h-12 md:h-16 w-full bg-gradient-to-t from-orange-100 to-white dark:from-orange-900/30 dark:to-zinc-800 rounded-t-lg mt-2 opacity-80"></div>
                     </div>
@@ -191,23 +196,25 @@ export const RankingScreen: React.FC<Props> = ({ ministryId, currentUser }) => {
                 <h3 className="font-bold text-zinc-700 dark:text-zinc-300 text-sm">Classificação Geral</h3>
             </div>
             
-            {loading ? (
-                <div className="p-8 text-center text-zinc-400">Carregando pontuação...</div>
-            ) : ranking.length === 0 ? (
-                <div className="p-8 text-center text-zinc-400">Nenhum dado de pontuação ainda.</div>
+            {activeRanking.length === 0 ? (
+                <div className="p-12 text-center text-zinc-400">
+                    <Smile size={48} className="mx-auto mb-3 opacity-20"/>
+                    <p>Ninguém pontuou ainda este ano.</p>
+                    <p className="text-xs mt-1">Seja o primeiro a confirmar uma escala!</p>
+                </div>
             ) : (
                 <div className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
                     {ranking.map((user, idx) => (
-                        <div key={user.memberId} className={`flex items-center justify-between p-4 ${user.memberId === currentUser.id ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
+                        <div key={user.memberId} className={`flex items-center justify-between p-4 transition-colors ${user.memberId === currentUser.id ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
                             <div className="flex items-center gap-4">
-                                <span className={`font-bold w-6 text-center ${idx < 3 ? getMedalColor(idx) : 'text-zinc-400'}`}>
+                                <span className={`font-bold w-6 text-center text-sm ${idx < 3 ? getMedalColor(idx) : 'text-zinc-400'}`}>
                                     #{idx + 1}
                                 </span>
                                 
                                 {user.avatar_url ? (
                                     <img src={user.avatar_url} className="w-10 h-10 rounded-full object-cover border border-zinc-200 dark:border-zinc-700" />
                                 ) : (
-                                    <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-700 flex items-center justify-center text-zinc-500 font-bold">
+                                    <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-700 flex items-center justify-center text-zinc-500 font-bold text-xs">
                                         {user.name.charAt(0)}
                                     </div>
                                 )}
@@ -266,10 +273,6 @@ export const RankingScreen: React.FC<Props> = ({ ministryId, currentUser }) => {
                             <div className="flex justify-between items-center p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-100 dark:border-amber-900/30">
                                 <span className="text-sm font-bold text-amber-700 dark:text-amber-400">Solicitar Troca</span>
                                 <span className="font-black text-amber-600">-50 pts</span>
-                            </div>
-                            <div className="flex justify-between items-center p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-100 dark:border-red-900/30">
-                                <span className="text-sm font-bold text-red-700 dark:text-red-400">Falta (Sem Check-in)</span>
-                                <span className="font-black text-red-600">-100 pts</span>
                             </div>
                         </div>
                         
