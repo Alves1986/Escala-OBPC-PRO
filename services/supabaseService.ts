@@ -3,7 +3,8 @@ import {
     SUPABASE_URL, SUPABASE_KEY, PushSubscriptionRecord, User, MemberMap, 
     AppNotification, TeamMemberProfile, AvailabilityMap, SwapRequest, 
     ScheduleMap, RepertoireItem, Announcement, GlobalConflictMap, 
-    MinistrySettings, RankingEntry, AvailabilityNotesMap, CustomEvent
+    MinistrySettings, RankingEntry, AvailabilityNotesMap, CustomEvent,
+    AttendanceMap
 } from '../types';
 
 let supabase: SupabaseClient | null = null;
@@ -186,11 +187,20 @@ export const fetchMinistrySchedule = async (ministryId: string, monthIso: string
     if (!supabase) return { events: [], schedule: {}, attendance: {} };
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     
+    // Calculate start and end dates for the month to safely filter timestamps
+    const [year, month] = monthIso.split('-').map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    
+    const startFilter = `${monthIso}-01T00:00:00`;
+    const endFilter = `${monthIso}-${String(lastDay).padStart(2, '0')}T23:59:59`;
+
     const { data: eventsData } = await supabase
         .from('events')
         .select('*')
         .eq('ministry_id', cleanMid)
-        .like('date_time', `${monthIso}%`);
+        .gte('date_time', startFilter)
+        .lte('date_time', endFilter)
+        .order('date_time', { ascending: true });
 
     const events: CustomEvent[] = (eventsData || []).map((e: any) => ({
         id: e.id,
@@ -200,16 +210,21 @@ export const fetchMinistrySchedule = async (ministryId: string, monthIso: string
         iso: e.date_time
     }));
 
-    const { data: assignData } = await supabase
-        .from('schedule_assignments')
-        .select('*, events!inner(*)')
-        .eq('events.ministry_id', cleanMid)
-        .like('events.date_time', `${monthIso}%`);
+    const eventIds = events.map(e => e.id);
+    let assignData: any[] = [];
+
+    if (eventIds.length > 0) {
+        const { data } = await supabase
+            .from('schedule_assignments')
+            .select('*, events!inner(*)')
+            .in('event_id', eventIds);
+        assignData = data || [];
+    }
 
     const schedule: ScheduleMap = {};
     const attendance: AttendanceMap = {};
 
-    assignData?.forEach((a: any) => {
+    assignData.forEach((a: any) => {
         const evtIso = a.events.date_time.slice(0, 16); 
         const key = `${evtIso}_${a.role}`;
         schedule[key] = a.member_name;
@@ -223,7 +238,9 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
     if (!supabase) return false;
     const [iso, role] = key.split('_'); 
     
-    const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', iso).single();
+    // ISO usually comes as YYYY-MM-DDTHH:mm, we might need :00 for exact match if stored that way
+    // Using a reliable fetch logic:
+    const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).like('date_time', `${iso}%`).single();
     if (!event) return false;
 
     if (!memberName) {
@@ -253,7 +270,7 @@ export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap
 export const toggleAssignmentConfirmation = async (ministryId: string, key: string) => {
     if (!supabase) return false;
     const [iso, role] = key.split('_');
-    const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', iso).single();
+    const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).like('date_time', `${iso}%`).single();
     if (!event) return false;
 
     const { data: assign } = await supabase.from('schedule_assignments').select('confirmed').eq('event_id', event.id).eq('role', role).single();
@@ -265,7 +282,12 @@ export const toggleAssignmentConfirmation = async (ministryId: string, key: stri
 
 export const clearScheduleForMonth = async (ministryId: string, monthIso: string) => {
     if (!supabase) return;
-    const { data: events } = await supabase.from('events').select('id').eq('ministry_id', ministryId).like('date_time', `${monthIso}%`);
+    const [year, month] = monthIso.split('-').map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    const startFilter = `${monthIso}-01T00:00:00`;
+    const endFilter = `${monthIso}-${String(lastDay).padStart(2, '0')}T23:59:59`;
+
+    const { data: events } = await supabase.from('events').select('id').eq('ministry_id', ministryId).gte('date_time', startFilter).lte('date_time', endFilter);
     const ids = events?.map((e: any) => e.id) || [];
     if (ids.length > 0) {
         await supabase.from('schedule_assignments').delete().in('event_id', ids);
@@ -274,7 +296,46 @@ export const clearScheduleForMonth = async (ministryId: string, monthIso: string
 
 export const resetToDefaultEvents = async (ministryId: string, monthIso: string) => {
     if (!supabase) return;
-    await supabase.from('events').delete().eq('ministry_id', ministryId).like('date_time', `${monthIso}%`);
+    const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
+    
+    // 1. Calculate Date Range
+    const [year, month] = monthIso.split('-').map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    
+    const startFilter = `${monthIso}-01T00:00:00`;
+    const endFilter = `${monthIso}-${String(lastDay).padStart(2, '0')}T23:59:59`;
+
+    // 2. Delete existing events for this month
+    await supabase.from('events')
+        .delete()
+        .eq('ministry_id', cleanMid)
+        .gte('date_time', startFilter)
+        .lte('date_time', endFilter);
+
+    // 3. Generate Sundays
+    const eventsToInsert = [];
+    for (let d = 1; d <= lastDay; d++) {
+        // Note: Month in JS Date is 0-indexed (0=Jan, 9=Oct)
+        const date = new Date(year, month - 1, d);
+        
+        // 0 = Sunday
+        if (date.getDay() === 0) { 
+            const dayStr = String(d).padStart(2, '0');
+            const dateStr = `${monthIso}-${dayStr}`;
+            
+            // Add Default Sunday Service (18:00 is a safe default)
+            eventsToInsert.push({
+                ministry_id: cleanMid,
+                title: 'Culto de Domingo',
+                date_time: `${dateStr}T18:00:00`,
+                type: 'default'
+            });
+        }
+    }
+
+    if (eventsToInsert.length > 0) {
+        await supabase.from('events').insert(eventsToInsert);
+    }
 };
 
 export const createMinistryEvent = async (ministryId: string, event: Partial<CustomEvent>) => {
@@ -290,7 +351,7 @@ export const createMinistryEvent = async (ministryId: string, event: Partial<Cus
 
 export const updateMinistryEvent = async (ministryId: string, oldIso: string, newTitle: string, newIso: string, applyToAll: boolean) => {
     if (!supabase) return;
-    const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', oldIso).single();
+    const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).like('date_time', `${oldIso}%`).single();
     if (event) {
         await supabase.from('events').update({ title: newTitle, date_time: newIso }).eq('id', event.id);
     }
@@ -298,16 +359,23 @@ export const updateMinistryEvent = async (ministryId: string, oldIso: string, ne
 
 export const deleteMinistryEvent = async (ministryId: string, iso: string) => {
     if (!supabase) return;
-    await supabase.from('events').delete().eq('ministry_id', ministryId).eq('date_time', iso);
+    await supabase.from('events').delete().eq('ministry_id', ministryId).like('date_time', `${iso}%`);
 };
 
 export const fetchGlobalSchedules = async (monthIso: string, excludeMinistryId: string): Promise<GlobalConflictMap> => {
     if (!supabase) return {};
+    
+    const [year, month] = monthIso.split('-').map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    const startFilter = `${monthIso}-01T00:00:00`;
+    const endFilter = `${monthIso}-${String(lastDay).padStart(2, '0')}T23:59:59`;
+
     const { data } = await supabase
         .from('schedule_assignments')
         .select('*, events!inner(ministry_id, date_time)')
         .neq('events.ministry_id', excludeMinistryId)
-        .like('events.date_time', `${monthIso}%`);
+        .gte('events.date_time', startFilter)
+        .lte('events.date_time', endFilter);
 
     const conflicts: GlobalConflictMap = {};
     data?.forEach((a: any) => {
@@ -615,7 +683,7 @@ export const performSwapSQL = async (ministryId: string, reqId: string, takerNam
     const { data: req } = await supabase.from('swap_requests').select('*').eq('id', reqId).single();
     if (!req || req.status !== 'pending') return { success: false, message: "Solicitação inválida." };
 
-    const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', req.event_iso).single();
+    const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).like('date_time', `${req.event_iso}%`).single();
     if (event) {
         await supabase.from('schedule_assignments').update({ 
             member_name: takerName, 
