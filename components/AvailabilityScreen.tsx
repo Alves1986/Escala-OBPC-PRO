@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AvailabilityMap, AvailabilityNotesMap, User } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
-import { ChevronLeft, ChevronRight, Save, CheckCircle2, Moon, Sun, Lock, FileText, Info, Ban, Unlock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Save, CheckCircle2, Moon, Sun, Lock, FileText, Info, Ban, Unlock, AlertCircle } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface Props {
@@ -179,7 +179,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-4xl mx-auto pb-10">
+    <div className="space-y-6 animate-fade-in max-w-4xl mx-auto pb-32">
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
             <div>
@@ -322,7 +322,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                 </div>
             </div>
 
-            {/* Notes & Actions */}
+            {/* Notes Section (Moved button to Floating Bar) */}
             <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 p-6 mt-6">
                 <div className="flex items-center gap-2 mb-3">
                     <FileText size={18} className="text-zinc-400" />
@@ -335,20 +335,34 @@ export const AvailabilityScreen: React.FC<Props> = ({
                     className="w-full h-20 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none placeholder:text-zinc-400 text-zinc-800 dark:text-zinc-200"
                     disabled={!isWindowOpen}
                 />
-                
-                <div className="mt-4 flex items-center justify-between pt-4 border-t border-zinc-100 dark:border-zinc-700">
-                    <div className="flex items-center gap-2 text-xs text-zinc-400">
-                        <Info size={14} />
-                        <span>Clique nos dias para alternar.</span>
-                    </div>
-                    <button 
-                        onClick={handleSave}
-                        disabled={!hasUnsavedChanges || isSaving || !isWindowOpen}
-                        className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-600/20 active:scale-95"
-                    >
-                        {isSaving ? "Salvando..." : <><Save size={18} /> Salvar Disponibilidade</>}
-                    </button>
+                <div className="mt-3 flex items-center gap-2 text-xs text-zinc-400">
+                    <Info size={14} />
+                    <span>Clique nos dias para alternar status (Dia Todo -> Manhã -> Noite -> Livre).</span>
                 </div>
+            </div>
+        </div>
+
+        {/* Floating Save Bar - Appears ONLY when has unsaved changes */}
+        <div className={`fixed bottom-4 left-0 right-0 z-50 flex justify-center pointer-events-none transition-all duration-300 ease-out ${hasUnsavedChanges ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'}`}>
+            <div className="bg-zinc-900/90 dark:bg-white/90 backdrop-blur-md text-white dark:text-zinc-900 rounded-2xl shadow-2xl p-3 pl-5 w-[90%] max-w-md flex items-center justify-between pointer-events-auto border border-zinc-700/50 dark:border-zinc-200/50 ring-1 ring-black/5">
+                <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+                    <span className="text-sm font-bold">Alterações pendentes</span>
+                </div>
+                <button 
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-600/30 active:scale-95 transition-all flex items-center gap-2 text-sm disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                    {isSaving ? (
+                        <>
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
+                            Salvando
+                        </>
+                    ) : (
+                        <><Save size={18} /> Salvar</>
+                    )}
+                </button>
             </div>
         </div>
     </div>
