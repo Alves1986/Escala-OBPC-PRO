@@ -435,7 +435,7 @@ const InnerApp = () => {
                                 </h1>
                                 <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">Bem-vindo ao painel do {ministryTitle}.</p>
                             </div>
-                            <div className="hidden md:block">
+                            <div className="w-full md:w-auto">
                                 <WeatherWidget />
                             </div>
                         </div>
