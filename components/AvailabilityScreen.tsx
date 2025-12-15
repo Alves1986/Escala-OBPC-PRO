@@ -25,8 +25,8 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const [selectedMember, setSelectedMember] = useState("");
   const [tempDates, setTempDates] = useState<string[]>([]);
   const [generalNote, setGeneralNote] = useState(""); 
-  const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const { addToast, confirmAction } = useToast();
 
   const [year, month] = currentMonth.split('-').map(Number);
@@ -38,23 +38,19 @@ export const AvailabilityScreen: React.FC<Props> = ({
   // Check if month is blocked for the selected member
   const isMonthBlocked = tempDates.includes(`${currentMonth}_BLK`);
 
-  // --- CORREÇÃO AQUI: LÓGICA DE JANELA ROBUSTA ---
   const getWindowState = () => {
       if (!availabilityWindow?.start && !availabilityWindow?.end) return 'OPEN';
       
       const startStr = availabilityWindow.start || '';
       const endStr = availabilityWindow.end || '';
 
-      // Verifica string 1970 antes de converter data
       if (startStr.includes('1970') || endStr.includes('1970')) return 'CLOSED';
 
       const start = new Date(startStr);
       const end = new Date(endStr);
       const now = new Date();
 
-      // Verificação extra de ano UTC
       if (start.getUTCFullYear() === 1970) return 'CLOSED';
-
       if (isNaN(start.getTime()) || isNaN(end.getTime())) return 'OPEN'; 
       
       return (now >= start && now <= end) ? 'OPEN' : 'CLOSED';
@@ -63,30 +59,29 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const windowState = getWindowState();
   const isEditable = isAdmin || windowState === 'OPEN';
 
+  // Initial user selection
   useEffect(() => {
-    if (currentUser && currentUser.name && !isAdmin) {
+    if (currentUser && currentUser.name && !isAdmin && !selectedMember) {
         setSelectedMember(currentUser.name);
     } else if (isAdmin && !selectedMember && currentUser) {
         setSelectedMember(currentUser.name);
     }
-  }, [currentUser, isAdmin]);
+  }, [currentUser, isAdmin, selectedMember]);
 
-  // Sincroniza dados do banco com o estado local
+  // Sync Logic: Load data ONLY when member changes or explicit refresh
+  // We do NOT listen to 'availability' prop constantly to avoid overwriting user edits
   useEffect(() => {
-    // PROTEÇÃO: Se o usuário fez alterações não salvas, não sobrescreve com dados do banco
-    // Isso evita que o "flicker" de loading apague o que o usuário acabou de clicar
-    if (hasChanges) return;
-
     if (selectedMember) {
         const storedDates = availability[selectedMember] || [];
         setTempDates([...storedDates]);
         const genKey = `${selectedMember}_${currentMonth}-00`;
         setGeneralNote(availabilityNotes?.[genKey] || "");
+        setHasUnsavedChanges(false);
     } else {
         setTempDates([]);
         setGeneralNote("");
     }
-  }, [selectedMember, availability, availabilityNotes, currentMonth, hasChanges]);
+  }, [selectedMember, currentMonth]); // Removed 'availability' from deps to prevent overwrite loop
 
   const handlePrevMonth = () => onMonthChange(adjustMonth(currentMonth, -1));
   const handleNextMonth = () => onMonthChange(adjustMonth(currentMonth, 1));
@@ -121,17 +116,15 @@ export const AvailabilityScreen: React.FC<Props> = ({
       }
       
       setTempDates(newDates);
-      setHasChanges(true);
+      setHasUnsavedChanges(true);
   };
 
   const toggleMonthBlock = () => {
       if (!isEditable) return;
 
       if (isMonthBlocked) {
-          // Unblock: Remove the tag
           setTempDates(prev => prev.filter(d => d !== `${currentMonth}_BLK`));
       } else {
-          // Block: Warn and add tag
           confirmAction(
               "Bloquear Mês Inteiro?", 
               "Você está indicando que NÃO poderá ser escalado em NENHUM dia deste mês. Isso apagará suas seleções atuais.", 
@@ -140,7 +133,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
               }
           );
       }
-      setHasChanges(true);
+      setHasUnsavedChanges(true);
   };
 
   const getDayStatus = (day: number) => {
@@ -165,10 +158,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
               notesToSave[`${currentMonth}-00`] = generalNote.trim();
           }
           await onSaveAvailability(selectedMember, tempDates, notesToSave, currentMonth);
-          
-          // Importante: Só marca como "sem mudanças" APÓS o sucesso
-          setHasChanges(false);
-          
+          setHasUnsavedChanges(false);
           addToast("Disponibilidade salva com sucesso!", "success");
       } catch (error) {
           addToast("Erro ao salvar. Tente novamente.", "error");
@@ -219,7 +209,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
       {selectedMember ? (
           <div className={`relative transition-opacity duration-300 ${!isEditable ? 'opacity-60 pointer-events-none grayscale-[0.5]' : ''}`}>
               
-              {/* Opção de Bloqueio de Mês */}
               <div className="mb-6 flex justify-center">
                   <button 
                       onClick={toggleMonthBlock}
@@ -273,10 +262,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
               <div className="bg-white dark:bg-zinc-800 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm mb-24">
                   <div className="flex items-center gap-2 mb-3 text-zinc-500"><MessageSquare size={18} className="text-emerald-500" /><span className="text-xs font-bold uppercase tracking-wider">Observações do Mês</span></div>
-                  <textarea value={generalNote} onChange={(e) => { setGeneralNote(e.target.value); setHasChanges(true); }} className="w-full bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 text-sm text-zinc-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] transition-all" placeholder={isEditable ? "Ex: Chego atrasado no dia 15..." : "Edição de observações encerrada."} disabled={!isEditable} />
+                  <textarea value={generalNote} onChange={(e) => { setGeneralNote(e.target.value); setHasUnsavedChanges(true); }} className="w-full bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 text-sm text-zinc-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] transition-all" placeholder={isEditable ? "Ex: Chego atrasado no dia 15..." : "Edição de observações encerrada."} disabled={!isEditable} />
               </div>
 
-              <div className={`fixed bottom-6 right-6 left-6 md:left-auto flex justify-end z-[90] transition-all duration-500 ease-out ${hasChanges ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0 pointer-events-none'}`}>
+              <div className={`fixed bottom-6 right-6 left-6 md:left-auto flex justify-end z-[90] transition-all duration-500 ease-out ${hasUnsavedChanges ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0 pointer-events-none'}`}>
                   <button onClick={handleSave} disabled={isSaving} className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-full font-bold shadow-2xl shadow-emerald-900/30 flex items-center gap-3 transition-transform hover:scale-105 active:scale-95 disabled:opacity-70 ring-4 ring-white dark:ring-zinc-900">
                       {isSaving ? <span className="animate-spin text-white block w-5 h-5 border-2 border-white/30 border-t-white rounded-full"></span> : <Check size={24} strokeWidth={3} />}
                       {isSaving ? "Salvando..." : "Confirmar Disponibilidade"}

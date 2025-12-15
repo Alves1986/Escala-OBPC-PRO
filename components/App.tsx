@@ -92,21 +92,17 @@ const InnerApp = () => {
   const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
   
   // ========================================================================
-  // LÓGICA DE ROTEAMENTO (Login Google vs Spotify)
+  // LÓGICA DE ROTEAMENTO
   // ========================================================================
   
-  // 1. Auxiliar para detectar callback do Spotify
   const isSpotifyCallback = () => {
       if (typeof window === 'undefined') return false;
       return window.location.hash.includes('state=spotify_login_app');
   };
 
-  // 2. Estado inicial da aba
   const [currentTab, setCurrentTab] = useState(() => {
       if (typeof window !== 'undefined') {
-          // Só vai para o repertório se for callback do Spotify
           if (isSpotifyCallback()) return 'repertoire-manager'; 
-          
           const params = new URLSearchParams(window.location.search);
           return params.get('tab') || 'dashboard';
       }
@@ -141,24 +137,17 @@ const InnerApp = () => {
 
   // --- EFFECTS ---
 
-  // 3. Gerenciamento de Login e Limpeza de URL
   useEffect(() => {
-      // Caso 1: Retorno do Spotify (vai para repertório)
       if (isSpotifyCallback() && currentUser) {
           const target = currentUser.role === 'admin' ? 'repertoire-manager' : 'repertoire';
           if (currentTab !== target) setCurrentTab(target);
           return;
       }
-      
-      // Caso 2: Login Google/Supabase (vai para dashboard e limpa URL)
       if (currentUser && window.location.hash.includes('access_token') && !isSpotifyCallback()) {
           try {
               window.history.replaceState(null, '', window.location.pathname + window.location.search);
           } catch(e) {}
-          
-          if (currentTab === 'repertoire-manager') {
-              setCurrentTab('dashboard');
-          }
+          if (currentTab === 'repertoire-manager') setCurrentTab('dashboard');
       }
   }, [currentUser]); 
 
@@ -179,7 +168,6 @@ const InnerApp = () => {
       return () => window.removeEventListener('focus', handleFocus);
   }, [currentUser, ministryId, loadData]);
 
-  // Sync URL with Tab
   useEffect(() => {
       const url = new URL(window.location.href);
       if (url.searchParams.get('tab') !== currentTab) {
@@ -214,14 +202,39 @@ const InnerApp = () => {
     return () => { if (interval) clearInterval(interval); };
   }, [themeMode]);
 
+  // --- ACTIONS ---
+
+  const handleSaveAvailability = async (member: string, dates: string[], notes: Record<string, string>, targetMonth: string) => {
+      const p = publicMembers.find(pm => pm.name === member);
+      if (!p) return;
+
+      // 1. ATUALIZAÇÃO OTIMISTA (Atualiza a UI instantaneamente)
+      // Isso impede que o dia "desmarque" enquanto o servidor processa
+      setAvailability(prev => ({
+          ...prev,
+          [member]: dates
+      }));
+
+      // 2. Envia para o servidor em background
+      try {
+          await Supabase.saveMemberAvailability(p.id, member, dates, targetMonth, notes);
+          // Opcional: recarregar dados para garantir consistência final, mas sem flicker
+          // await loadData(); 
+      } catch (error) {
+          addToast("Erro ao salvar. Verifique sua conexão.", "error");
+          // Em caso de erro real, poderíamos reverter o estado aqui (opcional)
+          loadData(); 
+      }
+  };
+
   const handleSetThemeMode = (mode: ThemeMode) => setThemeMode(mode);
   
   const handleSaveTheme = () => {
       try {
           localStorage.setItem('themeMode', themeMode);
-          addToast("Preferência de tema salva com sucesso!", "success");
+          addToast("Preferência de tema salva!", "success");
       } catch (e) {
-          addToast("Erro ao salvar preferência.", "warning");
+          addToast("Erro ao salvar.", "warning");
       }
   };
 
@@ -244,16 +257,16 @@ const InnerApp = () => {
           }
           if (sub) {
               await Supabase.saveSubscriptionSQL(ministryId, sub);
-              addToast("Notificações ativadas com sucesso!", "success");
+              addToast("Notificações ativadas!", "success");
           }
       } catch(e: any) {
           console.error("Erro Push:", e);
-          addToast("Erro ao ativar notificações. Verifique as permissões.", "error");
+          addToast("Erro ao ativar notificações.", "error");
       }
   };
 
   const handleLogout = () => {
-    confirmAction("Sair", "Deseja realmente sair do sistema?", async () => {
+    confirmAction("Sair", "Deseja realmente sair?", async () => {
         await Supabase.logout();
         setCurrentUser(null);
         try { window.history.replaceState(null, '', '/'); } catch(e) {}
@@ -283,6 +296,7 @@ const InnerApp = () => {
   };
 
   const handleCellChange = async (key: string, value: string) => {
+      // Lógica de edição da célula
       let keyToRemove: string | null = null;
       if (value) {
           const eventIso = key.substring(0, 16);
@@ -329,7 +343,7 @@ const InnerApp = () => {
           }
       });
 
-      if (myEvents.length === 0) { addToast("Sem escalas para sincronizar.", "info"); return; }
+      if (myEvents.length === 0) { addToast("Sem escalas.", "info"); return; }
 
       let ics = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//EscalaOBPC//PT\n";
       myEvents.forEach(evt => {
@@ -351,7 +365,7 @@ const InnerApp = () => {
 
   const handleAiAutoFill = async () => {
       const runAi = async () => {
-          addToast("Gerando escala inteligente com IA... aguarde.", "info");
+          addToast("Gerando com IA... aguarde.", "info");
           try {
               const generatedSchedule = await generateScheduleWithAI({
                   events: events.map(e => ({ iso: e.iso, title: e.title })),
@@ -363,11 +377,11 @@ const InnerApp = () => {
               });
               setSchedule(generatedSchedule);
               await Supabase.saveScheduleBulk(ministryId, generatedSchedule, true);
-              addToast("Escala gerada com sucesso!", "success");
+              addToast("Escala gerada!", "success");
               await Supabase.sendNotificationSQL(ministryId, { title: "Escala Disponível", message: `Escala de ${getMonthName(currentMonth)} gerada com IA.`, type: 'info', actionLink: 'calendar' });
           } catch (e: any) { addToast(`Erro: ${e.message}`, "error"); }
       };
-      if (Object.keys(schedule).length > 0) confirmAction("Sobrescrever?", "Deseja usar IA para refazer a escala existente?", runAi);
+      if (Object.keys(schedule).length > 0) confirmAction("Sobrescrever?", "Deseja usar IA para refazer a escala?", runAi);
       else runAi();
   };
 
@@ -498,7 +512,6 @@ const InnerApp = () => {
                             </div>
                         </div>
 
-                        {/* Recent Announcements */}
                         <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden">
                             <div className="p-5 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50/50 dark:bg-zinc-900/30">
                                 <h3 className="font-bold text-zinc-800 dark:text-white text-sm">Quadro de Avisos</h3>
@@ -586,18 +599,7 @@ const InnerApp = () => {
                         currentMonth={currentMonth} 
                         onMonthChange={setCurrentMonth} 
                         currentUser={currentUser} 
-                        onSaveAvailability={async (member, dates, notes, targetMonth) => { 
-                            const p = publicMembers.find(pm => pm.name === member); 
-                            if (p) { 
-                                // ATUALIZAÇÃO OTIMISTA: Atualiza o estado local imediatamente
-                                setAvailability(prev => ({
-                                    ...prev,
-                                    [member]: dates
-                                }));
-                                await Supabase.saveMemberAvailability(p.id, member, dates, targetMonth, notes); 
-                                loadData();
-                            }
-                        }} 
+                        onSaveAvailability={handleSaveAvailability} 
                         availabilityWindow={availabilityWindow} 
                     />
                 )}
