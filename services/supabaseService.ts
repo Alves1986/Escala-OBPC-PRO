@@ -39,7 +39,7 @@ const safeParseArray = (value: any): string[] => {
     return [];
 };
 
-// ... (Mantenha as funções de Auth, Profiles e Schedule anteriores inalteradas até chegar em fetchMinistryAvailability) ...
+// ... (functions before fetchMinistryAvailability remain mostly unchanged, just showing fetchMinistryAvailability and saveMemberAvailability) ...
 export const loginWithEmail = async (email: string, pass: string) => {
     if (!supabase) return { success: true, message: "Demo Login" };
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
@@ -115,8 +115,6 @@ export const toggleAssignmentConfirmation = async (ministryId: string, key: stri
 export const clearScheduleForMonth = async (ministryId: string, month: string) => { if (!supabase) return; const startDate = `${month}-01T00:00:00`; const [y, m] = month.split('-').map(Number); const nextMonth = new Date(y, m, 1).toISOString(); const { data: events } = await supabase.from('events').select('id').eq('ministry_id', ministryId).gte('date_time', startDate).lt('date_time', nextMonth); const eventIds = events?.map((e: any) => e.id) || []; if (eventIds.length > 0) { await supabase.from('schedule_assignments').delete().in('event_id', eventIds); } };
 export const resetToDefaultEvents = async (ministryId: string, month: string) => { if (!supabase) return; const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-'); const [y, m] = month.split('-').map(Number); const startDate = `${month}-01T00:00:00`; const nextMonth = new Date(y, m, 1).toISOString(); try { await clearScheduleForMonth(cleanMid, month); const { error: deleteError } = await supabase.from('events').delete().eq('ministry_id', cleanMid).gte('date_time', startDate).lt('date_time', nextMonth); if (deleteError) throw deleteError; const daysInMonth = new Date(y, m, 0).getDate(); const eventsToInsert = []; for (let d = 1; d <= daysInMonth; d++) { const date = new Date(y, m - 1, d, 12, 0, 0); const dayOfWeek = date.getDay(); const dateStr = `${month}-${String(d).padStart(2, '0')}`; if (dayOfWeek === 0) { eventsToInsert.push({ ministry_id: cleanMid, title: "Culto da Família", date_time: `${dateStr}T18:00:00` }); } else if (dayOfWeek === 3) { eventsToInsert.push({ ministry_id: cleanMid, title: "Culto de Doutrina", date_time: `${dateStr}T19:30:00` }); } } if (eventsToInsert.length > 0) { await supabase.from('events').insert(eventsToInsert); } } catch (error) { console.error("Erro ao restaurar eventos:", error); } };
 
-// --- LÓGICA DE DISPONIBILIDADE PROFISSIONAL (CORRIGIDA E ROBUSTA) ---
-
 export const fetchMinistryAvailability = async (ministryId: string) => {
     if (!supabase) return { availability: {}, notes: {} };
     
@@ -176,7 +174,6 @@ export const saveMemberAvailability = async (
     if (!supabase) return { error: { message: "Sem conexão com banco de dados." } };
 
     try {
-        // 1. Passo Crítico: Buscar o ID do membro baseando-se no nome
         const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('id')
@@ -188,11 +185,8 @@ export const saveMemberAvailability = async (
         }
 
         const memberId = profile.id;
-
-        // 2. Filtra apenas as datas que pertencem ao mês alvo
         const monthDates = dates.filter(d => d.startsWith(targetMonth));
         
-        // 3. Filtra notas que pertencem ao mês alvo e remove vazias
         const monthNotes: Record<string, string> = {};
         Object.entries(notes).forEach(([key, val]) => {
             if (key.startsWith(targetMonth) && val && val.trim() !== "") {
@@ -200,70 +194,25 @@ export const saveMemberAvailability = async (
             }
         });
 
-        // 4. Verificação de Integridade do Banco (Teste Prévio)
-        // Isso ajuda a dar erros mais claros se o banco estiver desatualizado
-        const { error: checkError } = await supabase
+        // Tenta UPSERT usando a restrição única
+        const { error: upsertError } = await supabase
             .from('availability')
-            .select('id, month')
-            .eq('member_id', memberId)
-            .limit(1);
+            .upsert({
+                member_id: memberId,
+                month: targetMonth,
+                dates: monthDates,
+                notes: monthNotes
+            }, { 
+                onConflict: 'member_id, month' // Garante que atualiza se já existir
+            });
 
-        if (checkError) {
-            // Se o erro for sobre coluna inexistente (código 42703 no Postgres)
-            if (checkError.message?.includes('month') || checkError.code === '42703') {
-                throw new Error("Erro de Banco de Dados: Coluna 'month' não existe. Por favor, peça ao Admin para rodar o script de atualização no Supabase.");
+        if (upsertError) {
+            // Tratamento de erro específico para o problema de tipo de coluna
+            if (upsertError.message?.includes('invalid input syntax for type date') || upsertError.message?.includes('type date')) {
+                 throw new Error("⚠️ Erro de Banco de Dados: A coluna 'dates' não está configurada como Array. Por favor, execute o 'Script de Correção' no Supabase (SQL Editor).");
             }
-        }
-
-        // 5. Upsert Inteligente (Insert ou Update) com base em (member_id + month)
-        // Se a constraint única existir (criada pelo SQL script), isso funcionará perfeitamente.
-        // Se a constraint não existir e houver duplicatas, pode falhar, mas o script SQL corrige isso.
-        
-        // Primeiro tentamos selecionar para saber se existe (fallback manual se o upsert falhar)
-        const { data: existing, error: fetchError } = await supabase
-            .from('availability')
-            .select('id')
-            .eq('member_id', memberId)
-            .eq('month', targetMonth)
-            .maybeSingle();
-
-        if (fetchError) throw fetchError;
-
-        let result;
-
-        if (existing) {
-            // Update
-            result = await supabase
-                .from('availability')
-                .update({ 
-                    dates: monthDates,
-                    notes: monthNotes 
-                })
-                .eq('id', existing.id);
-        } else {
-            // Insert
-            result = await supabase
-                .from('availability')
-                .insert({
-                    member_id: memberId,
-                    month: targetMonth,
-                    dates: monthDates,
-                    notes: monthNotes
-                });
-        }
-
-        if (result.error) {
-            console.error("Supabase Error Details:", result.error);
-            if (result.error.code === '23505') { // Unique violation
-                 throw new Error("Erro de conflito: Já existe um registro para este mês. Tente recarregar a página.");
-            }
-            if (result.error.code === '42P01') { // Undefined table
-                 throw new Error("Tabela 'availability' não encontrada.");
-            }
-            if (result.error.code === '42501') { // RLS violation
-                 throw new Error("Permissão negada. Você não tem permissão para editar a disponibilidade deste membro.");
-            }
-            throw result.error;
+            // Outros erros
+            throw upsertError;
         }
 
         return { success: true };

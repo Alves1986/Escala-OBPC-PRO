@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { AvailabilityMap, AvailabilityNotesMap, User } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
-import { ChevronLeft, ChevronRight, Save, CheckCircle2, Moon, Sun, Lock, FileText, Info, Ban, Unlock, RefreshCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Save, CheckCircle2, Moon, Sun, Lock, FileText, Info, Ban, Unlock, RefreshCw, Check } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface Props {
@@ -34,6 +34,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const [tempDates, setTempDates] = useState<string[]>([]); 
   const [generalNote, setGeneralNote] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false); // New success state
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   
   const isAdmin = currentUser?.role === 'admin';
@@ -88,11 +89,13 @@ export const AvailabilityScreen: React.FC<Props> = ({
     setGeneralNote(availabilityNotes?.[noteKey] || "");
     
     setHasUnsavedChanges(false);
+    setSaveSuccess(false);
   }, [selectedMember, currentMonth, availability, availabilityNotes]);
 
   const handleToggleBlockMonth = () => {
       if (!isWindowOpen) return;
       setHasUnsavedChanges(true);
+      setSaveSuccess(false);
 
       if (isBlockedMonth) {
           setTempDates([]); // Clear block
@@ -108,6 +111,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
       }
 
       setHasUnsavedChanges(true);
+      setSaveSuccess(false);
       const dateBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
       const dateObj = new Date(year, month - 1, day);
       const isSunday = dateObj.getDay() === 0;
@@ -149,24 +153,20 @@ export const AvailabilityScreen: React.FC<Props> = ({
               notesPayload[`${currentMonth}-00`] = generalNote.trim();
           }
 
-          // AQUI: A ordem dos argumentos agora bate certo com a correção no Service
-          // 1. selectedMember (Nome)
-          // 2. tempDates (Array de Strings)
-          // 3. notesPayload (Objeto)
-          // 4. currentMonth (String)
           await onSaveAvailability(selectedMember, tempDates, notesPayload, currentMonth);
           
           setHasUnsavedChanges(false);
+          setSaveSuccess(true);
+          
+          // Auto hide success state after a delay
+          setTimeout(() => setSaveSuccess(false), 3000);
+          
           addToast("Disponibilidade enviada com sucesso!", "success");
       } catch (e: any) {
           console.error(e);
           // Mensagem de erro mais específica para o usuário
           const msg = e.message || "Erro desconhecido";
-          if (msg.includes("month")) {
-              addToast("⚠️ ERRO DE BANCO: Execute o script SQL no Supabase.", "error");
-          } else {
-              addToast(`Erro: ${msg}`, "error");
-          }
+          addToast(`Erro: ${msg}`, "error");
       } finally {
           setIsSaving(false);
       }
@@ -339,7 +339,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                 </div>
                 <textarea 
                     value={generalNote}
-                    onChange={e => { setGeneralNote(e.target.value); setHasUnsavedChanges(true); }}
+                    onChange={e => { setGeneralNote(e.target.value); setHasUnsavedChanges(true); setSaveSuccess(false); }}
                     placeholder="Ex: Chego atrasado no dia 15..."
                     className="w-full h-20 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none placeholder:text-zinc-400 text-zinc-800 dark:text-zinc-200"
                     disabled={!isWindowOpen}
@@ -351,21 +351,42 @@ export const AvailabilityScreen: React.FC<Props> = ({
             </div>
         </div>
 
-        {/* Floating Save Button */}
-        <div className={`fixed bottom-6 left-0 right-0 z-50 flex justify-center pointer-events-none transition-all duration-300 ${hasUnsavedChanges ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'}`}>
-            <div className="bg-zinc-900/90 dark:bg-white/95 backdrop-blur-md text-white dark:text-zinc-900 rounded-2xl shadow-2xl p-2 pl-5 pr-2 w-[90%] max-w-sm flex items-center justify-between pointer-events-auto border border-zinc-700/50 dark:border-zinc-200/50 ring-1 ring-black/10">
-                <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-                    <span className="text-xs font-bold uppercase tracking-wider">Não salvo</span>
+        {/* Floating Action Bar - Professional Style */}
+        <div className={`fixed bottom-6 left-0 right-0 z-50 flex justify-center pointer-events-none transition-all duration-500 ease-out transform ${hasUnsavedChanges || saveSuccess ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}`}>
+            <div className={`
+                backdrop-blur-xl rounded-2xl shadow-2xl p-2 pl-5 pr-2 w-[90%] max-w-sm flex items-center justify-between pointer-events-auto border ring-1 ring-black/5 transition-colors duration-300
+                ${saveSuccess 
+                    ? 'bg-emerald-500 border-emerald-400 text-white' 
+                    : 'bg-zinc-900/90 dark:bg-white/95 text-white dark:text-zinc-900 border-zinc-700/50 dark:border-zinc-200/50'
+                }
+            `}>
+                <div className="flex items-center gap-3">
+                    {saveSuccess ? (
+                        <CheckCircle2 size={20} className="text-white animate-bounce" />
+                    ) : (
+                        <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse shadow-[0_0_8px_2px_rgba(250,204,21,0.5)]"></div>
+                    )}
+                    <span className="text-xs font-bold uppercase tracking-wider">
+                        {saveSuccess ? 'Salvo com sucesso!' : 'Alterações pendentes'}
+                    </span>
                 </div>
-                <button 
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-emerald-600/30 active:scale-95 transition-all flex items-center gap-2 text-sm disabled:opacity-70 disabled:cursor-not-allowed"
-                >
-                    {isSaving ? <RefreshCw className="animate-spin" size={18}/> : <Save size={18} />}
-                    Salvar
-                </button>
+                
+                {!saveSuccess && (
+                    <button 
+                        onClick={handleSave}
+                        disabled={isSaving}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-emerald-600/30 active:scale-95 transition-all flex items-center gap-2 text-sm disabled:opacity-70 disabled:cursor-not-allowed group"
+                    >
+                        {isSaving ? <RefreshCw className="animate-spin" size={16}/> : <Save size={16} className="group-hover:scale-110 transition-transform"/>}
+                        Salvar
+                    </button>
+                )}
+                
+                {saveSuccess && (
+                    <div className="px-4 py-2">
+                        <Check size={20} className="text-white/80" />
+                    </div>
+                )}
             </div>
         </div>
     </div>
