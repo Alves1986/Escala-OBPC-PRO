@@ -31,14 +31,11 @@ export const AvailabilityScreen: React.FC<Props> = ({
   
   // State
   const [selectedMember, setSelectedMember] = useState<string>("");
-  const [tempDates, setTempDates] = useState<string[]>([]); // Estado local de edição
+  const [tempDates, setTempDates] = useState<string[]>([]); 
   const [generalNote, setGeneralNote] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   
-  // Track context to allow forcing updates when switching member/month
-  const viewContextRef = useRef(`${selectedMember}-${currentMonth}`);
-
   const isAdmin = currentUser?.role === 'admin';
   const isBlockedMonth = tempDates.includes(`${currentMonth}-BLK`);
 
@@ -85,35 +82,27 @@ export const AvailabilityScreen: React.FC<Props> = ({
   useEffect(() => {
     if (!selectedMember) return;
 
-    const currentContext = `${selectedMember}-${currentMonth}`;
-    const contextChanged = viewContextRef.current !== currentContext;
-
-    // Se mudou o contexto (membro ou mês) OU se não temos alterações não salvas, atualizamos os dados.
-    if (contextChanged || !hasUnsavedChanges) {
-        viewContextRef.current = currentContext;
-        
-        const storedDates = availability[selectedMember] || [];
-        const monthDates = storedDates.filter(d => d.startsWith(currentMonth));
-        
-        setTempDates(monthDates);
-        
-        const genKey = `${selectedMember}_${currentMonth}-00`;
-        setGeneralNote(availabilityNotes?.[genKey] || "");
-        
-        // Se mudou o contexto, resetamos o flag de unsaved
-        if (contextChanged) setHasUnsavedChanges(false);
-    }
-  }, [selectedMember, currentMonth, availability, availabilityNotes, hasUnsavedChanges]);
+    // Reseta estado local ao mudar mês ou membro, mas preserva se houver mudanças não salvas? 
+    // Para simplificar, sempre recarrega do estado global quando muda o contexto.
+    const storedDates = availability[selectedMember] || [];
+    const monthDates = storedDates.filter(d => d.startsWith(currentMonth));
+    setTempDates(monthDates);
+    
+    // Busca nota do mês (armazenada com chave especial dia '00')
+    // A chave no notes global é "NomeMembro_YYYY-MM-00"
+    const noteKey = `${selectedMember}_${currentMonth}-00`;
+    setGeneralNote(availabilityNotes?.[noteKey] || "");
+    
+    setHasUnsavedChanges(false);
+  }, [selectedMember, currentMonth, availability, availabilityNotes]);
 
   const handleToggleBlockMonth = () => {
       if (!isWindowOpen) return;
       setHasUnsavedChanges(true);
 
       if (isBlockedMonth) {
-          // Desbloquear: Limpa a tag BLK
           setTempDates([]);
       } else {
-          // Bloquear: Define APENAS a tag BLK
           setTempDates([`${currentMonth}-BLK`]);
       }
   };
@@ -127,7 +116,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
       setHasUnsavedChanges(true);
       const dateBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
       
-      // Determine if it is Sunday
       const dateObj = new Date(year, month - 1, day);
       const isSunday = dateObj.getDay() === 0;
 
@@ -142,22 +130,21 @@ export const AvailabilityScreen: React.FC<Props> = ({
       const hasMorning = newDates.includes(morning);
       const hasNight = newDates.includes(night);
 
-      // Remove current state for this day
+      // Remove qualquer estado anterior para este dia
       newDates = newDates.filter(d => d !== full && d !== morning && d !== night);
 
       if (isSunday) {
           // Cycle: None -> Full -> Morning -> Night -> None
-          if (hasFull) {
+          if (!hasFull && !hasMorning && !hasNight) {
+              newDates.push(full);
+          } else if (hasFull) {
               newDates.push(morning);
           } else if (hasMorning) {
               newDates.push(night);
-          } else if (hasNight) {
-              // Back to none
-          } else {
-              newDates.push(full);
           }
+          // Se era Night, remove tudo (já removido no filtro acima)
       } else {
-          // Cycle: None -> Full -> None (For non-Sundays)
+          // Cycle: None -> Full -> None
           if (!hasFull) {
               newDates.push(full);
           }
@@ -170,33 +157,21 @@ export const AvailabilityScreen: React.FC<Props> = ({
       if (!selectedMember) return;
       setIsSaving(true);
       try {
-          // 1. Reconstruir objeto de notas existentes para este membro neste mês
-          // Isso evita que apaguemos notas de dias específicos ao salvar a nota geral
-          const existingNotes: Record<string, string> = {};
+          // Precisamos construir o objeto de notas APENAS para este mês
+          const notesPayload: Record<string, string> = {};
           
-          Object.entries(availabilityNotes).forEach(([key, note]) => {
-              // A chave vem como "NomeMembro_YYYY-MM-DD"
-              if (key.startsWith(`${selectedMember}_`)) {
-                  const datePart = key.replace(`${selectedMember}_`, ''); // YYYY-MM-DD
-                  if (datePart.startsWith(currentMonth)) {
-                      existingNotes[datePart] = note as string;
-                  }
-              }
-          });
-
-          // 2. Atualizar a nota geral (dia 00)
           if (generalNote.trim()) {
-              existingNotes[`${currentMonth}-00`] = generalNote;
-          } else {
-              delete existingNotes[`${currentMonth}-00`];
+              notesPayload[`${currentMonth}-00`] = generalNote.trim();
           }
+
+          // Salva chamando a função principal
+          await onSaveAvailability(selectedMember, tempDates, notesPayload, currentMonth);
           
-          await onSaveAvailability(selectedMember, tempDates, existingNotes, currentMonth);
           setHasUnsavedChanges(false);
-          addToast("Disponibilidade salva!", "success");
+          addToast("Disponibilidade enviada com sucesso!", "success");
       } catch (e) {
           console.error(e);
-          addToast("Erro ao salvar. Verifique sua conexão.", "error");
+          addToast("Erro ao salvar. Tente novamente.", "error");
       } finally {
           setIsSaving(false);
       }
@@ -209,6 +184,13 @@ export const AvailabilityScreen: React.FC<Props> = ({
       if (tempDates.includes(`${dateBase}_M`)) return 'morning';
       if (tempDates.includes(`${dateBase}_N`)) return 'night';
       return 'none';
+  };
+
+  const handleMonthNav = (dir: number) => {
+      if (hasUnsavedChanges) {
+          if (!window.confirm("Você tem alterações não salvas. Deseja descartá-las?")) return;
+      }
+      onMonthChange(adjustMonth(currentMonth, dir));
   };
 
   return (
@@ -229,7 +211,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                     <select 
                         value={selectedMember} 
                         onChange={(e) => {
-                            if(hasUnsavedChanges && !confirm("Descartar alterações não salvas?")) return;
+                            if(hasUnsavedChanges && !confirm("Descartar alterações?")) return;
                             setSelectedMember(e.target.value);
                         }}
                         className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg py-1.5 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
@@ -239,9 +221,9 @@ export const AvailabilityScreen: React.FC<Props> = ({
                 )}
                 
                 <div className="flex items-center gap-2 bg-white dark:bg-zinc-800 p-1 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm">
-                    <button onClick={() => { if(!hasUnsavedChanges || confirm("Mudar mês descarta alterações?")) onMonthChange(adjustMonth(currentMonth, -1)) }} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md"><ChevronLeft size={16}/></button>
+                    <button onClick={() => handleMonthNav(-1)} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md"><ChevronLeft size={16}/></button>
                     <span className="text-sm font-bold min-w-[100px] text-center">{getMonthName(currentMonth)}</span>
-                    <button onClick={() => { if(!hasUnsavedChanges || confirm("Mudar mês descarta alterações?")) onMonthChange(adjustMonth(currentMonth, 1)) }} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md"><ChevronRight size={16}/></button>
+                    <button onClick={() => handleMonthNav(1)} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md"><ChevronRight size={16}/></button>
                 </div>
             </div>
         </div>
@@ -355,7 +337,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                 </div>
             </div>
 
-            {/* Notes Section (Moved button to Floating Bar) */}
+            {/* Notes Section */}
             <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 p-6 mt-6">
                 <div className="flex items-center gap-2 mb-3">
                     <FileText size={18} className="text-zinc-400" />

@@ -55,10 +55,8 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
     const data = registeredMembers.map((profile) => {
       let roles: string[] = [];
       if (profile.roles && profile.roles.length > 0) {
-        // Filter roles to only show those active in the current ministry
         roles = profile.roles.filter(r => availableRoles.includes(r));
       } else {
-        // Fallback to searching map if no explicit roles, filtering by availableRoles
         Object.entries(membersMap).forEach(([role, members]) => {
           if (availableRoles.includes(role) && (members as string[]).some(m => normalizeString(m) === normalizeString(profile.name))) {
               roles.push(role);
@@ -66,15 +64,10 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
         });
       }
 
-      const normalizedName = normalizeString(profile.name);
-      let dates: string[] = [];
-      const availKey = Object.keys(availability).find(k => normalizeString(k) === normalizedName);
-      
-      if (availKey) {
-          dates = availability[availKey] || [];
-      }
+      // Procura a disponibilidade usando o nome exato (chave no mapa)
+      const dates = availability[profile.name] || [];
 
-      // Check for Block Tag
+      // Verifica se há bloqueio para este mês
       const isBlocked = dates.some(d => d.startsWith(currentMonth) && (d.includes('BLK') || d.includes('BLOCKED')));
 
       const monthDates = dates
@@ -85,7 +78,7 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
             const type = parts.length > 1 ? parts[1] : 'BOTH';
             return { day: dayNum, type };
         })
-        .filter(x => x.day > 0 && x.day <= 31) // Exclui dias '00' (notas) e '99' (placeholders)
+        .filter(x => !isNaN(x.day) && x.day > 0 && x.day <= 31)
         .sort((a, b) => a.day - b.day);
 
       return {
