@@ -574,8 +574,19 @@ const InnerApp = () => {
                         onMonthChange={setCurrentMonth} 
                         currentUser={currentUser} 
                         onSaveAvailability={async (member, dates, notes, targetMonth) => { 
-                            const p = publicMembers.find(pm => pm.name === member); 
-                            if (p) { 
+                            let targetId = '';
+                            // 1. Tenta usar o ID do usuário logado se o nome coincidir (Mais seguro para novos usuários)
+                            if (currentUser && currentUser.name === member) {
+                                targetId = currentUser.id || "";
+                            }
+                            
+                            // 2. Se não for o próprio usuário (Admin editando outro), busca na lista pública
+                            if (!targetId) {
+                                const p = publicMembers.find(pm => pm.name === member); 
+                                if (p) targetId = p.id;
+                            }
+
+                            if (targetId) { 
                                 // 1. Optimistic Update (Immediate Feedback)
                                 setAvailability(prev => {
                                     const oldDates = prev[member] || [];
@@ -586,8 +597,10 @@ const InnerApp = () => {
                                     };
                                 });
                                 // 2. Async Save
-                                await Supabase.saveMemberAvailability(p.id, member, dates, targetMonth, notes); 
+                                await Supabase.saveMemberAvailability(targetId, member, dates, targetMonth, notes); 
                                 // 3. No immediate loadData to avoid race condition revert
+                            } else {
+                                addToast("Erro ao identificar membro. Tente recarregar a página.", "error");
                             }
                         }} 
                         availabilityWindow={availabilityWindow} 
