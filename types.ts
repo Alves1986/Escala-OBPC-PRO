@@ -174,6 +174,14 @@ export interface AppState {
   sidebarOpen: boolean;
 }
 
+export interface RankingHistoryItem {
+    id: string;
+    date: string;
+    description: string;
+    points: number;
+    type: 'assignment' | 'swap_penalty' | 'announcement_read' | 'announcement_like';
+}
+
 export interface RankingEntry {
     memberId: string;
     name: string;
@@ -186,6 +194,7 @@ export interface RankingEntry {
         announcementsRead: number;
         announcementsLiked: number;
     };
+    history: RankingHistoryItem[];
 }
 
 export const DEFAULT_ROLES: Record<string, string[]> = {
