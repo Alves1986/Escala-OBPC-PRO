@@ -14,7 +14,7 @@ interface Props {
   onMonthChange: (newMonth: string) => void;
   onNotify?: (message: string) => void;
   currentUser: User | null;
-  onSaveAvailability: (member: string, dates: string[], notes: Record<string, string>, targetMonth: string) => Promise<void>;
+  onSaveAvailability: (member: string, dates: string[], notes: Record<string, string>, targetMonth: string) => Promise<any>; // Changed return type to any/promise
   availabilityWindow?: { start?: string, end?: string };
 }
 
@@ -160,11 +160,14 @@ export const AvailabilityScreen: React.FC<Props> = ({
           if (generalNote.trim()) {
               notesToSave[`${currentMonth}-00`] = generalNote.trim();
           }
+          // The return from onSaveAvailability can now be checked if implemented in App
           await onSaveAvailability(selectedMember, tempDates, notesToSave, currentMonth);
+          
           setHasChanges(false);
           addToast("Disponibilidade salva com sucesso!", "success");
       } catch (error) {
-          addToast("Erro ao salvar. Tente novamente.", "error");
+          console.error(error);
+          addToast("Erro ao salvar. Verifique sua conexão.", "error");
       } finally {
           setIsSaving(false);
       }
