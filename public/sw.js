@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'gestao-escala-pwa-v30';
+const CACHE_NAME = 'gestao-escala-pwa-v31';
 
 // Arquivos estáticos fundamentais
 const PRECACHE_URLS = [
@@ -22,13 +22,14 @@ self.addEventListener('install', event => {
   );
 });
 
-// Ativação e Limpeza
+// Ativação e Limpeza de Caches Antigos
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.map(cacheName => {
           if (cacheName !== CACHE_NAME) {
+            console.log('Removendo cache antigo:', cacheName);
             return caches.delete(cacheName);
           }
         })
