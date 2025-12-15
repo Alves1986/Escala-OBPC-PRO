@@ -165,7 +165,7 @@ export const DashboardLayout: React.FC<Props> = ({
         
         {/* Header */}
         <div className={`px-4 py-5 shrink-0 flex items-center ${isCollapsed ? 'lg:justify-center' : 'justify-between'}`}>
-           <div className="flex items-center gap-3 w-full overflow-hidden">
+           <div className="flex items-center gap-3 w-full relative">
                <div className="w-9 h-9 rounded-xl bg-white dark:bg-zinc-900 flex items-center justify-center shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden shrink-0 transition-transform hover:scale-105">
                   {imgError ? (
                       <Layout size={18} className="text-zinc-500" />
