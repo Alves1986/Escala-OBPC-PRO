@@ -71,18 +71,22 @@ export const AvailabilityScreen: React.FC<Props> = ({
     }
   }, [currentUser, isAdmin]);
 
+  // Sincroniza dados do banco com o estado local
   useEffect(() => {
+    // PROTEÇÃO: Se o usuário fez alterações não salvas, não sobrescreve com dados do banco
+    // Isso evita que o "flicker" de loading apague o que o usuário acabou de clicar
+    if (hasChanges) return;
+
     if (selectedMember) {
         const storedDates = availability[selectedMember] || [];
         setTempDates([...storedDates]);
         const genKey = `${selectedMember}_${currentMonth}-00`;
         setGeneralNote(availabilityNotes?.[genKey] || "");
-        setHasChanges(false);
     } else {
         setTempDates([]);
         setGeneralNote("");
     }
-  }, [selectedMember, availability, availabilityNotes, currentMonth]);
+  }, [selectedMember, availability, availabilityNotes, currentMonth, hasChanges]);
 
   const handlePrevMonth = () => onMonthChange(adjustMonth(currentMonth, -1));
   const handleNextMonth = () => onMonthChange(adjustMonth(currentMonth, 1));
@@ -161,7 +165,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
               notesToSave[`${currentMonth}-00`] = generalNote.trim();
           }
           await onSaveAvailability(selectedMember, tempDates, notesToSave, currentMonth);
+          
+          // Importante: Só marca como "sem mudanças" APÓS o sucesso
           setHasChanges(false);
+          
           addToast("Disponibilidade salva com sucesso!", "success");
       } catch (error) {
           addToast("Erro ao salvar. Tente novamente.", "error");
