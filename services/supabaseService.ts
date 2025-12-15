@@ -187,10 +187,11 @@ export const fetchMinistrySchedule = async (ministryId: string, monthIso: string
     if (!supabase) return { events: [], schedule: {}, attendance: {} };
     const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-');
     
+    // Calculate start and end dates for the month to safely filter timestamps
+    // ISO format: YYYY-MM
     const [year, month] = monthIso.split('-').map(Number);
     const lastDay = new Date(year, month, 0).getDate();
     
-    // Filtro mais robusto de string ISO
     const startFilter = `${monthIso}-01T00:00:00`;
     const endFilter = `${monthIso}-${String(lastDay).padStart(2, '0')}T23:59:59`;
 
@@ -238,9 +239,10 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
     if (!supabase) return false;
     const [iso, role] = key.split('_'); 
     
-    // Tenta encontrar o evento pela data ISO exata ou prefixo
+    // Attempt to find event by exact match or start of ISO string (handling different timezone formats)
     let { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', iso).maybeSingle();
     
+    // Fallback: try finding by prefix if exact match fails (e.g. seconds difference)
     if (!event) {
         const { data: fallbackEvent } = await supabase.from('events').select('id').eq('ministry_id', ministryId).like('date_time', `${iso}%`).maybeSingle();
         event = fallbackEvent;
