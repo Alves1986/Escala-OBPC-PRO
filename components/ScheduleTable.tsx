@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis, GlobalConflictMap, TeamMemberProfile } from '../types';
@@ -45,7 +44,6 @@ const SelectorDropdown = ({
     const dropdownRef = useRef<HTMLDivElement>(null);
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
-    // Apply click outside logic to the PORTAL content
     useClickOutside(dropdownRef, () => {
         onClose();
     });
@@ -77,7 +75,7 @@ const SelectorDropdown = ({
                 className={`fixed z-[9999] bg-white dark:bg-zinc-800 flex flex-col overflow-hidden animate-fade-in
                     ${isMobile 
                         ? 'bottom-0 left-0 w-full rounded-t-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.3)] max-h-[85vh] border-t border-zinc-200 dark:border-zinc-700' 
-                        : 'rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-700 max-h-[300px]'
+                        : 'rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-700 max-h-[320px] ring-1 ring-black/5'
                     }
                 `}
                 style={isMobile ? {} : { top: position.top, left: position.left, width: position.width }}
@@ -91,11 +89,11 @@ const SelectorDropdown = ({
                 <div className="p-2 border-b border-zinc-100 dark:border-zinc-700 sticky top-0 bg-white dark:bg-zinc-800 z-10">
                     <div className="relative">
                         <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400"/>
-                        <input ref={searchInputRef} placeholder="Buscar membro..." value={search} onChange={e => setSearch(e.target.value)} className="w-full text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-8 p-2 focus:ring-2 focus:ring-blue-500 outline-none transition-all text-zinc-900 dark:text-zinc-100" />
+                        <input ref={searchInputRef} placeholder="Buscar membro..." value={search} onChange={e => setSearch(e.target.value)} className="w-full text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-8 p-2 focus:ring-2 focus:ring-zinc-500 outline-none transition-all text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400" />
                     </div>
                 </div>
                 <div className="overflow-y-auto custom-scrollbar p-1 flex-1">
-                    <button onClick={() => { onChange(""); onClose(); }} className="w-full text-left px-3 py-3 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center gap-2 mb-1 border border-transparent"><Trash2 size={16} /> Remover da Escala</button>
+                    <button onClick={() => { onChange(""); onClose(); }} className="w-full text-left px-3 py-2.5 text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center gap-2 mb-1 border border-transparent transition-colors uppercase tracking-wide"><Trash2 size={14} /> Remover da Escala</button>
                     {filteredOptions.length === 0 && <div className="p-6 text-center text-sm text-zinc-400 flex flex-col items-center gap-2"><User size={24} className="opacity-20"/> Nenhum membro encontrado.</div>}
                     {filteredOptions.map((opt: string, idx: number) => {
                         const profile = memberProfiles?.find((p: any) => p.name === opt);
@@ -107,26 +105,26 @@ const SelectorDropdown = ({
 
                         return (
                             <React.Fragment key={opt}>
-                            {showSeparator && <div className="px-3 py-1.5 text-[10px] uppercase font-bold text-zinc-400 bg-zinc-50 dark:bg-zinc-800/50 mt-1 mb-1 rounded">Indisponíveis</div>}
+                            {showSeparator && <div className="px-3 py-2 text-[10px] uppercase font-bold text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 mt-1 mb-1 border-t border-b border-zinc-100 dark:border-zinc-800">Indisponíveis</div>}
                             <button
                                 onClick={() => { onChange(opt); onClose(); }}
-                                className={`w-full text-left px-3 py-2 text-sm rounded-lg flex items-center justify-between group transition-colors mb-1 ${value === opt ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30' : isAvailable ? 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50 border border-transparent' : 'opacity-50 hover:opacity-80 hover:bg-zinc-50 dark:hover:bg-zinc-800 border border-transparent'}`}
+                                className={`w-full text-left px-3 py-2 text-sm rounded-lg flex items-center justify-between group transition-colors mb-0.5 ${value === opt ? 'bg-zinc-100 dark:bg-zinc-700' : isAvailable ? 'hover:bg-zinc-50 dark:hover:bg-zinc-800' : 'opacity-60 hover:opacity-100 hover:bg-zinc-50 dark:hover:bg-zinc-800 grayscale hover:grayscale-0'}`}
                             >
                                 <div className="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
                                     <div className="relative shrink-0">
                                         {profile?.avatar_url ? (
-                                            <img src={profile.avatar_url} alt="" className={`w-8 h-8 rounded-full object-cover border ${isAvailable ? 'border-green-400 shadow-sm' : 'border-zinc-200 dark:border-zinc-600 grayscale'}`} />
+                                            <img src={profile.avatar_url} alt="" className={`w-8 h-8 rounded-full object-cover border ${isAvailable ? 'border-zinc-200 dark:border-zinc-700' : 'border-zinc-200 dark:border-zinc-600'}`} />
                                         ) : (
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${isAvailable ? 'bg-indigo-100 text-indigo-600' : 'bg-zinc-200 text-zinc-500'}`}>{getInitials(opt)}</div>
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${isAvailable ? 'bg-zinc-200 text-zinc-600' : 'bg-zinc-200 text-zinc-500'}`}>{getInitials(opt)}</div>
                                         )}
-                                        {isOnline && <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-white dark:border-zinc-800 rounded-full animate-pulse" />}
+                                        {isOnline && <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-white dark:border-zinc-800 rounded-full" />}
                                     </div>
                                     <div className="flex flex-col truncate text-left flex-1 min-w-0">
-                                        <span className={`font-medium truncate text-sm ${isAvailable ? 'text-zinc-800 dark:text-zinc-100' : 'text-zinc-400 dark:text-zinc-500 line-through decoration-zinc-400/50'}`}>{opt}</span>
-                                        {isAvailable ? <span className="text-[10px] text-green-600 dark:text-green-400 font-bold flex items-center gap-1 truncate"><CheckCircle2 size={10}/> Disponível</span> : <span className="text-[10px] text-zinc-400 font-medium flex items-center gap-1 truncate"><XCircle size={10}/> Indisponível</span>}
+                                        <span className={`font-medium truncate text-sm ${isAvailable ? 'text-zinc-800 dark:text-zinc-100' : 'text-zinc-500 line-through decoration-zinc-400/50'}`}>{opt}</span>
+                                        {!isAvailable && <span className="text-[10px] text-zinc-400 font-medium">Indisponível</span>}
                                     </div>
                                 </div>
-                                <span className={`text-[10px] font-bold px-2 py-1 rounded-full shrink-0 ml-2 ${count === 0 ? 'bg-green-100 text-green-700' : count > 4 ? 'bg-red-100 text-red-700' : 'bg-zinc-100 text-zinc-600'}`}>{count}x</span>
+                                {count > 0 && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ml-2 ${count > 4 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400'}`}>{count}x</span>}
                             </button>
                             </React.Fragment>
                         );
@@ -150,14 +148,13 @@ const MemberSelector = ({
     const selectedProfile = memberProfiles.find(p => p.name === value);
     const getInitials = (name: string) => name ? name.charAt(0).toUpperCase() : '?';
 
-    // Calculate position only when opening
     useEffect(() => {
         if (isOpen && triggerRef.current && window.innerWidth >= 768) {
             const rect = triggerRef.current.getBoundingClientRect();
             const spaceBelow = window.innerHeight - rect.bottom;
-            const openUp = spaceBelow < 300; 
+            const openUp = spaceBelow < 320; 
             setPosition({
-                top: openUp ? rect.top - 300 : rect.bottom + 5,
+                top: openUp ? rect.top - 320 : rect.bottom + 5,
                 left: rect.left,
                 width: Math.max(rect.width, 240)
             });
@@ -168,55 +165,46 @@ const MemberSelector = ({
         <div className="relative w-full" ref={triggerRef}>
             <div 
                 onClick={() => !isOpen && setIsOpen(true)}
-                className={`flex items-center justify-between p-2.5 md:p-2 rounded-lg border cursor-pointer transition-all bg-white dark:bg-zinc-900 shadow-sm ${
+                className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-all bg-white dark:bg-zinc-900 shadow-sm ${
                     hasError 
                     ? 'border-red-300 bg-red-50 dark:bg-red-900/10' 
                     : hasWarning
                     ? 'border-amber-300 bg-amber-50 dark:bg-amber-900/20'
-                    : 'border-zinc-200 dark:border-zinc-700 hover:border-blue-400 dark:hover:border-blue-500'
+                    : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-500'
                 }`}
             >
                 {value ? (
                     <div className="flex items-center gap-2 min-w-0">
                         {selectedProfile?.avatar_url ? (
-                            <img src={selectedProfile.avatar_url} alt="" className="w-6 h-6 md:w-5 md:h-5 rounded-full object-cover shrink-0 ring-1 ring-zinc-200 dark:ring-zinc-700" />
+                            <img src={selectedProfile.avatar_url} alt="" className="w-5 h-5 rounded-full object-cover shrink-0 ring-1 ring-zinc-200 dark:ring-zinc-700" />
                         ) : (
-                            <div className={`w-6 h-6 md:w-5 md:h-5 rounded-full flex items-center justify-center text-[10px] md:text-[9px] font-bold text-white shrink-0 shadow-sm ${hasError ? 'bg-red-500' : hasWarning ? 'bg-amber-500' : 'bg-gradient-to-br from-blue-500 to-indigo-600'}`}>
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 shrink-0`}>
                                 {getInitials(value)}
                             </div>
                         )}
-                        <span className={`text-sm md:text-xs font-medium truncate ${hasError ? 'text-red-700 dark:text-red-400' : hasWarning ? 'text-amber-700 dark:text-amber-400' : 'text-zinc-800 dark:text-zinc-200'}`}>
+                        <span className={`text-xs font-medium truncate ${hasError ? 'text-red-700 dark:text-red-400' : hasWarning ? 'text-amber-700 dark:text-amber-400' : 'text-zinc-800 dark:text-zinc-200'}`}>
                             {value}
                         </span>
                     </div>
                 ) : (
-                    <span className="text-sm md:text-xs text-zinc-400 italic">Selecionar...</span>
+                    <span className="text-xs text-zinc-400 italic pl-1">Vazio</span>
                 )}
-                <ChevronDown size={14} className={`text-zinc-400 shrink-0 ml-1 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown size={12} className={`text-zinc-400 shrink-0 ml-1 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </div>
 
-            {/* Icons and Dropdown ... */}
-            {hasWarning && (
-                <div className="absolute -top-2 -right-2 z-20 group/warn">
-                    <div className="bg-amber-500 text-white p-1 rounded-full shadow-md border-2 border-white dark:border-zinc-800 cursor-help">
-                        <AlertTriangle size={10} fill="currentColor" />
+            {/* Error/Warning Icons */}
+            <div className="absolute -top-1.5 -right-1.5 flex gap-1 pointer-events-none">
+                {hasWarning && (
+                    <div className="bg-amber-500 text-white p-0.5 rounded-full shadow-md">
+                        <AlertTriangle size={8} fill="currentColor" />
                     </div>
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-zinc-800 text-white text-[10px] rounded-lg shadow-lg opacity-0 group-hover/warn:opacity-100 transition-opacity pointer-events-none z-50 text-center">
-                        {warningMsg}
+                )}
+                {hasError && (
+                    <div className="bg-red-500 text-white p-0.5 rounded-full shadow-md">
+                        <AlertOctagon size={8} fill="currentColor" />
                     </div>
-                </div>
-            )}
-
-            {hasError && !hasWarning && (
-                <div className="absolute -top-2 -right-2 z-20 group/err">
-                    <div className="bg-red-500 text-white p-1 rounded-full shadow-md border-2 border-white dark:border-zinc-800">
-                        <AlertOctagon size={10} fill="currentColor" />
-                    </div>
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 p-2 bg-zinc-800 text-white text-[10px] rounded-lg shadow-lg opacity-0 group-hover/err:opacity-100 transition-opacity pointer-events-none z-50 text-center">
-                        Membro marcou indisponibilidade.
-                    </div>
-                </div>
-            )}
+                )}
+            </div>
 
             {isOpen && (
                 <SelectorDropdown 
@@ -242,20 +230,21 @@ const ScheduleRow = React.memo(({ event, columns, schedule, attendance, availabi
     const time = event.iso.split('T')[1];
 
     return (
-        <tr className="border-b border-zinc-100 dark:border-zinc-700/50 hover:bg-white dark:hover:bg-zinc-700/30 transition-colors group">
-            <td className="px-6 py-4 sticky left-0 bg-zinc-50/90 dark:bg-zinc-800/90 backdrop-blur-sm z-10 border-r border-zinc-200 dark:border-zinc-700 group-hover:bg-zinc-100/90 dark:group-hover:bg-zinc-800/90 transition-colors">
-                <div className="flex items-center justify-between gap-2">
-                    <div className="flex flex-col min-w-0 gap-1">
-                        <span className="font-bold text-zinc-800 dark:text-zinc-100 truncate text-base" title={event.title}>{event.title}</span>
-                        <div className="flex items-center gap-2 text-xs text-zinc-500">
-                            <span className="font-medium bg-zinc-200 dark:bg-zinc-700 px-2 py-0.5 rounded text-zinc-700 dark:text-zinc-300">{event.dateDisplay}</span>
-                            <span className="flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded border border-blue-100 dark:border-blue-800/50"><Clock size={12}/> {time}</span>
+        <tr className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors group">
+            <td className="px-6 py-4 sticky left-0 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-sm z-10 border-r border-zinc-200 dark:border-zinc-700 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-col min-w-0">
+                        <span className="font-bold text-zinc-900 dark:text-white truncate text-sm" title={event.title}>{event.title}</span>
+                        <div className="flex items-center gap-2 text-xs text-zinc-500 mt-0.5">
+                            <span className="font-medium">{event.dateDisplay}</span>
+                            <span className="w-1 h-1 rounded-full bg-zinc-300"></span>
+                            <span className="font-mono">{time}</span>
                         </div>
                     </div>
                     {!readOnly && (
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => onEditEvent(event)} className="text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 p-2 rounded-lg transition-colors"><Edit size={16} /></button>
-                            <button onClick={() => onDeleteEvent(event.iso, event.title)} className="text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 p-2 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                        <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => onEditEvent(event)} className="text-zinc-400 hover:text-blue-500 p-1"><Edit size={14} /></button>
+                            <button onClick={() => onDeleteEvent(event.iso, event.title)} className="text-zinc-400 hover:text-red-500 p-1"><Trash2 size={14} /></button>
                         </div>
                     )}
                 </div>
@@ -277,13 +266,13 @@ const ScheduleRow = React.memo(({ event, columns, schedule, attendance, availabi
                         const conflict = conflicts.find((c: any) => c.eventIso === event.iso);
                         if (conflict) {
                             hasGlobalConflict = true;
-                            globalConflictMsg = `Conflito: ${currentValue} em ${conflict.ministryId.toUpperCase()}`;
+                            globalConflictMsg = `${conflict.ministryId.toUpperCase()}`;
                         }
                     }
                 }
 
                 return (
-                    <td key={key} className="px-4 py-3 min-w-[220px]">
+                    <td key={key} className="px-3 py-3 min-w-[180px]">
                         <div className="flex items-center gap-2">
                             {readOnly ? (
                                 <div className="flex-1 flex items-center gap-2">
@@ -304,12 +293,14 @@ const ScheduleRow = React.memo(({ event, columns, schedule, attendance, availabi
                                         availabilityLookup={availabilityLookup} 
                                         onlineUsers={onlineUsers}
                                     />
-                                    {hasLocalConflict && <div className="text-[10px] text-red-500 mt-1 flex items-center gap-1 font-medium animate-pulse"><AlertOctagon size={10} /> Indisponível</div>}
-                                    {hasGlobalConflict && <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1 font-bold" title={globalConflictMsg}><AlertTriangle size={10} /> Em outro ministério</div>}
+                                    {hasLocalConflict && <div className="text-[9px] text-red-500 mt-1 flex items-center gap-1 font-medium ml-1">Indisponível</div>}
+                                    {hasGlobalConflict && <div className="text-[9px] text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1 font-bold ml-1">Em {globalConflictMsg}</div>}
                                 </div>
                             )}
                             {currentValue && (
-                                <button onClick={() => onAttendanceToggle(key)} className={`p-1.5 rounded-full transition-colors flex-shrink-0 ${isConfirmed ? 'text-green-600 bg-green-100 dark:bg-green-900/30' : 'text-zinc-300 hover:text-zinc-400 bg-zinc-50 dark:bg-zinc-800'}`}><CheckCircle2 size={16} /></button>
+                                <button onClick={() => onAttendanceToggle(key)} className={`p-1 rounded-md transition-colors flex-shrink-0 ${isConfirmed ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' : 'text-zinc-300 hover:text-zinc-400 bg-transparent'}`} title={isConfirmed ? "Confirmado" : "Pendente"}>
+                                    <CheckCircle2 size={16} />
+                                </button>
                             )}
                         </div>
                     </td>
@@ -370,17 +361,17 @@ export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, sched
   };
 
   return (
-    <div className={`relative group ${readOnly ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
-      <div className="hidden md:block bg-white dark:bg-zinc-800 rounded-xl shadow-lg shadow-zinc-200/50 dark:shadow-black/20 border border-zinc-200 dark:border-zinc-700 transition-opacity duration-200 overflow-hidden relative">
-          {showLeftArrow && <button onClick={() => scroll('left')} className="absolute left-2 top-1/2 -translate-y-1/2 z-30 bg-white/90 dark:bg-zinc-800/90 shadow-xl border border-zinc-200 dark:border-zinc-700 p-2.5 rounded-full text-zinc-600 dark:text-zinc-300 hover:bg-white hover:scale-110 transition-all backdrop-blur-sm"><ChevronLeft size={20} /></button>}
-          {showRightArrow && <button onClick={() => scroll('right')} className="absolute right-2 top-1/2 -translate-y-1/2 z-30 bg-white/90 dark:bg-zinc-800/90 shadow-xl border border-zinc-200 dark:border-zinc-700 p-2.5 rounded-full text-zinc-600 dark:text-zinc-300 hover:bg-white hover:scale-110 transition-all backdrop-blur-sm"><ChevronRight size={20} /></button>}
+    <div className={`relative group ${readOnly ? 'opacity-70 pointer-events-none' : 'opacity-100'}`}>
+      <div className="hidden md:block bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 transition-opacity duration-200 overflow-hidden relative">
+          {showLeftArrow && <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-white dark:from-zinc-900 to-transparent z-20 pointer-events-none" />}
+          {showRightArrow && <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-white dark:from-zinc-900 to-transparent z-20 pointer-events-none" />}
 
           <div ref={scrollContainerRef} onScroll={checkScroll} className="overflow-x-auto custom-scrollbar scroll-smooth"> 
             <table className="w-full text-sm text-left">
-              <thead className="text-xs text-zinc-500 uppercase bg-zinc-50/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-700">
+              <thead className="text-xs text-zinc-500 uppercase bg-zinc-50/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800">
                 <tr>
-                  <th className="px-6 py-4 font-bold sticky left-0 bg-zinc-50/95 dark:bg-zinc-900/95 backdrop-blur-md z-20 w-64 shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">Evento</th>
-                  {columns.map(col => <th key={col.keySuffix} className="px-6 py-4 font-bold min-w-[200px]">{col.displayRole}</th>)}
+                  <th className="px-6 py-4 font-bold sticky left-0 bg-zinc-50/95 dark:bg-zinc-900/95 backdrop-blur-md z-20 w-64 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">Evento</th>
+                  {columns.map(col => <th key={col.keySuffix} className="px-3 py-4 font-bold min-w-[180px] text-zinc-400">{col.displayRole}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -413,18 +404,19 @@ export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, sched
       {/* Mobile View */}
       <div className="md:hidden space-y-4 pb-24">
           {events.length === 0 ? (
-              <div className="bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-700 p-8 text-center text-zinc-500">Nenhum evento para este mês.</div>
+              <div className="bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-8 text-center text-zinc-500">Nenhum evento para este mês.</div>
           ) : events.map((event) => (
-              <div key={event.iso} className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm overflow-hidden animate-slide-up">
-                  <div className="bg-zinc-50 dark:bg-zinc-900/50 p-4 border-b border-zinc-100 dark:border-zinc-700 flex justify-between items-start">
+              <div key={event.iso} className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden animate-slide-up">
+                  <div className="bg-zinc-50 dark:bg-zinc-900/50 p-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-start">
                       <div className="flex-1 min-w-0">
                           <h3 className="font-bold text-zinc-800 dark:text-zinc-100 text-lg truncate">{event.title}</h3>
-                          <div className="flex items-center gap-2 mt-1">
-                              <span className="text-xs font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded">{event.dateDisplay}</span>
-                              <span className="text-xs text-zinc-500 flex items-center gap-1"><Clock size={12}/> {event.iso.split('T')[1]}</span>
+                          <div className="flex items-center gap-2 mt-1 text-xs text-zinc-500">
+                              <span className="font-bold">{event.dateDisplay}</span>
+                              <span className="w-1 h-1 rounded-full bg-zinc-300"></span>
+                              <span className="flex items-center gap-1"><Clock size={12}/> {event.iso.split('T')[1]}</span>
                           </div>
                       </div>
-                      {!readOnly && <div className="flex gap-1 ml-2"><button onClick={() => onEditEvent(event)} className="p-2 text-blue-500 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 transition-colors"><Edit size={16}/></button><button onClick={() => onDeleteEvent(event.iso, event.title)} className="p-2 text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 transition-colors"><Trash2 size={16}/></button></div>}
+                      {!readOnly && <div className="flex gap-1 ml-2"><button onClick={() => onEditEvent(event)} className="p-2 text-zinc-400 hover:text-blue-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"><Edit size={16}/></button><button onClick={() => onDeleteEvent(event.iso, event.title)} className="p-2 text-zinc-400 hover:text-red-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"><Trash2 size={16}/></button></div>}
                   </div>
                   
                   {columns.length === 0 ? (
@@ -476,7 +468,7 @@ export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, sched
                                                     onlineUsers={onlineUsers} 
                                                   />
                                               </div>
-                                              {currentValue && <button onClick={() => onAttendanceToggle(key)} className={`p-2.5 rounded-lg transition-colors border ${isConfirmed ? 'text-green-600 bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' : 'text-zinc-300 bg-zinc-50 border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700'}`}><CheckCircle2 size={18} /></button>}
+                                              {currentValue && <button onClick={() => onAttendanceToggle(key)} className={`p-2.5 rounded-lg transition-colors border ${isConfirmed ? 'text-emerald-600 bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800' : 'text-zinc-300 bg-zinc-50 border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700'}`}><CheckCircle2 size={18} /></button>}
                                           </div>
                                           {hasLocalConflict && <p className="text-[10px] text-red-500 mt-1 flex items-center gap-1 font-medium"><AlertOctagon size={10}/> Indisponível</p>}
                                           {hasGlobalConflict && <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1 font-bold animate-pulse"><AlertTriangle size={10}/> {globalConflictMsg}</div>}

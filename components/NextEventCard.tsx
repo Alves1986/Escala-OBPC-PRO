@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { CalendarClock, User, CheckCircle2, Clock, MapPin, AlertCircle, ShieldCheck, CalendarPlus } from 'lucide-react';
+import { CalendarClock, User, CheckCircle2, Clock, MapPin, AlertCircle, ShieldCheck, CalendarPlus, ChevronRight } from 'lucide-react';
 import { Role, AttendanceMap, User as UserType } from '../types';
 import { getLocalDateISOString, generateGoogleCalendarUrl } from '../utils/dateUtils';
 
@@ -67,6 +66,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
   const eventIsToday = isToday();
   const eventTime = event.iso.split('T')[1];
 
+  // Helper render for primary action button
   const renderActionButton = (memberKey: string, isConfirmed: boolean, role: string) => {
       const googleCalUrl = generateGoogleCalendarUrl(
           `Escala: ${event.title}`,
@@ -76,17 +76,18 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
 
       if (isConfirmed) {
           return (
-              <div className="space-y-2">
-                  <div className="flex items-center justify-center gap-1.5 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-4 py-3 rounded-xl text-sm font-bold border border-emerald-100 dark:border-emerald-800 w-full shadow-sm">
-                      <ShieldCheck size={18} /> Presença Confirmada
+              <div className="flex gap-2 w-full">
+                  <div className="flex-1 flex items-center justify-center gap-2 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-4 py-2.5 rounded-lg text-sm font-bold border border-emerald-200 dark:border-emerald-800">
+                      <ShieldCheck size={16} /> Presença Confirmada
                   </div>
                   <a 
                       href={googleCalUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-2 text-xs font-bold text-zinc-500 hover:text-teal-600 dark:text-zinc-400 dark:hover:text-teal-400 py-2 transition-colors"
+                      className="p-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                      title="Adicionar ao Google Agenda"
                   >
-                      <CalendarPlus size={14} /> Adicionar ao Google Agenda
+                      <CalendarPlus size={20} />
                   </a>
               </div>
           );
@@ -94,130 +95,141 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
 
       if (!eventIsToday) {
           return (
-              <div className="space-y-3">
-                  <div className="bg-zinc-50 dark:bg-zinc-800/50 p-3 rounded-xl text-center border border-zinc-100 dark:border-zinc-700/50">
-                      <span className="text-xs font-medium text-zinc-400">Check-in disponível no dia do evento</span>
-                  </div>
-                  <a 
-                      href={googleCalUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-2 w-full py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
-                  >
-                      <CalendarPlus size={14} /> Salvar no Google Agenda
-                  </a>
-              </div>
+              <a 
+                  href={googleCalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg text-xs font-bold hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors border border-zinc-200 dark:border-zinc-700"
+              >
+                  <CalendarPlus size={14} /> Salvar no Agenda
+              </a>
           );
       }
 
       switch (timeStatus) {
           case 'early':
               return (
-                  <button disabled className="flex items-center gap-2 px-4 py-3 bg-zinc-100 dark:bg-zinc-700/50 text-zinc-400 rounded-xl text-sm font-medium cursor-not-allowed w-full justify-center">
-                      <Clock size={16} /> 
-                      Abre em {minutesToOpen} min
+                  <button disabled className="flex items-center justify-center gap-2 w-full py-2.5 bg-zinc-50 dark:bg-zinc-800/50 text-zinc-400 rounded-lg text-xs font-bold cursor-not-allowed border border-zinc-100 dark:border-zinc-800">
+                      <Clock size={14} /> Check-in em {minutesToOpen} min
                   </button>
               );
           case 'closed':
               return (
-                  <button disabled className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 text-red-400 border border-red-100 dark:border-red-900/30 rounded-xl text-sm font-medium cursor-not-allowed w-full justify-center">
-                      <AlertCircle size={16} /> 
-                      Check-in Encerrado
+                  <button disabled className="flex items-center justify-center gap-2 w-full py-2.5 bg-red-50 dark:bg-red-900/10 text-red-400 rounded-lg text-xs font-bold cursor-not-allowed">
+                      <AlertCircle size={14} /> Encerrado
                   </button>
               );
           case 'open':
               return (
                   <button 
                       onClick={() => onConfirm(memberKey)}
-                      className="group relative overflow-hidden w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-teal-500/20 active:scale-[0.98] transition-all"
+                      className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-zinc-900 dark:bg-white hover:bg-black dark:hover:bg-zinc-200 text-white dark:text-zinc-900 rounded-lg text-sm font-bold shadow-md active:scale-95 transition-all"
                   >
-                      <span className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></span>
-                      <MapPin size={18} /> 
-                      CONFIRMAR PRESENÇA
+                      <MapPin size={16} /> Confirmar Presença
                   </button>
               );
       }
   };
 
   return (
-    <div className="relative mb-8 rounded-3xl overflow-hidden shadow-xl shadow-zinc-200/50 dark:shadow-black/50 border border-white/50 dark:border-zinc-700/50 bg-white dark:bg-zinc-800 group animate-slide-up">
-      {/* Hero Header with Mesh Gradient - System Colors (Teal/Emerald) */}
-      <div className="relative p-8 h-48 flex flex-col justify-between overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-teal-600 via-teal-700 to-emerald-800 opacity-100 dark:opacity-90"></div>
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
-          
-          <div className="relative z-10">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md border border-white/10 text-white/90 text-xs font-bold uppercase tracking-wider mb-2">
-                  <CalendarClock size={14} /> Próximo Evento
+    <div className="relative mb-8 rounded-2xl overflow-hidden bg-white dark:bg-zinc-900 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.1)] border border-zinc-200 dark:border-zinc-800 animate-slide-up group">
+      
+      {/* Top Banner Status */}
+      {eventIsToday && (
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-teal-500 to-emerald-500"></div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3">
+          {/* Header Info */}
+          <div className="p-6 lg:p-8 lg:col-span-1 border-b lg:border-b-0 lg:border-r border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex flex-col justify-between">
+              <div>
+                  <div className="flex items-center gap-2 mb-3">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Próximo Evento</span>
+                      {eventIsToday && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 text-[9px] font-black uppercase">
+                              <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"></span> Hoje
+                          </span>
+                      )}
+                  </div>
+                  <h2 className="text-2xl lg:text-3xl font-bold text-zinc-900 dark:text-white leading-tight mb-2 tracking-tight">
+                      {event.title}
+                  </h2>
+                  <div className="flex items-center gap-3 text-zinc-500 dark:text-zinc-400 text-sm font-medium">
+                      <span>{event.dateDisplay}</span>
+                      <span className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></span>
+                      <span className="flex items-center gap-1"><Clock size={14}/> {eventTime}</span>
+                  </div>
               </div>
-              <h2 className="text-3xl font-bold text-white leading-tight drop-shadow-sm">{event.title}</h2>
+              
+              <div className="hidden lg:block mt-8">
+                  <div className="text-xs text-zinc-400 mb-2">Seu Status:</div>
+                  {/* Find current user status */}
+                  {(() => {
+                      const myRole = team.find(t => currentUser && t.name === currentUser.name);
+                      if (myRole) {
+                          const isConfirmed = attendance[myRole.key];
+                          return renderActionButton(myRole.key, !!isConfirmed, myRole.role);
+                      }
+                      return <div className="text-xs text-zinc-400 italic">Você não está escalado.</div>;
+                  })()}
+              </div>
           </div>
 
-          <div className="relative z-10 flex items-end justify-between">
-              <div className="text-white/90 font-medium text-lg flex items-center gap-2">
-                  {event.dateDisplay} <span className="w-1 h-1 bg-white/50 rounded-full"></span> {eventTime}
+          {/* Team List */}
+          <div className="p-6 lg:p-8 lg:col-span-2">
+              <div className="flex items-center justify-between mb-5">
+                  <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">Escala Oficial</h3>
+                  <div className="text-xs text-zinc-400">{team.length} membros</div>
               </div>
-              {eventIsToday && (
-                  <div className="bg-white text-teal-600 text-xs font-black px-4 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 animate-pulse">
-                      <Clock size={14} /> É HOJE
+
+              {team.length === 0 ? (
+                  <div className="py-8 text-center text-zinc-400 text-sm bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-100 dark:border-zinc-800 border-dashed">
+                      Nenhuma escala definida.
+                  </div>
+              ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {team.map((t, idx) => {
+                          const isConfirmed = attendance[t.key];
+                          const isMe = currentUser && t.name === currentUser.name;
+                          
+                          return (
+                              <div key={idx} className={`group/card flex items-center p-3 rounded-xl border transition-all duration-200 ${
+                                  isMe 
+                                  ? 'bg-white dark:bg-zinc-800 border-teal-200 dark:border-teal-900 ring-1 ring-teal-500/10 shadow-sm' 
+                                  : 'bg-white dark:bg-zinc-800/50 border-zinc-100 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'
+                              }`}>
+                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                                      isConfirmed 
+                                      ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' 
+                                      : 'bg-zinc-100 dark:bg-zinc-700 text-zinc-400 dark:text-zinc-500'
+                                  }`}>
+                                      {isConfirmed ? <CheckCircle2 size={18} /> : <User size={18} />}
+                                  </div>
+                                  
+                                  <div className="ml-3 flex-1 min-w-0">
+                                      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide mb-0.5">{t.role}</p>
+                                      <p className={`text-sm font-bold truncate ${isConfirmed ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                                          {t.name} {isMe && <span className="text-teal-600 dark:text-teal-400 text-[10px] ml-1">(Você)</span>}
+                                      </p>
+                                  </div>
+                              </div>
+                          );
+                      })}
                   </div>
               )}
-          </div>
-      </div>
 
-      <div className="p-6">
-        <div className="flex items-center justify-between mb-5">
-            <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-widest">Escala Oficial</h3>
-            {timeStatus === 'open' && eventIsToday && (
-                <span className="flex h-3 w-3 relative">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-                </span>
-            )}
-        </div>
-        
-        {team.length === 0 ? (
-          <div className="text-center py-10 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-2xl bg-zinc-50 dark:bg-zinc-900/30">
-             <p className="text-zinc-400 text-sm font-medium">Escala ainda não definida.</p>
+              {/* Mobile Only Action Button */}
+              <div className="lg:hidden mt-6 pt-6 border-t border-zinc-100 dark:border-zinc-800">
+                  {(() => {
+                      const myRole = team.find(t => currentUser && t.name === currentUser.name);
+                      if (myRole) {
+                          const isConfirmed = attendance[myRole.key];
+                          return renderActionButton(myRole.key, !!isConfirmed, myRole.role);
+                      }
+                      return null;
+                  })()}
+              </div>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {team.map((t, idx) => {
-              const isConfirmed = attendance[t.key];
-              const isMe = currentUser && t.name === currentUser.name;
-              
-              return (
-                <div key={idx} className={`relative p-4 rounded-2xl border transition-all duration-300 ${
-                    isMe 
-                    ? 'bg-white dark:bg-zinc-800 border-teal-100 dark:border-teal-900/50 shadow-lg shadow-teal-100/50 dark:shadow-none ring-1 ring-teal-500/20' 
-                    : 'bg-zinc-50/50 dark:bg-zinc-900/30 border-zinc-100 dark:border-zinc-700/50 hover:bg-white dark:hover:bg-zinc-800'
-                }`}>
-                  <div className="flex items-center gap-3.5">
-                    <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-sm ${
-                      isConfirmed 
-                        ? 'bg-gradient-to-br from-emerald-400 to-teal-500 text-white shadow-emerald-200 dark:shadow-none' 
-                        : 'bg-white dark:bg-zinc-700 text-zinc-300 dark:text-zinc-500 border border-zinc-100 dark:border-zinc-600'
-                    }`}>
-                      {isConfirmed ? <CheckCircle2 size={20} /> : <User size={20} />}
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide mb-0.5">{t.role}</span>
-                      <span className={`text-sm font-bold truncate ${isConfirmed ? 'text-zinc-800 dark:text-zinc-100' : 'text-zinc-500 dark:text-zinc-400'} ${isMe ? 'text-teal-600 dark:text-teal-400' : ''}`}>
-                        {t.name} {isMe && "(Você)"}
-                      </span>
-                    </div>
-                  </div>
-                  
-                  {isMe && (
-                      <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-700/50">
-                          {renderActionButton(t.key, !!isConfirmed, t.role)}
-                      </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
     </div>
   );
