@@ -180,7 +180,10 @@ const InnerApp = () => {
       return () => window.removeEventListener('pwa-ready', handlePwaReady);
   }, []);
 
+  // --- DARK MODE LOGIC ---
   useEffect(() => {
+    localStorage.setItem('themeMode', themeMode);
+    
     const applyTheme = () => {
         let targetTheme: 'light' | 'dark' = 'light';
         if (themeMode === 'system') {

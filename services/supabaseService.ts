@@ -112,11 +112,12 @@ export const fetchMinistryMembers = async (ministryId: string): Promise<{ member
     // Traz todos para filtrar no cliente se necessário (mais seguro contra dados sujos)
     const { data } = await supabase.from('profiles').select('*');
     
-    // Filtra no JS para garantir robustez contra allowed_ministries mal formatado
+    // Filtra no JS para garantir robustez
     const filteredData = (data || []).filter((p: any) => {
         const allowed = safeParseArray(p.allowed_ministries);
-        // Se for admin ou tiver o ministério permitido, inclui
-        return p.is_admin || allowed.includes(ministryId) || p.ministry_id === ministryId;
+        // CORREÇÃO: Removemos p.is_admin da condição OR.
+        // O membro só aparece se estiver explicitamente vinculado ao ministério atual.
+        return allowed.includes(ministryId) || p.ministry_id === ministryId;
     });
     
     const publicList: TeamMemberProfile[] = filteredData.map((p: any) => ({
