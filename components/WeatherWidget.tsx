@@ -83,8 +83,8 @@ export const WeatherWidget: React.FC = () => {
 
   const getLocationAndFetch = () => {
       if (!navigator.geolocation) {
-          setLoading(false);
-          setError(true);
+          // Fallback se o navegador não suportar
+          fetchWeatherData(-23.5505, -46.6333); // São Paulo (Default)
           return;
       }
 
@@ -94,11 +94,9 @@ export const WeatherWidget: React.FC = () => {
           },
           (err) => {
               console.warn("Erro de geolocalização:", err);
-              // Fallback para coordenadas padrão (Brasília) se negar permissão, ou mostrar erro
-              // fetchWeatherData(-15.7975, -47.8919); 
-              setLoading(false);
-              setRefreshing(false);
-              setError(true);
+              // Fallback para coordenadas padrão (São Paulo) se negar permissão
+              // Isso garante que o widget sempre apareça
+              fetchWeatherData(-23.5505, -46.6333); 
           },
           { 
               enableHighAccuracy: true, // Força uso de GPS/WIFI preciso
@@ -155,6 +153,7 @@ export const WeatherWidget: React.FC = () => {
     );
   }
 
+  // Com o fallback, este estado de erro raramente será alcançado, mas mantemos por segurança
   if (error && !weather) {
       return (
         <button onClick={handleRefresh} className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/20 rounded-2xl border border-red-200 dark:border-red-800/50 shadow-sm text-red-500 hover:bg-red-100 transition-colors">
