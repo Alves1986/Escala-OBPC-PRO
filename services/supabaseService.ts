@@ -19,16 +19,13 @@ export const getSupabase = () => supabase;
 
 // --- UTILS ---
 
-// Helper robusto para corrigir arrays mal formatados (ex: importações de CSV que viraram string)
 const safeParseArray = (value: any): string[] => {
     if (!value) return [];
     if (Array.isArray(value)) {
-        // Limpa aspas extras que podem ter sobrado de CSVs mal formados
         return value.map(v => String(v).replace(/^"+|"+$/g, '').trim()).filter(v => v);
     }
     if (typeof value === 'string') {
         const cleaned = value.trim();
-        // Tenta parsear JSON string: '["Role"]' ou '[""Role""]'
         if (cleaned.startsWith('[') && cleaned.endsWith(']')) {
             try { 
                 const parsed = JSON.parse(cleaned);
@@ -37,21 +34,18 @@ const safeParseArray = (value: any): string[] => {
                 }
             } catch(e) {}
         }
-        // Tenta parsear formato Postgres Array: '{Role, "Role Two"}'
         if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
             return cleaned.slice(1, -1).split(',').map((s: string) => s.replace(/^"|"$/g, '').trim()).filter((s: string) => s);
         }
-        // Fallback: string separada por vírgula
         if (cleaned.includes(',')) {
             return cleaned.split(',').map(s => s.trim()).filter(s => s);
         }
-        // Fallback: valor único
         return [cleaned];
     }
     return [];
 };
 
-// ... (Manter funções de Auth inalteradas até fetchMinistryAvailability) ...
+// ... (Keep Auth functions as is) ...
 export const loginWithEmail = async (email: string, pass: string) => {
     if (!supabase) return { success: true, message: "Demo Login" };
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
@@ -81,7 +75,6 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
     if (data.user) {
         const mainMinistry = ministries[0] || 'midia';
         
-        // Create Profile
         await supabase.from('profiles').insert({
             id: data.user.id,
             email,
@@ -92,7 +85,6 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
             functions: functions || []
         });
 
-        // NOTIFY: Inform the team about the new member
         await sendNotificationSQL(mainMinistry, {
             title: "Novo Membro",
             message: `${name} acabou de se cadastrar na equipe! Dê as boas-vindas.`,
@@ -114,7 +106,7 @@ export const sendPasswordResetEmail = async (email: string) => {
     return { success: !error, message: error ? error.message : "Email enviado!" };
 };
 
-// ... (Manter Profile Functions inalteradas) ...
+// ... (Keep Profile/Member functions as is) ...
 export const fetchMinistryMembers = async (ministryId: string): Promise<{ memberMap: MemberMap, publicList: TeamMemberProfile[] }> => {
     if (!supabase) return { memberMap: {}, publicList: [] };
     
@@ -244,6 +236,7 @@ export const saveMinistrySettings = async (ministryId: string, displayName?: str
     await supabase.from('ministry_settings').upsert({ ministry_id: ministryId, ...updates });
 };
 
+// ... (Keep Schedule functions, but updated `saveScheduleAssignment` below) ...
 export const fetchMinistrySchedule = async (ministryId: string, month: string) => {
     if (!supabase) return { events: [], schedule: {}, attendance: {} };
     
@@ -314,30 +307,35 @@ export const deleteMinistryEvent = async (ministryId: string, iso: string) => {
 
 export const saveScheduleAssignment = async (ministryId: string, key: string, memberName: string) => {
     if (!supabase) return true;
-    const [iso, ...roleParts] = key.split('_');
-    const role = roleParts.join('_');
-    const date_time = iso + ':00';
+    try {
+        const [iso, ...roleParts] = key.split('_');
+        const role = roleParts.join('_');
+        const date_time = iso + ':00';
 
-    const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', date_time).single();
-    if (!event) return false;
+        const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', date_time).single();
+        if (!event) return false;
 
-    let memberId = null;
-    if (memberName) {
-        const { data: member } = await supabase.from('profiles').select('id').eq('name', memberName).single();
-        if (member) memberId = member.id;
+        let memberId = null;
+        if (memberName) {
+            const { data: member } = await supabase.from('profiles').select('id').eq('name', memberName).single();
+            if (member) memberId = member.id;
+        }
+
+        if (!memberId) {
+            await supabase.from('schedule_assignments').delete().eq('event_id', event.id).eq('role', role);
+        } else {
+            await supabase.from('schedule_assignments').upsert({
+                event_id: event.id,
+                role,
+                member_id: memberId,
+                confirmed: false
+            }, { onConflict: 'event_id,role' });
+        }
+        return true;
+    } catch (e) {
+        console.error("Save schedule error:", e);
+        return false;
     }
-
-    if (!memberId) {
-        await supabase.from('schedule_assignments').delete().eq('event_id', event.id).eq('role', role);
-    } else {
-        await supabase.from('schedule_assignments').upsert({
-            event_id: event.id,
-            role,
-            member_id: memberId,
-            confirmed: false
-        }, { onConflict: 'event_id,role' });
-    }
-    return true;
 };
 
 export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap, overwrite: boolean) => {
@@ -349,18 +347,20 @@ export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap
 
 export const toggleAssignmentConfirmation = async (ministryId: string, key: string) => {
     if (!supabase) return false;
-    const [iso, ...roleParts] = key.split('_');
-    const role = roleParts.join('_');
-    const date_time = iso + ':00';
+    try {
+        const [iso, ...roleParts] = key.split('_');
+        const role = roleParts.join('_');
+        const date_time = iso + ':00';
 
-    const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', date_time).single();
-    if (!event) return false;
+        const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', date_time).single();
+        if (!event) return false;
 
-    const { data: assign } = await supabase.from('schedule_assignments').select('confirmed').eq('event_id', event.id).eq('role', role).single();
-    if (assign) {
-        await supabase.from('schedule_assignments').update({ confirmed: !assign.confirmed }).eq('event_id', event.id).eq('role', role);
-        return true;
-    }
+        const { data: assign } = await supabase.from('schedule_assignments').select('confirmed').eq('event_id', event.id).eq('role', role).single();
+        if (assign) {
+            await supabase.from('schedule_assignments').update({ confirmed: !assign.confirmed }).eq('event_id', event.id).eq('role', role);
+            return true;
+        }
+    } catch(e) { console.error(e); }
     return false;
 };
 
@@ -453,49 +453,58 @@ export const fetchMinistryAvailability = async (ministryId: string) => {
     return { availability, notes };
 };
 
-// FIX CRÍTICO: Reescrevendo a lógica de saveMemberAvailability para evitar falhas de constraint no UPSERT.
-// Agora ele verifica se existe -> se sim, UPDATE; se não, INSERT. Muito mais seguro.
+// FIX CRÍTICO: Tratamento robusto para salvar disponibilidade
 export const saveMemberAvailability = async (userId: string, memberName: string, dates: string[], targetMonth: string, notes: Record<string, string>) => {
-    if (!supabase) return { error: { message: "Supabase not initialized" } };
+    if (!supabase) return { error: { message: "Conexão perdida. Tente recarregar." } };
 
-    const monthDates = dates.filter(d => d.startsWith(targetMonth));
-    
-    // Tenta encontrar o registro existente (Select antes de Upsert)
-    // Isso evita problemas se o banco não tiver a Constraint Unique configurada corretamente
-    const { data: existing } = await supabase
-        .from('availability')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('month', targetMonth)
-        .maybeSingle();
-
-    let result;
-
-    if (existing) {
-        // Se existe, faz UPDATE
-        result = await supabase
+    try {
+        const monthDates = dates.filter(d => d.startsWith(targetMonth));
+        
+        // 1. Tenta verificar existência primeiro (Mais seguro contra conflitos)
+        const { data: existing, error: selectError } = await supabase
             .from('availability')
-            .update({ 
-                dates: monthDates,
-                notes: notes 
-            })
-            .eq('id', existing.id);
-    } else {
-        // Se não existe, faz INSERT
-        result = await supabase
-            .from('availability')
-            .insert({
-                user_id: userId,
-                month: targetMonth,
-                dates: monthDates,
-                notes: notes
-            });
+            .select('id')
+            .eq('user_id', userId)
+            .eq('month', targetMonth)
+            .maybeSingle();
+
+        if (selectError) throw selectError;
+
+        let result;
+
+        if (existing) {
+            // Update
+            result = await supabase
+                .from('availability')
+                .update({ 
+                    dates: monthDates,
+                    notes: notes 
+                })
+                .eq('id', existing.id)
+                .select();
+        } else {
+            // Insert
+            result = await supabase
+                .from('availability')
+                .insert({
+                    user_id: userId,
+                    month: targetMonth,
+                    dates: monthDates,
+                    notes: notes
+                })
+                .select();
+        }
+
+        if (result.error) throw result.error;
+        return { data: result.data, error: null };
+
+    } catch (err: any) {
+        console.error("Save availability error:", err);
+        return { error: { message: err.message || "Falha ao salvar." } };
     }
-
-    return result;
 };
 
-// ... (Restante das funções: Notifications, Announcements, Swaps, Repertoire, Ranking, Push, etc. mantidas iguais) ...
+// ... (Rest of functions remain same but we assume they work as they are generally simpler) ...
 export const fetchNotificationsSQL = async (ministryIds: string[], userId: string): Promise<AppNotification[]> => {
     if (!supabase) return [];
     

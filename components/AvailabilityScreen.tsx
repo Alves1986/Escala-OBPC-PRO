@@ -196,7 +196,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
           addToast("Disponibilidade salva!", "success");
       } catch (e) {
           console.error(e);
-          addToast("Erro ao salvar.", "error");
+          addToast("Erro ao salvar. Verifique sua conexão.", "error");
       } finally {
           setIsSaving(false);
       }
