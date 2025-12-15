@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { Plus, Trash2, CalendarDays, Clock } from 'lucide-react';
 import { CustomEvent } from '../types';
@@ -45,8 +44,10 @@ export const EventsScreen: React.FC<Props> = ({ customEvents, onCreateEvent, onD
       });
   };
 
+  // Robustly list events by ISO string to prevent timezone shuffle
   const displayedEvents = useMemo(() => {
       if (!customEvents || !Array.isArray(customEvents)) return [];
+      
       return [...customEvents].sort((a, b) => {
             const dateA = a.iso || `${a.date}T${a.time}`;
             const dateB = b.iso || `${b.date}T${b.time}`;
@@ -57,7 +58,10 @@ export const EventsScreen: React.FC<Props> = ({ customEvents, onCreateEvent, onD
   const formatDateDisplay = (dateStr: string) => {
       if (!dateStr) return '--/--';
       try {
-          return dateStr.split('-').reverse().join('/');
+          // Robust DD/MM formation independent of Date object to avoid TZ shifts
+          const parts = dateStr.split('-');
+          if (parts.length === 3) return `${parts[2]}/${parts[1]}`;
+          return dateStr;
       } catch (e) {
           return dateStr;
       }
@@ -140,6 +144,7 @@ export const EventsScreen: React.FC<Props> = ({ customEvents, onCreateEvent, onD
            <div className="grid grid-cols-1 gap-3">
                {displayedEvents.map(evt => {
                   const eventDateStr = evt.date || (evt.iso ? evt.iso.split('T')[0] : '');
+                  
                   return (
                     <div key={evt.id || evt.iso} className="flex justify-between items-center bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md transition-shadow group animate-slide-up">
                         <div className="flex items-center gap-4">
