@@ -118,21 +118,21 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
       {/* Profile Header Card */}
       <div className="relative bg-white dark:bg-zinc-800 rounded-3xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden mb-6">
           {/* Cover Background */}
-          <div className="h-32 bg-gradient-to-r from-teal-600 via-emerald-600 to-teal-800 relative">
+          <div className="h-28 md:h-32 bg-gradient-to-r from-teal-600 via-emerald-600 to-teal-800 relative">
               <div className="absolute inset-0 bg-black/10"></div>
               <div className="absolute bottom-0 left-0 w-full h-16 bg-gradient-to-t from-black/20 to-transparent"></div>
           </div>
 
           <div className="px-6 pb-6 relative">
-              <div className="flex flex-col md:flex-row items-center md:items-end gap-4 -mt-12 mb-4">
+              <div className="flex flex-col md:flex-row items-center md:items-end gap-4 -mt-10 md:-mt-12 mb-4">
                   {/* Avatar Circle */}
                   <div className="relative group cursor-pointer shrink-0" onClick={() => fileInputRef.current?.click()}>
-                      <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-4 border-white dark:border-zinc-800 shadow-xl bg-zinc-100 dark:bg-zinc-700 flex items-center justify-center relative z-10">
+                      <div className="w-20 h-20 md:w-32 md:h-32 rounded-full overflow-hidden border-4 border-white dark:border-zinc-800 shadow-xl bg-zinc-100 dark:bg-zinc-700 flex items-center justify-center relative z-10">
                         {avatar ? (
                           <img src={avatar} alt="Profile" className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full bg-gradient-to-br from-zinc-200 to-zinc-300 dark:from-zinc-700 dark:to-zinc-600 flex items-center justify-center text-zinc-400 dark:text-zinc-500">
-                            <UserIcon size={48} />
+                            <UserIcon size={40} />
                           </div>
                         )}
                       </div>
@@ -141,19 +141,19 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                         <Camera className="text-white drop-shadow-md" size={28} />
                       </div>
 
-                      <div className="absolute bottom-1 right-1 z-30 bg-teal-600 text-white p-2 rounded-full shadow-lg border-2 border-white dark:border-zinc-800 pointer-events-none">
-                        <Camera size={14} />
+                      <div className="absolute bottom-1 right-1 z-30 bg-teal-600 text-white p-1.5 md:p-2 rounded-full shadow-lg border-2 border-white dark:border-zinc-800 pointer-events-none">
+                        <Camera size={12} />
                       </div>
                   </div>
                   <input type="file" ref={fileInputRef} onChange={handleImageChange} accept="image/*" className="hidden" />
 
                   {/* Name & Title */}
-                  <div className="flex-1 text-center md:text-left mb-2">
-                      <h1 className="text-2xl font-bold text-zinc-900 dark:text-white flex items-center justify-center md:justify-start gap-2">
+                  <div className="flex-1 text-center md:text-left mb-2 w-full">
+                      <h1 className="text-xl md:text-2xl font-bold text-zinc-900 dark:text-white flex items-center justify-center md:justify-start gap-2 truncate">
                           {user.name} 
-                          {user.role === 'admin' && <Shield size={18} className="text-teal-500 fill-teal-500/20"/>}
+                          {user.role === 'admin' && <Shield size={16} className="text-teal-500 fill-teal-500/20"/>}
                       </h1>
-                      <p className="text-zinc-500 dark:text-zinc-400 text-sm font-medium">
+                      <p className="text-zinc-500 dark:text-zinc-400 text-xs md:text-sm font-medium">
                           {user.role === 'admin' ? 'Administrador do Sistema' : 'Membro da Equipe'}
                       </p>
                   </div>

@@ -1,3 +1,4 @@
+
 import React, { ReactNode, useState, useRef } from 'react';
 import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles, Building2 } from 'lucide-react';
 import { User, AppNotification } from '../types';
@@ -267,7 +268,7 @@ export const DashboardLayout: React.FC<Props> = ({
       </aside>
 
       {/* Main Content Area */}
-      <main className={`flex-1 flex flex-col min-w-0 bg-transparent transition-all duration-300 overflow-hidden relative`}>
+      <main className={`flex-1 flex flex-col min-w-0 max-w-full bg-transparent transition-all duration-300 overflow-hidden relative`}>
         
         {/* Mobile Header - Sticky Glass */}
         <header className="lg:hidden h-16 px-4 flex items-center justify-between sticky top-0 z-30 bg-white/80 dark:bg-[#09090b]/80 backdrop-blur-xl border-b border-zinc-200/50 dark:border-zinc-800/50">
@@ -327,8 +328,8 @@ export const DashboardLayout: React.FC<Props> = ({
              </div>
         </header>
 
-        {/* Content Scroll Area - Standardized Padding */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-8 custom-scrollbar">
+        {/* Content Scroll Area - Standardized Padding with X-Hidden */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-8 custom-scrollbar relative w-full">
             <div className="max-w-6xl mx-auto w-full h-full pb-10">
                 {children}
             </div>

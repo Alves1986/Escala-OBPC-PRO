@@ -71,16 +71,16 @@ export const SwapRequestsScreen: React.FC<Props> = ({
         </div>
 
         {/* Tabs */}
-        <div className="flex p-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl w-full max-w-md mx-auto">
+        <div className="flex p-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl w-full max-w-sm mx-auto">
             <button 
                 onClick={() => setActiveTab('mine')}
-                className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'mine' ? 'bg-white dark:bg-zinc-700 shadow text-zinc-900 dark:text-white' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+                className={`flex-1 py-2 text-xs md:text-sm font-bold rounded-lg transition-all ${activeTab === 'mine' ? 'bg-white dark:bg-zinc-700 shadow text-zinc-900 dark:text-white' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
             >
                 Minhas Escalas
             </button>
             <button 
                 onClick={() => setActiveTab('wall')}
-                className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'wall' ? 'bg-white dark:bg-zinc-700 shadow text-zinc-900 dark:text-white' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+                className={`flex-1 py-2 text-xs md:text-sm font-bold rounded-lg transition-all ${activeTab === 'wall' ? 'bg-white dark:bg-zinc-700 shadow text-zinc-900 dark:text-white' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
             >
                 Mural de Trocas
                 {visibleRequests.length > 0 && <span className="ml-2 bg-amber-500 text-white text-[10px] px-1.5 rounded-full">{visibleRequests.length}</span>}

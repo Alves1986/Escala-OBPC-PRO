@@ -242,8 +242,10 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
 
       {mode === 'manage' && (
           <div className="flex flex-col lg:flex-row gap-6">
-              <div className="flex-1 bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-fade-in">
-                  <div className="flex gap-2 mb-4 border-b border-zinc-100 dark:border-zinc-700 pb-1 overflow-x-auto">
+              <div className="flex-1 bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-fade-in w-full overflow-hidden">
+                  
+                  {/* Full Bleed Mobile Tabs */}
+                  <div className="flex gap-2 mb-4 border-b border-zinc-100 dark:border-zinc-700 pb-1 overflow-x-auto no-scrollbar -mx-5 px-5 md:mx-0 md:px-0">
                       <button onClick={() => setActiveTab('spotify')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'spotify' ? 'text-green-600 border-green-500 bg-green-50 dark:bg-green-900/10' : 'text-zinc-500 border-transparent'}`}><Search size={14}/> Spotify</button>
                       <button onClick={() => setActiveTab('youtube')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'youtube' ? 'text-red-600 border-red-500 bg-red-50 dark:bg-red-900/10' : 'text-zinc-500 border-transparent'}`}><Youtube size={14}/> YouTube</button>
                       {isLouvor && <button onClick={() => setActiveTab('cifra')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'cifra' ? 'text-orange-600 border-orange-500 bg-orange-50 dark:bg-orange-900/10' : 'text-zinc-500 border-transparent'}`}><FileText size={14}/> Cifras</button>}
