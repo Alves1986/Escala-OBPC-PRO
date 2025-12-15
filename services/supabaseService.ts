@@ -51,7 +51,7 @@ const safeParseArray = (value: any): string[] => {
     return [];
 };
 
-// ... (Authentication functions remain the same) ...
+// ... (Manter funções de Auth inalteradas até fetchMinistryAvailability) ...
 export const loginWithEmail = async (email: string, pass: string) => {
     if (!supabase) return { success: true, message: "Demo Login" };
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
@@ -114,7 +114,7 @@ export const sendPasswordResetEmail = async (email: string) => {
     return { success: !error, message: error ? error.message : "Email enviado!" };
 };
 
-// ... (Profile functions remain the same) ...
+// ... (Manter Profile Functions inalteradas) ...
 export const fetchMinistryMembers = async (ministryId: string): Promise<{ memberMap: MemberMap, publicList: TeamMemberProfile[] }> => {
     if (!supabase) return { memberMap: {}, publicList: [] };
     
@@ -217,7 +217,6 @@ export const deleteMember = async (ministryId: string, memberId: string, name: s
     return { success: !error, message: error ? "Erro" : "Removido" };
 };
 
-// ... (Ministry Settings functions) ...
 export const fetchMinistrySettings = async (ministryId: string): Promise<MinistrySettings> => {
     if (!supabase) return { displayName: '', roles: [] };
     const { data } = await supabase.from('ministry_settings').select('*').eq('ministry_id', ministryId).single();
@@ -245,7 +244,6 @@ export const saveMinistrySettings = async (ministryId: string, displayName?: str
     await supabase.from('ministry_settings').upsert({ ministry_id: ministryId, ...updates });
 };
 
-// ... (Schedule & Events functions) ...
 export const fetchMinistrySchedule = async (ministryId: string, month: string) => {
     if (!supabase) return { events: [], schedule: {}, attendance: {} };
     
@@ -455,19 +453,49 @@ export const fetchMinistryAvailability = async (ministryId: string) => {
     return { availability, notes };
 };
 
+// FIX CRÍTICO: Reescrevendo a lógica de saveMemberAvailability para evitar falhas de constraint no UPSERT.
+// Agora ele verifica se existe -> se sim, UPDATE; se não, INSERT. Muito mais seguro.
 export const saveMemberAvailability = async (userId: string, memberName: string, dates: string[], targetMonth: string, notes: Record<string, string>) => {
     if (!supabase) return { error: { message: "Supabase not initialized" } };
+
     const monthDates = dates.filter(d => d.startsWith(targetMonth));
-    const { error } = await supabase.from('availability').upsert({
-        user_id: userId,
-        month: targetMonth,
-        dates: monthDates,
-        notes: notes
-    }, { onConflict: 'user_id,month' });
-    return { error };
+    
+    // Tenta encontrar o registro existente (Select antes de Upsert)
+    // Isso evita problemas se o banco não tiver a Constraint Unique configurada corretamente
+    const { data: existing } = await supabase
+        .from('availability')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('month', targetMonth)
+        .maybeSingle();
+
+    let result;
+
+    if (existing) {
+        // Se existe, faz UPDATE
+        result = await supabase
+            .from('availability')
+            .update({ 
+                dates: monthDates,
+                notes: notes 
+            })
+            .eq('id', existing.id);
+    } else {
+        // Se não existe, faz INSERT
+        result = await supabase
+            .from('availability')
+            .insert({
+                user_id: userId,
+                month: targetMonth,
+                dates: monthDates,
+                notes: notes
+            });
+    }
+
+    return result;
 };
 
-// ... (Notifications & other functions remain the same) ...
+// ... (Restante das funções: Notifications, Announcements, Swaps, Repertoire, Ranking, Push, etc. mantidas iguais) ...
 export const fetchNotificationsSQL = async (ministryIds: string[], userId: string): Promise<AppNotification[]> => {
     if (!supabase) return [];
     
