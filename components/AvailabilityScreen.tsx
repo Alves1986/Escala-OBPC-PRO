@@ -360,8 +360,8 @@ export const AvailabilityScreen: React.FC<Props> = ({
             </div>
         </div>
 
-        {/* Floating Action Bar */}
-        <div className={`fixed bottom-6 left-0 right-0 z-50 flex justify-center pointer-events-none transition-all duration-500 ease-out transform ${hasUnsavedChanges || saveSuccess ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}`}>
+        {/* Floating Action Bar - Adjusted bottom position for mobile nav */}
+        <div className={`fixed bottom-24 lg:bottom-6 left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-500 ease-out transform ${hasUnsavedChanges || saveSuccess ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}`}>
             <div className={`
                 backdrop-blur-xl rounded-2xl shadow-2xl p-2 pl-5 pr-2 w-[90%] max-w-sm flex items-center justify-between pointer-events-auto border ring-1 ring-black/5 transition-colors duration-300
                 ${saveSuccess 
