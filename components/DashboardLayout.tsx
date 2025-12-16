@@ -1,6 +1,6 @@
 
 import React, { ReactNode, useState, useRef } from 'react';
-import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles, Building2 } from 'lucide-react';
+import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles, Building2, Home, Calendar, Megaphone, CalendarCheck } from 'lucide-react';
 import { User, AppNotification } from '../types';
 import { NotificationCenter } from './NotificationCenter';
 import { useClickOutside } from '../hooks/useClickOutside';
@@ -117,17 +117,63 @@ export const DashboardLayout: React.FC<Props> = ({
     );
   };
 
+  // --- MOBILE BOTTOM NAV COMPONENT ---
+  const MobileBottomNav = () => {
+    // Icons mapping for specific bottom nav items if passed via props, or defaults
+    return (
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/90 dark:bg-[#09090b]/90 backdrop-blur-xl border-t border-zinc-200 dark:border-zinc-800 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+        <div className="flex justify-around items-end h-16 pb-2">
+          
+          <button onClick={() => onTabChange('dashboard')} className={`flex flex-col items-center justify-center w-full space-y-1 ${currentTab === 'dashboard' ? 'text-teal-600 dark:text-teal-400' : 'text-zinc-400 dark:text-zinc-500'}`}>
+             <Home size={22} strokeWidth={currentTab === 'dashboard' ? 2.5 : 2} />
+             <span className="text-[9px] font-bold">Início</span>
+          </button>
+
+          <button onClick={() => onTabChange('calendar')} className={`flex flex-col items-center justify-center w-full space-y-1 ${currentTab === 'calendar' ? 'text-teal-600 dark:text-teal-400' : 'text-zinc-400 dark:text-zinc-500'}`}>
+             <Calendar size={22} strokeWidth={currentTab === 'calendar' ? 2.5 : 2} />
+             <span className="text-[9px] font-bold">Escala</span>
+          </button>
+
+          {/* Central Action Button */}
+          <div className="relative -top-5">
+            <button 
+                onClick={() => onTabChange('availability')}
+                className={`w-14 h-14 rounded-full flex items-center justify-center shadow-xl shadow-teal-600/30 transition-transform active:scale-95 border-4 border-[#f8fafc] dark:border-[#09090b] ${
+                    currentTab === 'availability' 
+                    ? 'bg-teal-600 text-white' 
+                    : 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
+                }`}
+            >
+                <CalendarCheck size={24} />
+            </button>
+          </div>
+
+          <button onClick={() => onTabChange('announcements')} className={`flex flex-col items-center justify-center w-full space-y-1 ${currentTab === 'announcements' ? 'text-teal-600 dark:text-teal-400' : 'text-zinc-400 dark:text-zinc-500'}`}>
+             <Megaphone size={22} strokeWidth={currentTab === 'announcements' ? 2.5 : 2} />
+             <span className="text-[9px] font-bold">Avisos</span>
+          </button>
+
+          <button onClick={() => setSidebarOpen(true)} className={`flex flex-col items-center justify-center w-full space-y-1 text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100`}>
+             <Menu size={22} />
+             <span className="text-[9px] font-bold">Menu</span>
+          </button>
+
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex h-screen overflow-hidden bg-[#f8fafc] dark:bg-[#09090b] font-sans text-zinc-900 dark:text-zinc-100 selection:bg-teal-500/20 selection:text-teal-700 dark:selection:text-teal-300">
       
       {/* Mobile Backdrop */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-40 bg-zinc-900/20 backdrop-blur-sm lg:hidden transition-opacity duration-300" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 z-50 bg-zinc-900/40 backdrop-blur-sm lg:hidden transition-opacity duration-300" onClick={() => setSidebarOpen(false)} />
       )}
 
       {/* Sidebar - Modern & Minimalist */}
       <aside 
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white/80 dark:bg-[#0c0c0e]/90 backdrop-blur-2xl border-r border-zinc-200/60 dark:border-zinc-800/60 transform transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] lg:translate-x-0 lg:static lg:inset-0 flex flex-col shadow-xl lg:shadow-none ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed inset-y-0 left-0 z-[60] w-72 bg-white/95 dark:bg-[#0c0c0e]/95 backdrop-blur-2xl border-r border-zinc-200/60 dark:border-zinc-800/60 transform transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] lg:translate-x-0 lg:static lg:inset-0 flex flex-col shadow-2xl lg:shadow-none ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         
         {/* Sidebar Header */}
@@ -273,12 +319,12 @@ export const DashboardLayout: React.FC<Props> = ({
         {/* Mobile Header - Sticky Glass */}
         <header className="lg:hidden h-16 px-4 flex items-center justify-between sticky top-0 z-30 bg-white/80 dark:bg-[#09090b]/80 backdrop-blur-xl border-b border-zinc-200/50 dark:border-zinc-800/50">
             <div className="flex items-center gap-3">
-                <button onClick={() => setSidebarOpen(true)} className="p-2 -ml-2 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg active:scale-95 transition-all">
-                    <Menu size={20} />
-                </button>
+                {/* Logo or Brand on Mobile Header since Menu is now at bottom */}
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center shadow-md text-white">
+                    <Layout size={16} />
+                </div>
                 
                 <div className="flex items-center gap-2 overflow-hidden">
-                    <span className="text-zinc-300 dark:text-zinc-700 h-4 w-px bg-current block"></span>
                     <h1 className="font-bold text-sm text-zinc-800 dark:text-white truncate">{activeLabel}</h1>
                 </div>
             </div>
@@ -330,10 +376,15 @@ export const DashboardLayout: React.FC<Props> = ({
 
         {/* Content Scroll Area - Standardized Padding with X-Hidden */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-8 custom-scrollbar relative w-full">
-            <div className="max-w-6xl mx-auto w-full h-full pb-10">
+            {/* Added extra bottom padding for mobile nav clearance */}
+            <div className="max-w-6xl mx-auto w-full h-full pb-24 lg:pb-10">
                 {children}
             </div>
         </div>
+
+        {/* Mobile Bottom Navigation */}
+        <MobileBottomNav />
+
       </main>
     </div>
   );

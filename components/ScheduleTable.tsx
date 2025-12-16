@@ -372,8 +372,34 @@ export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, sched
   return (
     <div className={`relative group ${readOnly ? 'opacity-70 pointer-events-none' : 'opacity-100'}`}>
       <div className="hidden md:block bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 transition-opacity duration-200 overflow-hidden relative">
-          {showLeftArrow && <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-white dark:from-zinc-900 to-transparent z-20 pointer-events-none" />}
-          {showRightArrow && <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-white dark:from-zinc-900 to-transparent z-20 pointer-events-none" />}
+          
+          {/* Seta Esquerda */}
+          {showLeftArrow && (
+            <>
+                <div className="absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-white dark:from-zinc-900 to-transparent z-20 pointer-events-none" />
+                <button
+                    onClick={() => scroll('left')}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 z-30 p-2.5 bg-white dark:bg-zinc-800 rounded-full shadow-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 hover:scale-110 transition-all active:scale-95"
+                    title="Rolar para esquerda"
+                >
+                    <ChevronLeft size={20} />
+                </button>
+            </>
+          )}
+
+          {/* Seta Direita */}
+          {showRightArrow && (
+            <>
+                <div className="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-white dark:from-zinc-900 to-transparent z-20 pointer-events-none" />
+                <button
+                    onClick={() => scroll('right')}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 z-30 p-2.5 bg-white dark:bg-zinc-800 rounded-full shadow-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 hover:scale-110 transition-all active:scale-95"
+                    title="Rolar para direita"
+                >
+                    <ChevronRight size={20} />
+                </button>
+            </>
+          )}
 
           <div ref={scrollContainerRef} onScroll={checkScroll} className="overflow-x-auto custom-scrollbar scroll-smooth"> 
             <table className="w-full text-sm text-left">
