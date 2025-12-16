@@ -140,9 +140,9 @@ export const generateFullSchedulePDF = (
       lineWidth: 0.1, // Linhas muito finas
     },
     columnStyles: {
-      date: { fontStyle: 'bold', cellWidth: 25, textColor: COLORS.SECONDARY },
-      time: { cellWidth: 15 },
-      event: { fontStyle: 'bold', cellWidth: 45 },
+      date: { fontStyle: 'bold', cellWidth: 28, textColor: COLORS.SECONDARY },
+      time: { cellWidth: 20, halign: 'center' }, // Aumentado para 20 e centralizado
+      event: { fontStyle: 'bold', cellWidth: 50 }, // Aumentado para 50
     },
     alternateRowStyles: {
       fillColor: [250, 250, 250] // Zebra muito sutil
