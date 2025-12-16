@@ -163,7 +163,8 @@ export const AvailabilityScreen: React.FC<Props> = ({
           setSaveSuccess(true);
           setTimeout(() => setSaveSuccess(false), 3000);
           
-          addToast("Disponibilidade enviada com sucesso!", "success");
+          // Toast removido para evitar duplicidade de notificação visual
+          // O feedback já é dado pela barra flutuante verde
       } catch (e: any) {
           console.error(e);
           const msg = e.message || "Erro desconhecido";

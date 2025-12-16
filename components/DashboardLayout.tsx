@@ -121,7 +121,7 @@ export const DashboardLayout: React.FC<Props> = ({
   const MobileBottomNav = () => {
     // Icons mapping for specific bottom nav items if passed via props, or defaults
     return (
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/90 dark:bg-[#09090b]/90 backdrop-blur-xl border-t border-zinc-200 dark:border-zinc-800 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[90] bg-white/90 dark:bg-[#09090b]/90 backdrop-blur-xl border-t border-zinc-200 dark:border-zinc-800 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
         <div className="flex justify-around items-end h-16 pb-2">
           
           <button onClick={() => onTabChange('dashboard')} className={`flex flex-col items-center justify-center w-full space-y-1 ${currentTab === 'dashboard' ? 'text-teal-600 dark:text-teal-400' : 'text-zinc-400 dark:text-zinc-500'}`}>
@@ -168,12 +168,12 @@ export const DashboardLayout: React.FC<Props> = ({
       
       {/* Mobile Backdrop */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-50 bg-zinc-900/40 backdrop-blur-sm lg:hidden transition-opacity duration-300" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 z-[95] bg-zinc-900/40 backdrop-blur-sm lg:hidden transition-opacity duration-300" onClick={() => setSidebarOpen(false)} />
       )}
 
       {/* Sidebar - Modern & Minimalist */}
       <aside 
-        className={`fixed inset-y-0 left-0 z-[60] w-72 bg-white/95 dark:bg-[#0c0c0e]/95 backdrop-blur-2xl border-r border-zinc-200/60 dark:border-zinc-800/60 transform transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] lg:translate-x-0 lg:static lg:inset-0 flex flex-col shadow-2xl lg:shadow-none ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed inset-y-0 left-0 z-[100] w-72 bg-white/95 dark:bg-[#0c0c0e]/95 backdrop-blur-2xl border-r border-zinc-200/60 dark:border-zinc-800/60 transform transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] lg:translate-x-0 lg:static lg:inset-0 flex flex-col shadow-2xl lg:shadow-none ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         
         {/* Sidebar Header */}
