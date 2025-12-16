@@ -4,9 +4,67 @@ import autoTable from "jspdf-autotable";
 import { ScheduleMap, Role } from "../types";
 import { getMonthName } from "./dateUtils";
 
-const BRAND_COLOR = [13, 148, 136]; // Teal-600 (#0d9488)
-const HEADER_COLOR = [240, 253, 250]; // Teal-50
-const TEXT_COLOR = [24, 24, 27]; // Zinc-900
+// --- Design Constants ---
+const COLORS = {
+  PRIMARY: [13, 148, 136],    // Teal-600
+  SECONDARY: [15, 118, 110],  // Teal-700
+  ACCENT: [204, 251, 241],    // Teal-50
+  TEXT_DARK: [39, 39, 42],    // Zinc-800
+  TEXT_LIGHT: [113, 113, 122],// Zinc-500
+  TABLE_LINE: [228, 228, 231],// Zinc-200
+  WHITE: [255, 255, 255]
+};
+
+const LOGO_URL = "https://i.ibb.co/nsFR8zNG/icon1.png"; // Usando o ícone do app
+
+// Helper para desenhar cabeçalho padrão
+const drawHeader = (doc: jsPDF, title: string, subtitle: string, orientation: 'p' | 'l' = 'l') => {
+  const pageWidth = doc.internal.pageSize.width;
+  
+  // Barra lateral decorativa
+  doc.setFillColor(COLORS.PRIMARY[0], COLORS.PRIMARY[1], COLORS.PRIMARY[2]);
+  doc.rect(0, 0, 4, 30, "F");
+
+  // Título Principal
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(22);
+  doc.setTextColor(COLORS.TEXT_DARK[0], COLORS.TEXT_DARK[1], COLORS.TEXT_DARK[2]);
+  doc.text(title.toUpperCase(), 14, 15);
+
+  // Subtítulo (Mês/Ano)
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(12);
+  doc.setTextColor(COLORS.TEXT_LIGHT[0], COLORS.TEXT_LIGHT[1], COLORS.TEXT_LIGHT[2]);
+  doc.text(subtitle, 14, 22);
+
+  // Data de Geração no canto direito
+  doc.setFontSize(8);
+  const dateStr = `Gerado em: ${new Date().toLocaleDateString('pt-BR')}`;
+  doc.text(dateStr, pageWidth - 14, 15, { align: "right" });
+  
+  // Linha separadora suave
+  doc.setDrawColor(COLORS.TABLE_LINE[0], COLORS.TABLE_LINE[1], COLORS.TABLE_LINE[2]);
+  doc.line(14, 28, pageWidth - 14, 28);
+};
+
+// Helper para rodapé
+const drawFooter = (doc: jsPDF) => {
+  const pageCount = doc.internal.getNumberOfPages();
+  const pageWidth = doc.internal.pageSize.width;
+  const pageHeight = doc.internal.pageSize.height;
+
+  for(let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150);
+      
+      // Esquerda
+      doc.text("Gestão Escala OBPC - Sistema Integrado", 14, pageHeight - 10);
+      
+      // Direita (Paginação)
+      doc.text(`Página ${i} de ${pageCount}`, pageWidth - 14, pageHeight - 10, { align: "right" });
+  }
+};
 
 export const generateFullSchedulePDF = (
   ministryName: string,
@@ -15,103 +73,104 @@ export const generateFullSchedulePDF = (
   roles: Role[],
   schedule: ScheduleMap
 ) => {
+  // Landscape para caber todas as colunas
   const doc = new jsPDF({ orientation: "landscape" });
   const monthName = getMonthName(monthIso);
 
-  // Header
-  doc.setFillColor(BRAND_COLOR[0], BRAND_COLOR[1], BRAND_COLOR[2]);
-  doc.rect(0, 0, 297, 24, "F");
-  
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(22);
-  doc.setFont("helvetica", "bold");
-  doc.text(ministryName.toUpperCase(), 14, 16);
-  
-  doc.setFontSize(12);
-  doc.setFont("helvetica", "normal");
-  doc.text(`Escala de ${monthName}`, 280, 16, { align: "right" });
+  drawHeader(doc, ministryName, `Escala Oficial - ${monthName}`);
 
-  // Columns
+  // Preparar Colunas
   const columns = [
-    { header: "Data", dataKey: "date" },
-    { header: "Horário", dataKey: "time" },
-    { header: "Evento", dataKey: "event" },
-    ...roles.map(r => ({ header: r, dataKey: r }))
+    { header: "DATA", dataKey: "date" },
+    { header: "HORA", dataKey: "time" },
+    { header: "EVENTO", dataKey: "event" },
+    ...roles.map(r => ({ header: r.toUpperCase(), dataKey: r }))
   ];
 
-  // Rows
+  // Preparar Dados
   const body = events.map(evt => {
-    const time = evt.iso.split('T')[1];
+    const time = evt.iso.split('T')[1].substring(0, 5); // HH:mm
+    
+    // Detectar dia da semana
+    const dateObj = new Date(evt.iso);
+    const weekDay = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' }).toUpperCase();
+    
     const row: any = {
-      date: evt.dateDisplay,
+      date: `${evt.dateDisplay} (${weekDay.replace('.', '')})`,
       time: time,
       event: evt.title
     };
 
     roles.forEach(role => {
-      // Logic to handle potential dynamic roles like Vocal 1, Vocal 2 if strict mapping is used, 
-      // but assuming standard roles array passed matches schedule keys for now.
-      // If roles array contains "Vocal", but schedule has "Vocal_1", "Vocal_2", this needs specific handling.
-      // For general cases:
       const key = `${evt.iso}_${role}`;
-      
-      // Try exact match first
+      // Lógica para lidar com 'Vocal_1', 'Vocal_2' se necessário, ou correspondência exata
+      // Tenta correspondência exata primeiro
       let value = schedule[key];
       
-      // Special handling for "Vocal" aggregation if needed, or if roles passed are specific
-      // Assuming 'roles' passed to this function are the columns to display.
+      // Se não encontrar e o papel for "Vocal", tenta agregar (opcional, mantendo simples por enquanto)
       
-      row[role] = value || "-";
+      row[role] = value || "";
     });
 
     return row;
   });
 
+  // Gerar Tabela
   // @ts-ignore
   autoTable(doc, {
     columns: columns,
     body: body,
-    startY: 32,
-    theme: 'grid',
+    startY: 35,
+    theme: 'grid', // Mantemos grid mas customizamos as bordas
     headStyles: {
-      fillColor: BRAND_COLOR,
-      textColor: [255, 255, 255],
+      fillColor: COLORS.WHITE,
+      textColor: COLORS.SECONDARY,
       fontStyle: 'bold',
-      halign: 'center'
+      fontSize: 8,
+      lineWidth: 0,
+      valign: 'middle',
+      halign: 'left' // Alinhamento à esquerda fica mais limpo
     },
-    styles: {
+    bodyStyles: {
+      fillColor: COLORS.WHITE,
+      textColor: COLORS.TEXT_DARK,
       fontSize: 9,
-      cellPadding: 3,
-      textColor: TEXT_COLOR,
-      lineColor: [228, 228, 231], // Zinc-200
-      lineWidth: 0.1,
+      cellPadding: 4,
+      lineColor: COLORS.TABLE_LINE,
+      lineWidth: 0.1, // Linhas muito finas
     },
     columnStyles: {
-      date: { fontStyle: 'bold', cellWidth: 20, halign: 'center' },
-      time: { cellWidth: 15, halign: 'center' },
-      event: { fontStyle: 'bold', cellWidth: 40 },
+      date: { fontStyle: 'bold', cellWidth: 25, textColor: COLORS.SECONDARY },
+      time: { cellWidth: 15 },
+      event: { fontStyle: 'bold', cellWidth: 45 },
     },
     alternateRowStyles: {
-      fillColor: HEADER_COLOR
+      fillColor: [250, 250, 250] // Zebra muito sutil
     },
     didParseCell: function(data: any) {
-       // Highlight empty cells or specific status if needed
-       if (data.section === 'body' && data.cell.raw === '-') {
-           data.cell.styles.textColor = [161, 161, 170]; // Zinc-400
+       // Remove bordas verticais para um look "SaaS Moderno"
+       if (data.section === 'head') {
+           data.cell.styles.lineWidth = 0; 
+           // Adiciona uma linha grossa apenas embaixo do header
        }
+       if (data.section === 'body' && !data.cell.raw) {
+           data.cell.text = ["-"];
+           data.cell.styles.textColor = [200, 200, 200];
+           data.cell.styles.halign = 'center';
+       }
+    },
+    willDrawCell: function(data: any) {
+        // Adiciona linha inferior mais forte no cabeçalho
+        if (data.row.index === -1 && data.section === 'head') {
+            doc.setDrawColor(COLORS.PRIMARY[0], COLORS.PRIMARY[1], COLORS.PRIMARY[2]);
+            doc.setLineWidth(0.5);
+            doc.line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
+        }
     }
   });
 
-  // Footer
-  const pageCount = doc.internal.getNumberOfPages();
-  for(let i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
-      doc.setFontSize(8);
-      doc.setTextColor(150);
-      doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')} - Gestão Escala OBPC`, 14, doc.internal.pageSize.height - 10);
-  }
-
-  doc.save(`escala_${ministryName.toLowerCase().replace(/\s/g, '_')}_${monthIso}.pdf`);
+  drawFooter(doc);
+  doc.save(`Escala_${ministryName.trim()}_${monthIso}.pdf`);
 };
 
 export const generateIndividualPDF = (
@@ -121,32 +180,35 @@ export const generateIndividualPDF = (
   events: { iso: string; title: string; dateDisplay: string }[],
   schedule: ScheduleMap
 ) => {
+  // Portrait para individual
   const doc = new jsPDF();
   const monthName = getMonthName(monthIso);
 
-  // Header
-  doc.setFillColor(BRAND_COLOR[0], BRAND_COLOR[1], BRAND_COLOR[2]);
-  doc.rect(0, 0, 210, 40, "F");
+  drawHeader(doc, ministryName, `Ficha Individual - ${monthName}`, 'p');
+
+  // Info do Membro (Card style)
+  doc.setFillColor(248, 250, 252); // Zinc-50
+  doc.roundedRect(14, 35, 182, 25, 2, 2, "F");
   
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(18);
-  doc.setFont("helvetica", "bold");
-  doc.text(`Escala Individual - ${monthName}`, 105, 20, { align: "center" });
+  doc.setFontSize(10);
+  doc.setTextColor(COLORS.TEXT_LIGHT[0], COLORS.TEXT_LIGHT[1], COLORS.TEXT_LIGHT[2]);
+  doc.text("MEMBRO", 20, 42);
   
   doc.setFontSize(14);
-  doc.setFont("helvetica", "normal");
-  doc.text(memberName, 105, 30, { align: "center" });
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(COLORS.TEXT_DARK[0], COLORS.TEXT_DARK[1], COLORS.TEXT_DARK[2]);
+  doc.text(memberName, 20, 50);
 
+  // Filtrar eventos do membro
   const myEvents = [];
-
   events.forEach(evt => {
       Object.entries(schedule).forEach(([key, assignedName]) => {
           if (key.startsWith(evt.iso) && assignedName === memberName) {
-              const role = key.split('_').slice(1).join(' '); // Handle Vocal_1 -> Vocal 1
+              const role = key.split('_').slice(1).join(' '); 
               myEvents.push({
                   date: evt.dateDisplay,
                   weekday: new Date(evt.iso).toLocaleDateString('pt-BR', { weekday: 'long' }),
-                  time: evt.iso.split('T')[1],
+                  time: evt.iso.split('T')[1].substring(0, 5),
                   event: evt.title,
                   role: role
               });
@@ -155,10 +217,11 @@ export const generateIndividualPDF = (
   });
 
   if (myEvents.length === 0) {
-      doc.setTextColor(100);
       doc.setFontSize(12);
-      doc.text("Nenhuma escala encontrada para este período.", 105, 60, { align: "center" });
-      doc.save(`escala_${memberName}_${monthIso}.pdf`);
+      doc.setTextColor(150);
+      doc.text("Nenhuma escala encontrada para este período.", 105, 80, { align: "center" });
+      drawFooter(doc);
+      doc.save(`Individual_${memberName}_${monthIso}.pdf`);
       return;
   }
 
@@ -166,35 +229,54 @@ export const generateIndividualPDF = (
   autoTable(doc, {
       body: myEvents,
       columns: [
-          { header: 'Dia', dataKey: 'date' },
-          { header: 'Semana', dataKey: 'weekday' },
-          { header: 'Horário', dataKey: 'time' },
-          { header: 'Evento', dataKey: 'event' },
-          { header: 'Função', dataKey: 'role' },
+          { header: 'DIA', dataKey: 'date' },
+          { header: 'SEMANA', dataKey: 'weekday' },
+          { header: 'HORÁRIO', dataKey: 'time' },
+          { header: 'EVENTO', dataKey: 'event' },
+          { header: 'FUNÇÃO', dataKey: 'role' },
       ],
-      startY: 50,
-      theme: 'striped',
+      startY: 70,
+      theme: 'plain', // Theme Plain para customizar total
       headStyles: {
-          fillColor: BRAND_COLOR,
-          textColor: 255,
-          fontStyle: 'bold'
+          fillColor: COLORS.WHITE,
+          textColor: COLORS.SECONDARY,
+          fontStyle: 'bold',
+          fontSize: 9,
+          uppercase: true
       },
       styles: {
-          cellPadding: 4,
-          fontSize: 11
+          cellPadding: 5,
+          fontSize: 10,
+          textColor: COLORS.TEXT_DARK,
+          valign: 'middle'
       },
       columnStyles: {
-          date: { fontStyle: 'bold', halign: 'center' },
-          time: { halign: 'center' },
-          role: { fontStyle: 'bold', textColor: [217, 119, 6] } // Amber-600
+          date: { fontStyle: 'bold', textColor: COLORS.PRIMARY },
+          role: { fontStyle: 'bold', textColor: [217, 119, 6] } // Amber-600 para destaque
+      },
+      willDrawCell: function(data: any) {
+          // Linha divisória fina entre eventos
+          if (data.section === 'body' && data.column.index === 0) {
+               doc.setDrawColor(240, 240, 240);
+               doc.line(14, data.cell.y, 196, data.cell.y);
+          }
+          // Linha de cabeçalho
+          if (data.section === 'head' && data.column.index === 0) {
+              doc.setDrawColor(COLORS.PRIMARY[0], COLORS.PRIMARY[1], COLORS.PRIMARY[2]);
+              doc.setLineWidth(0.5);
+              doc.line(14, data.cell.y + data.cell.height, 196, data.cell.y + data.cell.height);
+          }
       }
   });
 
-  // Footer Message
+  // Mensagem Final
   const finalY = (doc as any).lastAutoTable.finalY || 150;
+  doc.setFont("helvetica", "italic");
   doc.setFontSize(10);
-  doc.setTextColor(80);
-  doc.text(`"Tudo o que fizerem, façam de todo o coração, como para o Senhor." (Col 3:23)`, 105, finalY + 20, { align: "center" });
+  doc.setTextColor(100);
+  doc.text(`"Tudo o que fizerem, façam de todo o coração, como para o Senhor."`, 105, finalY + 20, { align: "center" });
+  doc.text(`(Colossenses 3:23)`, 105, finalY + 25, { align: "center" });
 
-  doc.save(`escala_${memberName.replace(/\s/g, '_')}_${monthIso}.pdf`);
+  drawFooter(doc);
+  doc.save(`Individual_${memberName.replace(/\s/g, '_')}_${monthIso}.pdf`);
 };
