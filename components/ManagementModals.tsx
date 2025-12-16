@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { CustomEvent, AvailabilityMap, AuditLogEntry, Role, TeamMemberProfile } from '../types';
-import { X, Plus, Trash2, Calendar, ShieldAlert, Undo2, ArrowUp, ArrowDown, GripVertical, User, Check, Briefcase, Hash } from 'lucide-react';
+import { X, Plus, Trash2, Calendar, ShieldAlert, Undo2, ArrowUp, ArrowDown, GripVertical, User, Check, Briefcase, Hash, History } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface ModalProps {
@@ -333,14 +333,17 @@ export const AuditModal = ({ isOpen, onClose, logs }: { isOpen: boolean; onClose
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Histórico de Atividades (Logs)">
       <div className="space-y-2">
-        {logs.length === 0 && <p className="text-zinc-500 text-sm italic text-center py-4">Nenhum registro encontrado.</p>}
+        {logs.length === 0 && <p className="text-zinc-500 text-sm italic text-center py-8 flex flex-col items-center gap-2"><History size={24} className="opacity-20"/> Nenhum registro recente.</p>}
         {logs.map((log, idx) => (
-          <div key={idx} className="text-xs p-3 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700 rounded-lg">
-            <div className="flex justify-between text-zinc-400 mb-1">
-              <span>{log.date}</span>
-              <span className="font-bold text-blue-500 uppercase tracking-wider text-[10px]">{log.action}</span>
+          <div key={log.id || idx} className="text-xs p-3 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700 rounded-lg flex flex-col gap-1">
+            <div className="flex justify-between items-center text-zinc-400">
+              <span className="font-bold text-zinc-600 dark:text-zinc-300 flex items-center gap-1.5"><User size={10}/> {log.author}</span>
+              <span>{new Date(log.date).toLocaleString('pt-BR')}</span>
             </div>
-            <div className="text-zinc-700 dark:text-zinc-300 font-medium">{log.details}</div>
+            <div className="flex items-center gap-2">
+                <span className="font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider text-[10px] bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded">{log.action}</span>
+            </div>
+            <div className="text-zinc-700 dark:text-zinc-300 font-medium mt-1 leading-relaxed border-l-2 border-zinc-200 dark:border-zinc-700 pl-2">{log.details}</div>
           </div>
         ))}
       </div>

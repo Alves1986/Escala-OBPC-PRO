@@ -39,7 +39,7 @@ const safeParseArray = (value: any): string[] => {
     return [];
 };
 
-// ... (keep login/register functions identical until fetchRepertoire) ...
+// ... (keep login/register/logout/fetchMinistryMembers identical) ...
 export const loginWithEmail = async (email: string, pass: string) => {
     if (!supabase) return { success: true, message: "Demo Login" };
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
@@ -106,15 +106,80 @@ export const deleteMember = async (ministryId: string, memberId: string, name: s
 export const fetchMinistrySettings = async (ministryId: string): Promise<MinistrySettings> => { if (!supabase) return { displayName: '', roles: [] }; const { data } = await supabase.from('ministry_settings').select('*').eq('ministry_id', ministryId).single(); if (!data) return { displayName: '', roles: [] }; return { displayName: data.display_name, roles: safeParseArray(data.roles), availabilityStart: data.availability_start, availabilityEnd: data.availability_end, spotifyClientId: data.spotify_client_id, spotifyClientSecret: data.spotify_client_secret }; };
 export const saveMinistrySettings = async (ministryId: string, displayName?: string, roles?: string[], availabilityStart?: string, availabilityEnd?: string, spotifyClientId?: string, spotifyClientSecret?: string) => { if (!supabase) return; const updates: any = {}; if (displayName !== undefined) updates.display_name = displayName; if (roles !== undefined) updates.roles = roles; if (availabilityStart !== undefined) updates.availability_start = availabilityStart; if (availabilityEnd !== undefined) updates.availability_end = availabilityEnd; if (spotifyClientId !== undefined) updates.spotify_client_id = spotifyClientId; if (spotifyClientSecret !== undefined) updates.spotify_client_secret = spotifyClientSecret; await supabase.from('ministry_settings').upsert({ ministry_id: ministryId, ...updates }); };
 export const fetchMinistrySchedule = async (ministryId: string, month: string) => { if (!supabase) return { events: [], schedule: {}, attendance: {} }; const startDate = `${month}-01`; const [y, m] = month.split('-').map(Number); const nextMonth = new Date(y, m, 1).toISOString().slice(0, 7); const { data: eventsData } = await supabase.from('events').select('*').eq('ministry_id', ministryId).gte('date_time', startDate).lt('date_time', `${nextMonth}-01`).order('date_time'); const events = (eventsData || []).map((e: any) => ({ id: e.id, iso: e.date_time.slice(0, 16), title: e.title, date: e.date_time.slice(0, 10), time: e.date_time.slice(11, 16), dateDisplay: e.date_time.slice(0, 10).split('-').reverse().slice(0, 2).join('/') })); const eventIds = events.map(e => e.id); const schedule: ScheduleMap = {}; const attendance: AttendanceMap = {}; if (eventIds.length > 0) { const { data: assigns } = await supabase.from('schedule_assignments').select('event_id, role, member_id, confirmed, profiles(name)').in('event_id', eventIds); (assigns || []).forEach((a: any) => { const evt = events.find(e => e.id === a.event_id); if (evt && a.profiles) { const key = `${evt.iso}_${a.role}`; schedule[key] = a.profiles.name; if (a.confirmed) attendance[key] = true; } }); } return { events, schedule, attendance }; };
-export const createMinistryEvent = async (ministryId: string, event: { title: string, date: string, time: string }) => { if (!supabase) return; await supabase.from('events').insert({ ministry_id: ministryId, title: event.title, date_time: `${event.date}T${event.time}:00` }); };
-export const updateMinistryEvent = async (ministryId: string, oldIso: string, newTitle: string, newIso: string, applyToAll: boolean) => { if (!supabase) return; const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', oldIso + ':00').single(); if (event) { await supabase.from('events').update({ title: newTitle, date_time: newIso + ':00' }).eq('id', event.id); } };
-export const deleteMinistryEvent = async (ministryId: string, iso: string) => { if (!supabase) return; const date_time = iso.length === 16 ? iso + ':00' : iso; await supabase.from('events').delete().eq('ministry_id', ministryId).eq('date_time', date_time); };
-export const saveScheduleAssignment = async (ministryId: string, key: string, memberName: string) => { if (!supabase) return true; try { const [iso, ...roleParts] = key.split('_'); const role = roleParts.join('_'); const date_time = iso + ':00'; const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', date_time).single(); if (!event) return false; let memberId = null; if (memberName) { const { data: member } = await supabase.from('profiles').select('id').eq('name', memberName).single(); if (member) memberId = member.id; } if (!memberId) { await supabase.from('schedule_assignments').delete().eq('event_id', event.id).eq('role', role); } else { await supabase.from('schedule_assignments').upsert({ event_id: event.id, role, member_id: memberId, confirmed: false }, { onConflict: 'event_id,role' }); } return true; } catch (e) { console.error("Save schedule error:", e); return false; } };
-export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap, overwrite: boolean) => { if (!supabase) return; for (const [key, memberName] of Object.entries(schedule)) { if (memberName) await saveScheduleAssignment(ministryId, key, memberName); } };
-export const toggleAssignmentConfirmation = async (ministryId: string, key: string) => { if (!supabase) return false; try { const [iso, ...roleParts] = key.split('_'); const role = roleParts.join('_'); const date_time = iso + ':00'; const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', date_time).single(); if (!event) return false; const { data: assign } = await supabase.from('schedule_assignments').select('confirmed').eq('event_id', event.id).eq('role', role).single(); if (assign) { await supabase.from('schedule_assignments').update({ confirmed: !assign.confirmed }).eq('event_id', event.id).eq('role', role); return true; } } catch(e) { console.error(e); } return false; };
-export const clearScheduleForMonth = async (ministryId: string, month: string) => { if (!supabase) return; const startDate = `${month}-01T00:00:00`; const [y, m] = month.split('-').map(Number); const nextMonth = new Date(y, m, 1).toISOString(); const { data: events } = await supabase.from('events').select('id').eq('ministry_id', ministryId).gte('date_time', startDate).lt('date_time', nextMonth); const eventIds = events?.map((e: any) => e.id) || []; if (eventIds.length > 0) { await supabase.from('schedule_assignments').delete().in('event_id', eventIds); } };
-export const resetToDefaultEvents = async (ministryId: string, month: string) => { if (!supabase) return; const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-'); const [y, m] = month.split('-').map(Number); const startDate = `${month}-01T00:00:00`; const nextMonth = new Date(y, m, 1).toISOString(); try { await clearScheduleForMonth(cleanMid, month); const { error: deleteError } = await supabase.from('events').delete().eq('ministry_id', cleanMid).gte('date_time', startDate).lt('date_time', nextMonth); if (deleteError) throw deleteError; const daysInMonth = new Date(y, m, 0).getDate(); const eventsToInsert = []; for (let d = 1; d <= daysInMonth; d++) { const date = new Date(y, m - 1, d, 12, 0, 0); const dayOfWeek = date.getDay(); const dateStr = `${month}-${String(d).padStart(2, '0')}`; if (dayOfWeek === 0) { eventsToInsert.push({ ministry_id: cleanMid, title: "Culto da Família", date_time: `${dateStr}T18:00:00` }); } else if (dayOfWeek === 3) { eventsToInsert.push({ ministry_id: cleanMid, title: "Culto de Doutrina", date_time: `${dateStr}T19:30:00` }); } } if (eventsToInsert.length > 0) { await supabase.from('events').insert(eventsToInsert); } } catch (error) { console.error("Erro ao restaurar eventos:", error); } };
+export const createMinistryEvent = async (ministryId: string, event: { title: string, date: string, time: string }) => { if (!supabase) return; await supabase.from('events').insert({ ministry_id: ministryId, title: event.title, date_time: `${event.date}T${event.time}:00` }); await logAction(ministryId, 'Criou Evento', `Evento: ${event.title} em ${event.date}`); };
+export const updateMinistryEvent = async (ministryId: string, oldIso: string, newTitle: string, newIso: string, applyToAll: boolean) => { if (!supabase) return; const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', oldIso + ':00').single(); if (event) { await supabase.from('events').update({ title: newTitle, date_time: newIso + ':00' }).eq('id', event.id); await logAction(ministryId, 'Editou Evento', `De ${oldIso} para ${newIso} - ${newTitle}`); } };
+export const deleteMinistryEvent = async (ministryId: string, iso: string) => { if (!supabase) return; const date_time = iso.length === 16 ? iso + ':00' : iso; await supabase.from('events').delete().eq('ministry_id', ministryId).eq('date_time', date_time); await logAction(ministryId, 'Excluiu Evento', `Data: ${iso}`); };
 
+// --- AUDIT LOG ---
+const logAction = async (ministryId: string, action: string, details: string) => {
+    if (!supabase) return;
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        const author = user?.user_metadata?.full_name || user?.email || 'Sistema';
+        
+        await supabase.from('audit_logs').insert({
+            ministry_id: ministryId,
+            action,
+            details,
+            author_name: author,
+            created_at: new Date().toISOString()
+        });
+    } catch (e) { console.error("Audit fail", e); }
+};
+
+export const fetchAuditLogs = async (ministryId: string): Promise<AuditLogEntry[]> => {
+    if (!supabase) return [];
+    const { data } = await supabase.from('audit_logs')
+        .select('*')
+        .eq('ministry_id', ministryId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+        
+    return (data || []).map((l: any) => ({
+        id: l.id,
+        date: l.created_at,
+        action: l.action,
+        details: l.details,
+        author: l.author_name
+    }));
+};
+
+export const saveScheduleAssignment = async (ministryId: string, key: string, memberName: string) => {
+    if (!supabase) return true;
+    try {
+        const [iso, ...roleParts] = key.split('_');
+        const role = roleParts.join('_');
+        const date_time = iso + ':00';
+        
+        const { data: event } = await supabase.from('events').select('id, title').eq('ministry_id', ministryId).eq('date_time', date_time).single();
+        if (!event) return false;
+
+        let memberId = null;
+        if (memberName) {
+            const { data: member } = await supabase.from('profiles').select('id').eq('name', memberName).single();
+            if (member) memberId = member.id;
+        }
+
+        if (!memberId) {
+            await supabase.from('schedule_assignments').delete().eq('event_id', event.id).eq('role', role);
+            await logAction(ministryId, 'Removeu Escala', `${role} removido de ${event.title} (${iso})`);
+        } else {
+            await supabase.from('schedule_assignments').upsert({ event_id: event.id, role, member_id: memberId, confirmed: false }, { onConflict: 'event_id,role' });
+            await logAction(ministryId, 'Alterou Escala', `${memberName} escalado como ${role} em ${event.title} (${iso})`);
+        }
+        return true;
+    } catch (e) {
+        console.error("Save schedule error:", e);
+        return false;
+    }
+};
+
+export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap, overwrite: boolean) => { if (!supabase) return; for (const [key, memberName] of Object.entries(schedule)) { if (memberName) await saveScheduleAssignment(ministryId, key, memberName); } };
+export const toggleAssignmentConfirmation = async (ministryId: string, key: string) => { if (!supabase) return false; try { const [iso, ...roleParts] = key.split('_'); const role = roleParts.join('_'); const date_time = iso + ':00'; const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', date_time).single(); if (!event) return false; const { data: assign } = await supabase.from('schedule_assignments').select('confirmed, member_id').eq('event_id', event.id).eq('role', role).single(); if (assign) { await supabase.from('schedule_assignments').update({ confirmed: !assign.confirmed }).eq('event_id', event.id).eq('role', role); await logAction(ministryId, 'Status Presença', `Status alterado para ${!assign.confirmed} (${role})`); return true; } } catch(e) { console.error(e); } return false; };
+export const clearScheduleForMonth = async (ministryId: string, month: string) => { if (!supabase) return; const startDate = `${month}-01T00:00:00`; const [y, m] = month.split('-').map(Number); const nextMonth = new Date(y, m, 1).toISOString(); const { data: events } = await supabase.from('events').select('id').eq('ministry_id', ministryId).gte('date_time', startDate).lt('date_time', nextMonth); const eventIds = events?.map((e: any) => e.id) || []; if (eventIds.length > 0) { await supabase.from('schedule_assignments').delete().in('event_id', eventIds); await logAction(ministryId, 'Limpeza Mensal', `Escala limpa para ${month}`); } };
+export const resetToDefaultEvents = async (ministryId: string, month: string) => { if (!supabase) return; const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-'); const [y, m] = month.split('-').map(Number); const startDate = `${month}-01T00:00:00`; const nextMonth = new Date(y, m, 1).toISOString(); try { await clearScheduleForMonth(cleanMid, month); const { error: deleteError } = await supabase.from('events').delete().eq('ministry_id', cleanMid).gte('date_time', startDate).lt('date_time', nextMonth); if (deleteError) throw deleteError; const daysInMonth = new Date(y, m, 0).getDate(); const eventsToInsert = []; for (let d = 1; d <= daysInMonth; d++) { const date = new Date(y, m - 1, d, 12, 0, 0); const dayOfWeek = date.getDay(); const dateStr = `${month}-${String(d).padStart(2, '0')}`; if (dayOfWeek === 0) { eventsToInsert.push({ ministry_id: cleanMid, title: "Culto da Família", date_time: `${dateStr}T18:00:00` }); } else if (dayOfWeek === 3) { eventsToInsert.push({ ministry_id: cleanMid, title: "Culto de Doutrina", date_time: `${dateStr}T19:30:00` }); } } if (eventsToInsert.length > 0) { await supabase.from('events').insert(eventsToInsert); } await logAction(ministryId, 'Reset Eventos', `Eventos padrão restaurados para ${month}`); } catch (error) { console.error("Erro ao restaurar eventos:", error); } };
+
+// ... (keep fetchMinistryAvailability/saveMemberAvailability identical) ...
 export const fetchMinistryAvailability = async (ministryId: string) => {
     // ... code identical to original ...
     if (!supabase) return { availability: {}, notes: {} };
@@ -188,10 +253,9 @@ export const createSwapRequestSQL = async (ministryId: string, request: SwapRequ
     }); 
     
     if (!error) {
-        const dateDisplay = request.eventIso.split('T')[0].split('-').reverse().slice(0, 2).join('/');
         await sendNotificationSQL(ministryId, {
             title: "🔄 Pedido de Troca",
-            message: `${request.requesterName} solicitou troca para ${request.role} no dia ${dateDisplay}.`,
+            message: `${request.requesterName} solicitou troca para ${request.role}.`,
             type: 'warning',
             actionLink: 'swaps'
         });
@@ -217,6 +281,7 @@ export const performSwapSQL = async (ministryId: string, reqId: string, takerNam
                 type: 'success',
                 actionLink: 'calendar'
             });
+            await logAction(ministryId, 'Troca Escala', `${takerName} assumiu vaga de troca (Pedido ${reqId})`);
         }
         return result;
     } catch (err: any) {
@@ -225,7 +290,7 @@ export const performSwapSQL = async (ministryId: string, reqId: string, takerNam
     }
 };
 
-// --- Updated Repertoire Functions ---
+// ... (keep fetchRepertoire/addToRepertoire identical) ...
 export const fetchRepertoire = async (ministryId: string): Promise<RepertoireItem[]> => { 
     if (!supabase) return []; 
     const { data } = await supabase.from('repertoire').select('*').eq('ministry_id', ministryId).order('event_date', { ascending: false }); 
@@ -261,9 +326,58 @@ export const updateRepertoireItem = async (itemId: string, updates: { content?: 
 };
 
 export const deleteFromRepertoire = async (itemId: string) => { if (!supabase) return; await supabase.from('repertoire').delete().eq('id', itemId); };
-export const fetchGlobalSchedules = async (month: string, currentMinistryId: string): Promise<GlobalConflictMap> => { return {}; };
 
-// --- UPDATED RANKING DATA WITH HISTORY ---
+// --- GLOBAL CONFLICTS FETCHING ---
+export const fetchGlobalSchedules = async (month: string, currentMinistryId: string): Promise<GlobalConflictMap> => {
+    if (!supabase) return {};
+    const startDate = `${month}-01T00:00:00`;
+    const [y, m] = month.split('-').map(Number);
+    const nextMonth = new Date(y, m, 1).toISOString();
+
+    try {
+        // 1. Fetch ALL events in this month for ALL ministries EXCEPT current
+        const { data: events } = await supabase.from('events')
+            .select('id, date_time, ministry_id')
+            .gte('date_time', startDate)
+            .lt('date_time', nextMonth)
+            .neq('ministry_id', currentMinistryId);
+
+        if (!events || events.length === 0) return {};
+
+        const eventIds = events.map((e: any) => e.id);
+        const eventMap: Record<string, any> = {};
+        events.forEach((e: any) => eventMap[e.id] = e);
+
+        // 2. Fetch assignments for these events
+        const { data: assignments } = await supabase.from('schedule_assignments')
+            .select('event_id, role, profiles(name)')
+            .in('event_id', eventIds);
+
+        const conflictMap: GlobalConflictMap = {};
+
+        (assignments || []).forEach((a: any) => {
+            const memberName = a.profiles?.name;
+            if (!memberName) return;
+            const normalizedName = memberName.toLowerCase().trim();
+            const evt = eventMap[a.event_id];
+
+            if (!conflictMap[normalizedName]) conflictMap[normalizedName] = [];
+            
+            conflictMap[normalizedName].push({
+                ministryId: evt.ministry_id,
+                eventIso: evt.date_time.slice(0, 16),
+                role: a.role
+            });
+        });
+
+        return conflictMap;
+    } catch (e) {
+        console.error("Conflict fetch error", e);
+        return {};
+    }
+};
+
+// ... (keep fetchRankingData/saveSubscriptionSQL identical) ...
 export const fetchRankingData = async (ministryId: string): Promise<RankingEntry[]> => {
     // ... Code identical to original function ...
     if (!supabase) return [];

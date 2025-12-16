@@ -40,11 +40,13 @@ export interface MinistrySettings {
     spotifyClientSecret?: string; // New
 }
 
+// --- NEW AUDIT TYPES ---
 export interface AuditLogEntry {
   id?: string;
-  date: string;
-  action: string;
-  details: string;
+  date: string; // ISO String
+  action: string; // "Edited Schedule", "Removed Member", etc.
+  details: string; // "Joao changed Drummer from Pedro to Lucas"
+  author: string; // Who did it
 }
 
 export interface AppNotification {

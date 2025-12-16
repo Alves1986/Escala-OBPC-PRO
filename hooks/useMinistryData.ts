@@ -15,6 +15,8 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     announcementsQuery,
     swapsQuery,
     repertoireQuery,
+    conflictsQuery,
+    auditLogsQuery,
     isLoading
   } = useMinistryQueries(mid, currentMonth, currentUser);
 
@@ -46,7 +48,9 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       await queryClient.invalidateQueries({ predicate: (query) => 
           query.queryKey[0] === 'schedule' || 
           query.queryKey[0] === 'settings' || 
-          query.queryKey[0] === 'members'
+          query.queryKey[0] === 'members' ||
+          query.queryKey[0] === 'audit' ||
+          query.queryKey[0] === 'conflicts'
       });
   };
 
@@ -62,7 +66,8 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     announcements: announcementsQuery.data || [],
     repertoire: repertoireQuery.data || [],
     swapRequests: swapsQuery.data || [],
-    globalConflicts: {}, // Global conflicts temporarily disabled or need separate query
+    globalConflicts: conflictsQuery.data || {}, // New
+    auditLogs: auditLogsQuery.data || [], // New
     roles,
     ministryTitle,
     availabilityWindow,

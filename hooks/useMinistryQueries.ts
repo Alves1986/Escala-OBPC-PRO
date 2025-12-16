@@ -14,7 +14,8 @@ export const keys = {
   swapRequests: (mid: string) => ['swaps', mid],
   repertoire: (mid: string) => ['repertoire', mid],
   globalConflicts: (mid: string, month: string) => ['conflicts', mid, month],
-  ranking: (mid: string) => ['ranking', mid]
+  ranking: (mid: string) => ['ranking', mid],
+  auditLogs: (mid: string) => ['audit', mid] // New Key
 };
 
 export function useMinistryQueries(ministryId: string, currentMonth: string, user: any) {
@@ -77,6 +78,20 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     enabled
   });
 
+  // 9. Global Conflicts (New)
+  const conflictsQuery = useQuery({
+    queryKey: keys.globalConflicts(ministryId, currentMonth),
+    queryFn: () => Supabase.fetchGlobalSchedules(currentMonth, ministryId),
+    enabled
+  });
+
+  // 10. Audit Logs (New - Admin Only usually, but fetching here for now)
+  const auditLogsQuery = useQuery({
+    queryKey: keys.auditLogs(ministryId),
+    queryFn: () => Supabase.fetchAuditLogs(ministryId),
+    enabled: user?.role === 'admin'
+  });
+
   return {
     settingsQuery,
     scheduleQuery,
@@ -86,6 +101,8 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     announcementsQuery,
     swapsQuery,
     repertoireQuery,
+    conflictsQuery,
+    auditLogsQuery,
     isLoading: settingsQuery.isLoading || scheduleQuery.isLoading || membersQuery.isLoading
   };
 }
@@ -100,6 +117,7 @@ export function useScheduleMutations(ministryId: string, currentMonth: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: keys.schedule(ministryId, currentMonth) });
+      queryClient.invalidateQueries({ queryKey: keys.auditLogs(ministryId) }); // Refresh logs
     }
   });
 
@@ -107,6 +125,7 @@ export function useScheduleMutations(ministryId: string, currentMonth: string) {
     mutationFn: (key: string) => Supabase.toggleAssignmentConfirmation(ministryId, key),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: keys.schedule(ministryId, currentMonth) });
+      queryClient.invalidateQueries({ queryKey: keys.auditLogs(ministryId) }); // Refresh logs
     }
   });
 
