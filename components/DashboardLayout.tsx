@@ -4,6 +4,7 @@ import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, 
 import { User, AppNotification } from '../types';
 import { NotificationCenter } from './NotificationCenter';
 import { useClickOutside } from '../hooks/useClickOutside';
+import { useAppStore } from '../store/appStore';
 
 interface NavItem {
   id: string;
@@ -13,14 +14,8 @@ interface NavItem {
 
 interface Props {
   children: ReactNode;
-  sidebarOpen: boolean;
-  setSidebarOpen: (v: boolean) => void;
-  theme: 'dark' | 'light';
-  toggleTheme: () => void;
   onLogout: () => void;
   title: string;
-  isConnected: boolean;
-  currentUser?: User | null;
   currentTab: string;
   onTabChange: (tab: string) => void;
   mainNavItems: NavItem[];
@@ -43,10 +38,11 @@ const getMinistryLabel = (id: string) => {
 };
 
 export const DashboardLayout: React.FC<Props> = ({ 
-  children, sidebarOpen, setSidebarOpen, theme, toggleTheme, onLogout, title, isConnected, currentUser,
+  children, onLogout, title,
   currentTab, onTabChange, mainNavItems, managementNavItems, notifications, onNotificationsUpdate,
   onInstall, isStandalone, onSwitchMinistry, onOpenJoinMinistry
 }) => {
+  const { currentUser, themeMode, setThemeMode, sidebarOpen, setSidebarOpen } = useAppStore();
   const [imgError, setImgError] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [ministryMenuOpen, setMinistryMenuOpen] = useState(false);
@@ -60,23 +56,16 @@ export const DashboardLayout: React.FC<Props> = ({
   const activeLabel = activeItem ? activeItem.label : (currentTab === 'profile' ? 'Meu Perfil' : 'Visão Geral');
   const ActiveIcon = activeItem ? activeItem.icon : <Layout size={20}/>;
 
+  const toggleTheme = () => {
+      if (themeMode === 'system') setThemeMode('light');
+      else if (themeMode === 'light') setThemeMode('dark');
+      else setThemeMode('system');
+  };
+
   const handleHardReload = async () => {
     setIsUpdating(true);
-    setTimeout(async () => {
-      try {
-        if ('serviceWorker' in navigator) {
-            const registrations = await navigator.serviceWorker.getRegistrations();
-            for (let registration of registrations) await registration.unregister();
-        }
-        if ('caches' in window) {
-             const keys = await caches.keys();
-             await Promise.all(keys.map(key => caches.delete(key)));
-        }
-      } catch (e) {
-        console.error("Erro geral na atualização:", e);
-      } finally {
-        window.location.reload();
-      }
+    setTimeout(() => {
+      window.location.reload();
     }, 500);
   };
 
@@ -307,7 +296,7 @@ export const DashboardLayout: React.FC<Props> = ({
                     onClick={toggleTheme}
                     className="flex items-center justify-center gap-1.5 py-1.5 text-[10px] font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg transition-colors"
                 >
-                    {theme === 'dark' ? <Sun size={12} /> : <Moon size={12} />} Tema
+                    {themeMode === 'dark' ? <Sun size={12} /> : <Moon size={12} />} Tema
                 </button>
             </div>
             
@@ -334,7 +323,6 @@ export const DashboardLayout: React.FC<Props> = ({
         {/* Mobile Header - Sticky Glass */}
         <header className="lg:hidden h-16 px-4 flex items-center justify-between sticky top-0 z-30 bg-white/80 dark:bg-[#09090b]/80 backdrop-blur-xl border-b border-zinc-200/50 dark:border-zinc-800/50">
             <div className="flex items-center gap-3">
-                {/* Logo or Brand on Mobile Header since Menu is now at bottom */}
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center shadow-md text-white">
                     <Layout size={16} />
                 </div>
@@ -389,9 +377,8 @@ export const DashboardLayout: React.FC<Props> = ({
              </div>
         </header>
 
-        {/* Content Scroll Area - Standardized Padding with X-Hidden */}
+        {/* Content Scroll Area */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-8 custom-scrollbar relative w-full">
-            {/* Added extra bottom padding for mobile nav clearance */}
             <div className="max-w-6xl mx-auto w-full min-h-full pb-32 lg:pb-12">
                 {children}
             </div>
