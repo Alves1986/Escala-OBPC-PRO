@@ -26,6 +26,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 
 import * as Supabase from './services/supabaseService';
 import { generateScheduleWithAI } from './services/aiService';
+import { generateFullSchedulePDF, generateIndividualPDF } from './utils/pdfGenerator';
 import { ThemeMode, SUPABASE_URL, SUPABASE_KEY } from './types';
 import { adjustMonth, getMonthName, getLocalDateISOString } from './utils/dateUtils';
 import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from './utils/pushUtils';
@@ -538,7 +539,16 @@ const InnerApp = () => {
                         <div className="flex flex-col md:flex-row justify-between items-end gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-6">
                             <div><h2 className="text-3xl font-bold text-zinc-800 dark:text-white flex items-center gap-3"><Edit className="text-blue-600 dark:text-blue-500" size={32} /> Editor de Escala</h2><p className="text-zinc-500 dark:text-zinc-400 mt-2">Gerencie a escala oficial de {getMonthName(currentMonth)}.</p></div>
                             <div className="flex items-center gap-3">
-                                <ToolsMenu onExportIndividual={() => {}} onExportFull={() => {}} onWhatsApp={() => {}} onClearMonth={() => confirmAction("Limpar?", "Limpar toda a escala do mês?", () => Supabase.clearScheduleForMonth(ministryId, currentMonth).then(() => loadData()))} onResetEvents={() => confirmAction("Restaurar?", "Restaurar eventos padrão?", () => Supabase.resetToDefaultEvents(ministryId, currentMonth).then(() => loadData()))} onAiAutoFill={handleAiAutoFill} onSyncCalendar={handleSyncCalendar} allMembers={publicMembers.map(m => m.name)} />
+                                <ToolsMenu 
+                                    onExportIndividual={(member) => generateIndividualPDF(ministryTitle, currentMonth, member, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), schedule)} 
+                                    onExportFull={() => generateFullSchedulePDF(ministryTitle, currentMonth, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), roles, schedule)} 
+                                    onWhatsApp={() => {}} 
+                                    onClearMonth={() => confirmAction("Limpar?", "Limpar toda a escala do mês?", () => Supabase.clearScheduleForMonth(ministryId, currentMonth).then(() => loadData()))} 
+                                    onResetEvents={() => confirmAction("Restaurar?", "Restaurar eventos padrão?", () => Supabase.resetToDefaultEvents(ministryId, currentMonth).then(() => loadData()))} 
+                                    onAiAutoFill={handleAiAutoFill} 
+                                    onSyncCalendar={handleSyncCalendar} 
+                                    allMembers={publicMembers.map(m => m.name)} 
+                                />
                                 <div className="flex items-center gap-2 bg-zinc-900 dark:bg-zinc-800 p-1.5 rounded-lg border border-zinc-700 shadow-sm text-white"><button onClick={() => setCurrentMonth(adjustMonth(currentMonth, -1))} className="p-2 hover:bg-zinc-700 rounded-md"><ArrowLeft size={16}/></button><span className="text-sm font-bold min-w-[80px] text-center">{currentMonth}</span><button onClick={() => setCurrentMonth(adjustMonth(currentMonth, 1))} className="p-2 hover:bg-zinc-700 rounded-md"><ArrowRight size={16}/></button></div>
                             </div>
                         </div>
