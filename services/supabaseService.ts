@@ -39,9 +39,7 @@ const safeParseArray = (value: any): string[] => {
     return [];
 };
 
-// ... (existing functions until fetchRankingData) ...
-// Manter todas as funções anteriores intactas até fetchRankingData
-
+// ... (keep login/register functions identical until fetchRepertoire) ...
 export const loginWithEmail = async (email: string, pass: string) => {
     if (!supabase) return { success: true, message: "Demo Login" };
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
@@ -118,6 +116,7 @@ export const clearScheduleForMonth = async (ministryId: string, month: string) =
 export const resetToDefaultEvents = async (ministryId: string, month: string) => { if (!supabase) return; const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-'); const [y, m] = month.split('-').map(Number); const startDate = `${month}-01T00:00:00`; const nextMonth = new Date(y, m, 1).toISOString(); try { await clearScheduleForMonth(cleanMid, month); const { error: deleteError } = await supabase.from('events').delete().eq('ministry_id', cleanMid).gte('date_time', startDate).lt('date_time', nextMonth); if (deleteError) throw deleteError; const daysInMonth = new Date(y, m, 0).getDate(); const eventsToInsert = []; for (let d = 1; d <= daysInMonth; d++) { const date = new Date(y, m - 1, d, 12, 0, 0); const dayOfWeek = date.getDay(); const dateStr = `${month}-${String(d).padStart(2, '0')}`; if (dayOfWeek === 0) { eventsToInsert.push({ ministry_id: cleanMid, title: "Culto da Família", date_time: `${dateStr}T18:00:00` }); } else if (dayOfWeek === 3) { eventsToInsert.push({ ministry_id: cleanMid, title: "Culto de Doutrina", date_time: `${dateStr}T19:30:00` }); } } if (eventsToInsert.length > 0) { await supabase.from('events').insert(eventsToInsert); } } catch (error) { console.error("Erro ao restaurar eventos:", error); } };
 
 export const fetchMinistryAvailability = async (ministryId: string) => {
+    // ... code identical to original ...
     if (!supabase) return { availability: {}, notes: {} };
     const { data: profiles } = await supabase.from('profiles').select('id, name, allowed_ministries, ministry_id');
     if (!profiles) return { availability: {}, notes: {} };
@@ -144,6 +143,7 @@ export const fetchMinistryAvailability = async (ministryId: string) => {
 };
 
 export const saveMemberAvailability = async (memberName: string, dates: string[], notes: Record<string, string>, targetMonth: string) => {
+    // ... code identical to original ...
     if (!supabase) return { error: { message: "Sem conexão com banco de dados." } };
     try {
         const { data: profile, error: profileError } = await supabase.from('profiles').select('id').eq('name', memberName).single();
@@ -188,8 +188,6 @@ export const createSwapRequestSQL = async (ministryId: string, request: SwapRequ
     }); 
     
     if (!error) {
-        // Envia notificação para todos do ministério (filtragem visual no front)
-        // Isso permite que todos saibam que há uma vaga, incentivando a troca
         const dateDisplay = request.eventIso.split('T')[0].split('-').reverse().slice(0, 2).join('/');
         await sendNotificationSQL(ministryId, {
             title: "🔄 Pedido de Troca",
@@ -202,24 +200,17 @@ export const createSwapRequestSQL = async (ministryId: string, request: SwapRequ
     return !error; 
 };
 
-// --- UPDATED PERFORM SWAP FUNCTION (Using RPC) ---
 export const performSwapSQL = async (ministryId: string, reqId: string, takerName: string, takerId: string) => {
     if (!supabase) return { success: false, message: "Offline" };
-    
     try {
-        // Calls the secure RPC function 'perform_swap' in Postgres
         const { data, error } = await supabase.rpc('perform_swap', {
             p_swap_id: reqId,
             p_taker_id: takerId,
             p_taker_name: takerName
         });
-
         if (error) throw error;
-        
         const result = data as { success: boolean, message: string };
-
         if (result.success) {
-            // Notifica o sucesso da troca
             await sendNotificationSQL(ministryId, { 
                 title: "✅ Troca Realizada", 
                 message: `${takerName} assumiu a escala. O pedido foi finalizado com sucesso.`, 
@@ -227,22 +218,54 @@ export const performSwapSQL = async (ministryId: string, reqId: string, takerNam
                 actionLink: 'calendar'
             });
         }
-
         return result;
-
     } catch (err: any) {
         console.error("Erro na troca (RPC):", err);
         return { success: false, message: "Erro ao processar troca. Tente novamente." };
     }
 };
 
-export const fetchRepertoire = async (ministryId: string): Promise<RepertoireItem[]> => { if (!supabase) return []; const { data } = await supabase.from('repertoire').select('*').eq('ministry_id', ministryId).order('event_date', { ascending: false }); return (data || []).map((r: any) => ({ id: r.id, title: r.title, link: r.link, date: r.event_date, addedBy: r.added_by, createdAt: r.created_at })); };
-export const addToRepertoire = async (ministryId: string, item: { title: string, link: string, date: string, addedBy: string }) => { if (!supabase) return true; const { error } = await supabase.from('repertoire').insert({ ministry_id: ministryId, title: item.title, link: item.link, event_date: item.date, added_by: item.addedBy }); return !error; };
+// --- Updated Repertoire Functions ---
+export const fetchRepertoire = async (ministryId: string): Promise<RepertoireItem[]> => { 
+    if (!supabase) return []; 
+    const { data } = await supabase.from('repertoire').select('*').eq('ministry_id', ministryId).order('event_date', { ascending: false }); 
+    return (data || []).map((r: any) => ({ 
+        id: r.id, 
+        title: r.title, 
+        link: r.link, 
+        date: r.event_date, 
+        addedBy: r.added_by, 
+        createdAt: r.created_at,
+        content: r.content, // New field
+        key: r.key // New field
+    })); 
+};
+
+export const addToRepertoire = async (ministryId: string, item: { title: string, link: string, date: string, addedBy: string, content?: string, key?: string }) => { 
+    if (!supabase) return true; 
+    const { error } = await supabase.from('repertoire').insert({ 
+        ministry_id: ministryId, 
+        title: item.title, 
+        link: item.link, 
+        event_date: item.date, 
+        added_by: item.addedBy,
+        content: item.content, // New field
+        key: item.key // New field
+    }); 
+    return !error; 
+};
+
+export const updateRepertoireItem = async (itemId: string, updates: { content?: string, key?: string }) => {
+    if (!supabase) return;
+    await supabase.from('repertoire').update(updates).eq('id', itemId);
+};
+
 export const deleteFromRepertoire = async (itemId: string) => { if (!supabase) return; await supabase.from('repertoire').delete().eq('id', itemId); };
 export const fetchGlobalSchedules = async (month: string, currentMinistryId: string): Promise<GlobalConflictMap> => { return {}; };
 
 // --- UPDATED RANKING DATA WITH HISTORY ---
 export const fetchRankingData = async (ministryId: string): Promise<RankingEntry[]> => {
+    // ... Code identical to original function ...
     if (!supabase) return [];
     
     // 1. Get Members

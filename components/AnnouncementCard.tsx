@@ -1,5 +1,4 @@
 
-
 import React, { useState } from 'react';
 import { Announcement, User } from '../types';
 import { Megaphone, CheckCircle2, Eye, Clock, AlertTriangle, AlertOctagon, Info, CheckCircle, ChevronDown, ChevronUp, Heart } from 'lucide-react';
@@ -8,7 +7,7 @@ interface Props {
   announcement: Announcement;
   currentUser: User;
   onMarkRead: (id: string) => void;
-  onToggleLike?: (id: string) => void; // Nova Prop
+  onToggleLike?: (id: string) => void; 
 }
 
 export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, onMarkRead, onToggleLike }) => {
@@ -66,32 +65,6 @@ export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, o
 
   const theme = getTheme(announcement.type);
 
-  // Helper function to convert URLs in text to clickable links
-  const formatMessageWithLinks = (text: string) => {
-    // Regex para detectar URLs começando com http:// ou https://
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    
-    const parts = text.split(urlRegex);
-    
-    return parts.map((part, index) => {
-        if (part.match(urlRegex)) {
-            return (
-                <a 
-                    key={index} 
-                    href={part} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-blue-600 dark:text-blue-400 underline hover:text-blue-800 dark:hover:text-blue-300 break-all font-medium transition-colors"
-                    onClick={(e) => e.stopPropagation()} // Impede clique no card se houver lógica de clique no futuro
-                >
-                    {part}
-                </a>
-            );
-        }
-        return part;
-    });
-  };
-
   // Se o usuário já leu e não é admin, ocultamos o card para não poluir (opcional, mas solicitado pelo fluxo "marcar como visto")
   if (hasRead && !isAdmin) return null;
 
@@ -109,9 +82,11 @@ export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, o
                     </span>
                 </div>
                 
-                <div className="text-zinc-700 dark:text-zinc-300 mt-2 text-sm leading-relaxed whitespace-pre-wrap break-words">
-                    {formatMessageWithLinks(announcement.message)}
-                </div>
+                {/* Safe HTML Rendering for Rich Text */}
+                <div 
+                    className="text-zinc-700 dark:text-zinc-300 mt-2 text-sm leading-relaxed break-words prose prose-sm dark:prose-invert max-w-none"
+                    dangerouslySetInnerHTML={{ __html: announcement.message }}
+                />
 
                 <div className="mt-4 flex flex-col sm:flex-row justify-between items-center gap-3 pt-3 border-t border-black/5 dark:border-white/5">
                     <div className="text-xs text-zinc-500">

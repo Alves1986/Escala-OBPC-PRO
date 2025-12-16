@@ -1,12 +1,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Music, Plus, Trash2, ExternalLink, Calendar, Settings, ListMusic, Loader2, Search, Youtube, Link, ArrowLeft, X, PlayCircle, Save, FileText } from 'lucide-react';
+import { Music, Plus, Trash2, ExternalLink, Calendar, Settings, ListMusic, Loader2, Search, Youtube, Link, ArrowLeft, X, PlayCircle, Save, FileText, AlignLeft } from 'lucide-react';
 import { RepertoireItem, User } from '../types';
 import { useToast } from './Toast';
-import { addToRepertoire, deleteFromRepertoire, sendNotificationSQL } from '../services/supabaseService';
+import { addToRepertoire, deleteFromRepertoire, sendNotificationSQL, updateRepertoireItem } from '../services/supabaseService';
 import { searchSpotifyTracks, getLoginUrl, handleLoginCallback, isUserLoggedIn, logoutSpotify, getUserProfile, getUserPlaylists, getPlaylistTracks } from '../services/spotifyService';
 import { searchYouTubeVideos } from '../services/youtubeService';
 import { searchCifraClub } from '../services/cifraClubService';
+import { ChordViewer } from './ChordViewer';
 
 interface Props {
   repertoire: RepertoireItem[];
@@ -24,9 +25,10 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   const [activeTab, setActiveTab] = useState<'manual' | 'spotify' | 'playlists' | 'youtube' | 'cifra'>('spotify');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const dateInputRef = useRef<HTMLInputElement>(null);
+  const [selectedChordItem, setSelectedChordItem] = useState<RepertoireItem | null>(null);
   
   // Staging / Draft State
-  const [draftItems, setDraftItems] = useState<{title: string, link: string}[]>([]);
+  const [draftItems, setDraftItems] = useState<{title: string, link: string, content?: string}[]>([]);
 
   // Persist Date
   const [date, setDate] = useState(() => {
@@ -39,6 +41,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   // Manual Form
   const [title, setTitle] = useState("");
   const [link, setLink] = useState("");
+  const [content, setContent] = useState("");
 
   // Spotify Auth & Data
   const [isSpotifyLoggedIn, setIsSpotifyLoggedIn] = useState(false);
@@ -137,9 +140,10 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
       if (results.length === 0) addToast("Nenhuma cifra encontrada.", "warning");
   };
 
-  const handleAddToDraft = (overrideTitle?: string, overrideLink?: string) => {
+  const handleAddToDraft = (overrideTitle?: string, overrideLink?: string, overrideContent?: string) => {
     const finalTitle = overrideTitle || title;
     const finalLink = overrideLink || link;
+    const finalContent = overrideContent || content;
 
     if (!finalTitle) {
         addToast("O título da música é obrigatório.", "error");
@@ -151,8 +155,8 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
         return;
     }
 
-    setDraftItems(prev => [...prev, { title: finalTitle, link: finalLink }]);
-    if (!overrideTitle) { setTitle(""); setLink(""); }
+    setDraftItems(prev => [...prev, { title: finalTitle, link: finalLink, content: finalContent }]);
+    if (!overrideTitle) { setTitle(""); setLink(""); setContent(""); }
     addToast("Adicionado à lista de seleção!", "success");
   };
 
@@ -182,7 +186,8 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
             title: item.title,
             link: item.link,
             date,
-            addedBy: currentUser.name
+            addedBy: currentUser.name,
+            content: item.content
         });
         if (success) successCount++;
     }
@@ -214,6 +219,14 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
           await setRepertoire([]); 
           addToast("Item removido.", "success");
       });
+  };
+
+  const handleSaveChordPreference = async (newKey: string, newContent: string) => {
+      if (selectedChordItem) {
+          await updateRepertoireItem(selectedChordItem.id, { content: newContent, key: newKey });
+          // No need to refresh full list instantly, keeps UI smooth
+          addToast("Cifra atualizada!", "success");
+      }
   };
 
   const groupedRepertoire = repertoire.reduce((acc, item) => {
@@ -250,7 +263,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                       <button onClick={() => setActiveTab('youtube')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'youtube' ? 'text-red-600 border-red-500 bg-red-50 dark:bg-red-900/10' : 'text-zinc-500 border-transparent'}`}><Youtube size={14}/> YouTube</button>
                       {isLouvor && <button onClick={() => setActiveTab('cifra')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'cifra' ? 'text-orange-600 border-orange-500 bg-orange-50 dark:bg-orange-900/10' : 'text-zinc-500 border-transparent'}`}><FileText size={14}/> Cifras</button>}
                       {isSpotifyLoggedIn && <button onClick={() => { setActiveTab('playlists'); if(userPlaylists.length === 0) handleLoadPlaylists(); }} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'playlists' ? 'text-green-600 border-green-500 bg-green-50 dark:bg-green-900/10' : 'text-zinc-500 border-transparent'}`}><ListMusic size={14}/> Playlists</button>}
-                      <button onClick={() => setActiveTab('manual')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'manual' ? 'text-blue-600 border-blue-500 bg-blue-50 dark:bg-blue-900/10' : 'text-zinc-500 border-transparent'}`}><Link size={14}/> Link Manual</button>
+                      <button onClick={() => setActiveTab('manual')} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-t-lg border-b-2 transition-all whitespace-nowrap ${activeTab === 'manual' ? 'text-blue-600 border-blue-500 bg-blue-50 dark:bg-blue-900/10' : 'text-zinc-500 border-transparent'}`}><AlignLeft size={14}/> Manual / Cifra</button>
                   </div>
 
                   {activeTab === 'spotify' && (
@@ -303,6 +316,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                       <div className="space-y-4 animate-fade-in">
                           <div><label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Título</label><input type="text" placeholder="Ex: Todavia Me Alegrarei" value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100"/></div>
                           <div><label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Link (URL)</label><input type="text" placeholder="https://..." value={link} onChange={e => setLink(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100"/></div>
+                          <div><label className="text-[10px] uppercase text-zinc-400 font-bold mb-1 block">Cifra / Letra</label><textarea placeholder="Cole a cifra aqui..." value={content} onChange={e => setContent(e.target.value)} className="w-full h-32 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100 resize-none" /></div>
                           <div className="flex justify-end"><button onClick={() => handleAddToDraft()} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-lg transition-all active:scale-95 flex items-center justify-center gap-2"><Plus size={16}/> Adicionar</button></div>
                       </div>
                   )}
@@ -326,11 +340,17 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
                       <div className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden shadow-sm">
                           {groupedRepertoire[dateKey].map((item, idx) => (
                               <div key={item.id} className={`flex items-center justify-between p-3 sm:p-4 hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors group ${idx !== groupedRepertoire[dateKey].length - 1 ? 'border-b border-zinc-100 dark:border-zinc-700/50' : ''}`}>
-                                  <div className="flex items-center gap-3 sm:gap-4 overflow-hidden">
+                                  <div className="flex items-center gap-3 sm:gap-4 overflow-hidden flex-1 cursor-pointer" onClick={() => setSelectedChordItem(item)}>
                                       <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${item.link.includes('spotify') ? 'bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400' : item.link.includes('youtu') ? 'bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'}`}>
-                                          {item.link.includes('youtu') ? <Youtube size={20}/> : item.link.includes('cifra') ? <FileText size={20}/> : <Music size={20} />}
+                                          {item.link.includes('youtu') ? <Youtube size={20}/> : (item.link.includes('cifra') || item.content) ? <FileText size={20}/> : <Music size={20} />}
                                       </div>
-                                      <div className="min-w-0"><h4 className="font-bold text-sm text-zinc-800 dark:text-white truncate pr-2">{item.title}</h4><div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400"><span className="hidden sm:inline">• Adicionado por {item.addedBy.split(' ')[0]}</span></div></div>
+                                      <div className="min-w-0">
+                                          <h4 className="font-bold text-sm text-zinc-800 dark:text-white truncate pr-2">{item.title}</h4>
+                                          <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                                              <span>• Adicionado por {item.addedBy.split(' ')[0]}</span>
+                                              {item.content && <span className="bg-zinc-100 dark:bg-zinc-700 px-1.5 py-0.5 rounded text-[10px] font-bold border border-zinc-200 dark:border-zinc-600">CIFRA</span>}
+                                          </div>
+                                      </div>
                                   </div>
                                   <div className="flex items-center gap-2 shrink-0">
                                       <a href={item.link} target="_blank" rel="noopener noreferrer" className="p-2 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"><ExternalLink size={18} /></a>
@@ -343,6 +363,19 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
               );
           })}
       </div>
+
+      {/* Chord Viewer Modal */}
+      {selectedChordItem && (
+          <ChordViewer 
+              isOpen={!!selectedChordItem} 
+              onClose={() => setSelectedChordItem(null)} 
+              title={selectedChordItem.title} 
+              initialContent={selectedChordItem.content || ""} 
+              initialKey={selectedChordItem.key}
+              onSavePreference={handleSaveChordPreference}
+              readOnly={mode !== 'manage'}
+          />
+      )}
     </div>
   );
 };

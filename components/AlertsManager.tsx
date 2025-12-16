@@ -4,6 +4,7 @@ import { Megaphone, Send, Info, CheckCircle, AlertTriangle, AlertOctagon, Calend
 import { AppNotification } from '../types';
 import { useToast } from './Toast';
 import { polishAnnouncementAI } from '../services/aiService';
+import { RichTextEditor } from './RichTextEditor';
 
 interface Props {
   onSend: (title: string, message: string, type: 'info' | 'success' | 'warning' | 'alert', expirationDate: string) => Promise<void>;
@@ -42,7 +43,14 @@ export const AlertsManager: React.FC<Props> = ({ onSend }) => {
   };
 
   const handlePolish = async (tone: 'professional' | 'exciting' | 'urgent') => {
-      if(!message.trim()) return;
+      // For rich text, AI polish is tricky as it might strip HTML. 
+      // For now, we strip tags to polish text, but warn user formatting might be lost
+      // OR better: Disable AI for HTML content for safety in this version.
+      if(!message.trim() || message.includes('<')) {
+          addToast("IA disponível apenas para texto simples.", "warning");
+          return;
+      }
+      
       setIsPolishing(true);
       const refined = await polishAnnouncementAI(message, tone);
       setMessage(refined);
@@ -149,21 +157,15 @@ export const AlertsManager: React.FC<Props> = ({ onSend }) => {
                         </div>
                     </div>
                     <div className="relative">
-                        <textarea 
+                        <RichTextEditor 
                             value={message}
-                            onChange={e => setMessage(e.target.value)}
-                            placeholder="Digite o rascunho aqui e use a IA para melhorar..."
-                            rows={4}
-                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-orange-500 resize-none pr-8 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
+                            onChange={setMessage}
+                            placeholder="Digite o aviso aqui..."
+                            className="min-h-[150px]"
                         />
                         {isPolishing && (
                             <div className="absolute right-3 bottom-3">
                                 <Loader2 className="animate-spin text-orange-500" size={16} />
-                            </div>
-                        )}
-                        {!isPolishing && message.length > 5 && (
-                            <div className="absolute right-2 bottom-2 group">
-                                <Sparkles className="text-zinc-300 group-hover:text-orange-500 transition-colors" size={16}/>
                             </div>
                         )}
                     </div>
@@ -187,13 +189,14 @@ export const AlertsManager: React.FC<Props> = ({ onSend }) => {
                     <div className={`w-full max-w-sm p-4 rounded-xl border shadow-sm ${getBgColor(type)}`}>
                         <div className="flex gap-3">
                             <div className="mt-1 shrink-0">{getIcon(type)}</div>
-                            <div>
+                            <div className="w-full min-w-0">
                                 <h4 className="font-bold text-zinc-800 dark:text-zinc-100 text-sm">
                                     {title || "Título do Aviso"}
                                 </h4>
-                                <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1 leading-relaxed whitespace-pre-wrap">
-                                    {message || "O conteúdo da mensagem aparecerá aqui."}
-                                </p>
+                                <div 
+                                    className="text-xs text-zinc-600 dark:text-zinc-300 mt-1 leading-relaxed break-words prose prose-sm dark:prose-invert max-w-none"
+                                    dangerouslySetInnerHTML={{ __html: message || "O conteúdo aparecerá aqui." }}
+                                />
                                 <span className="text-[10px] text-zinc-400 mt-2 block">
                                     Agora • Válido por {durationDays} dias
                                 </span>

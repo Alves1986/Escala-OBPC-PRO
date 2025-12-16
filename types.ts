@@ -61,7 +61,7 @@ export interface AppNotification {
 export interface Announcement {
   id: string;
   title: string;
-  message: string;
+  message: string; // Now supports HTML/Rich Text
   type: 'info' | 'success' | 'warning' | 'alert';
   timestamp: string;
   expirationDate?: string; 
@@ -121,6 +121,8 @@ export interface RepertoireItem {
   observation?: string;
   addedBy: string;
   createdAt: string;
+  content?: string; // Chords/Lyrics content
+  key?: string; // Musical Key (e.g., "G")
 }
 
 export interface PushSubscriptionRecord {
