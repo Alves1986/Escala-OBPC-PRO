@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { Plus, Trash2, CalendarDays, Clock } from 'lucide-react';
 import { CustomEvent } from '../types';
@@ -68,7 +69,7 @@ export const EventsScreen: React.FC<Props> = ({ customEvents, onCreateEvent, onD
   };
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-4xl mx-auto pb-10">
+    <div className="space-y-6 animate-fade-in max-w-4xl mx-auto pb-28">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
         <div>
           <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">

@@ -105,7 +105,7 @@ export const MonthlyReportScreen: React.FC<Props> = ({
   const handleNextMonth = () => onMonthChange(adjustMonth(currentMonth, 1));
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-20">
+    <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-28">
       
       {/* Header e Controles */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">

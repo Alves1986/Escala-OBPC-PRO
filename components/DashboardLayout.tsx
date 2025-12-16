@@ -119,43 +119,58 @@ export const DashboardLayout: React.FC<Props> = ({
 
   // --- MOBILE BOTTOM NAV COMPONENT ---
   const MobileBottomNav = () => {
-    // Icons mapping for specific bottom nav items if passed via props, or defaults
+    const isDashboard = currentTab === 'dashboard';
+    const isCalendar = currentTab === 'calendar';
+    const isAvailability = currentTab === 'availability';
+    const isAnnouncements = currentTab === 'announcements';
+
     return (
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[90] bg-white/90 dark:bg-[#09090b]/90 backdrop-blur-xl border-t border-zinc-200 dark:border-zinc-800 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
-        <div className="flex justify-around items-end h-16 pb-2">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[90] bg-white/95 dark:bg-[#09090b]/95 backdrop-blur-2xl border-t border-zinc-200 dark:border-zinc-800 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_30px_rgba(0,0,0,0.08)]">
+        <div className="flex justify-around items-end h-[68px] pb-2 px-1">
           
-          <button onClick={() => onTabChange('dashboard')} className={`flex flex-col items-center justify-center w-full space-y-1 ${currentTab === 'dashboard' ? 'text-teal-600 dark:text-teal-400' : 'text-zinc-400 dark:text-zinc-500'}`}>
-             <Home size={22} strokeWidth={currentTab === 'dashboard' ? 2.5 : 2} />
-             <span className="text-[9px] font-bold">Início</span>
+          <button onClick={() => onTabChange('dashboard')} className="flex flex-col items-center justify-end w-full h-full pb-1 group">
+             <div className={`p-1.5 rounded-2xl transition-all duration-300 mb-0.5 ${isDashboard ? 'bg-teal-50 dark:bg-teal-500/20 text-teal-600 dark:text-teal-400 -translate-y-1' : 'text-zinc-400 dark:text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-200'}`}>
+                <Home size={24} strokeWidth={isDashboard ? 2.5 : 2} />
+             </div>
+             <span className={`text-[10px] transition-colors duration-300 ${isDashboard ? 'font-bold text-teal-700 dark:text-teal-400 translate-y-[-2px]' : 'font-medium text-zinc-400 dark:text-zinc-500'}`}>Início</span>
           </button>
 
-          <button onClick={() => onTabChange('calendar')} className={`flex flex-col items-center justify-center w-full space-y-1 ${currentTab === 'calendar' ? 'text-teal-600 dark:text-teal-400' : 'text-zinc-400 dark:text-zinc-500'}`}>
-             <Calendar size={22} strokeWidth={currentTab === 'calendar' ? 2.5 : 2} />
-             <span className="text-[9px] font-bold">Escala</span>
+          <button onClick={() => onTabChange('calendar')} className="flex flex-col items-center justify-end w-full h-full pb-1 group">
+             <div className={`p-1.5 rounded-2xl transition-all duration-300 mb-0.5 ${isCalendar ? 'bg-teal-50 dark:bg-teal-500/20 text-teal-600 dark:text-teal-400 -translate-y-1' : 'text-zinc-400 dark:text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-200'}`}>
+                <Calendar size={24} strokeWidth={isCalendar ? 2.5 : 2} />
+             </div>
+             <span className={`text-[10px] transition-colors duration-300 ${isCalendar ? 'font-bold text-teal-700 dark:text-teal-400 translate-y-[-2px]' : 'font-medium text-zinc-400 dark:text-zinc-500'}`}>Escala</span>
           </button>
 
           {/* Central Action Button */}
-          <div className="relative -top-5">
+          <div className="relative -top-6 group">
             <button 
                 onClick={() => onTabChange('availability')}
-                className={`w-14 h-14 rounded-full flex items-center justify-center shadow-xl shadow-teal-600/30 transition-transform active:scale-95 border-4 border-[#f8fafc] dark:border-[#09090b] ${
-                    currentTab === 'availability' 
-                    ? 'bg-teal-600 text-white' 
-                    : 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
+                className={`w-14 h-14 rounded-full flex items-center justify-center shadow-2xl shadow-teal-600/30 transition-all duration-300 active:scale-95 border-[4px] border-[#f8fafc] dark:border-[#09090b] ${
+                    isAvailability 
+                    ? 'bg-gradient-to-br from-teal-500 to-emerald-600 text-white scale-110 ring-2 ring-teal-500/20' 
+                    : 'bg-zinc-800 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-400 hover:bg-zinc-700'
                 }`}
             >
-                <CalendarCheck size={24} />
+                <CalendarCheck size={26} strokeWidth={2.5} />
             </button>
+            <span className={`absolute -bottom-4 left-1/2 -translate-x-1/2 text-[10px] font-bold transition-colors ${isAvailability ? 'text-teal-600 dark:text-teal-400' : 'text-zinc-400 dark:text-zinc-500'}`}>
+                Dispo
+            </span>
           </div>
 
-          <button onClick={() => onTabChange('announcements')} className={`flex flex-col items-center justify-center w-full space-y-1 ${currentTab === 'announcements' ? 'text-teal-600 dark:text-teal-400' : 'text-zinc-400 dark:text-zinc-500'}`}>
-             <Megaphone size={22} strokeWidth={currentTab === 'announcements' ? 2.5 : 2} />
-             <span className="text-[9px] font-bold">Avisos</span>
+          <button onClick={() => onTabChange('announcements')} className="flex flex-col items-center justify-end w-full h-full pb-1 group">
+             <div className={`p-1.5 rounded-2xl transition-all duration-300 mb-0.5 ${isAnnouncements ? 'bg-teal-50 dark:bg-teal-500/20 text-teal-600 dark:text-teal-400 -translate-y-1' : 'text-zinc-400 dark:text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-200'}`}>
+                <Megaphone size={24} strokeWidth={isAnnouncements ? 2.5 : 2} />
+             </div>
+             <span className={`text-[10px] transition-colors duration-300 ${isAnnouncements ? 'font-bold text-teal-700 dark:text-teal-400 translate-y-[-2px]' : 'font-medium text-zinc-400 dark:text-zinc-500'}`}>Avisos</span>
           </button>
 
-          <button onClick={() => setSidebarOpen(true)} className={`flex flex-col items-center justify-center w-full space-y-1 text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100`}>
-             <Menu size={22} />
-             <span className="text-[9px] font-bold">Menu</span>
+          <button onClick={() => setSidebarOpen(true)} className="flex flex-col items-center justify-end w-full h-full pb-1 group">
+             <div className="p-1.5 rounded-2xl text-zinc-400 dark:text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-200 transition-colors mb-0.5">
+                <Menu size={24} />
+             </div>
+             <span className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 transition-colors">Menu</span>
           </button>
 
         </div>
@@ -377,7 +392,7 @@ export const DashboardLayout: React.FC<Props> = ({
         {/* Content Scroll Area - Standardized Padding with X-Hidden */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-8 custom-scrollbar relative w-full">
             {/* Added extra bottom padding for mobile nav clearance */}
-            <div className="max-w-6xl mx-auto w-full h-full pb-24 lg:pb-10">
+            <div className="max-w-6xl mx-auto w-full min-h-full pb-32 lg:pb-12">
                 {children}
             </div>
         </div>

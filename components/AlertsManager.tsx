@@ -69,7 +69,7 @@ export const AlertsManager: React.FC<Props> = ({ onSend }) => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-4xl mx-auto">
+    <div className="space-y-6 animate-fade-in max-w-4xl mx-auto pb-24">
       <div className="border-b border-zinc-200 dark:border-zinc-700 pb-4">
         <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
           <Megaphone className="text-orange-500"/> Central de Avisos

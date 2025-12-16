@@ -44,7 +44,7 @@ export const MembersScreen: React.FC<Props> = ({
   }, [members, searchTerm, selectedRole, showOnlineOnly, onlineUsers]);
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-7xl mx-auto pb-10">
+    <div className="space-y-6 animate-fade-in max-w-7xl mx-auto pb-28">
         {/* Header com Controles Profissionais */}
         <div className="flex flex-col gap-6 border-b border-zinc-200 dark:border-zinc-700 pb-6">
            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
