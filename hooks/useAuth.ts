@@ -9,57 +9,127 @@ export function useAuth() {
   const [loadingAuth, setLoadingAuth] = useState(true);
 
   useEffect(() => {
-    // Caso o Supabase não esteja configurado, não tenta autenticar para evitar erro de inicialização
-    if (!SUPABASE_URL || SUPABASE_URL === "" || SUPABASE_URL.includes("SUA_URL")) {
-      setLoadingAuth(false);
-      return;
+    // Modo Preview: Loga automaticamente com usuário fictício
+    if (SUPABASE_URL === 'https://preview.mode') {
+        setCurrentUser({
+            id: 'demo-user-123',
+            name: 'Usuário Demo',
+            email: 'demo@teste.com',
+            role: 'admin',
+            ministryId: 'midia',
+            allowedMinistries: ['midia'],
+            avatar_url: '',
+            whatsapp: '11999999999',
+            functions: ['Projeção']
+        });
+        setLoadingAuth(false);
+        return;
     }
 
     const sb = Supabase.getSupabase();
     if (!sb) {
-      setLoadingAuth(false);
-      return;
+        setLoadingAuth(false);
+        return;
     }
 
     const handleUserSession = async (session: any) => {
-      const user = session?.user;
+        const user = session?.user;
 
-      if (!user) {
-        setCurrentUser(null);
-        setLoadingAuth(false);
-        return;
-      }
-
-      try {
-        const { data: profile, error } = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle();
-        
-        if (profile) {
-          setCurrentUser({
-            id: profile.id,
-            name: profile.name,
-            email: profile.email || user.email,
-            role: profile.is_admin ? 'admin' : 'member',
-            ministryId: profile.ministry_id || 'midia',
-            allowedMinistries: profile.allowed_ministries || [],
-            avatar_url: profile.avatar_url,
-            whatsapp: profile.whatsapp,
-            functions: profile.functions || []
-          });
+        if (!user) {
+            setCurrentUser(null);
+            setLoadingAuth(false);
+            return;
         }
-      } catch (e) {
-        console.error("Auth hook error:", e);
-      } finally {
-        setLoadingAuth(false);
-      }
+
+        try {
+            // Busca segura do perfil
+            let { data: profile, error: fetchError } = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle();
+            
+            // LÓGICA DE AUTO-CORREÇÃO (SELF-HEALING) ROBUSTA
+            if (!profile || fetchError) {
+                console.warn("Perfil ausente ou erro de schema. Tentando recriar perfil básico.", user.email);
+                
+                const defaultMinistry = 'midia';
+                const metaName = user.user_metadata?.full_name || user.user_metadata?.name;
+                const emailName = user.email?.split('@')[0];
+                const displayName = metaName || emailName || 'Membro';
+
+                const newProfile = {
+                    id: user.id,
+                    email: user.email,
+                    name: displayName,
+                    avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || '',
+                    ministry_id: defaultMinistry,
+                    allowed_ministries: [defaultMinistry],
+                    role: 'member',
+                    // Não enviamos created_at aqui se o banco tiver default now() para evitar erro de coluna
+                };
+
+                // Tenta inserir na tabela profiles manualmente
+                const { data: insertedProfile, error: insertError } = await sb
+                    .from('profiles')
+                    .upsert(newProfile)
+                    .select()
+                    .single();
+                
+                if (insertError) {
+                    console.error("Falha crítica ao criar perfil automático:", insertError.message);
+                    // Fallback de emergência: Objeto em memória para não travar o app
+                    profile = { ...newProfile, is_admin: false }; 
+                } else {
+                    console.log("Perfil restaurado com sucesso.");
+                    profile = insertedProfile;
+                }
+            }
+
+            // Normalização de dados para evitar undefined
+            if (profile) {
+                const userMinistry = profile.ministry_id || 'midia';
+                const safeAllowed = Array.isArray(profile.allowed_ministries) ? profile.allowed_ministries : [userMinistry];
+                const safeFunctions = Array.isArray(profile.functions) ? profile.functions : [];
+
+                setCurrentUser({
+                    id: profile.id,
+                    name: profile.name || 'Usuário',
+                    email: profile.email || user.email,
+                    role: profile.is_admin ? 'admin' : 'member',
+                    ministryId: userMinistry,
+                    allowedMinistries: safeAllowed,
+                    avatar_url: profile.avatar_url,
+                    whatsapp: profile.whatsapp,
+                    birthDate: profile.birth_date,
+                    functions: safeFunctions
+                });
+            }
+        } catch (e) {
+            console.error("Erro geral na autenticação:", e);
+            // Em caso de erro catastrófico, desloga para tentar limpar o estado
+            await sb.auth.signOut();
+            setCurrentUser(null);
+        } finally {
+            setLoadingAuth(false);
+        }
     };
 
-    sb.auth.getSession().then(({ data: { session } }) => handleUserSession(session));
-
-    const { data: { subscription } } = sb.auth.onAuthStateChange((_event, session) => {
-      handleUserSession(session);
+    // 1. Check Session directly
+    sb.auth.getSession().then(({ data: { session } }) => {
+        handleUserSession(session);
     });
 
-    return () => subscription.unsubscribe();
+    // 2. Listen for changes
+    const { data: { subscription } } = sb.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+            if (event === 'SIGNED_IN') setLoadingAuth(true);
+            handleUserSession(session);
+        } else if (event === 'SIGNED_OUT') {
+            setCurrentUser(null);
+            setLoadingAuth(false);
+        }
+    });
+
+    return () => {
+        subscription.unsubscribe();
+    };
   }, []);
 
   return { currentUser, setCurrentUser, loadingAuth };
