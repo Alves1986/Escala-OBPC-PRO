@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { AvailabilityMap, ScheduleMap, TeamMemberProfile, AvailabilityNotesMap } from "../types";
 
@@ -20,7 +21,6 @@ const getAiClient = () => {
     console.warn("API Key do Gemini não encontrada.");
     throw new Error("Chave de API da Inteligência Artificial não configurada. Verifique o arquivo .env.");
   }
-  // Initialize with named parameter
   return new GoogleGenAI({ apiKey: key });
 };
 
@@ -50,13 +50,14 @@ const prepareMinifiedContext = (context: AIContext) => {
     .map(m => {
       const rawAvail = context.availability[m.name] || [];
       
+      // Critical check for Block Tag
       const isBlocked = rawAvail.some(d => d.startsWith(monthPrefix) && (d.includes('BLK') || d.includes('BLOCKED')));
       
       if (isBlocked) {
           return {
               n: m.name,
               r: m.roles?.filter(r => context.roles.includes(r)) || [],
-              d: [], 
+              d: [], // Empty days array signals 0 availability to AI
               nt: { "0": "User requested BLOCK MONTH" }
           };
       }
@@ -68,14 +69,16 @@ const prepareMinifiedContext = (context: AIContext) => {
             const day = parseInt(date.split('-')[2], 10);
             return { day, suffix };
         })
-        .filter(x => x.day > 0 && x.day <= 31) 
+        .filter(x => x.day > 0 && x.day <= 31) // Exclude markers 00 and 99
         .map(x => x.suffix ? `${x.day}(${x.suffix})` : `${x.day}`);
 
+      // Extract notes for this member for this month
       const notes: Record<string, string> = {};
       if (context.availabilityNotes) {
           Object.entries(context.availabilityNotes).forEach(([key, note]) => {
+             // key is "Name_YYYY-MM-DD"
              if (key.startsWith(`${m.name}_`)) {
-                 const datePart = key.substring(m.name.length + 1); 
+                 const datePart = key.substring(m.name.length + 1); // YYYY-MM-DD
                  if (datePart.startsWith(monthPrefix)) {
                      const day = parseInt(datePart.split('-')[2], 10);
                      notes[day] = note;
@@ -115,25 +118,47 @@ export const generateScheduleWithAI = async (context: AIContext): Promise<Schedu
 
       const systemInstruction = `
         You are an expert Ministry Scheduler for "${ministryId}".
+        
         GOAL: Create a fair schedule based strictly on availability and notes.
-        Required Roles: ${JSON.stringify(roles)}
+        
+        INPUT DATA:
+        - Events (e): {id: "ISO_Date", d: day_number, h: hour_of_day}
+        - Members (m): {n: name, r: [roles], d: [available_days], nt: {day: "note"}}
+        - Required Roles: ${JSON.stringify(roles)}
+
+        AVAILABILITY CODES (d):
+        - "5": Available ALL day.
+        - "5(M)": Available ONLY Morning (h < 13).
+        - "5(N)": Available ONLY Night (h >= 13).
+        - empty list []: NOT AVAILABLE AT ALL. DO NOT SCHEDULE.
+        
+        RULES:
+        0. **STRICT EVENTS**: Schedule ONLY for provided Event IDs.
+        1. **ONE ROLE PER DAY**: A member takes max 1 slot per day.
+        2. **AVAILABILITY**: Respect (M)/(N) constraints vs event hour (h). If 'd' is empty, NEVER schedule.
+        3. **NOTES (nt)**: 
+           - If 'nt' exists for a day, READ IT.
+           - If note says "Prefer [Role]", prioritize assignment to that role.
+           - If note says "Chego as 20h" (late arrival) and event is 19:30, try to avoid or assign a role that allows it.
+           - Notes are high priority hints.
+        4. **FAIRNESS**: Distribute load. Prioritize those with fewer available days to ensure they get a spot.
+
         OUTPUT (JSON): { "EventISO_RoleName": "MemberName" }
       `;
 
-      // Use gemini-3-pro-preview for complex reasoning task
       const response = await ai.models.generateContent({
-          model: 'gemini-3-pro-preview', 
+          model: 'gemini-2.5-flash', 
           contents: JSON.stringify(inputData),
           config: {
               systemInstruction: systemInstruction,
               responseMimeType: "application/json",
-              temperature: 0.0, 
+              temperature: 0.0, // Zero temperature for deterministic output
           }
       });
 
-      // Fixed: response.text is a property
       if (!response.text) throw new Error("A IA não retornou uma escala válida.");
       
+      // Clean potential markdown fences (```json) which cause crashes
       const cleanJson = cleanAiResponse(response.text);
       const rawSchedule = JSON.parse(cleanJson);
 
@@ -161,9 +186,8 @@ export const generateScheduleWithAI = async (context: AIContext): Promise<Schedu
 export const suggestRepertoireAI = async (theme: string, style: string = "Contemporary"): Promise<{title: string, artist: string, reason: string}[]> => {
     try {
         const ai = getAiClient();
-        // Use gemini-3-flash-preview for basic text task
         const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
+            model: 'gemini-2.5-flash',
             contents: `Suggest 5 christian worship songs for the theme: "${theme}". Style: ${style}. Return JSON.`,
             config: {
                 responseMimeType: "application/json",
@@ -181,7 +205,6 @@ export const suggestRepertoireAI = async (theme: string, style: string = "Contem
             }
         });
 
-        // Fixed: response.text is a property
         if (!response.text) return [];
         return JSON.parse(cleanAiResponse(response.text));
     } catch (e) {
@@ -199,17 +222,21 @@ export const polishAnnouncementAI = async (text: string, tone: 'professional' | 
             urgent: "direto, sério e com senso de prioridade"
         };
 
-        // Use gemini-3-flash-preview for proofreading task
         const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
+            model: 'gemini-2.5-flash',
             contents: `
                 Act as a professional copywriter. Rewrite the announcement text below to be ${tonePrompt[tone]}. 
-                STRICT RULES: Return ONLY the rewritten text. NO conversational filler. ONE single best version. Language: Portuguese.
+                
+                STRICT RULES:
+                1. Return ONLY the rewritten text.
+                2. NO conversational filler.
+                3. Provide ONE single best version.
+                4. Language: Portuguese.
+
                 Original Text: "${text}"
             `,
         });
 
-        // Fixed: response.text is a property
         return response.text ? response.text.trim() : text;
     } catch (e) {
         return text;
