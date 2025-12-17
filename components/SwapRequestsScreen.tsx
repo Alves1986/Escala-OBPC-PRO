@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { RefreshCcw, User, Calendar, ArrowRight, CheckCircle2, Clock, Info, FilterX } from 'lucide-react';
+import { RefreshCcw, User, Calendar, ArrowRight, CheckCircle2, Clock, Info, FilterX, Trash2, XCircle, Loader2 } from 'lucide-react';
 import { SwapRequest, User as UserType, ScheduleMap } from '../types';
 import { useToast } from './Toast';
 
@@ -11,18 +11,18 @@ interface Props {
   visibleEvents: { iso: string; title: string; dateDisplay: string }[];
   onCreateRequest: (role: string, iso: string, title: string) => void;
   onAcceptRequest: (reqId: string) => void;
-  onCancelRequest?: (reqId: string) => void;
+  onCancelRequest: (reqId: string) => void;
 }
 
 export const SwapRequestsScreen: React.FC<Props> = ({ 
     schedule, currentUser, requests, visibleEvents, onCreateRequest, onAcceptRequest, onCancelRequest 
 }) => {
   const [activeTab, setActiveTab] = useState<'mine' | 'wall'>('wall');
+  const [processingId, setProcessingId] = useState<string | null>(null);
   const { confirmAction } = useToast();
 
-  // Find my upcoming schedules
+  // Encontrar minhas escalas futuras
   const mySchedules = visibleEvents.map(evt => {
-      // Find all roles I am assigned to in this event
       const myRolesInEvent: string[] = [];
       Object.keys(schedule).forEach(key => {
           if (key.startsWith(evt.iso) && schedule[key] === currentUser.name) {
@@ -33,9 +33,9 @@ export const SwapRequestsScreen: React.FC<Props> = ({
       return { event: evt, roles: myRolesInEvent };
   }).filter(item => item.roles.length > 0);
 
-  // Check if I have already requested swap for a slot
-  const isRequested = (iso: string, role: string) => {
-      return requests.some(r => 
+  // Encontrar o pedido específico para uma vaga
+  const getExistingRequest = (iso: string, role: string) => {
+      return requests.find(r => 
           r.eventIso === iso && 
           r.role === role && 
           r.requesterName === currentUser.name && 
@@ -43,10 +43,7 @@ export const SwapRequestsScreen: React.FC<Props> = ({
       );
   };
 
-  // Filter requests for the Wall
-  // 1. Must be pending
-  // 2. Must NOT be my own request
-  // 3. Must match one of my functions OR I must be admin
+  // Filtrar pedidos para o Mural
   const visibleRequests = requests.filter(req => {
       if (req.status !== 'pending') return false;
       if (req.requesterName === currentUser.name) return false;
@@ -56,6 +53,18 @@ export const SwapRequestsScreen: React.FC<Props> = ({
 
       return isAdmin || hasRole;
   });
+
+  const handleCancel = (reqId: string) => {
+      confirmAction(
+          "Cancelar Pedido",
+          "Deseja remover este pedido de troca? Sua escala voltará ao normal e o item sairá do mural.",
+          () => {
+              setProcessingId(reqId);
+              onCancelRequest(reqId);
+              setTimeout(() => setProcessingId(null), 1000);
+          }
+      );
+  };
 
   return (
     <div className="space-y-6 animate-fade-in max-w-5xl mx-auto">
@@ -93,7 +102,7 @@ export const SwapRequestsScreen: React.FC<Props> = ({
                 <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800/30 flex items-start gap-3">
                     <Info className="text-blue-500 shrink-0 mt-0.5" size={18} />
                     <p className="text-sm text-blue-700 dark:text-blue-300">
-                        Abaixo estão os eventos onde você está escalado. Clique em "Solicitar Troca" para disponibilizar sua vaga no mural para outros membros da mesma função.
+                        Clique em "Solicitar Troca" para disponibilizar sua vaga. Se mudar de ideia, você pode cancelar o pedido a qualquer momento antes de alguém assumir.
                     </p>
                 </div>
 
@@ -105,7 +114,7 @@ export const SwapRequestsScreen: React.FC<Props> = ({
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {mySchedules.map((item, idx) => (
-                            <div key={idx} className="bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                            <div key={idx} className="bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm animate-slide-up">
                                 <div className="flex justify-between items-start mb-3">
                                     <div>
                                         <h3 className="font-bold text-zinc-800 dark:text-white">{item.event.title}</h3>
@@ -118,15 +127,27 @@ export const SwapRequestsScreen: React.FC<Props> = ({
                                 
                                 <div className="space-y-2">
                                     {item.roles.map(role => {
-                                        const alreadyRequested = isRequested(item.event.iso, role);
+                                        const existingReq = getExistingRequest(item.event.iso, role);
+                                        const isProcessing = processingId === existingReq?.id;
+
                                         return (
-                                            <div key={role} className="flex items-center justify-between bg-zinc-50 dark:bg-zinc-900/50 p-3 rounded-lg border border-zinc-100 dark:border-zinc-700/50">
+                                            <div key={role} className={`flex items-center justify-between p-3 rounded-lg border transition-all ${existingReq ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800/50' : 'bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-700/50'}`}>
                                                 <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{role}</span>
                                                 
-                                                {alreadyRequested ? (
-                                                    <span className="text-xs font-bold text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5 rounded-full border border-amber-200 dark:border-amber-800">
-                                                        Solicitação Pendente...
-                                                    </span>
+                                                {existingReq ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider bg-white dark:bg-zinc-800 px-2 py-1 rounded border border-amber-100 dark:border-amber-900">
+                                                            No Mural
+                                                        </span>
+                                                        <button 
+                                                            onClick={() => handleCancel(existingReq.id)}
+                                                            disabled={isProcessing}
+                                                            className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-1 bg-red-50 dark:bg-red-900/20 px-2 py-1.5 rounded-lg transition-colors border border-red-100 dark:border-red-900/30"
+                                                        >
+                                                            {isProcessing ? <Loader2 size={12} className="animate-spin"/> : <XCircle size={12}/>}
+                                                            Cancelar
+                                                        </button>
+                                                    </div>
                                                 ) : (
                                                     <button 
                                                         onClick={() => onCreateRequest(role, item.event.iso, item.event.title)}
@@ -166,7 +187,6 @@ export const SwapRequestsScreen: React.FC<Props> = ({
                         {visibleRequests.map(req => {
                             const dateDisplay = req.eventIso.split('T')[0].split('-').reverse().join('/');
                             const timeDisplay = req.eventIso.split('T')[1];
-                            const isMyRole = currentUser.functions?.includes(req.role);
 
                             return (
                                 <div key={req.id} className="bg-white dark:bg-zinc-800 p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm relative overflow-hidden animate-slide-up">
