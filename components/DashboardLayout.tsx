@@ -42,7 +42,7 @@ export const DashboardLayout: React.FC<Props> = ({
   currentTab, onTabChange, mainNavItems, managementNavItems, notifications, onNotificationsUpdate,
   onInstall, isStandalone, onSwitchMinistry, onOpenJoinMinistry
 }) => {
-  const { currentUser, themeMode, setThemeMode, sidebarOpen, setSidebarOpen } = useAppStore();
+  const { currentUser, themeMode, setThemeMode, sidebarOpen, setSidebarOpen, ministryId: activeMinistryId } = useAppStore();
   const [imgError, setImgError] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [ministryMenuOpen, setMinistryMenuOpen] = useState(false);
@@ -215,7 +215,7 @@ export const DashboardLayout: React.FC<Props> = ({
                            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Meus Ministérios</p>
                        </div>
                        {currentUser?.allowedMinistries?.map(mid => {
-                           const isCurrent = currentUser.ministryId === mid;
+                           const isCurrent = activeMinistryId === mid;
                            return (
                                <button
                                    key={mid}
