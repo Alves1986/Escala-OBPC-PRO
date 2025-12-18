@@ -306,32 +306,47 @@ const InnerApp = () => {
                 {/* Schedule Editor (Admin) */}
                 {currentTab === 'schedule-editor' && isAdmin && (
                     <div className="space-y-6 animate-fade-in">
-                        <div className="flex flex-col md:flex-row justify-between items-end gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-6">
-                            <div><h2 className="text-3xl font-bold text-zinc-800 dark:text-white flex items-center gap-3"><Edit className="text-blue-600 dark:text-blue-500" size={32} /> Editor de Escala</h2><p className="text-zinc-500 dark:text-zinc-400 mt-2">Gerencie a escala oficial de {getMonthName(currentMonth)}.</p></div>
-                            <div className="flex items-center gap-3">
-                                <button 
-                                    onClick={() => setRolesModalOpen(true)}
-                                    className="flex items-center gap-2 px-3 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-xs font-bold"
-                                >
-                                    <Briefcase size={16}/> Funções
-                                </button>
-                                <button 
-                                    onClick={() => setAuditModalOpen(true)}
-                                    className="flex items-center gap-2 px-3 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-xs font-bold"
-                                >
-                                    <History size={16}/> Histórico
-                                </button>
-                                <ToolsMenu 
-                                    onExportIndividual={(member) => generateIndividualPDF(ministryTitle, currentMonth, member, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), schedule)} 
-                                    onExportFull={() => generateFullSchedulePDF(ministryTitle, currentMonth, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), roles, schedule)} 
-                                    onWhatsApp={() => {}} 
-                                    onClearMonth={() => confirmAction("Limpar?", "Limpar escala?", () => Supabase.clearScheduleForMonth(ministryId, currentMonth).then(refreshData))} 
-                                    onResetEvents={() => confirmAction("Restaurar?", "Restaurar eventos?", () => Supabase.resetToDefaultEvents(ministryId, currentMonth).then(refreshData))}
-                                    allMembers={publicMembers.map(m => m.name)} 
-                                />
-                                <div className="flex items-center gap-2 bg-zinc-900 dark:bg-zinc-800 p-1.5 rounded-lg border border-zinc-700 shadow-sm text-white"><button onClick={() => setCurrentMonth(adjustMonth(currentMonth, -1))} className="p-2 hover:bg-zinc-700 rounded-md"><ArrowLeft size={16}/></button><span className="text-sm font-bold min-w-[80px] text-center">{currentMonth}</span><button onClick={() => setCurrentMonth(adjustMonth(currentMonth, 1))} className="p-2 hover:bg-zinc-700 rounded-md"><ArrowRight size={16}/></button></div>
+                        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-6">
+                            <div className="w-full xl:w-auto">
+                                <h2 className="text-3xl font-bold text-zinc-800 dark:text-white flex items-center gap-3">
+                                    <Edit className="text-blue-600 dark:text-blue-500" size={32} /> Editor de Escala
+                                </h2>
+                                <p className="text-zinc-500 dark:text-zinc-400 mt-2">Gerencie a escala oficial de {getMonthName(currentMonth)}.</p>
+                            </div>
+                            
+                            {/* Layout Responsivo para Botões de Ação */}
+                            <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto justify-between xl:justify-end">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <button 
+                                        onClick={() => setRolesModalOpen(true)}
+                                        className="flex items-center gap-2 px-3 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-xs font-bold"
+                                    >
+                                        <Briefcase size={16}/> Funções
+                                    </button>
+                                    <button 
+                                        onClick={() => setAuditModalOpen(true)}
+                                        className="flex items-center gap-2 px-3 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-xs font-bold"
+                                    >
+                                        <History size={16}/> Histórico
+                                    </button>
+                                    <ToolsMenu 
+                                        onExportIndividual={(member) => generateIndividualPDF(ministryTitle, currentMonth, member, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), schedule)} 
+                                        onExportFull={() => generateFullSchedulePDF(ministryTitle, currentMonth, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), roles, schedule)} 
+                                        onWhatsApp={() => {}} 
+                                        onClearMonth={() => confirmAction("Limpar?", "Limpar escala?", () => Supabase.clearScheduleForMonth(ministryId, currentMonth).then(refreshData))} 
+                                        onResetEvents={() => confirmAction("Restaurar?", "Restaurar eventos?", () => Supabase.resetToDefaultEvents(ministryId, currentMonth).then(refreshData))}
+                                        allMembers={publicMembers.map(m => m.name)} 
+                                    />
+                                </div>
+                                
+                                <div className="flex items-center gap-2 bg-zinc-900 dark:bg-zinc-800 p-1.5 rounded-lg border border-zinc-700 shadow-sm text-white ml-auto xl:ml-2">
+                                    <button onClick={() => setCurrentMonth(adjustMonth(currentMonth, -1))} className="p-2 hover:bg-zinc-700 rounded-md"><ArrowLeft size={16}/></button>
+                                    <span className="text-sm font-bold min-w-[80px] text-center">{currentMonth}</span>
+                                    <button onClick={() => setCurrentMonth(adjustMonth(currentMonth, 1))} className="p-2 hover:bg-zinc-700 rounded-md"><ArrowRight size={16}/></button>
+                                </div>
                             </div>
                         </div>
+                        
                         <ScheduleTable events={events} roles={roles} schedule={schedule} attendance={attendance} availability={availability} members={membersMap} allMembers={publicMembers.map(m => m.name)} memberProfiles={publicMembers} scheduleIssues={{}} globalConflicts={globalConflicts} onCellChange={async (key, val) => { await Supabase.saveScheduleAssignment(ministryId, key, val); refreshData(); }} onAttendanceToggle={async (key) => { await Supabase.toggleAssignmentConfirmation(ministryId, key); refreshData(); }} onDeleteEvent={async (iso, title) => confirmAction("Remover?", `Remover "${title}"?`, async () => { await Supabase.deleteMinistryEvent(ministryId, iso.split('T')[0] + 'T' + iso.split('T')[1]); refreshData(); })} onEditEvent={(event) => setEventDetailsModal({ isOpen: true, event })} memberStats={Object.values(schedule).reduce((acc: any, val: any) => { if(val) acc[val] = (acc[val] || 0) + 1; return acc; }, {})} ministryId={ministryId} readOnly={false} onlineUsers={onlineUsers} />
                     </div>
                 )}
