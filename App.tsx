@@ -306,7 +306,7 @@ const InnerApp = () => {
                 {/* Schedule Editor (Admin) */}
                 {currentTab === 'schedule-editor' && isAdmin && (
                     <div className="space-y-6 animate-fade-in">
-                        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-6">
+                        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-6 border-b border-zinc-200 dark:border-zinc-800 pb-6">
                             <div className="w-full xl:w-auto">
                                 <h2 className="text-3xl font-bold text-zinc-800 dark:text-white flex items-center gap-3">
                                     <Edit className="text-blue-600 dark:text-blue-500" size={32} /> Editor de Escala
@@ -314,20 +314,22 @@ const InnerApp = () => {
                                 <p className="text-zinc-500 dark:text-zinc-400 mt-2">Gerencie a escala oficial de {getMonthName(currentMonth)}.</p>
                             </div>
                             
-                            {/* Layout Responsivo para Botões de Ação */}
-                            <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto justify-between xl:justify-end">
-                                <div className="flex items-center gap-2 flex-wrap">
+                            {/* Toolbar Container: Actions + Date Nav */}
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
+                                
+                                {/* Actions Group - Scrollable to prevent bad wrapping on small screens */}
+                                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar sm:overflow-visible pb-1 sm:pb-0">
                                     <button 
                                         onClick={() => setRolesModalOpen(true)}
-                                        className="flex items-center gap-2 px-3 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-xs font-bold"
+                                        className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-sm font-bold whitespace-nowrap border border-zinc-200 dark:border-zinc-700"
                                     >
-                                        <Briefcase size={16}/> Funções
+                                        <Briefcase size={16}/> <span>Funções</span>
                                     </button>
                                     <button 
                                         onClick={() => setAuditModalOpen(true)}
-                                        className="flex items-center gap-2 px-3 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-xs font-bold"
+                                        className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-sm font-bold whitespace-nowrap border border-zinc-200 dark:border-zinc-700"
                                     >
-                                        <History size={16}/> Histórico
+                                        <History size={16}/> <span>Histórico</span>
                                     </button>
                                     <ToolsMenu 
                                         onExportIndividual={(member) => generateIndividualPDF(ministryTitle, currentMonth, member, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), schedule)} 
@@ -339,10 +341,11 @@ const InnerApp = () => {
                                     />
                                 </div>
                                 
-                                <div className="flex items-center gap-2 bg-zinc-900 dark:bg-zinc-800 p-1.5 rounded-lg border border-zinc-700 shadow-sm text-white ml-auto xl:ml-2">
-                                    <button onClick={() => setCurrentMonth(adjustMonth(currentMonth, -1))} className="p-2 hover:bg-zinc-700 rounded-md"><ArrowLeft size={16}/></button>
-                                    <span className="text-sm font-bold min-w-[80px] text-center">{currentMonth}</span>
-                                    <button onClick={() => setCurrentMonth(adjustMonth(currentMonth, 1))} className="p-2 hover:bg-zinc-700 rounded-md"><ArrowRight size={16}/></button>
+                                {/* Date Navigator */}
+                                <div className="flex items-center justify-between gap-1 bg-white dark:bg-zinc-800 p-1 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm sm:ml-2">
+                                    <button onClick={() => setCurrentMonth(adjustMonth(currentMonth, -1))} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg text-zinc-500 dark:text-zinc-400 transition-colors"><ArrowLeft size={18}/></button>
+                                    <span className="text-sm font-bold min-w-[90px] text-center text-zinc-800 dark:text-zinc-100 tabular-nums">{currentMonth}</span>
+                                    <button onClick={() => setCurrentMonth(adjustMonth(currentMonth, 1))} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg text-zinc-500 dark:text-zinc-400 transition-colors"><ArrowRight size={18}/></button>
                                 </div>
                             </div>
                         </div>
