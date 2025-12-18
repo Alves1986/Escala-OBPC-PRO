@@ -232,30 +232,33 @@ const InnerApp = () => {
                 refreshData();
             }}
             onOpenJoinMinistry={() => setShowJoinModal(true)}
+            activeMinistryId={ministryId}
         >
             <Suspense fallback={<LoadingFallback />}>
                 {/* Dashboard */}
                 {currentTab === 'dashboard' && (
                     <div className="space-y-8 animate-fade-in max-w-5xl mx-auto">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                            <div>
-                                <h1 className="text-2xl md:text-3xl font-bold text-zinc-900 dark:text-white tracking-tight leading-tight">
+                            <div className="animate-slide-up">
+                                <h1 className="text-2xl md:text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight leading-tight">
                                     Olá, <span className="text-teal-600 dark:text-teal-400">{currentUser.name.split(' ')[0]}</span>
                                 </h1>
-                                <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">Bem-vindo ao painel do {ministryTitle}.</p>
+                                <p className="text-zinc-500 dark:text-zinc-400 text-sm md:text-base mt-1 font-medium">Bem-vindo ao painel do seu ministério.</p>
                             </div>
-                            <div className="w-full md:w-auto"><WeatherWidget /></div>
+                            <div className="w-full md:w-auto animate-fade-in" style={{ animationDelay: '0.1s' }}><WeatherWidget /></div>
                         </div>
 
                         {/* Next Event */}
-                        {(() => {
-                            const now = new Date();
-                            const upcoming = events.filter(e => new Date(e.iso) >= now || e.iso.startsWith(now.toISOString().split('T')[0])).sort((a, b) => a.iso.localeCompare(b.iso))[0];
-                            return <NextEventCard event={upcoming} schedule={schedule} attendance={attendance} roles={roles} onConfirm={(key) => { const assignment = Object.entries(schedule).find(([k, v]) => k === key); if (assignment) setConfirmModalData({ key, memberName: assignment[1], eventName: upcoming.title, date: upcoming.dateDisplay, role: key.split('_').pop() || '' }); }} ministryId={ministryId} currentUser={currentUser} />;
-                        })()}
+                        <div className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
+                            {(() => {
+                                const now = new Date();
+                                const upcoming = events.filter(e => new Date(e.iso) >= now || e.iso.startsWith(now.toISOString().split('T')[0])).sort((a, b) => a.iso.localeCompare(b.iso))[0];
+                                return <NextEventCard event={upcoming} schedule={schedule} attendance={attendance} roles={roles} onConfirm={(key) => { const assignment = Object.entries(schedule).find(([k, v]) => k === key); if (assignment) setConfirmModalData({ key, memberName: assignment[1], eventName: upcoming.title, date: upcoming.dateDisplay, role: key.split('_').pop() || '' }); }} ministryId={ministryId} currentUser={currentUser} />;
+                            })()}
+                        </div>
 
-                        {/* Quick Access Section */}
-                        <div className="space-y-4">
+                        {/* Quick Access Section - Desktop Only (Hidden on LG and below as requested) */}
+                        <div className="hidden lg:block space-y-4 animate-slide-up" style={{ animationDelay: '0.3s' }}>
                             <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-2">
                                 <MousePointerClick size={14}/> Acesso Rápido
                             </h3>
@@ -279,7 +282,9 @@ const InnerApp = () => {
                             </div>
                         </div>
                         
-                        <BirthdayCard members={publicMembers} currentMonthIso={currentMonth} />
+                        <div className="animate-slide-up" style={{ animationDelay: '0.4s' }}>
+                            <BirthdayCard members={publicMembers} currentMonthIso={currentMonth} />
+                        </div>
                     </div>
                 )}
 

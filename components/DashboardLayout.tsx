@@ -26,6 +26,7 @@ interface Props {
   isStandalone?: boolean;
   onSwitchMinistry?: (id: string) => void;
   onOpenJoinMinistry?: () => void; 
+  activeMinistryId?: string; // New prop for sync
 }
 
 const getMinistryLabel = (id: string) => {
@@ -40,13 +41,16 @@ const getMinistryLabel = (id: string) => {
 export const DashboardLayout: React.FC<Props> = ({ 
   children, onLogout, title,
   currentTab, onTabChange, mainNavItems, managementNavItems, notifications, onNotificationsUpdate,
-  onInstall, isStandalone, onSwitchMinistry, onOpenJoinMinistry
+  onInstall, isStandalone, onSwitchMinistry, onOpenJoinMinistry, activeMinistryId
 }) => {
-  const { currentUser, themeMode, setThemeMode, sidebarOpen, setSidebarOpen, ministryId: activeMinistryId } = useAppStore();
+  const { currentUser, themeMode, setThemeMode, sidebarOpen, setSidebarOpen, ministryId: storeMinistryId } = useAppStore();
   const [imgError, setImgError] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [ministryMenuOpen, setMinistryMenuOpen] = useState(false);
   const ministryMenuRef = useRef<HTMLDivElement>(null);
+
+  // Use prop if available (source of truth from App), otherwise fallback to store
+  const currentMinistryId = activeMinistryId || storeMinistryId;
 
   useClickOutside(ministryMenuRef, () => {
     if (ministryMenuOpen) setMinistryMenuOpen(false);
@@ -215,7 +219,7 @@ export const DashboardLayout: React.FC<Props> = ({
                            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Meus Ministérios</p>
                        </div>
                        {currentUser?.allowedMinistries?.map(mid => {
-                           const isCurrent = activeMinistryId === mid;
+                           const isCurrent = currentMinistryId === mid;
                            return (
                                <button
                                    key={mid}
