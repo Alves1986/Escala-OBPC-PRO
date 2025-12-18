@@ -1,2 +1,1 @@
-
-export default () => null;
+// ARQUIVO OBSOLETO. PODE EXCLUIR.

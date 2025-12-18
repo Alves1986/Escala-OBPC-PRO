@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { User } from '../types';
 import * as Supabase from '../services/supabaseService';
-import { SUPABASE_URL } from '../types';
+import { SUPABASE_URL } from '../services/supabaseService';
 
 export function useAuth() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);

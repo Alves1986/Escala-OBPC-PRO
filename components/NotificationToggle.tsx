@@ -1,2 +1,1 @@
-
-export const NotificationToggle = () => null;
+// ARQUIVO OBSOLETO. PODE EXCLUIR.

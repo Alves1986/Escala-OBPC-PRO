@@ -31,7 +31,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import * as Supabase from './services/supabaseService';
 import { generateScheduleWithAI } from './services/aiService';
 import { generateFullSchedulePDF, generateIndividualPDF } from './utils/pdfGenerator';
-import { SUPABASE_URL, SUPABASE_KEY } from './types';
+import { SUPABASE_URL, SUPABASE_KEY } from './services/supabaseService';
 import { adjustMonth, getMonthName, getLocalDateISOString } from './utils/dateUtils';
 import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from './utils/pushUtils';
 
