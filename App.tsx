@@ -7,7 +7,8 @@ import {
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
   Megaphone, Settings, FileBarChart, CalendarDays,
   Users, Edit, Send, ListMusic, Clock, ArrowLeft, ArrowRight,
-  Calendar as CalendarIcon, Trophy, Loader2, ShieldAlert, Share2, Sparkles, ChevronRight, FileText, History
+  Calendar as CalendarIcon, Trophy, Loader2, ShieldAlert, Share2, Sparkles, ChevronRight, FileText, History,
+  CheckCircle2, MousePointerClick
 } from 'lucide-react';
 import { ToastProvider, useToast } from './components/Toast';
 import { LoginScreen } from './components/LoginScreen';
@@ -201,6 +202,13 @@ const InnerApp = () => {
     { id: 'members', label: 'Membros & Equipe', icon: <Users size={20}/> },
   ];
 
+  const QUICK_ACTIONS = [
+    { id: 'calendar', label: 'Minhas Escalas', icon: <CalendarIcon size={24} />, color: 'bg-blue-500', hover: 'hover:bg-blue-600' },
+    { id: 'availability', label: 'Disponibilidade', icon: <CalendarCheck size={24} />, color: 'bg-emerald-500', hover: 'hover:bg-emerald-600' },
+    { id: 'swaps', label: 'Trocas de Vaga', icon: <RefreshCcw size={24} />, color: 'bg-amber-500', hover: 'hover:bg-amber-600' },
+    { id: 'repertoire', label: 'Repertório', icon: <Music size={24} />, color: 'bg-pink-500', hover: 'hover:bg-pink-600' },
+  ];
+
   return (
     <ErrorBoundary>
         <DashboardLayout
@@ -245,6 +253,31 @@ const InnerApp = () => {
                             const upcoming = events.filter(e => new Date(e.iso) >= now || e.iso.startsWith(now.toISOString().split('T')[0])).sort((a, b) => a.iso.localeCompare(b.iso))[0];
                             return <NextEventCard event={upcoming} schedule={schedule} attendance={attendance} roles={roles} onConfirm={(key) => { const assignment = Object.entries(schedule).find(([k, v]) => k === key); if (assignment) setConfirmModalData({ key, memberName: assignment[1], eventName: upcoming.title, date: upcoming.dateDisplay, role: key.split('_').pop() || '' }); }} ministryId={ministryId} currentUser={currentUser} />;
                         })()}
+
+                        {/* Quick Access Section */}
+                        <div className="space-y-4">
+                            <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                                <MousePointerClick size={14}/> Acesso Rápido
+                            </h3>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                {QUICK_ACTIONS.map((action) => (
+                                    <button
+                                        key={action.id}
+                                        onClick={() => setCurrentTab(action.id)}
+                                        className="group relative flex flex-col items-center justify-center p-6 bg-white dark:bg-zinc-800/50 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-zinc-200/50 dark:hover:shadow-black/50 hover:-translate-y-1 active:scale-95 overflow-hidden"
+                                    >
+                                        <div className={`absolute top-0 left-0 w-full h-1 ${action.color} opacity-80`}></div>
+                                        <div className={`mb-3 p-3 rounded-xl ${action.color} text-white shadow-lg transition-transform group-hover:scale-110`}>
+                                            {action.icon}
+                                        </div>
+                                        <span className="text-sm font-bold text-zinc-800 dark:text-zinc-200 tracking-tight">{action.label}</span>
+                                        <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <ChevronRight size={14} className="text-zinc-400" />
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                         
                         <BirthdayCard members={publicMembers} currentMonthIso={currentMonth} />
                     </div>
