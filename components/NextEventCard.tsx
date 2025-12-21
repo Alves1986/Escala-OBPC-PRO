@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { CalendarClock, User, CheckCircle2, Clock, MapPin, AlertCircle, ShieldCheck, CalendarPlus, ChevronRight } from 'lucide-react';
-import { Role, AttendanceMap, User as UserType } from '../types';
+import { Role, AttendanceMap, User as UserType, TeamMemberProfile } from '../types';
 import { getLocalDateISOString, generateGoogleCalendarUrl } from '../utils/dateUtils';
 
 interface Props {
@@ -9,6 +9,7 @@ interface Props {
   schedule: Record<string, string>;
   attendance: AttendanceMap;
   roles: Role[];
+  members: TeamMemberProfile[];
   onConfirm: (key: string) => void;
   ministryId: string | null;
   currentUser: UserType | null;
@@ -16,7 +17,7 @@ interface Props {
 
 type TimeStatus = 'early' | 'open' | 'closed';
 
-export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, roles, onConfirm, ministryId, currentUser }) => {
+export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, roles, members, onConfirm, ministryId, currentUser }) => {
   const [timeStatus, setTimeStatus] = useState<TimeStatus>('early');
   const [minutesToOpen, setMinutesToOpen] = useState(0);
 
@@ -197,6 +198,8 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
                       {team.map((t, idx) => {
                           const isConfirmed = attendance[t.key];
                           const isMe = currentUser && t.name === currentUser.name;
+                          const memberProfile = members.find(m => m.name === t.name);
+                          const hasAvatar = !!memberProfile?.avatar_url;
                           
                           return (
                               <div key={idx} className={`group/card flex items-center p-4 rounded-2xl border transition-all duration-300 ${
@@ -204,12 +207,30 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
                                   ? 'bg-teal-50/50 dark:bg-teal-900/10 border-teal-200 dark:border-teal-800 ring-2 ring-teal-500/10 shadow-lg shadow-teal-500/5' 
                                   : 'bg-white dark:bg-zinc-800/50 border-zinc-100 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50/50 dark:hover:bg-zinc-800 shadow-sm'
                               }`}>
-                                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all shadow-sm ${
-                                      isConfirmed 
-                                      ? 'bg-emerald-500 text-white' 
-                                      : 'bg-zinc-100 dark:bg-zinc-700 text-zinc-400 dark:text-zinc-500'
+                                  {/* Avatar or Icon Container */}
+                                  <div className={`relative w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-all shadow-sm ${
+                                      hasAvatar 
+                                        ? '' // No bg color if image is present
+                                        : (isConfirmed 
+                                            ? 'bg-emerald-500 text-white' 
+                                            : 'bg-zinc-100 dark:bg-zinc-700 text-zinc-400 dark:text-zinc-500')
                                   }`}>
-                                      {isConfirmed ? <CheckCircle2 size={20} /> : <User size={20} />}
+                                      {hasAvatar ? (
+                                          <>
+                                            <img 
+                                                src={memberProfile?.avatar_url} 
+                                                alt={t.name} 
+                                                className={`w-full h-full object-cover rounded-xl ${isConfirmed ? 'ring-2 ring-emerald-500' : ''}`} 
+                                            />
+                                            {isConfirmed && (
+                                                <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-white rounded-full p-0.5 border-2 border-white dark:border-zinc-900 shadow-sm">
+                                                    <CheckCircle2 size={10} />
+                                                </div>
+                                            )}
+                                          </>
+                                      ) : (
+                                          isConfirmed ? <CheckCircle2 size={20} /> : <User size={20} />
+                                      )}
                                   </div>
                                   
                                   <div className="ml-4 flex-1 min-w-0">

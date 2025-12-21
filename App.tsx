@@ -1,61 +1,55 @@
-
 import React, { useState, useEffect, Suspense, useRef } from 'react';
+import { 
+  Loader2, LayoutDashboard, Megaphone, Calendar as CalendarIcon, 
+  CalendarCheck, RefreshCcw, Music, Trophy, Share2, Settings, 
+  Edit, FileText, ListMusic, FileBarChart, CalendarDays, Send, 
+  Users, MousePointerClick, ChevronRight, Briefcase, History, 
+  ArrowLeft, ArrowRight 
+} from 'lucide-react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
-import { useAppStore } from './store/appStore';
-import { 
-  LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
-  Megaphone, Settings, FileBarChart, CalendarDays,
-  Users, Edit, Send, ListMusic, Clock, ArrowLeft, ArrowRight,
-  Calendar as CalendarIcon, Trophy, Loader2, ShieldAlert, Share2, Sparkles, ChevronRight, FileText, History,
-  CheckCircle2, MousePointerClick, Briefcase
-} from 'lucide-react';
 import { ToastProvider, useToast } from './components/Toast';
-import { LoginScreen } from './components/LoginScreen';
-import { SetupScreen } from './components/SetupScreen';
-import { LoadingScreen } from './components/LoadingScreen';
+import { useAuth } from './hooks/useAuth';
+import { useAppStore } from './store/appStore';
+import { useMinistryData } from './hooks/useMinistryData';
+import { useOnlinePresence } from './hooks/useOnlinePresence';
+import * as Supabase from './services/supabaseService';
+import { SUPABASE_URL, SUPABASE_KEY } from './services/supabaseService';
+import { getLocalDateISOString, getMonthName, adjustMonth } from './utils/dateUtils';
+import { generateIndividualPDF, generateFullSchedulePDF } from './utils/pdfGenerator';
+
+// Components
 import { DashboardLayout } from './components/DashboardLayout';
+import { WeatherWidget } from './components/WeatherWidget';
 import { NextEventCard } from './components/NextEventCard';
 import { BirthdayCard } from './components/BirthdayCard';
-import { WeatherWidget } from './components/WeatherWidget';
+import { CalendarGrid } from './components/CalendarGrid';
+import { ScheduleTable } from './components/ScheduleTable';
+import { AvailabilityScreen } from './components/AvailabilityScreen';
+import { SwapRequestsScreen } from './components/SwapRequestsScreen';
+import { RankingScreen } from './components/RankingScreen';
+import { RepertoireScreen } from './components/RepertoireScreen';
+import { AnnouncementsScreen } from './components/AnnouncementsScreen';
+import { ProfileScreen } from './components/ProfileScreen';
+import { SettingsScreen } from './components/SettingsScreen';
+import { MembersScreen } from './components/MembersScreen';
+import { EventsScreen } from './components/EventsScreen';
+import { AvailabilityReportScreen } from './components/AvailabilityReportScreen';
+import { MonthlyReportScreen } from './components/MonthlyReportScreen';
+import { SocialMediaScreen } from './components/SocialMediaScreen';
+import { AlertsManager } from './components/AlertsManager';
 import { InstallBanner } from './components/InstallBanner';
 import { InstallModal } from './components/InstallModal';
 import { JoinMinistryModal } from './components/JoinMinistryModal';
-import { ToolsMenu } from './components/ToolsMenu';
 import { EventDetailsModal } from './components/EventDetailsModal';
 import { StatsModal } from './components/StatsModal';
 import { ConfirmationModal } from './components/ConfirmationModal';
 import { EventsModal, AvailabilityModal, RolesModal, AuditModal } from './components/ManagementModals';
 import { ErrorBoundary } from './components/ErrorBoundary';
-
-import * as Supabase from './services/supabaseService';
-import { generateScheduleWithAI } from './services/aiService';
-import { generateFullSchedulePDF, generateIndividualPDF } from './utils/pdfGenerator';
-import { SUPABASE_URL, SUPABASE_KEY } from './services/supabaseService';
-import { adjustMonth, getMonthName, getLocalDateISOString } from './utils/dateUtils';
-import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from './utils/pushUtils';
-
-// Hooks
-import { useAuth } from './hooks/useAuth';
-import { useMinistryData } from './hooks/useMinistryData';
-import { useOnlinePresence } from './hooks/useOnlinePresence';
-
-// --- Lazy Load Heavy Components ---
-const ScheduleTable = React.lazy(() => import('./components/ScheduleTable').then(module => ({ default: module.ScheduleTable })));
-const CalendarGrid = React.lazy(() => import('./components/CalendarGrid').then(module => ({ default: module.CalendarGrid })));
-const AvailabilityScreen = React.lazy(() => import('./components/AvailabilityScreen').then(module => ({ default: module.AvailabilityScreen })));
-const SwapRequestsScreen = React.lazy(() => import('./components/SwapRequestsScreen').then(module => ({ default: module.SwapRequestsScreen })));
-const RepertoireScreen = React.lazy(() => import('./components/RepertoireScreen').then(module => ({ default: module.RepertoireScreen })));
-const AnnouncementsScreen = React.lazy(() => import('./components/AnnouncementsScreen').then(module => ({ default: module.AnnouncementsScreen })));
-const AlertsManager = React.lazy(() => import('./components/AlertsManager').then(module => ({ default: module.AlertsManager })));
-const AvailabilityReportScreen = React.lazy(() => import('./components/AvailabilityReportScreen').then(module => ({ default: module.AvailabilityReportScreen })));
-const MonthlyReportScreen = React.lazy(() => import('./components/MonthlyReportScreen').then(module => ({ default: module.MonthlyReportScreen })));
-const SettingsScreen = React.lazy(() => import('./components/SettingsScreen').then(module => ({ default: module.SettingsScreen })));
-const ProfileScreen = React.lazy(() => import('./components/ProfileScreen').then(module => ({ default: module.ProfileScreen })));
-const EventsScreen = React.lazy(() => import('./components/EventsScreen').then(module => ({ default: module.EventsScreen })));
-const RankingScreen = React.lazy(() => import('./components/RankingScreen').then(module => ({ default: module.RankingScreen })));
-const MembersScreen = React.lazy(() => import('./components/MembersScreen').then(module => ({ default: module.MembersScreen })));
-const SocialMediaScreen = React.lazy(() => import('./components/SocialMediaScreen').then(module => ({ default: module.SocialMediaScreen })));
+import { SetupScreen } from './components/SetupScreen';
+import { LoadingScreen } from './components/LoadingScreen';
+import { LoginScreen } from './components/LoginScreen';
+import { ToolsMenu } from './components/ToolsMenu';
 
 // Loading Spinner
 const LoadingFallback = () => (
@@ -264,7 +258,7 @@ const InnerApp = () => {
                                     return expirationDate > now;
                                 }).sort((a, b) => a.iso.localeCompare(b.iso))[0];
 
-                                return <NextEventCard event={upcoming} schedule={schedule} attendance={attendance} roles={roles} onConfirm={(key) => { const assignment = Object.entries(schedule).find(([k, v]) => k === key); if (assignment) setConfirmModalData({ key, memberName: assignment[1], eventName: upcoming.title, date: upcoming.dateDisplay, role: key.split('_').pop() || '' }); }} ministryId={ministryId} currentUser={currentUser} />;
+                                return <NextEventCard event={upcoming} schedule={schedule} attendance={attendance} roles={roles} members={publicMembers} onConfirm={(key) => { const assignment = Object.entries(schedule).find(([k, v]) => k === key); if (assignment) setConfirmModalData({ key, memberName: assignment[1], eventName: upcoming.title, date: upcoming.dateDisplay, role: key.split('_').pop() || '' }); }} ministryId={ministryId} currentUser={currentUser} />;
                             })()}
                         </div>
 
