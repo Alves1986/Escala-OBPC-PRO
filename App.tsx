@@ -252,7 +252,18 @@ const InnerApp = () => {
                         <div className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
                             {(() => {
                                 const now = new Date();
-                                const upcoming = events.filter(e => new Date(e.iso) >= now || e.iso.startsWith(now.toISOString().split('T')[0])).sort((a, b) => a.iso.localeCompare(b.iso))[0];
+                                const bufferMs = 2.5 * 60 * 60 * 1000; // 2 horas e 30 minutos em milissegundos
+                                
+                                const upcoming = events.filter(e => {
+                                    const eventDate = new Date(e.iso);
+                                    // A data de expiração é o horário do evento + 2h 30min
+                                    const expirationDate = new Date(eventDate.getTime() + bufferMs);
+                                    
+                                    // O evento é válido se o momento atual for menor que a data de expiração
+                                    // Ou seja, ainda não passou de 2h30min após o início
+                                    return expirationDate > now;
+                                }).sort((a, b) => a.iso.localeCompare(b.iso))[0];
+
                                 return <NextEventCard event={upcoming} schedule={schedule} attendance={attendance} roles={roles} onConfirm={(key) => { const assignment = Object.entries(schedule).find(([k, v]) => k === key); if (assignment) setConfirmModalData({ key, memberName: assignment[1], eventName: upcoming.title, date: upcoming.dateDisplay, role: key.split('_').pop() || '' }); }} ministryId={ministryId} currentUser={currentUser} />;
                             })()}
                         </div>

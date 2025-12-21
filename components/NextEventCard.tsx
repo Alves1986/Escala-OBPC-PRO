@@ -29,7 +29,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
     if (diffInMinutes < -60) {
       setTimeStatus('early');
       setMinutesToOpen(Math.abs(Math.floor(diffInMinutes + 60)));
-    } else if (diffInMinutes > 60) {
+    } else if (diffInMinutes > 150) { // 2.5 hours = 150 minutes window
       setTimeStatus('closed');
     } else {
       setTimeStatus('open');
