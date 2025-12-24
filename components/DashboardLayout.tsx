@@ -87,7 +87,7 @@ export const DashboardLayout: React.FC<Props> = ({
         }`}
       >
         <span className={`transition-colors duration-200 ${isActive ? 'text-zinc-900 dark:text-white' : 'text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300'}`}>
-          {React.cloneElement(item.icon as React.ReactElement, { size: 18, strokeWidth: isActive ? 2.5 : 2 })}
+          {React.isValidElement(item.icon) ? React.cloneElement(item.icon as React.ReactElement<any>, { size: 18, strokeWidth: isActive ? 2.5 : 2 }) : item.icon}
         </span>
         <span className="flex-1 text-left tracking-tight">{item.label}</span>
         {isActive && (

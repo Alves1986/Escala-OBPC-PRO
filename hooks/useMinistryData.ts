@@ -1,8 +1,9 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { User, ScheduleMap, AttendanceMap, AvailabilityMap, AppNotification, Announcement, SwapRequest, RepertoireItem, TeamMemberProfile, MemberMap, Role, GlobalConflictMap, AvailabilityNotesMap, DEFAULT_ROLES } from '../types';
-import { useMinistryQueries } from './useMinistryQueries';
+import { useMinistryQueries, keys } from './useMinistryQueries';
 import { useQueryClient } from '@tanstack/react-query';
+import { getSupabase } from '../services/supabaseService';
 
 export function useMinistryData(ministryId: string | null, currentMonth: string, currentUser: User | null) {
   const mid = ministryId || 'midia';
@@ -53,6 +54,61 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
           query.queryKey[0] === 'conflicts'
       });
   };
+
+  // --- SUPABASE REALTIME INTEGRATION ---
+  useEffect(() => {
+    const sb = getSupabase();
+    if (!sb || !mid) return;
+
+    // Create a single channel for this ministry context
+    const channel = sb.channel(`ministry-live-${mid}`);
+
+    channel
+        // 1. SCHEDULE & EVENTS
+        // Updates when an event is created/deleted/edited
+        .on(
+            'postgres_changes', 
+            { event: '*', schema: 'public', table: 'events', filter: `ministry_id=eq.${mid}` }, 
+            () => {
+                queryClient.invalidateQueries({ queryKey: keys.schedule(mid, currentMonth) });
+            }
+        )
+        // Updates when someone is assigned/removed/confirms (Assumes ministry_id exists on assignments or linked via trigger)
+        // Compliance with "Filtro obrigatório: ministry_id" for Escala
+        .on(
+            'postgres_changes', 
+            { event: '*', schema: 'public', table: 'schedule_assignments', filter: `ministry_id=eq.${mid}` }, 
+            () => {
+                queryClient.invalidateQueries({ queryKey: keys.schedule(mid, currentMonth) });
+                queryClient.invalidateQueries({ queryKey: keys.auditLogs(mid) });
+                queryClient.invalidateQueries({ queryKey: keys.ranking(mid) });
+            }
+        )
+        // 2. NOTIFICATIONS
+        // Updates when a new notification is sent
+        // Compliance with "contexto" via ministry_id filter
+        .on(
+            'postgres_changes', 
+            { event: 'INSERT', schema: 'public', table: 'notifications', filter: `ministry_id=eq.${mid}` }, 
+            () => {
+                // Invalidate all notifications queries to update the bell icon count
+                queryClient.invalidateQueries({ queryKey: ['notifications'] });
+            }
+        )
+        // 3. SWAPS (Extra UX improvement)
+        .on(
+            'postgres_changes', 
+            { event: '*', schema: 'public', table: 'swap_requests', filter: `ministry_id=eq.${mid}` }, 
+            () => {
+                queryClient.invalidateQueries({ queryKey: keys.swapRequests(mid) });
+            }
+        )
+        .subscribe();
+
+    return () => {
+        sb.removeChannel(channel);
+    };
+  }, [mid, currentMonth, queryClient]);
 
   return {
     events: scheduleQuery.data?.events || [],

@@ -224,7 +224,13 @@ export const fetchMinistryAvailability = async (ministryId: string) => {
     });
     const memberIds = filteredProfiles.map((p: any) => p.id);
     if (memberIds.length === 0) return { availability: {}, notes: {} };
-    const { data: avails } = await supabase.from('availability').select('*').in('member_id', memberIds); 
+    
+    // Updated to filter by ministry_id
+    const { data: avails } = await supabase.from('availability')
+        .select('*')
+        .eq('ministry_id', ministryId) // Scoping by ministry
+        .in('member_id', memberIds); 
+        
     const availability: AvailabilityMap = {};
     const notes: AvailabilityNotesMap = {};
     (avails || []).forEach((a: any) => {
@@ -240,7 +246,7 @@ export const fetchMinistryAvailability = async (ministryId: string) => {
     return { availability, notes };
 };
 
-export const saveMemberAvailability = async (memberName: string, dates: string[], notes: Record<string, string>, targetMonth: string) => {
+export const saveMemberAvailability = async (ministryId: string, memberName: string, dates: string[], notes: Record<string, string>, targetMonth: string) => {
     if (!supabase) return { error: { message: "Sem conexão com banco de dados." } };
     try {
         const { data: profile, error: profileError } = await supabase.from('profiles').select('id').eq('name', memberName).single();
@@ -249,7 +255,16 @@ export const saveMemberAvailability = async (memberName: string, dates: string[]
         const monthDates = dates.filter(d => d.startsWith(targetMonth));
         const monthNotes: Record<string, string> = {};
         Object.entries(notes).forEach(([key, val]) => { if (key.startsWith(targetMonth) && val && val.trim() !== "") monthNotes[key] = val; });
-        const { error: upsertError } = await supabase.from('availability').upsert({ member_id: memberId, month: targetMonth, dates: monthDates, notes: monthNotes }, { onConflict: 'member_id, month' });
+        
+        // Upsert with ministry_id included in the conflict key
+        const { error: upsertError } = await supabase.from('availability').upsert({ 
+            member_id: memberId, 
+            ministry_id: ministryId,
+            month: targetMonth, 
+            dates: monthDates, 
+            notes: monthNotes 
+        }, { onConflict: 'member_id, ministry_id, month' }); // Updated conflict constraint
+        
         if (upsertError) {
             if (upsertError.message?.includes('invalid input syntax for type date') || upsertError.message?.includes('type date')) {
                  throw new Error("⚠️ Erro de Banco de Dados: A coluna 'dates' não está configurada como Array. Por favor, execute o 'Script de Correção' no Supabase (SQL Editor).");

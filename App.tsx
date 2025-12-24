@@ -1,55 +1,60 @@
 import React, { useState, useEffect, Suspense, useRef } from 'react';
-import { 
-  Loader2, LayoutDashboard, Megaphone, Calendar as CalendarIcon, 
-  CalendarCheck, RefreshCcw, Music, Trophy, Share2, Settings, 
-  Edit, FileText, ListMusic, FileBarChart, CalendarDays, Send, 
-  Users, MousePointerClick, ChevronRight, Briefcase, History, 
-  ArrowLeft, ArrowRight 
-} from 'lucide-react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
-import { ToastProvider, useToast } from './components/Toast';
-import { useAuth } from './hooks/useAuth';
 import { useAppStore } from './store/appStore';
-import { useMinistryData } from './hooks/useMinistryData';
-import { useOnlinePresence } from './hooks/useOnlinePresence';
-import * as Supabase from './services/supabaseService';
-import { SUPABASE_URL, SUPABASE_KEY } from './services/supabaseService';
-import { getLocalDateISOString, getMonthName, adjustMonth } from './utils/dateUtils';
-import { generateIndividualPDF, generateFullSchedulePDF } from './utils/pdfGenerator';
-
-// Components
+import { 
+  LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
+  Megaphone, Settings, FileBarChart, CalendarDays,
+  Users, Edit, Send, ListMusic, Clock, ArrowLeft, ArrowRight,
+  Calendar as CalendarIcon, Trophy, Loader2, ShieldAlert, Share2, Sparkles, ChevronRight, FileText, History,
+  CheckCircle2, MousePointerClick, Briefcase
+} from 'lucide-react';
+import { ToastProvider, useToast } from './components/Toast';
+import { LoginScreen } from './components/LoginScreen';
+import { SetupScreen } from './components/SetupScreen';
+import { LoadingScreen } from './components/LoadingScreen';
 import { DashboardLayout } from './components/DashboardLayout';
-import { WeatherWidget } from './components/WeatherWidget';
 import { NextEventCard } from './components/NextEventCard';
 import { BirthdayCard } from './components/BirthdayCard';
-import { CalendarGrid } from './components/CalendarGrid';
-import { ScheduleTable } from './components/ScheduleTable';
-import { AvailabilityScreen } from './components/AvailabilityScreen';
-import { SwapRequestsScreen } from './components/SwapRequestsScreen';
-import { RankingScreen } from './components/RankingScreen';
-import { RepertoireScreen } from './components/RepertoireScreen';
-import { AnnouncementsScreen } from './components/AnnouncementsScreen';
-import { ProfileScreen } from './components/ProfileScreen';
-import { SettingsScreen } from './components/SettingsScreen';
-import { MembersScreen } from './components/MembersScreen';
-import { EventsScreen } from './components/EventsScreen';
-import { AvailabilityReportScreen } from './components/AvailabilityReportScreen';
-import { MonthlyReportScreen } from './components/MonthlyReportScreen';
-import { SocialMediaScreen } from './components/SocialMediaScreen';
-import { AlertsManager } from './components/AlertsManager';
+import { WeatherWidget } from './components/WeatherWidget';
 import { InstallBanner } from './components/InstallBanner';
 import { InstallModal } from './components/InstallModal';
 import { JoinMinistryModal } from './components/JoinMinistryModal';
+import { ToolsMenu } from './components/ToolsMenu';
 import { EventDetailsModal } from './components/EventDetailsModal';
 import { StatsModal } from './components/StatsModal';
 import { ConfirmationModal } from './components/ConfirmationModal';
 import { EventsModal, AvailabilityModal, RolesModal, AuditModal } from './components/ManagementModals';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { SetupScreen } from './components/SetupScreen';
-import { LoadingScreen } from './components/LoadingScreen';
-import { LoginScreen } from './components/LoginScreen';
-import { ToolsMenu } from './components/ToolsMenu';
+
+import * as Supabase from './services/supabaseService';
+import { generateScheduleWithAI } from './services/aiService';
+import { generateFullSchedulePDF, generateIndividualPDF } from './utils/pdfGenerator';
+import { SUPABASE_URL, SUPABASE_KEY } from './services/supabaseService';
+import { adjustMonth, getMonthName, getLocalDateISOString } from './utils/dateUtils';
+import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from './utils/pushUtils';
+
+// Hooks
+import { useAuth } from './hooks/useAuth';
+import { useMinistryData } from './hooks/useMinistryData';
+import { useOnlinePresence } from './hooks/useOnlinePresence';
+
+// --- Lazy Load Heavy Components ---
+const ScheduleTable = React.lazy(() => import('./components/ScheduleTable').then(module => ({ default: module.ScheduleTable })));
+const CalendarGrid = React.lazy(() => import('./components/CalendarGrid').then(module => ({ default: module.CalendarGrid })));
+const AvailabilityScreen = React.lazy(() => import('./components/AvailabilityScreen').then(module => ({ default: module.AvailabilityScreen })));
+const SwapRequestsScreen = React.lazy(() => import('./components/SwapRequestsScreen').then(module => ({ default: module.SwapRequestsScreen })));
+const RepertoireScreen = React.lazy(() => import('./components/RepertoireScreen').then(module => ({ default: module.RepertoireScreen })));
+const AnnouncementsScreen = React.lazy(() => import('./components/AnnouncementsScreen').then(module => ({ default: module.AnnouncementsScreen })));
+const AlertsManager = React.lazy(() => import('./components/AlertsManager').then(module => ({ default: module.AlertsManager })));
+const AvailabilityReportScreen = React.lazy(() => import('./components/AvailabilityReportScreen').then(module => ({ default: module.AvailabilityReportScreen })));
+const MonthlyReportScreen = React.lazy(() => import('./components/MonthlyReportScreen').then(module => ({ default: module.MonthlyReportScreen })));
+const SettingsScreen = React.lazy(() => import('./components/SettingsScreen').then(module => ({ default: module.SettingsScreen })));
+const ProfileScreen = React.lazy(() => import('./components/ProfileScreen').then(module => ({ default: module.ProfileScreen })));
+const EventsScreen = React.lazy(() => import('./components/EventsScreen').then(module => ({ default: module.EventsScreen })));
+const RankingScreen = React.lazy(() => import('./components/RankingScreen').then(module => ({ default: module.RankingScreen })));
+const MembersScreen = React.lazy(() => import('./components/MembersScreen').then(module => ({ default: module.MembersScreen })));
+const SocialMediaScreen = React.lazy(() => import('./components/SocialMediaScreen').then(module => ({ default: module.SocialMediaScreen })));
 
 // Loading Spinner
 const LoadingFallback = () => (
@@ -360,7 +365,7 @@ const InnerApp = () => {
                 )}
 
                 {/* Other Tabs Mapped */}
-                {currentTab === 'availability' && <AvailabilityScreen availability={availability} availabilityNotes={availabilityNotes} setAvailability={setAvailability} allMembersList={publicMembers.map(m => m.name)} currentMonth={currentMonth} onMonthChange={setCurrentMonth} currentUser={currentUser} onSaveAvailability={async (m, d, n, t) => { await Supabase.saveMemberAvailability(m, d, n, t); refreshData(); }} availabilityWindow={availabilityWindow} />}
+                {currentTab === 'availability' && <AvailabilityScreen availability={availability} availabilityNotes={availabilityNotes} setAvailability={setAvailability} allMembersList={publicMembers.map(m => m.name)} currentMonth={currentMonth} onMonthChange={setCurrentMonth} currentUser={currentUser} onSaveAvailability={async (mid, m, d, n, t) => { await Supabase.saveMemberAvailability(mid, m, d, n, t); refreshData(); }} availabilityWindow={availabilityWindow} ministryId={ministryId} />}
                 {currentTab === 'swaps' && <SwapRequestsScreen schedule={schedule} currentUser={currentUser} requests={swapRequests} visibleEvents={events} onCreateRequest={async (role, iso, title) => { await Supabase.createSwapRequestSQL(ministryId, { id: '', ministryId, requesterName: currentUser.name, requesterId: currentUser.id, role, eventIso: iso, eventTitle: title, status: 'pending', createdAt: new Date().toISOString() }); refreshData(); }} onAcceptRequest={async (reqId) => { await Supabase.performSwapSQL(ministryId, reqId, currentUser.name, currentUser.id!); refreshData(); }} onCancelRequest={async (reqId) => { await Supabase.cancelSwapRequestSQL(reqId); addToast("Pedido removido com sucesso.", "info"); refreshData(); }} />}
                 {currentTab === 'ranking' && <RankingScreen ministryId={ministryId} currentUser={currentUser} />}
                 {(currentTab === 'repertoire' || (currentTab === 'repertoire-manager' && isAdmin)) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={currentUser} mode={currentTab === 'repertoire-manager' ? 'manage' : 'view'} ministryId={ministryId} />}
@@ -380,7 +385,7 @@ const InnerApp = () => {
             <InstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />
             <JoinMinistryModal isOpen={showJoinModal} onClose={() => setShowJoinModal(false)} onJoin={async (id, r) => { await Supabase.joinMinistry(id, r); window.location.reload(); }} alreadyJoined={currentUser.allowedMinistries || []} />
             <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ ...e, iso: e.iso }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, e); refreshData(); }} onRemove={async (id) => { refreshData(); }} />
-            <AvailabilityModal isOpen={isAvailModalOpen} onClose={() => setAvailModalOpen(false)} members={publicMembers.map(m => m.name)} availability={availability} onUpdate={async (m, d) => { await Supabase.saveMemberAvailability(m, d, {}, currentMonth); refreshData(); }} currentMonth={currentMonth} />
+            <AvailabilityModal isOpen={isAvailModalOpen} onClose={() => setAvailModalOpen(false)} members={publicMembers.map(m => m.name)} availability={availability} onUpdate={async (m, d) => { await Supabase.saveMemberAvailability(ministryId, m, d, {}, currentMonth); refreshData(); }} currentMonth={currentMonth} />
             <RolesModal isOpen={isRolesModalOpen} onClose={() => setRolesModalOpen(false)} roles={roles} onUpdate={async (r) => { await Supabase.saveMinistrySettings(ministryId, undefined, r); refreshData(); }} />
             <AuditModal isOpen={isAuditModalOpen} onClose={() => setAuditModalOpen(false)} logs={auditLogs} />
             

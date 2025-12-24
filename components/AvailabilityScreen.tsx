@@ -13,8 +13,9 @@ interface Props {
   currentMonth: string;
   onMonthChange: (newMonth: string) => void;
   currentUser: User | null;
-  onSaveAvailability: (member: string, dates: string[], notes: Record<string, string>, targetMonth: string) => Promise<void>;
+  onSaveAvailability: (ministryId: string, member: string, dates: string[], notes: Record<string, string>, targetMonth: string) => Promise<void>;
   availabilityWindow?: { start?: string, end?: string };
+  ministryId: string;
 }
 
 export const AvailabilityScreen: React.FC<Props> = ({
@@ -25,7 +26,8 @@ export const AvailabilityScreen: React.FC<Props> = ({
   onMonthChange,
   currentUser,
   onSaveAvailability,
-  availabilityWindow
+  availabilityWindow,
+  ministryId
 }) => {
   const { addToast } = useToast();
   
@@ -157,14 +159,13 @@ export const AvailabilityScreen: React.FC<Props> = ({
               notesPayload[`${currentMonth}-00`] = generalNote.trim();
           }
 
-          await onSaveAvailability(selectedMember, tempDates, notesPayload, currentMonth);
+          // FIX: Pass ministryId explicitly as the first argument
+          await onSaveAvailability(ministryId, selectedMember, tempDates, notesPayload, currentMonth);
           
           setHasUnsavedChanges(false);
           setSaveSuccess(true);
           setTimeout(() => setSaveSuccess(false), 3000);
           
-          // Toast removido para evitar duplicidade de notificação visual
-          // O feedback já é dado pela barra flutuante verde
       } catch (e: any) {
           console.error(e);
           const msg = e.message || "Erro desconhecido";
