@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, useRef } from 'react';
+import React, { useState, useEffect, Suspense, useRef, useMemo } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { useAppStore } from './store/appStore';
@@ -33,6 +33,7 @@ import { generateFullSchedulePDF, generateIndividualPDF } from './utils/pdfGener
 import { SUPABASE_URL, SUPABASE_KEY } from './services/supabaseService';
 import { adjustMonth, getMonthName, getLocalDateISOString } from './utils/dateUtils';
 import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from './utils/pushUtils';
+import { getMinistryConfig } from './types'; // Importando a configuração centralizada
 
 // Hooks
 import { useAuth } from './hooks/useAuth';
@@ -116,6 +117,9 @@ const InnerApp = () => {
   // Use the refactored Hook (now backed by React Query)
   const ministryId = useAppStore(state => state.ministryId);
   
+  // Obter configuração do ministério ativo (Controle de Visibilidade)
+  const ministryConfig = useMemo(() => getMinistryConfig(ministryId), [ministryId]);
+
   const { 
     events, schedule, attendance,
     membersMap, publicMembers, availability,
@@ -179,7 +183,8 @@ const InnerApp = () => {
 
   const isAdmin = currentUser.role === 'admin';
 
-  const MAIN_NAV = [
+  // Definição Completa das Abas (Source of Truth do Layout)
+  const RAW_MAIN_NAV = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20}/> },
     { id: 'announcements', label: 'Avisos', icon: <Megaphone size={20}/> },
     { id: 'calendar', label: 'Calendário', icon: <CalendarIcon size={20}/> },
@@ -191,7 +196,7 @@ const InnerApp = () => {
     { id: 'settings', label: 'Configurações', icon: <Settings size={20}/> },
   ];
 
-  const MANAGEMENT_NAV = [
+  const RAW_MANAGEMENT_NAV = [
     { id: 'schedule-editor', label: 'Editor de Escala', icon: <Edit size={20}/> },
     { id: 'monthly-report', label: 'Relatório Mensal', icon: <FileText size={20}/> },
     { id: 'repertoire-manager', label: 'Gerenciar Repertório', icon: <ListMusic size={20}/> },
@@ -201,12 +206,17 @@ const InnerApp = () => {
     { id: 'members', label: 'Membros & Equipe', icon: <Users size={20}/> },
   ];
 
-  const QUICK_ACTIONS = [
+  const RAW_QUICK_ACTIONS = [
     { id: 'calendar', label: 'Minhas Escalas', icon: <CalendarIcon size={24} />, color: 'bg-blue-500', hover: 'hover:bg-blue-600' },
     { id: 'availability', label: 'Disponibilidade', icon: <CalendarCheck size={24} />, color: 'bg-emerald-500', hover: 'hover:bg-emerald-600' },
     { id: 'swaps', label: 'Trocas de Vaga', icon: <RefreshCcw size={24} />, color: 'bg-amber-500', hover: 'hover:bg-amber-600' },
     { id: 'repertoire', label: 'Repertório', icon: <Music size={24} />, color: 'bg-pink-500', hover: 'hover:bg-pink-600' },
   ];
+
+  // FILTRAGEM DINÂMICA: Aplica a configuração do ministério ativo
+  const MAIN_NAV = RAW_MAIN_NAV.filter(item => ministryConfig.enabledTabs.includes(item.id));
+  const MANAGEMENT_NAV = RAW_MANAGEMENT_NAV.filter(item => ministryConfig.enabledTabs.includes(item.id));
+  const QUICK_ACTIONS = RAW_QUICK_ACTIONS.filter(item => ministryConfig.enabledTabs.includes(item.id));
 
   return (
     <ErrorBoundary>
@@ -229,6 +239,9 @@ const InnerApp = () => {
                 if (currentUser && currentUser.id) await Supabase.updateProfileMinistry(currentUser.id, id);
                 addToast(`Alternado para ${id}`, 'info');
                 refreshData();
+                // Opcional: Voltar para dashboard se a aba atual não existir no novo ministério
+                const newConfig = getMinistryConfig(id);
+                if (!newConfig.enabledTabs.includes(currentTab)) setCurrentTab('dashboard');
             }}
             onOpenJoinMinistry={() => setShowJoinModal(true)}
             activeMinistryId={ministryId}
@@ -299,7 +312,7 @@ const InnerApp = () => {
                 )}
 
                 {/* Calendar */}
-                {currentTab === 'calendar' && (
+                {currentTab === 'calendar' && ministryConfig.enabledTabs.includes('calendar') && (
                     <div className="space-y-6 animate-fade-in">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                             <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2"><CalendarIcon className="text-blue-500"/> Calendário</h2>
@@ -314,7 +327,7 @@ const InnerApp = () => {
                 )}
 
                 {/* Schedule Editor (Admin) */}
-                {currentTab === 'schedule-editor' && isAdmin && (
+                {currentTab === 'schedule-editor' && isAdmin && ministryConfig.enabledTabs.includes('schedule-editor') && (
                     <div className="space-y-6 animate-fade-in">
                         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-6 border-b border-zinc-200 dark:border-zinc-800 pb-6">
                             <div className="w-full xl:w-auto">
@@ -364,20 +377,24 @@ const InnerApp = () => {
                     </div>
                 )}
 
-                {/* Other Tabs Mapped */}
-                {currentTab === 'availability' && <AvailabilityScreen availability={availability} availabilityNotes={availabilityNotes} setAvailability={setAvailability} allMembersList={publicMembers.map(m => m.name)} currentMonth={currentMonth} onMonthChange={setCurrentMonth} currentUser={currentUser} onSaveAvailability={async (mid, m, d, n, t) => { await Supabase.saveMemberAvailability(mid, m, d, n, t); refreshData(); }} availabilityWindow={availabilityWindow} ministryId={ministryId} />}
-                {currentTab === 'swaps' && <SwapRequestsScreen schedule={schedule} currentUser={currentUser} requests={swapRequests} visibleEvents={events} onCreateRequest={async (role, iso, title) => { await Supabase.createSwapRequestSQL(ministryId, { id: '', ministryId, requesterName: currentUser.name, requesterId: currentUser.id, role, eventIso: iso, eventTitle: title, status: 'pending', createdAt: new Date().toISOString() }); refreshData(); }} onAcceptRequest={async (reqId) => { await Supabase.performSwapSQL(ministryId, reqId, currentUser.name, currentUser.id!); refreshData(); }} onCancelRequest={async (reqId) => { await Supabase.cancelSwapRequestSQL(reqId); addToast("Pedido removido com sucesso.", "info"); refreshData(); }} />}
-                {currentTab === 'ranking' && <RankingScreen ministryId={ministryId} currentUser={currentUser} />}
-                {(currentTab === 'repertoire' || (currentTab === 'repertoire-manager' && isAdmin)) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={currentUser} mode={currentTab === 'repertoire-manager' ? 'manage' : 'view'} ministryId={ministryId} />}
-                {currentTab === 'announcements' && <AnnouncementsScreen announcements={announcements} currentUser={currentUser} onMarkRead={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'read').then(refreshData)} onToggleLike={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'like').then(refreshData)} />}
+                {/* Other Tabs Mapped & Filtered */}
+                {currentTab === 'availability' && ministryConfig.enabledTabs.includes('availability') && <AvailabilityScreen availability={availability} availabilityNotes={availabilityNotes} setAvailability={setAvailability} allMembersList={publicMembers.map(m => m.name)} currentMonth={currentMonth} onMonthChange={setCurrentMonth} currentUser={currentUser} onSaveAvailability={async (mid, m, d, n, t) => { await Supabase.saveMemberAvailability(mid, m, d, n, t); refreshData(); }} availabilityWindow={availabilityWindow} ministryId={ministryId} />}
+                {currentTab === 'swaps' && ministryConfig.enabledTabs.includes('swaps') && <SwapRequestsScreen schedule={schedule} currentUser={currentUser} requests={swapRequests} visibleEvents={events} onCreateRequest={async (role, iso, title) => { await Supabase.createSwapRequestSQL(ministryId, { id: '', ministryId, requesterName: currentUser.name, requesterId: currentUser.id, role, eventIso: iso, eventTitle: title, status: 'pending', createdAt: new Date().toISOString() }); refreshData(); }} onAcceptRequest={async (reqId) => { await Supabase.performSwapSQL(ministryId, reqId, currentUser.name, currentUser.id!); refreshData(); }} onCancelRequest={async (reqId) => { await Supabase.cancelSwapRequestSQL(reqId); addToast("Pedido removido com sucesso.", "info"); refreshData(); }} />}
+                {currentTab === 'ranking' && ministryConfig.enabledTabs.includes('ranking') && <RankingScreen ministryId={ministryId} currentUser={currentUser} />}
+                
+                {/* Repertoire Tabs - Checked via Config */}
+                {(currentTab === 'repertoire' && ministryConfig.enabledTabs.includes('repertoire')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={currentUser} mode="view" ministryId={ministryId} />}
+                {(currentTab === 'repertoire-manager' && isAdmin && ministryConfig.enabledTabs.includes('repertoire-manager')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={currentUser} mode="manage" ministryId={ministryId} />}
+                
+                {currentTab === 'announcements' && ministryConfig.enabledTabs.includes('announcements') && <AnnouncementsScreen announcements={announcements} currentUser={currentUser} onMarkRead={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'read').then(refreshData)} onToggleLike={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'like').then(refreshData)} />}
                 {currentTab === 'profile' && <ProfileScreen user={currentUser} onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId); refreshData(); }} availableRoles={roles} />}
-                {currentTab === 'settings' && <SettingsScreen initialTitle={ministryTitle} ministryId={ministryId} themeMode={themeMode} onSetThemeMode={(m) => useAppStore.getState().setThemeMode(m)} onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, newTitle); refreshData(); }} onSaveAvailabilityWindow={async (start, end) => { await Supabase.saveMinistrySettings(ministryId, undefined, undefined, start, end); refreshData(); }} availabilityWindow={availabilityWindow} isAdmin={isAdmin} />}
-                {currentTab === 'members' && isAdmin && <MembersScreen members={publicMembers} onlineUsers={onlineUsers} currentUser={currentUser} availableRoles={roles} onToggleAdmin={async (email, currentStatus, name) => { await Supabase.toggleAdminSQL(email, !currentStatus, ministryId); refreshData(); }} onRemoveMember={async (id, name) => { await Supabase.deleteMember(ministryId, id, name); refreshData(); }} />}
-                {currentTab === 'events' && isAdmin && <EventsScreen customEvents={events.map(e => ({ ...e, iso: e.iso }))} onCreateEvent={async (evt) => { await Supabase.createMinistryEvent(ministryId, evt); refreshData(); }} onDeleteEvent={async (iso) => { await Supabase.deleteMinistryEvent(ministryId, iso); refreshData(); }} currentMonth={currentMonth} onMonthChange={setCurrentMonth} />}
-                {currentTab === 'report' && isAdmin && <AvailabilityReportScreen availability={availability} registeredMembers={publicMembers} membersMap={membersMap} currentMonth={currentMonth} onMonthChange={setCurrentMonth} availableRoles={roles} onRefresh={async () => { await refreshData(); }} />}
-                {currentTab === 'monthly-report' && isAdmin && <MonthlyReportScreen currentMonth={currentMonth} onMonthChange={setCurrentMonth} schedule={schedule} attendance={attendance} swapRequests={swapRequests} members={publicMembers} events={events} />}
-                {currentTab === 'social' && <SocialMediaScreen />}
-                {currentTab === 'send-announcements' && isAdmin && <AlertsManager onSend={async (t, m, type, exp) => { await Supabase.sendNotificationSQL(ministryId, { title: t, message: m, type, actionLink: 'announcements' }); await Supabase.createAnnouncementSQL(ministryId, { title: t, message: m, type, expirationDate: exp }, currentUser.name); refreshData(); }} />}
+                {currentTab === 'settings' && ministryConfig.enabledTabs.includes('settings') && <SettingsScreen initialTitle={ministryTitle} ministryId={ministryId} themeMode={themeMode} onSetThemeMode={(m) => useAppStore.getState().setThemeMode(m)} onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, newTitle); refreshData(); }} onSaveAvailabilityWindow={async (start, end) => { await Supabase.saveMinistrySettings(ministryId, undefined, undefined, start, end); refreshData(); }} availabilityWindow={availabilityWindow} isAdmin={isAdmin} />}
+                {currentTab === 'members' && isAdmin && ministryConfig.enabledTabs.includes('members') && <MembersScreen members={publicMembers} onlineUsers={onlineUsers} currentUser={currentUser} availableRoles={roles} onToggleAdmin={async (email, currentStatus, name) => { await Supabase.toggleAdminSQL(email, !currentStatus, ministryId); refreshData(); }} onRemoveMember={async (id, name) => { await Supabase.deleteMember(ministryId, id, name); refreshData(); }} />}
+                {currentTab === 'events' && isAdmin && ministryConfig.enabledTabs.includes('events') && <EventsScreen customEvents={events.map(e => ({ ...e, iso: e.iso }))} onCreateEvent={async (evt) => { await Supabase.createMinistryEvent(ministryId, evt); refreshData(); }} onDeleteEvent={async (iso) => { await Supabase.deleteMinistryEvent(ministryId, iso); refreshData(); }} currentMonth={currentMonth} onMonthChange={setCurrentMonth} />}
+                {currentTab === 'report' && isAdmin && ministryConfig.enabledTabs.includes('report') && <AvailabilityReportScreen availability={availability} registeredMembers={publicMembers} membersMap={membersMap} currentMonth={currentMonth} onMonthChange={setCurrentMonth} availableRoles={roles} onRefresh={async () => { await refreshData(); }} />}
+                {currentTab === 'monthly-report' && isAdmin && ministryConfig.enabledTabs.includes('monthly-report') && <MonthlyReportScreen currentMonth={currentMonth} onMonthChange={setCurrentMonth} schedule={schedule} attendance={attendance} swapRequests={swapRequests} members={publicMembers} events={events} />}
+                {currentTab === 'social' && ministryConfig.enabledTabs.includes('social') && <SocialMediaScreen />}
+                {currentTab === 'send-announcements' && isAdmin && ministryConfig.enabledTabs.includes('send-announcements') && <AlertsManager onSend={async (t, m, type, exp) => { await Supabase.sendNotificationSQL(ministryId, { title: t, message: m, type, actionLink: 'announcements' }); await Supabase.createAnnouncementSQL(ministryId, { title: t, message: m, type, expirationDate: exp }, currentUser.name); refreshData(); }} />}
             </Suspense>
 
             {/* Modals */}

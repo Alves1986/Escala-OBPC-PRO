@@ -82,15 +82,82 @@ export interface ScheduleAnalysis {
   [key: string]: ScheduleIssue;
 }
 
-// --- GLOBAL CONFLICT TYPES ---
-export const KNOWN_MINISTRIES = ['midia', 'louvor', 'infantil', 'recepcao', 'teatro', 'diaconia'];
+// --- ORGANIZATION & MINISTRIES CONFIGURATION ---
 
-export const MINISTRIES = [
-  { id: 'midia', label: 'Mídia / Comunicação' },
-  { id: 'louvor', label: 'Louvor / Adoração' },
-  { id: 'infantil', label: 'Ministério Infantil' },
-  { id: 'recepcao', label: 'Recepção / Diaconia' }
+// 1. Definição de todas as abas possíveis no sistema
+export const ALL_TABS = [
+  'dashboard', 
+  'announcements', 
+  'calendar', 
+  'availability', 
+  'swaps', 
+  'repertoire', 
+  'ranking', 
+  'social', 
+  'settings',
+  'schedule-editor',
+  'monthly-report',
+  'repertoire-manager',
+  'report',
+  'events',
+  'send-announcements',
+  'members'
 ];
+
+// 2. Pacote Padrão (Full) - Novos ministérios herdam isso
+export const DEFAULT_TABS = [...ALL_TABS];
+
+// 3. Interface de Configuração do Ministério
+export interface MinistryDef {
+  id: string;
+  label: string;
+  enabledTabs: string[]; // Lista de abas ativas para este ministério
+}
+
+// 4. Tabela de Configuração dos Ministérios
+export const MINISTRIES: MinistryDef[] = [
+  { 
+    id: 'midia', 
+    label: 'Mídia / Comunicação', 
+    enabledTabs: DEFAULT_TABS 
+  },
+  { 
+    id: 'louvor', 
+    label: 'Louvor / Adoração', 
+    enabledTabs: DEFAULT_TABS 
+  },
+  { 
+    id: 'infantil', 
+    label: 'Ministério Infantil', 
+    // REGRA DE NEGÓCIO: Remove abas de repertório para o Infantil
+    enabledTabs: DEFAULT_TABS.filter(t => !['repertoire', 'repertoire-manager'].includes(t)) 
+  },
+  { 
+    id: 'recepcao', 
+    label: 'Recepção / Diaconia', 
+    enabledTabs: DEFAULT_TABS 
+  },
+  {
+    id: 'teatro',
+    label: 'Teatro / Artes',
+    enabledTabs: DEFAULT_TABS
+  }
+];
+
+export const KNOWN_MINISTRIES = MINISTRIES.map(m => m.id);
+
+// Helper para obter configuração (com fallback para padrão se o ID for novo)
+export const getMinistryConfig = (id: string): MinistryDef => {
+  const found = MINISTRIES.find(m => m.id === id);
+  if (found) return found;
+  
+  // Auto-estrutura para novos ministérios desconhecidos
+  return {
+    id,
+    label: id.charAt(0).toUpperCase() + id.slice(1),
+    enabledTabs: DEFAULT_TABS // Habilita tudo por padrão
+  };
+};
 
 export interface GlobalConflict {
     ministryId: string; 
