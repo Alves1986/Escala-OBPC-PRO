@@ -1,7 +1,7 @@
 
 import React, { ReactNode, useState, useRef } from 'react';
 import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles, Building2, Home, Calendar, Megaphone, CalendarCheck } from 'lucide-react';
-import { User, AppNotification } from '../types';
+import { User, AppNotification, isValidMinistry, getMinistryConfig } from '../types';
 import { NotificationCenter } from './NotificationCenter';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useAppStore } from '../store/appStore';
@@ -28,15 +28,6 @@ interface Props {
   onOpenJoinMinistry?: () => void; 
   activeMinistryId?: string; // New prop for sync
 }
-
-const getMinistryLabel = (id: string) => {
-    const clean = id.trim().toLowerCase();
-    if (clean === 'midia') return 'Mídia / Comunicação';
-    if (clean === 'louvor') return 'Louvor / Adoração';
-    if (clean === 'infantil') return 'Ministério Infantil';
-    if (clean === 'recepcao') return 'Recepção / Diaconia';
-    return id.charAt(0).toUpperCase() + id.slice(1);
-};
 
 export const DashboardLayout: React.FC<Props> = ({ 
   children, onLogout, title,
@@ -218,8 +209,11 @@ export const DashboardLayout: React.FC<Props> = ({
                        <div className="px-3 py-2 bg-zinc-50/50 dark:bg-zinc-900/50">
                            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Meus Ministérios</p>
                        </div>
-                       {currentUser?.allowedMinistries?.map(mid => {
+                       
+                       {/* Lista filtrada para mostrar apenas ministérios válidos */}
+                       {currentUser?.allowedMinistries?.filter(isValidMinistry).map(mid => {
                            const isCurrent = currentMinistryId === mid;
+                           const config = getMinistryConfig(mid);
                            return (
                                <button
                                    key={mid}
@@ -229,7 +223,9 @@ export const DashboardLayout: React.FC<Props> = ({
                                    }}
                                    className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors ${isCurrent ? 'bg-zinc-50 dark:bg-zinc-800/50' : ''}`}
                                >
-                                   <span className={`${isCurrent ? 'text-zinc-900 dark:text-white font-semibold' : 'text-zinc-600 dark:text-zinc-300'}`}>{getMinistryLabel(mid)}</span>
+                                   <span className={`${isCurrent ? 'text-zinc-900 dark:text-white font-semibold' : 'text-zinc-600 dark:text-zinc-300'}`}>
+                                       {config.label}
+                                   </span>
                                    {isCurrent && <Check size={14} className="text-teal-600 dark:text-teal-400" />}
                                </button>
                            )

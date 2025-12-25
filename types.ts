@@ -82,7 +82,7 @@ export interface ScheduleAnalysis {
   [key: string]: ScheduleIssue;
 }
 
-// --- ORGANIZATION & MINISTRIES CONFIGURATION ---
+// --- ORGANIZATION & MINISTRIES CONFIGURATION (SOURCE OF TRUTH) ---
 
 // 1. Definição de todas as abas possíveis no sistema
 export const ALL_TABS = [
@@ -107,15 +107,8 @@ export const ALL_TABS = [
 // 2. Pacote Padrão (Full) - Novos ministérios herdam isso
 export const DEFAULT_TABS = [...ALL_TABS];
 
-// 3. Interface de Configuração do Ministério
-export interface MinistryDef {
-  id: string;
-  label: string;
-  enabledTabs: string[]; // Lista de abas ativas para este ministério
-}
-
-// 4. Tabela de Configuração dos Ministérios
-export const MINISTRIES: MinistryDef[] = [
+// 3. Tabela de Configuração dos Ministérios - READ ONLY / HARDCODED
+export const MINISTRIES = [
   { 
     id: 'midia', 
     label: 'Mídia / Comunicação', 
@@ -142,21 +135,32 @@ export const MINISTRIES: MinistryDef[] = [
     label: 'Teatro / Artes',
     enabledTabs: DEFAULT_TABS
   }
-];
+] as const;
+
+// 4. Tipos Derivados (Type Safety)
+export type ValidMinistryId = typeof MINISTRIES[number]['id'];
+
+// Interface baseada na constante
+export interface MinistryDef {
+  id: ValidMinistryId;
+  label: string;
+  enabledTabs: string[];
+}
 
 export const KNOWN_MINISTRIES = MINISTRIES.map(m => m.id);
 
-// Helper para obter configuração (com fallback para padrão se o ID for novo)
-export const getMinistryConfig = (id: string): MinistryDef => {
-  const found = MINISTRIES.find(m => m.id === id);
-  if (found) return found;
-  
-  // Auto-estrutura para novos ministérios desconhecidos
-  return {
-    id,
-    label: id.charAt(0).toUpperCase() + id.slice(1),
-    enabledTabs: DEFAULT_TABS // Habilita tudo por padrão
-  };
+// 5. Type Guard: Valida se uma string é um ID de ministério válido
+export const isValidMinistry = (id: any): id is ValidMinistryId => {
+    return MINISTRIES.some(m => m.id === id);
+};
+
+// 6. Helper para obter configuração (Seguro)
+export const getMinistryConfig = (id: string | null): MinistryDef => {
+  if (isValidMinistry(id)) {
+      return MINISTRIES.find(m => m.id === id)!;
+  }
+  // Fallback seguro: Retorna o primeiro da lista (Midia) se o ID for inválido
+  return MINISTRIES[0];
 };
 
 export interface GlobalConflict {

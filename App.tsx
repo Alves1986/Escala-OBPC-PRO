@@ -33,7 +33,7 @@ import { generateFullSchedulePDF, generateIndividualPDF } from './utils/pdfGener
 import { SUPABASE_URL, SUPABASE_KEY } from './services/supabaseService';
 import { adjustMonth, getMonthName, getLocalDateISOString } from './utils/dateUtils';
 import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from './utils/pushUtils';
-import { getMinistryConfig } from './types'; // Importando a configuração centralizada
+import { getMinistryConfig, isValidMinistry, MINISTRIES, ValidMinistryId } from './types'; 
 
 // Hooks
 import { useAuth } from './hooks/useAuth';
@@ -117,7 +117,23 @@ const InnerApp = () => {
   // Use the refactored Hook (now backed by React Query)
   const ministryId = useAppStore(state => state.ministryId);
   
+  // PORTEIRO: Verifica e corrige o ministryId inválido
+  useEffect(() => {
+      if (currentUser && !isValidMinistry(ministryId)) {
+          console.warn(`Ministério inválido detectado: "${ministryId}". Iniciando protocolo de correção...`);
+          
+          // Tenta encontrar o primeiro ministério válido na lista do usuário
+          const validId = currentUser.allowedMinistries?.find(id => isValidMinistry(id));
+          
+          // Fallback final para 'midia' (que é garantido existir em MINISTRIES)
+          const fallback: ValidMinistryId = isValidMinistry(validId) ? validId : MINISTRIES[0].id;
+          
+          setMinistryId(fallback);
+      }
+  }, [ministryId, currentUser]);
+
   // Obter configuração do ministério ativo (Controle de Visibilidade)
+  // Como isValidMinistry é usado acima, aqui é seguro, mas getMinistryConfig tem fallback interno também.
   const ministryConfig = useMemo(() => getMinistryConfig(ministryId), [ministryId]);
 
   const { 
@@ -213,7 +229,7 @@ const InnerApp = () => {
     { id: 'repertoire', label: 'Repertório', icon: <Music size={24} />, color: 'bg-pink-500', hover: 'hover:bg-pink-600' },
   ];
 
-  // FILTRAGEM DINÂMICA: Aplica a configuração do ministério ativo
+  // FILTRAGEM DINÂMICA: Aplica a configuração do ministério ativo (Source of Truth)
   const MAIN_NAV = RAW_MAIN_NAV.filter(item => ministryConfig.enabledTabs.includes(item.id));
   const MANAGEMENT_NAV = RAW_MANAGEMENT_NAV.filter(item => ministryConfig.enabledTabs.includes(item.id));
   const QUICK_ACTIONS = RAW_QUICK_ACTIONS.filter(item => ministryConfig.enabledTabs.includes(item.id));
@@ -237,9 +253,10 @@ const InnerApp = () => {
             onSwitchMinistry={async (id) => {
                 setMinistryId(id);
                 if (currentUser && currentUser.id) await Supabase.updateProfileMinistry(currentUser.id, id);
-                addToast(`Alternado para ${id}`, 'info');
+                addToast(`Alternado para ${getMinistryConfig(id).label}`, 'info');
                 refreshData();
-                // Opcional: Voltar para dashboard se a aba atual não existir no novo ministério
+                
+                // Se a nova configuração não tiver a aba atual, volta pro dashboard
                 const newConfig = getMinistryConfig(id);
                 if (!newConfig.enabledTabs.includes(currentTab)) setCurrentTab('dashboard');
             }}
