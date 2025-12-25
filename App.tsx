@@ -390,7 +390,27 @@ const InnerApp = () => {
                             </div>
                         </div>
                         
-                        <ScheduleTable events={events} roles={roles} schedule={schedule} attendance={attendance} availability={availability} members={membersMap} allMembers={publicMembers.map(m => m.name)} memberProfiles={publicMembers} scheduleIssues={{}} globalConflicts={globalConflicts} onCellChange={async (key, val) => { await Supabase.saveScheduleAssignment(ministryId, key, val); refreshData(); }} onAttendanceToggle={async (key) => { await Supabase.toggleAssignmentConfirmation(ministryId, key); refreshData(); }} onDeleteEvent={async (iso, title) => confirmAction("Remover?", `Remover "${title}"?`, async () => { await Supabase.deleteMinistryEvent(ministryId, iso.split('T')[0] + 'T' + iso.split('T')[1]); refreshData(); })} onEditEvent={(event) => setEventDetailsModal({ isOpen: true, event })} memberStats={Object.values(schedule).reduce((acc: any, val: any) => { if(val) acc[val] = (acc[val] || 0) + 1; return acc; }, {})} ministryId={ministryId} readOnly={false} onlineUsers={onlineUsers} />
+                        <ScheduleTable 
+                            events={events} 
+                            roles={roles} 
+                            schedule={schedule} 
+                            attendance={attendance} 
+                            availability={availability}
+                            availabilityNotes={availabilityNotes} // Passando notas para a tabela 
+                            members={membersMap} 
+                            allMembers={publicMembers.map(m => m.name)} 
+                            memberProfiles={publicMembers} 
+                            scheduleIssues={{}} 
+                            globalConflicts={globalConflicts} 
+                            onCellChange={async (key, val) => { await Supabase.saveScheduleAssignment(ministryId, key, val); refreshData(); }} 
+                            onAttendanceToggle={async (key) => { await Supabase.toggleAssignmentConfirmation(ministryId, key); refreshData(); }} 
+                            onDeleteEvent={async (iso, title) => confirmAction("Remover?", `Remover "${title}"?`, async () => { await Supabase.deleteMinistryEvent(ministryId, iso.split('T')[0] + 'T' + iso.split('T')[1]); refreshData(); })} 
+                            onEditEvent={(event) => setEventDetailsModal({ isOpen: true, event })} 
+                            memberStats={Object.values(schedule).reduce((acc: any, val: any) => { if(val) acc[val] = (acc[val] || 0) + 1; return acc; }, {})} 
+                            ministryId={ministryId} 
+                            readOnly={false} 
+                            onlineUsers={onlineUsers} 
+                        />
                     </div>
                 )}
 

@@ -1,8 +1,8 @@
 
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis, GlobalConflictMap, TeamMemberProfile } from '../types';
-import { CheckCircle2, AlertTriangle, Trash2, Edit, Clock, User, ChevronDown, ChevronLeft, ChevronRight, X, Search, AlertOctagon, XCircle, Settings } from 'lucide-react';
+import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis, GlobalConflictMap, TeamMemberProfile, AvailabilityNotesMap } from '../types';
+import { CheckCircle2, AlertTriangle, Trash2, Edit, Clock, User, ChevronDown, ChevronLeft, ChevronRight, X, Search, AlertOctagon, XCircle, Settings, FileText } from 'lucide-react';
 import { useClickOutside } from '../hooks/useClickOutside';
 
 interface Props {
@@ -11,6 +11,7 @@ interface Props {
   schedule: ScheduleMap;
   attendance: AttendanceMap;
   availability: AvailabilityMap;
+  availabilityNotes?: AvailabilityNotesMap; // Added notes
   members: Record<string, string[]>;
   allMembers: string[]; 
   memberProfiles?: TeamMemberProfile[];
@@ -38,7 +39,7 @@ const checkIsAvailable = (lookupSet: Set<string>, member: string, eventIso: stri
 
 // Componente isolado para a lista do dropdown (Renderizado apenas quando aberto)
 const SelectorDropdown = ({ 
-    options, onClose, onChange, position, memberProfiles, memberStats, availabilityLookup, eventIso, onlineUsers, label, value
+    options, onClose, onChange, position, memberProfiles, memberStats, availabilityLookup, availabilityNotes, eventIso, onlineUsers, label, value
 }: any) => {
     const [search, setSearch] = useState("");
     const searchInputRef = useRef<HTMLInputElement>(null);
@@ -66,6 +67,15 @@ const SelectorDropdown = ({
     }, [options, search, availabilityLookup, eventIso]);
 
     const getInitials = (name: string) => name ? name.charAt(0).toUpperCase() : '?';
+
+    // Helper to get note
+    const getMemberNote = (name: string) => {
+        if (!availabilityNotes) return null;
+        // Key format from AvailabilityScreen: Name_YYYY-MM-00
+        const monthKey = eventIso.slice(0, 7) + '-00';
+        const key = `${name}_${monthKey}`;
+        return availabilityNotes[key];
+    };
 
     return createPortal(
         <>
@@ -103,13 +113,14 @@ const SelectorDropdown = ({
                         const prevIsAvailable = idx > 0 ? checkIsAvailable(availabilityLookup, filteredOptions[idx-1], eventIso) : true;
                         const showSeparator = !isAvailable && prevIsAvailable;
                         const isOnline = profile ? onlineUsers.includes(profile.id) : false;
+                        const note = getMemberNote(opt);
 
                         return (
                             <React.Fragment key={opt}>
                             {showSeparator && <div className="px-3 py-2 text-[10px] uppercase font-bold text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 mt-1 mb-1 border-t border-b border-zinc-100 dark:border-zinc-800">Indisponíveis</div>}
                             <button
                                 onClick={() => { onChange(opt); onClose(); }}
-                                className={`w-full text-left px-3 py-2 text-sm rounded-lg flex items-center justify-between group transition-colors mb-0.5 ${value === opt ? 'bg-zinc-100 dark:bg-zinc-700' : isAvailable ? 'hover:bg-zinc-50 dark:hover:bg-zinc-800' : 'opacity-60 hover:opacity-100 hover:bg-zinc-50 dark:hover:bg-zinc-800 grayscale hover:grayscale-0'}`}
+                                className={`w-full text-left px-3 py-2 text-sm rounded-lg flex items-center justify-between group transition-colors mb-0.5 ${value === opt ? 'bg-zinc-100 dark:bg-zinc-700' : isAvailable ? 'hover:bg-zinc-50 dark:hover:bg-zinc-800' : 'opacity-80 hover:opacity-100 hover:bg-zinc-50 dark:hover:bg-zinc-800 grayscale hover:grayscale-0'}`}
                             >
                                 <div className="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
                                     <div className="relative shrink-0">
@@ -123,6 +134,11 @@ const SelectorDropdown = ({
                                     <div className="flex flex-col truncate text-left flex-1 min-w-0">
                                         <span className={`font-medium truncate text-sm ${isAvailable ? 'text-zinc-800 dark:text-zinc-100' : 'text-zinc-500 line-through decoration-zinc-400/50'}`}>{opt}</span>
                                         {!isAvailable && <span className="text-[10px] text-zinc-400 font-medium">Indisponível</span>}
+                                        {note && (
+                                            <div className="text-[10px] text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5 font-medium truncate">
+                                                <FileText size={10} className="shrink-0"/> "{note}"
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                                 {count > 0 && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ml-2 ${count > 4 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400'}`}>{count}x</span>}
@@ -138,9 +154,9 @@ const SelectorDropdown = ({
 };
 
 const MemberSelector = ({ 
-    value, onChange, options, memberProfiles = [], memberStats, hasError, hasWarning, eventIso, availabilityLookup, warningMsg, label, onlineUsers = []
+    value, onChange, options, memberProfiles = [], memberStats, hasError, hasWarning, eventIso, availabilityLookup, availabilityNotes, warningMsg, label, onlineUsers = []
 }: { 
-    value: string; onChange: (val: string) => void; options: string[]; memberProfiles?: TeamMemberProfile[]; memberStats: Record<string, number>; hasError: boolean; hasWarning: boolean; eventIso: string; availabilityLookup: Set<string>; warningMsg?: string; label?: string; onlineUsers?: string[];
+    value: string; onChange: (val: string) => void; options: string[]; memberProfiles?: TeamMemberProfile[]; memberStats: Record<string, number>; hasError: boolean; hasWarning: boolean; eventIso: string; availabilityLookup: Set<string>; availabilityNotes?: AvailabilityNotesMap; warningMsg?: string; label?: string; onlineUsers?: string[];
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const triggerRef = useRef<HTMLDivElement>(null);
@@ -224,6 +240,7 @@ const MemberSelector = ({
                     memberProfiles={memberProfiles}
                     memberStats={memberStats}
                     availabilityLookup={availabilityLookup}
+                    availabilityNotes={availabilityNotes}
                     eventIso={eventIso}
                     onlineUsers={onlineUsers}
                     label={label}
@@ -234,7 +251,7 @@ const MemberSelector = ({
     );
 };
 
-const ScheduleRow = React.memo(({ event, columns, schedule, attendance, availabilityLookup, members, memberProfiles, scheduleIssues, globalConflicts, onCellChange, onAttendanceToggle, onDeleteEvent, onEditEvent, memberStats, readOnly, onlineUsers }: any) => {
+const ScheduleRow = React.memo(({ event, columns, schedule, attendance, availabilityLookup, availabilityNotes, members, memberProfiles, scheduleIssues, globalConflicts, onCellChange, onAttendanceToggle, onDeleteEvent, onEditEvent, memberStats, readOnly, onlineUsers }: any) => {
     
     const time = event.iso.split('T')[1];
 
@@ -300,6 +317,7 @@ const ScheduleRow = React.memo(({ event, columns, schedule, attendance, availabi
                                         warningMsg={globalConflictMsg} 
                                         eventIso={event.iso} 
                                         availabilityLookup={availabilityLookup} 
+                                        availabilityNotes={availabilityNotes}
                                         onlineUsers={onlineUsers}
                                     />
                                     {hasLocalConflict && <div className="text-[9px] text-red-500 mt-1 flex items-center gap-1 font-medium ml-1">Indisponível</div>}
@@ -318,12 +336,12 @@ const ScheduleRow = React.memo(({ event, columns, schedule, attendance, availabi
         </tr>
     );
 }, (prev, next) => {
-    if (prev.readOnly !== next.readOnly || prev.memberStats !== next.memberStats || prev.event.iso !== next.event.iso || prev.memberProfiles !== next.memberProfiles || prev.globalConflicts !== next.globalConflicts || prev.onlineUsers !== next.onlineUsers || prev.availabilityLookup !== next.availabilityLookup) return false;
+    if (prev.readOnly !== next.readOnly || prev.memberStats !== next.memberStats || prev.event.iso !== next.event.iso || prev.memberProfiles !== next.memberProfiles || prev.globalConflicts !== next.globalConflicts || prev.onlineUsers !== next.onlineUsers || prev.availabilityLookup !== next.availabilityLookup || prev.availabilityNotes !== next.availabilityNotes) return false;
     const keys = next.columns.map((c: any) => `${next.event.iso}_${c.keySuffix}`);
     return !keys.some((k: string) => prev.schedule[k] !== next.schedule[k] || prev.attendance[k] !== next.attendance[k]);
 });
 
-export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, schedule, attendance, availability, members, allMembers, memberProfiles, scheduleIssues, globalConflicts, onCellChange, onAttendanceToggle, onDeleteEvent, onEditEvent, memberStats, ministryId, readOnly = false, onlineUsers = [] }) => {
+export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, schedule, attendance, availability, availabilityNotes, members, allMembers, memberProfiles, scheduleIssues, globalConflicts, onCellChange, onAttendanceToggle, onDeleteEvent, onEditEvent, memberStats, ministryId, readOnly = false, onlineUsers = [] }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
@@ -417,7 +435,8 @@ export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, sched
                         columns={columns} 
                         schedule={schedule} 
                         attendance={attendance} 
-                        availabilityLookup={availabilityLookup} 
+                        availabilityLookup={availabilityLookup}
+                        availabilityNotes={availabilityNotes} 
                         members={members} 
                         memberProfiles={memberProfiles} 
                         scheduleIssues={scheduleIssues} 
@@ -498,7 +517,8 @@ export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, sched
                                                     hasWarning={hasGlobalConflict} 
                                                     warningMsg={globalConflictMsg} 
                                                     eventIso={event.iso} 
-                                                    availabilityLookup={availabilityLookup} 
+                                                    availabilityLookup={availabilityLookup}
+                                                    availabilityNotes={availabilityNotes} 
                                                     label={`Selecionar ${col.displayRole}`} 
                                                     onlineUsers={onlineUsers} 
                                                   />

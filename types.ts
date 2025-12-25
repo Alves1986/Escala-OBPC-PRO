@@ -111,7 +111,7 @@ export const DEFAULT_TABS = [...ALL_TABS];
 export const MINISTRIES = [
   { 
     id: 'midia', 
-    label: 'Mídia / Comunicação', 
+    label: 'Comunicação / Mídia', 
     enabledTabs: DEFAULT_TABS 
   },
   { 
@@ -124,16 +124,6 @@ export const MINISTRIES = [
     label: 'Ministério Infantil', 
     // REGRA DE NEGÓCIO: Remove abas de repertório para o Infantil
     enabledTabs: DEFAULT_TABS.filter(t => !['repertoire', 'repertoire-manager'].includes(t)) 
-  },
-  { 
-    id: 'recepcao', 
-    label: 'Recepção / Diaconia', 
-    enabledTabs: DEFAULT_TABS 
-  },
-  {
-    id: 'teatro',
-    label: 'Teatro / Artes',
-    enabledTabs: DEFAULT_TABS
   }
 ] as const;
 
