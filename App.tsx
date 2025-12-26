@@ -5,9 +5,8 @@ import { useAppStore } from './store/appStore';
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
   Megaphone, Settings, FileBarChart, CalendarDays,
-  Users, Edit, Send, ListMusic, Clock, ArrowLeft, ArrowRight,
-  Calendar as CalendarIcon, Trophy, Loader2, ShieldAlert, Share2, Sparkles, ChevronRight, FileText, History,
-  CheckCircle2, MousePointerClick, Briefcase
+  Users, Edit, Send, ListMusic, ArrowLeft, ArrowRight,
+  Calendar as CalendarIcon, Trophy, Loader2, Share2, MousePointerClick, Briefcase, History, FileText, ChevronRight
 } from 'lucide-react';
 import { ToastProvider, useToast } from './components/Toast';
 import { LoginScreen } from './components/LoginScreen';
@@ -28,11 +27,9 @@ import { EventsModal, AvailabilityModal, RolesModal, AuditModal } from './compon
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 import * as Supabase from './services/supabaseService';
-import { generateScheduleWithAI } from './services/aiService';
 import { generateFullSchedulePDF, generateIndividualPDF } from './utils/pdfGenerator';
 import { SUPABASE_URL, SUPABASE_KEY } from './services/supabaseService';
 import { adjustMonth, getMonthName, getLocalDateISOString } from './utils/dateUtils';
-import { urlBase64ToUint8Array, VAPID_PUBLIC_KEY } from './utils/pushUtils';
 import { getMinistryConfig, isValidMinistry, MINISTRIES, ValidMinistryId } from './types'; 
 
 // Hooks
@@ -147,7 +144,6 @@ const InnerApp = () => {
   } = useMinistryData(ministryId, currentMonth, currentUser);
 
   // Online Presence
-  const presenceTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const onlineUsers = useOnlinePresence(currentUser?.id, currentUser?.name);
 
   // Modals
@@ -374,7 +370,6 @@ const InnerApp = () => {
                                     <ToolsMenu 
                                         onExportIndividual={(member) => generateIndividualPDF(ministryTitle, currentMonth, member, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), schedule)} 
                                         onExportFull={() => generateFullSchedulePDF(ministryTitle, currentMonth, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), roles, schedule)} 
-                                        onWhatsApp={() => {}} 
                                         onClearMonth={() => confirmAction("Limpar?", "Limpar escala?", () => Supabase.clearScheduleForMonth(ministryId, currentMonth).then(refreshData))} 
                                         onResetEvents={() => confirmAction("Restaurar?", "Restaurar eventos?", () => Supabase.resetToDefaultEvents(ministryId, currentMonth).then(refreshData))}
                                         allMembers={publicMembers.map(m => m.name)} 

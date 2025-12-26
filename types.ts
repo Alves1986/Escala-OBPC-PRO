@@ -188,16 +188,6 @@ export interface RepertoireItem {
   key?: string; // Musical Key (e.g., "G")
 }
 
-export interface PushSubscriptionRecord {
-  endpoint: string;
-  keys: {
-    p256dh: string;
-    auth: string;
-  };
-  device_id: string; 
-  last_updated: string;
-}
-
 export interface User {
   id?: string;        
   email?: string;     

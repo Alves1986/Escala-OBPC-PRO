@@ -1,11 +1,11 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
-    PushSubscriptionRecord, User, MemberMap, 
+    User, MemberMap, 
     AppNotification, TeamMemberProfile, AvailabilityMap, SwapRequest, 
     ScheduleMap, RepertoireItem, Announcement, GlobalConflictMap, 
-    GlobalConflict, DEFAULT_ROLES, AttendanceMap, AuditLogEntry, MinistrySettings,
-    RankingEntry, AvailabilityNotesMap, CustomEvent, RankingHistoryItem
+    AttendanceMap, AuditLogEntry, MinistrySettings,
+    RankingEntry, AvailabilityNotesMap, RankingHistoryItem
 } from '../types';
 
 // ============================================================================
@@ -209,7 +209,6 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
     }
 };
 
-export const saveScheduleBulk = async (ministryId: string, schedule: ScheduleMap, overwrite: boolean) => { if (!supabase) return; for (const [key, memberName] of Object.entries(schedule)) { if (memberName) await saveScheduleAssignment(ministryId, key, memberName); } };
 export const toggleAssignmentConfirmation = async (ministryId: string, key: string) => { if (!supabase) return false; try { const [iso, ...roleParts] = key.split('_'); const role = roleParts.join('_'); const date_time = iso + ':00'; const { data: event } = await supabase.from('events').select('id, title').eq('ministry_id', ministryId).eq('date_time', date_time).single(); if (!event) return false; const { data: assign } = await supabase.from('schedule_assignments').select('confirmed, member_id').eq('event_id', event.id).eq('role', role).single(); if (assign) { await supabase.from('schedule_assignments').update({ confirmed: !assign.confirmed }).eq('event_id', event.id).eq('role', role); await logAction(ministryId, 'Status Presença', `Status alterado para ${!assign.confirmed} (${role})`); return true; } } catch(e) { console.error(e); } return false; };
 export const clearScheduleForMonth = async (ministryId: string, month: string) => { if (!supabase) return; const startDate = `${month}-01T00:00:00`; const [y, m] = month.split('-').map(Number); const nextMonth = new Date(y, m, 1).toISOString(); const { data: events } = await supabase.from('events').select('id').eq('ministry_id', ministryId).gte('date_time', startDate).lt('date_time', nextMonth); const eventIds = events?.map((e: any) => e.id) || []; if (eventIds.length > 0) { await supabase.from('schedule_assignments').delete().in('event_id', eventIds); await logAction(ministryId, 'Limpeza Mensal', `Escala limpa para ${month}`); } };
 export const resetToDefaultEvents = async (ministryId: string, month: string) => { if (!supabase) return; const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-'); const [y, m] = month.split('-').map(Number); const startDate = `${month}-01T00:00:00`; const nextMonth = new Date(y, m, 1).toISOString(); try { await clearScheduleForMonth(cleanMid, month); const { error: deleteError } = await supabase.from('events').delete().eq('ministry_id', cleanMid).gte('date_time', startDate).lt('date_time', nextMonth); if (deleteError) throw deleteError; const daysInMonth = new Date(y, m, 0).getDate(); const eventsToInsert = []; for (let d = 1; d <= daysInMonth; d++) { const date = new Date(y, m - 1, d, 12, 0, 0); const dayOfWeek = date.getDay(); const dateStr = `${month}-${String(d).padStart(2, '0')}`; if (dayOfWeek === 0) { eventsToInsert.push({ ministry_id: cleanMid, title: "Culto da Família", date_time: `${dateStr}T18:00:00` }); } else if (dayOfWeek === 3) { eventsToInsert.push({ ministry_id: cleanMid, title: "Culto de Doutrina", date_time: `${dateStr}T19:30:00` }); } } if (eventsToInsert.length > 0) { await supabase.from('events').insert(eventsToInsert); } await logAction(ministryId, 'Reset Eventos', `Eventos padrão restaurados para ${month}`); } catch (error) { console.error("Erro ao restaurar eventos:", error); } };
@@ -555,5 +554,3 @@ export const fetchRankingData = async (ministryId: string): Promise<RankingEntry
 
     return Object.values(rankingMap).sort((a, b) => b.points - a.points);
 };
-
-export const saveSubscriptionSQL = async (ministryId: string, subscription: PushSubscription) => { if (!supabase) return; const { data: { user } } = await supabase.auth.getUser(); if (!user) return; const p256dh = subscription.getKey('p256dh') ? btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('p256dh')!) as any)) : ''; const auth = subscription.getKey('auth') ? btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('auth')!) as any)) : ''; await supabase.from('push_subscriptions').upsert({ user_id: user.id, endpoint: subscription.endpoint, p256dh, auth }, { onConflict: 'endpoint' }); };
