@@ -1,5 +1,5 @@
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
     User, MinistrySettings, MinistryDef, Organization, 
     AppNotification, Announcement, SwapRequest, RepertoireItem, 
@@ -7,25 +7,65 @@ import {
     AuditLogEntry, GlobalConflictMap, RankingEntry, AvailabilityNotesMap
 } from '../types';
 
-export const SUPABASE_URL = (import.meta as any).env.VITE_SUPABASE_URL || "";
-export const SUPABASE_KEY = (import.meta as any).env.VITE_SUPABASE_KEY || "";
+// Globals injected by Vite via define (Configured in vite.config.ts)
+declare const __SUPABASE_URL__: string;
+declare const __SUPABASE_KEY__: string;
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+let injectedUrl = '';
+let injectedKey = '';
+
+// 1. Try Injected Globals (Build-time env vars)
+try {
+    // @ts-ignore
+    if (typeof __SUPABASE_URL__ !== 'undefined') injectedUrl = __SUPABASE_URL__;
+    // @ts-ignore
+    if (typeof __SUPABASE_KEY__ !== 'undefined') injectedKey = __SUPABASE_KEY__;
+} catch(e) {}
+
+let metaUrl = '';
+let metaKey = '';
+
+// 2. Try import.meta.env (Vite Standard)
+try {
+    // @ts-ignore
+    if (import.meta && import.meta.env) {
+        // @ts-ignore
+        metaUrl = import.meta.env.VITE_SUPABASE_URL;
+        // @ts-ignore
+        metaKey = import.meta.env.VITE_SUPABASE_KEY;
+    }
+} catch (e) {}
+
+export const SUPABASE_URL = injectedUrl || metaUrl || "";
+export const SUPABASE_KEY = injectedKey || metaKey || "";
+
+let supabase: SupabaseClient | null = null;
+
+if (SUPABASE_URL && SUPABASE_KEY) {
+    try {
+        supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    } catch (e) {
+        console.error("Failed to initialize Supabase client:", e);
+    }
+}
 
 export const getSupabase = () => supabase;
 
 // --- AUTH ---
 export const loginWithEmail = async (email: string, password: string) => {
+    if (!supabase) return { success: false, message: "Supabase não configurado" };
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     return { success: !error, message: error?.message, user: data.user };
 };
 
 export const loginWithGoogle = async () => {
+    if (!supabase) return { success: false, message: "Supabase não configurado" };
     const { data, error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
     return { success: !error, message: error?.message, data };
 };
 
 export const registerWithEmail = async (email: string, password: string, name: string, ministries: string[], orgId?: string, roles?: string[]) => {
+    if (!supabase) return { success: false, message: "Supabase não configurado" };
     const { data, error } = await supabase.auth.signUp({ 
         email, 
         password,
@@ -37,11 +77,13 @@ export const registerWithEmail = async (email: string, password: string, name: s
 };
 
 export const sendPasswordResetEmail = async (email: string) => {
+    if (!supabase) return { success: false, message: "Supabase não configurado" };
     const { error } = await supabase.auth.resetPasswordForEmail(email);
     return { success: !error, message: error ? error.message : "Email enviado." };
 };
 
 export const updateLastMinistry = async (userId: string, ministryId: string) => {
+    if (!supabase) return;
     try {
         await supabase.from('profiles').update({ last_ministry_id: ministryId }).eq('id', userId);
     } catch (e) {
@@ -50,11 +92,13 @@ export const updateLastMinistry = async (userId: string, ministryId: string) => 
 };
 
 export const fetchUserAllowedMinistries = async (userId: string, orgId: string): Promise<string[]> => {
+    if (!supabase) return [];
     const { data } = await supabase.from('profiles').select('allowed_ministries').eq('id', userId).single();
     return data?.allowed_ministries || [];
 };
 
 export const updateUserProfile = async (name: string, whatsapp: string, avatar_url?: string, functions?: string[], birthDate?: string, ministryId?: string) => {
+    if (!supabase) return;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     const updates: any = { name, whatsapp, functions, birth_date: birthDate };
@@ -64,11 +108,13 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
 
 // --- ORGANIZATION & MINISTRIES ---
 export const fetchOrganizationMinistries = async (orgId: string): Promise<MinistryDef[]> => {
+    if (!supabase) return [];
     const { data } = await supabase.from('organization_ministries').select('*').eq('organization_id', orgId);
     return data || [];
 };
 
 export const fetchMinistrySettings = async (ministryId: string): Promise<MinistrySettings> => {
+    if (!supabase) return { displayName: ministryId, roles: [] };
     const { data } = await supabase.from('ministry_settings').select('*').eq('ministry_id', ministryId).single();
     return data || { displayName: ministryId, roles: [] };
 };

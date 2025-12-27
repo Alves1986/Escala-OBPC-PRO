@@ -1,10 +1,9 @@
-
 import { useState, useEffect, Suspense, useMemo } from 'react';
 import { 
   Home, Calendar, CalendarCheck, Megaphone, Repeat, Award, 
   Music, User, Settings, Edit, Users, CalendarDays, 
   FileText, Share2, Briefcase, History, ArrowLeft, ArrowRight,
-  MousePointerClick
+  MousePointerClick, ChevronRight
 } from 'lucide-react';
 import { useAuth } from './hooks/useAuth';
 import { useAppStore } from './store/appStore';
