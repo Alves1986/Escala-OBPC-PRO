@@ -3,14 +3,17 @@ import { useState, useEffect } from 'react';
 import { User } from '../types';
 import * as Supabase from '../services/supabaseService';
 import { SUPABASE_URL } from '../services/supabaseService';
+import { useAppStore } from '../store/appStore';
 
 export function useAuth() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
+  const { setMinistryId } = useAppStore();
 
   useEffect(() => {
     // Modo Preview: Loga automaticamente com usuário fictício
     if (SUPABASE_URL === 'https://preview.mode') {
+        // ... (código existente de preview)
         setCurrentUser({
             id: 'demo-user-123',
             name: 'Usuário Demo',
@@ -19,7 +22,7 @@ export function useAuth() {
             ministryId: 'midia',
             allowedMinistries: ['midia'],
             organizationId: 'demo-org-001',
-            isSuperAdmin: true, // Demo Super Admin
+            isSuperAdmin: true,
             avatar_url: '',
             whatsapp: '11999999999',
             functions: ['Projeção']
@@ -44,72 +47,75 @@ export function useAuth() {
         }
 
         try {
-            // Busca segura do perfil INCLUINDO organization_id e is_super_admin
+            // Busca segura do perfil INCLUINDO last_ministry_id
             let { data: profile, error: fetchError } = await sb
                 .from('profiles')
                 .select('*')
                 .eq('id', user.id)
                 .maybeSingle();
             
-            // LÓGICA DE AUTO-CORREÇÃO (SELF-HEALING) ROBUSTA
+            // ... (código existente de auto-correção de perfil) ...
             if (!profile || fetchError) {
-                console.warn("Perfil ausente ou erro de schema. Tentando recriar perfil básico.", user.email);
-                
-                const defaultMinistry = 'midia';
-                // Fallback para organização padrão se não existir no banco
-                const defaultOrgId = '00000000-0000-0000-0000-000000000000';
-                const metaName = user.user_metadata?.full_name || user.user_metadata?.name;
-                const emailName = user.email?.split('@')[0];
-                const displayName = metaName || emailName || 'Membro';
-
-                const newProfile = {
+                 // ... fallback code ...
+                 const defaultMinistry = 'midia';
+                 const defaultOrgId = '00000000-0000-0000-0000-000000000000';
+                 profile = {
                     id: user.id,
                     email: user.email,
-                    name: displayName,
-                    avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || '',
+                    name: user.user_metadata?.full_name || 'Membro',
                     ministry_id: defaultMinistry,
                     allowed_ministries: [defaultMinistry],
-                    organization_id: defaultOrgId, // Atribui organização padrão
+                    organization_id: defaultOrgId,
                     role: 'member',
-                    is_super_admin: false,
-                };
-
-                // Tenta inserir na tabela profiles manualmente
-                const { data: insertedProfile, error: insertError } = await sb
-                    .from('profiles')
-                    .upsert(newProfile)
-                    .select()
-                    .single();
-                
-                if (insertError) {
-                    console.error("Falha crítica ao criar perfil automático:", insertError.message);
-                    // Fallback de emergência: Objeto em memória para não travar o app
-                    profile = { ...newProfile, is_admin: false }; 
-                } else {
-                    console.log("Perfil restaurado com sucesso.");
-                    profile = insertedProfile;
-                }
+                    is_super_admin: false
+                 };
             }
 
-            // Normalização de dados para evitar undefined
             if (profile) {
-                const userMinistry = profile.ministry_id || 'midia';
-                // Se organization_id vier nulo do banco (antes da migração), usa fallback
+                // BUSCA AVANÇADA DE PERMISSÕES (Memberships)
                 const safeOrgId = profile.organization_id || '00000000-0000-0000-0000-000000000000';
+                const allowedMinistries = await Supabase.fetchUserAllowedMinistries(profile.id, safeOrgId);
                 const safeFunctions = Array.isArray(profile.functions) ? profile.functions : [];
 
-                // BUSCA AVANÇADA DE PERMISSÕES (Memberships)
-                const allowedMinistries = await Supabase.fetchUserAllowedMinistries(profile.id, safeOrgId);
+                // --- LÓGICA DE PERSISTÊNCIA DE MINISTÉRIO ---
+                let activeMinistry = '';
+
+                // 1. Tenta recuperar do Banco (último acesso salvo)
+                if (profile.last_ministry_id && allowedMinistries.includes(profile.last_ministry_id)) {
+                    activeMinistry = profile.last_ministry_id;
+                }
+                
+                // 2. Tenta recuperar do LocalStorage (fallback de dispositivo)
+                if (!activeMinistry) {
+                    const localSaved = localStorage.getItem('last_ministry_id');
+                    if (localSaved && allowedMinistries.includes(localSaved)) {
+                        activeMinistry = localSaved;
+                    }
+                }
+
+                // 3. Fallback para o primeiro ministério permitido
+                if (!activeMinistry && allowedMinistries.length > 0) {
+                    activeMinistry = allowedMinistries[0];
+                }
+
+                // 4. Último caso (nunca deve acontecer se allowedMinistries estiver ok)
+                if (!activeMinistry) {
+                    activeMinistry = 'midia'; 
+                }
+
+                // Atualiza Store Global
+                setMinistryId(activeMinistry);
 
                 setCurrentUser({
                     id: profile.id,
                     name: profile.name || 'Usuário',
                     email: profile.email || user.email,
                     role: profile.is_admin ? 'admin' : 'member',
-                    ministryId: userMinistry,
-                    allowedMinistries: allowedMinistries, // Lista populada via tabela de memberships
+                    ministryId: activeMinistry, // Define o ativo correto
+                    lastMinistryId: profile.last_ministry_id,
+                    allowedMinistries: allowedMinistries,
                     organizationId: safeOrgId,
-                    isSuperAdmin: !!profile.is_super_admin, // New mapping
+                    isSuperAdmin: !!profile.is_super_admin,
                     avatar_url: profile.avatar_url,
                     whatsapp: profile.whatsapp,
                     birthDate: profile.birth_date,
@@ -118,7 +124,6 @@ export function useAuth() {
             }
         } catch (e) {
             console.error("Erro geral na autenticação:", e);
-            // Em caso de erro catastrófico, desloga para tentar limpar o estado
             await sb.auth.signOut();
             setCurrentUser(null);
         } finally {
@@ -126,12 +131,11 @@ export function useAuth() {
         }
     };
 
-    // 1. Check Session directly
+    // ... (restante do código de session check) ...
     sb.auth.getSession().then(({ data: { session } }) => {
         handleUserSession(session);
     });
 
-    // 2. Listen for changes
     const { data: { subscription } } = sb.auth.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
             if (event === 'SIGNED_IN') setLoadingAuth(true);

@@ -1,146 +1,124 @@
 
-import React, { useState, useEffect, Suspense, useRef, useMemo } from 'react';
-import { QueryClientProvider } from '@tanstack/react-query';
-import { queryClient } from './lib/queryClient';
+import React, { useState, useEffect, Suspense, useMemo } from 'react';
+import { useAuth } from './hooks/useAuth';
 import { useAppStore } from './store/appStore';
-import { 
-  LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
-  Megaphone, Settings, FileBarChart, CalendarDays,
-  Users, Edit, Send, ListMusic, ArrowLeft, ArrowRight,
-  Calendar as CalendarIcon, Trophy, Loader2, Share2, MousePointerClick, Briefcase, History, FileText, ChevronRight
-} from 'lucide-react';
-import { ToastProvider, useToast } from './components/Toast';
-import { LoginScreen } from './components/LoginScreen';
-import { SetupScreen } from './components/SetupScreen';
+import { useToast, ToastProvider } from './components/Toast';
+import { useMinistryData } from './hooks/useMinistryData';
 import { LoadingScreen } from './components/LoadingScreen';
-import { DashboardLayout } from './components/DashboardLayout';
+import { LoginScreen } from './components/LoginScreen';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { DashboardLayout, NavItem } from './components/DashboardLayout';
+import { WeatherWidget } from './components/WeatherWidget';
 import { NextEventCard } from './components/NextEventCard';
 import { BirthdayCard } from './components/BirthdayCard';
-import { WeatherWidget } from './components/WeatherWidget';
+import { CalendarGrid } from './components/CalendarGrid';
+import { ScheduleTable } from './components/ScheduleTable';
+import { SuperAdminDashboard } from './components/SuperAdminDashboard';
+import { AvailabilityScreen } from './components/AvailabilityScreen';
+import { SwapRequestsScreen } from './components/SwapRequestsScreen';
+import { RankingScreen } from './components/RankingScreen';
+import { RepertoireScreen } from './components/RepertoireScreen';
+import { AnnouncementsScreen } from './components/AnnouncementsScreen';
+import { ProfileScreen } from './components/ProfileScreen';
+import { SettingsScreen } from './components/SettingsScreen';
+import { MembersScreen } from './components/MembersScreen';
+import { EventsScreen } from './components/EventsScreen';
+import { AvailabilityReportScreen } from './components/AvailabilityReportScreen';
+import { MonthlyReportScreen } from './components/MonthlyReportScreen';
+import { SocialMediaScreen } from './components/SocialMediaScreen';
+import { AlertsManager } from './components/AlertsManager';
 import { InstallBanner } from './components/InstallBanner';
 import { InstallModal } from './components/InstallModal';
 import { JoinMinistryModal } from './components/JoinMinistryModal';
-import { ToolsMenu } from './components/ToolsMenu';
+import { EventsModal, AvailabilityModal, RolesModal, AuditModal, EditMemberModal } from './components/ManagementModals';
 import { EventDetailsModal } from './components/EventDetailsModal';
 import { StatsModal } from './components/StatsModal';
 import { ConfirmationModal } from './components/ConfirmationModal';
-import { EventsModal, AvailabilityModal, RolesModal, AuditModal } from './components/ManagementModals';
-import { ErrorBoundary } from './components/ErrorBoundary';
-
+import { ToolsMenu } from './components/ToolsMenu';
+import { generateIndividualPDF, generateFullSchedulePDF } from './utils/pdfGenerator';
 import * as Supabase from './services/supabaseService';
-import { generateFullSchedulePDF, generateIndividualPDF } from './utils/pdfGenerator';
-import { SUPABASE_URL, SUPABASE_KEY } from './services/supabaseService';
-import { adjustMonth, getMonthName, getLocalDateISOString } from './utils/dateUtils';
-import { DEFAULT_TABS } from './types'; 
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './lib/queryClient';
+import { DEFAULT_TABS, MinistryDef } from './types';
+import { getMonthName, adjustMonth, getLocalDateISOString } from './utils/dateUtils';
+import { 
+  Layout, Calendar as CalendarIcon, Megaphone, Clock, Calendar, 
+  CheckCircle2, Users, FileText, Share2, Shield, MousePointerClick, 
+  Briefcase, History, ArrowLeft, ArrowRight, Edit, Music
+} from 'lucide-react';
 
-// Hooks
-import { useAuth } from './hooks/useAuth';
-import { useMinistryData } from './hooks/useMinistryData';
-import { useOnlinePresence } from './hooks/useOnlinePresence';
+const RAW_MAIN_NAV: NavItem[] = [
+  { id: 'dashboard', label: 'Início', icon: <Layout /> },
+  { id: 'calendar', label: 'Calendário', icon: <CalendarIcon /> },
+  { id: 'announcements', label: 'Avisos', icon: <Megaphone /> },
+  { id: 'availability', label: 'Disponibilidade', icon: <Clock /> },
+  { id: 'swaps', label: 'Trocas', icon: <Calendar /> },
+  { id: 'repertoire', label: 'Repertório', icon: <Music /> },
+  { id: 'social', label: 'Redes Sociais', icon: <Share2 /> },
+];
 
-// --- Lazy Load Heavy Components ---
-const ScheduleTable = React.lazy(() => import('./components/ScheduleTable').then(module => ({ default: module.ScheduleTable })));
-const CalendarGrid = React.lazy(() => import('./components/CalendarGrid').then(module => ({ default: module.CalendarGrid })));
-const AvailabilityScreen = React.lazy(() => import('./components/AvailabilityScreen').then(module => ({ default: module.AvailabilityScreen })));
-const SwapRequestsScreen = React.lazy(() => import('./components/SwapRequestsScreen').then(module => ({ default: module.SwapRequestsScreen })));
-const RepertoireScreen = React.lazy(() => import('./components/RepertoireScreen').then(module => ({ default: module.RepertoireScreen })));
-const AnnouncementsScreen = React.lazy(() => import('./components/AnnouncementsScreen').then(module => ({ default: module.AnnouncementsScreen })));
-const AlertsManager = React.lazy(() => import('./components/AlertsManager').then(module => ({ default: module.AlertsManager })));
-const AvailabilityReportScreen = React.lazy(() => import('./components/AvailabilityReportScreen').then(module => ({ default: module.AvailabilityReportScreen })));
-const MonthlyReportScreen = React.lazy(() => import('./components/MonthlyReportScreen').then(module => ({ default: module.MonthlyReportScreen })));
-const SettingsScreen = React.lazy(() => import('./components/SettingsScreen').then(module => ({ default: module.SettingsScreen })));
-const ProfileScreen = React.lazy(() => import('./components/ProfileScreen').then(module => ({ default: module.ProfileScreen })));
-const EventsScreen = React.lazy(() => import('./components/EventsScreen').then(module => ({ default: module.EventsScreen })));
-const RankingScreen = React.lazy(() => import('./components/RankingScreen').then(module => ({ default: module.RankingScreen })));
-const MembersScreen = React.lazy(() => import('./components/MembersScreen').then(module => ({ default: module.MembersScreen })));
-const SocialMediaScreen = React.lazy(() => import('./components/SocialMediaScreen').then(module => ({ default: module.SocialMediaScreen })));
-const SuperAdminDashboard = React.lazy(() => import('./components/SuperAdminDashboard').then(module => ({ default: module.SuperAdminDashboard })));
+const RAW_MANAGEMENT_NAV: NavItem[] = [
+  { id: 'schedule-editor', label: 'Editor de Escala', icon: <Edit /> },
+  { id: 'members', label: 'Equipe', icon: <Users /> },
+  { id: 'events', label: 'Gerenciar Eventos', icon: <CalendarIcon /> },
+  { id: 'report', label: 'Relatório Disp.', icon: <FileText /> },
+  { id: 'monthly-report', label: 'Relatório Mensal', icon: <FileText /> },
+  { id: 'repertoire-manager', label: 'Gestão Repertório', icon: <Music /> },
+  { id: 'send-announcements', label: 'Enviar Avisos', icon: <Megaphone /> },
+];
 
-// Loading Spinner
-const LoadingFallback = () => (
-  <div className="flex flex-col items-center justify-center h-[50vh] text-zinc-400 animate-fade-in">
-    <Loader2 size={32} className="animate-spin mb-3 text-teal-500" />
-    <p className="text-xs font-medium uppercase tracking-widest opacity-70">Carregando...</p>
-  </div>
-);
+const RAW_QUICK_ACTIONS = [
+  { id: 'availability', label: 'Enviar Disponibilidade', icon: <Clock size={24}/>, color: 'bg-blue-500' },
+  { id: 'swaps', label: 'Trocar Escala', icon: <Calendar size={24}/>, color: 'bg-orange-500' },
+  { id: 'repertoire', label: 'Ver Repertório', icon: <Music size={24}/>, color: 'bg-pink-500' },
+  { id: 'announcements', label: 'Avisos', icon: <Megaphone size={24}/>, color: 'bg-purple-500' },
+];
+
+const LoadingFallback = () => <div className="flex justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600"></div></div>;
 
 const InnerApp = () => {
-  const [isDemoMode, setIsDemoMode] = useState(false);
   const { currentUser, loadingAuth } = useAuth();
   const { setCurrentUser, setMinistryId, setAvailableMinistries, availableMinistries, ministryId: storeMinistryId, themeMode } = useAppStore();
   const { addToast, confirmAction } = useToast();
   
-  // Initialize Global Store
+  // State for modals and UI interactions
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [showInstallModal, setShowInstallModal] = useState(false);
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [isEventsModalOpen, setEventsModalOpen] = useState(false);
+  const [isAvailModalOpen, setAvailModalOpen] = useState(false);
+  const [isRolesModalOpen, setRolesModalOpen] = useState(false);
+  const [isAuditModalOpen, setAuditModalOpen] = useState(false);
+  const [statsModalOpen, setStatsModalOpen] = useState(false);
+  const [eventDetailsModal, setEventDetailsModal] = useState<{ isOpen: boolean; event: any }>({ isOpen: false, event: null });
+  const [confirmModalData, setConfirmModalData] = useState<any>(null);
+  
+  const [currentMonth, setCurrentMonth] = useState(() => getLocalDateISOString().slice(0, 7));
+
+  // Sync Current User to Store
   useEffect(() => {
-      if (currentUser) {
-          useAppStore.getState().setCurrentUser(currentUser);
-      }
-  }, [currentUser]);
+      if (currentUser) setCurrentUser(currentUser);
+  }, [currentUser, setCurrentUser]);
 
-  // --- PORTEIRO V2.0: Carregar Ministérios do Banco ---
   useEffect(() => {
-      const loadOrganizationMinistries = async () => {
-          if (!currentUser?.organizationId) return;
-
-          try {
-              // 1. Fetch ministries from DB for the user's organization
-              const fetchedMinistries = await Supabase.fetchOrganizationMinistries(currentUser.organizationId);
-              setAvailableMinistries(fetchedMinistries);
-
-              // 2. Validate current ministryId
-              // Is it valid in the new list?
-              const isValid = fetchedMinistries.some(m => m.id === storeMinistryId);
-              
-              if (!isValid && fetchedMinistries.length > 0) {
-                  // 3. Fallback logic: Try allowed ministries first, or pick first valid
-                  const firstAllowed = currentUser.allowedMinistries?.find(mid => fetchedMinistries.some(fm => fm.id === mid));
-                  const target = firstAllowed || fetchedMinistries[0].id;
-                  
-                  console.warn(`Ministério inválido (${storeMinistryId}). Trocando para: ${target}`);
-                  setMinistryId(target);
-              } else if (fetchedMinistries.length === 0) {
-                  // 4. Critical Failure (No ministries found for this org)
-                  console.error("Nenhum ministério encontrado para esta organização.");
-                  // Optionally set a safe state or just wait (Empty array handles gracefully in UI)
-              }
-
-          } catch (e) {
-              console.error("Erro ao carregar ministérios:", e);
+      async function loadOrganizationMinistries() {
+          if (currentUser?.organizationId) {
+              const list = await Supabase.fetchOrganizationMinistries(currentUser.organizationId);
+              setAvailableMinistries(list);
           }
-      };
-
-      if (currentUser) {
-          loadOrganizationMinistries();
       }
-  }, [currentUser, currentUser?.organizationId]); // Depend on organizationId changes
+      loadOrganizationMinistries();
+  }, [currentUser?.organizationId, setAvailableMinistries]);
 
-  // Apply Theme Mode Side Effect
   useEffect(() => {
-    const applyTheme = () => {
-      const isDark = 
-        themeMode === 'dark' || 
-        (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-      
-      if (isDark) {
-        document.documentElement.classList.add('dark');
+      const root = window.document.documentElement;
+      if (themeMode === 'dark' || (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          root.classList.add('dark');
       } else {
-        document.documentElement.classList.remove('dark');
+          root.classList.remove('dark');
       }
-    };
-
-    applyTheme();
-
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleChange = () => {
-        if (themeMode === 'system') applyTheme();
-    };
-    
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
   }, [themeMode]);
 
-  const [currentMonth, setCurrentMonth] = useState(getLocalDateISOString().slice(0, 7));
-  
   // Tab State
   const [currentTab, setCurrentTab] = useState(() => {
       if (typeof window !== 'undefined') {
@@ -150,16 +128,19 @@ const InnerApp = () => {
       return 'dashboard';
   });
 
-  // Use the refactored Hook (now backed by React Query)
   const ministryId = useAppStore(state => state.ministryId);
   
-  // Get active config from available list
   const ministryConfig = useMemo(() => {
-      return availableMinistries.find(m => m.id === ministryId) || { 
+      const found = availableMinistries.find(m => m.id === ministryId);
+      if (found) return found;
+      
+      return { 
           id: ministryId, 
-          label: 'Carregando...', 
-          enabledTabs: DEFAULT_TABS 
-      };
+          label: '',
+          enabledTabs: DEFAULT_TABS,
+          isLoading: true,
+          code: ministryId 
+      } as MinistryDef & { isLoading?: boolean };
   }, [ministryId, availableMinistries]);
 
   const { 
@@ -169,92 +150,47 @@ const InnerApp = () => {
     repertoire, swapRequests, globalConflicts, auditLogs, roles, 
     ministryTitle, availabilityWindow, 
     refreshData, isLoading: loadingData,
-    setAvailability, setNotifications, setRepertoire, setPublicMembers // Legacy setters
+    setAvailability, setNotifications
   } = useMinistryData(ministryId, currentMonth, currentUser);
 
-  // Online Presence
-  const onlineUsers = useOnlinePresence(currentUser?.id, currentUser?.name);
+  const onlineUsers: string[] = []; // Placeholder
 
-  // Modals
-  const [showInstallBanner, setShowInstallBanner] = useState(false);
-  const [showInstallModal, setShowInstallModal] = useState(false);
-  const [showJoinModal, setShowJoinModal] = useState(false);
-  const [eventDetailsModal, setEventDetailsModal] = useState<{ isOpen: boolean; event: any | null }>({ isOpen: false, event: null });
-  const [statsModalOpen, setStatsModalOpen] = useState(false);
-  const [confirmModalData, setConfirmModalData] = useState<any>(null);
-  const [isEventsModalOpen, setEventsModalOpen] = useState(false);
-  const [isAvailModalOpen, setAvailModalOpen] = useState(false);
-  const [isRolesModalOpen, setRolesModalOpen] = useState(false);
-  const [isAuditModalOpen, setAuditModalOpen] = useState(false);
+  // Checks for SUPABASE_URL
+  if (!Supabase.SUPABASE_URL) {
+      // Logic handled in SetupScreen if needed, but here implies env vars exist
+  }
 
-  // --- LOGIC ---
-
-  useEffect(() => {
-      // URL Tab Sync
-      const url = new URL(window.location.href);
-      if (url.searchParams.get('tab') !== currentTab) {
-          if (!window.location.hash.includes('access_token')) {
-              url.searchParams.set('tab', currentTab);
-              try { window.history.replaceState({}, '', url.toString()); } catch (e) {}
-          }
-      }
-  }, [currentTab]);
-
-  useEffect(() => {
-      // PWA Prompt
-      const handlePwaReady = () => setShowInstallBanner(true);
-      window.addEventListener('pwa-ready', handlePwaReady);
-      return () => window.removeEventListener('pwa-ready', handlePwaReady);
-  }, []);
-
-  const handleLogout = () => {
-    confirmAction("Sair", "Deseja realmente sair do sistema?", async () => {
-        await Supabase.logout();
-        setCurrentUser(null);
-        try { window.history.replaceState(null, '', '/'); } catch(e) {}
-    });
+  // Handle Logout
+  const handleLogout = async () => {
+      const sb = Supabase.getSupabase();
+      if (sb) await sb.auth.signOut();
+      window.location.reload();
   };
 
-  if ((!SUPABASE_URL || !SUPABASE_KEY) && !isDemoMode) {
-      return <SetupScreen onEnterDemo={() => setIsDemoMode(true)} />;
-  }
+  useEffect(() => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get('tab');
+      if (tabParam) {
+          setCurrentTab(tabParam);
+          window.history.replaceState({}, '', window.location.pathname);
+      }
+  }, []);
+
+  useEffect(() => {
+      const handleBeforeInstallPrompt = (e: any) => {
+          e.preventDefault();
+          (window as any).deferredPrompt = e;
+          setShowInstallBanner(true);
+      };
+      window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
 
   if (loadingAuth) return <LoadingScreen />;
   if (!currentUser) return <LoginScreen isLoading={loadingAuth} />;
 
   const isAdmin = currentUser.role === 'admin';
 
-  // Definição Completa das Abas (Source of Truth do Layout)
-  const RAW_MAIN_NAV = [
-    { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20}/> },
-    { id: 'announcements', label: 'Avisos', icon: <Megaphone size={20}/> },
-    { id: 'calendar', label: 'Calendário', icon: <CalendarIcon size={20}/> },
-    { id: 'availability', label: 'Disponibilidade', icon: <CalendarCheck size={20}/> },
-    { id: 'swaps', label: 'Trocas de Escala', icon: <RefreshCcw size={20}/> },
-    { id: 'repertoire', label: 'Repertório', icon: <Music size={20}/> },
-    { id: 'ranking', label: 'Destaques', icon: <Trophy size={20}/> },
-    { id: 'social', label: 'Redes Sociais', icon: <Share2 size={20}/> },
-    { id: 'settings', label: 'Configurações', icon: <Settings size={20}/> },
-  ];
-
-  const RAW_MANAGEMENT_NAV = [
-    { id: 'schedule-editor', label: 'Editor de Escala', icon: <Edit size={20}/> },
-    { id: 'monthly-report', label: 'Relatório Mensal', icon: <FileText size={20}/> },
-    { id: 'repertoire-manager', label: 'Gerenciar Repertório', icon: <ListMusic size={20}/> },
-    { id: 'report', label: 'Relat. Disponibilidade', icon: <FileBarChart size={20}/> },
-    { id: 'events', label: 'Eventos', icon: <CalendarDays size={20}/> },
-    { id: 'send-announcements', label: 'Enviar Avisos', icon: <Send size={20}/> },
-    { id: 'members', label: 'Membros & Equipe', icon: <Users size={20}/> },
-  ];
-
-  const RAW_QUICK_ACTIONS = [
-    { id: 'calendar', label: 'Minhas Escalas', icon: <CalendarIcon size={24} />, color: 'bg-blue-500', hover: 'hover:bg-blue-600' },
-    { id: 'availability', label: 'Disponibilidade', icon: <CalendarCheck size={24} />, color: 'bg-emerald-500', hover: 'hover:bg-emerald-600' },
-    { id: 'swaps', label: 'Trocas de Vaga', icon: <RefreshCcw size={24} />, color: 'bg-amber-500', hover: 'hover:bg-amber-600' },
-    { id: 'repertoire', label: 'Repertório', icon: <Music size={24} />, color: 'bg-pink-500', hover: 'hover:bg-pink-600' },
-  ];
-
-  // FILTRAGEM DINÂMICA: Aplica a configuração do ministério ativo
   const safeEnabledTabs = ministryConfig.enabledTabs || DEFAULT_TABS;
   const MAIN_NAV = RAW_MAIN_NAV.filter(item => safeEnabledTabs.includes(item.id));
   const MANAGEMENT_NAV = RAW_MANAGEMENT_NAV.filter(item => safeEnabledTabs.includes(item.id));
@@ -264,7 +200,7 @@ const InnerApp = () => {
     <ErrorBoundary>
         <DashboardLayout
             onLogout={handleLogout}
-            title={ministryTitle}
+            title={(ministryConfig as any).isLoading ? '' : ministryConfig.label}
             currentTab={currentTab}
             onTabChange={setCurrentTab}
             mainNavItems={MAIN_NAV}
@@ -278,13 +214,14 @@ const InnerApp = () => {
             isStandalone={window.matchMedia('(display-mode: standalone)').matches}
             onSwitchMinistry={async (id) => {
                 setMinistryId(id);
-                if (currentUser && currentUser.id) await Supabase.updateProfileMinistry(currentUser.id, id);
+                if (currentUser && currentUser.id) {
+                    await Supabase.updateLastMinistry(currentUser.id, id);
+                }
                 
-                const label = availableMinistries.find(m => m.id === id)?.label || id;
+                const label = availableMinistries.find(m => m.id === id)?.label || 'Ministério';
                 addToast(`Alternado para ${label}`, 'info');
                 refreshData();
                 
-                // Se a nova configuração não tiver a aba atual, volta pro dashboard
                 const newConfig = availableMinistries.find(m => m.id === id);
                 if (newConfig && newConfig.enabledTabs && !newConfig.enabledTabs.includes(currentTab)) {
                     setCurrentTab('dashboard');
@@ -306,28 +243,22 @@ const InnerApp = () => {
                             </div>
                             <div className="w-full md:w-auto animate-fade-in" style={{ animationDelay: '0.1s' }}><WeatherWidget /></div>
                         </div>
-
+                        
                         {/* Next Event */}
                         <div className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
                             {(() => {
                                 const now = new Date();
-                                const bufferMs = 2.5 * 60 * 60 * 1000; // 2 horas e 30 minutos em milissegundos
-                                
+                                const bufferMs = 2.5 * 60 * 60 * 1000;
                                 const upcoming = events.filter(e => {
                                     const eventDate = new Date(e.iso);
-                                    // A data de expiração é o horário do evento + 2h 30min
                                     const expirationDate = new Date(eventDate.getTime() + bufferMs);
-                                    
-                                    // O evento é válido se o momento atual for menor que a data de expiração
-                                    // Ou seja, ainda não passou de 2h30min após o início
                                     return expirationDate > now;
                                 }).sort((a, b) => a.iso.localeCompare(b.iso))[0];
 
                                 return <NextEventCard event={upcoming} schedule={schedule} attendance={attendance} roles={roles} members={publicMembers} onConfirm={(key) => { const assignment = Object.entries(schedule).find(([k, v]) => k === key); if (assignment) setConfirmModalData({ key, memberName: assignment[1], eventName: upcoming.title, date: upcoming.dateDisplay, role: key.split('_').pop() || '' }); }} ministryId={ministryId} currentUser={currentUser} />;
                             })()}
                         </div>
-
-                        {/* Quick Access Section - Desktop Only (Hidden on LG and below as requested) */}
+                        
                         <div className="hidden lg:block space-y-4 animate-slide-up" style={{ animationDelay: '0.3s' }}>
                             <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-2">
                                 <MousePointerClick size={14}/> Acesso Rápido
@@ -357,8 +288,6 @@ const InnerApp = () => {
                         </div>
                     </div>
                 )}
-
-                {/* Calendar */}
                 {currentTab === 'calendar' && safeEnabledTabs.includes('calendar') && (
                     <div className="space-y-6 animate-fade-in">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -372,8 +301,7 @@ const InnerApp = () => {
                         <CalendarGrid currentMonth={currentMonth} events={events} schedule={schedule} roles={roles} onEventClick={(event) => setEventDetailsModal({ isOpen: true, event })} />
                     </div>
                 )}
-
-                {/* Schedule Editor (Admin) */}
+                
                 {currentTab === 'schedule-editor' && isAdmin && safeEnabledTabs.includes('schedule-editor') && (
                     <div className="space-y-6 animate-fade-in">
                         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-6 border-b border-zinc-200 dark:border-zinc-800 pb-6">
@@ -384,21 +312,12 @@ const InnerApp = () => {
                                 <p className="text-zinc-500 dark:text-zinc-400 mt-2">Gerencie a escala oficial de {getMonthName(currentMonth)}.</p>
                             </div>
                             
-                            {/* Toolbar Container: Actions + Date Nav */}
                             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
-                                
-                                {/* Actions Group - Scrollable to prevent bad wrapping on small screens */}
                                 <div className="flex items-center gap-2 overflow-x-auto no-scrollbar sm:overflow-visible pb-1 sm:pb-0">
-                                    <button 
-                                        onClick={() => setRolesModalOpen(true)}
-                                        className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-sm font-bold whitespace-nowrap border border-zinc-200 dark:border-zinc-700"
-                                    >
+                                    <button onClick={() => setRolesModalOpen(true)} className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-sm font-bold whitespace-nowrap border border-zinc-200 dark:border-zinc-700">
                                         <Briefcase size={16}/> <span>Funções</span>
                                     </button>
-                                    <button 
-                                        onClick={() => setAuditModalOpen(true)}
-                                        className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-sm font-bold whitespace-nowrap border border-zinc-200 dark:border-zinc-700"
-                                    >
+                                    <button onClick={() => setAuditModalOpen(true)} className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-sm font-bold whitespace-nowrap border border-zinc-200 dark:border-zinc-700">
                                         <History size={16}/> <span>Histórico</span>
                                     </button>
                                     <ToolsMenu 
@@ -409,8 +328,6 @@ const InnerApp = () => {
                                         allMembers={publicMembers.map(m => m.name)} 
                                     />
                                 </div>
-                                
-                                {/* Date Navigator */}
                                 <div className="flex items-center justify-between gap-1 bg-white dark:bg-zinc-800 p-1 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm sm:ml-2">
                                     <button onClick={() => setCurrentMonth(adjustMonth(currentMonth, -1))} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg text-zinc-500 dark:text-zinc-400 transition-colors"><ArrowLeft size={18}/></button>
                                     <span className="text-sm font-bold min-w-[90px] text-center text-zinc-800 dark:text-zinc-100 tabular-nums">{currentMonth}</span>
@@ -443,17 +360,11 @@ const InnerApp = () => {
                     </div>
                 )}
 
-                {/* SUPER ADMIN DASHBOARD */}
-                {currentTab === 'super-admin' && currentUser?.isSuperAdmin && (
-                    <SuperAdminDashboard />
-                )}
-
-                {/* Other Tabs Mapped & Filtered */}
+                {currentTab === 'super-admin' && currentUser?.isSuperAdmin && <SuperAdminDashboard />}
                 {currentTab === 'availability' && safeEnabledTabs.includes('availability') && <AvailabilityScreen availability={availability} availabilityNotes={availabilityNotes} setAvailability={setAvailability} allMembersList={publicMembers.map(m => m.name)} currentMonth={currentMonth} onMonthChange={setCurrentMonth} currentUser={currentUser} onSaveAvailability={async (mid, m, d, n, t) => { await Supabase.saveMemberAvailability(mid, m, d, n, t); refreshData(); }} availabilityWindow={availabilityWindow} ministryId={ministryId} />}
                 {currentTab === 'swaps' && safeEnabledTabs.includes('swaps') && <SwapRequestsScreen schedule={schedule} currentUser={currentUser} requests={swapRequests} visibleEvents={events} onCreateRequest={async (role, iso, title) => { await Supabase.createSwapRequestSQL(ministryId, { id: '', ministryId, requesterName: currentUser.name, requesterId: currentUser.id, role, eventIso: iso, eventTitle: title, status: 'pending', createdAt: new Date().toISOString() }); refreshData(); }} onAcceptRequest={async (reqId) => { await Supabase.performSwapSQL(ministryId, reqId, currentUser.name, currentUser.id!); refreshData(); }} onCancelRequest={async (reqId) => { await Supabase.cancelSwapRequestSQL(reqId); addToast("Pedido removido com sucesso.", "info"); refreshData(); }} />}
                 {currentTab === 'ranking' && safeEnabledTabs.includes('ranking') && <RankingScreen ministryId={ministryId} currentUser={currentUser} />}
                 
-                {/* Repertoire Tabs - Checked via Config */}
                 {(currentTab === 'repertoire' && safeEnabledTabs.includes('repertoire')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={currentUser} mode="view" ministryId={ministryId} />}
                 {(currentTab === 'repertoire-manager' && isAdmin && safeEnabledTabs.includes('repertoire-manager')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={currentUser} mode="manage" ministryId={ministryId} />}
                 

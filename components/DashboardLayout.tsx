@@ -1,18 +1,19 @@
 
+// ... imports existing ...
 import React, { ReactNode, useState, useRef } from 'react';
 import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles, Building2, Home, Calendar, Megaphone, CalendarCheck, Shield } from 'lucide-react';
-import { User, AppNotification, MinistryDef } from '../types'; // Remove MINISTRIES import
+import { User, AppNotification, MinistryDef } from '../types'; 
 import { NotificationCenter } from './NotificationCenter';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useAppStore } from '../store/appStore';
 
-interface NavItem {
+export interface NavItem {
   id: string;
   label: string;
   icon: React.ReactNode;
 }
 
-interface Props {
+export interface Props {
   children: ReactNode;
   onLogout: () => void;
   title: string;
@@ -21,54 +22,56 @@ interface Props {
   mainNavItems: NavItem[];
   managementNavItems: NavItem[];
   notifications: AppNotification[];
-  onNotificationsUpdate: (n: AppNotification[]) => void;
+  onNotificationsUpdate: (notifications: AppNotification[]) => void;
   onInstall?: () => void;
   isStandalone?: boolean;
   onSwitchMinistry?: (id: string) => void;
-  onOpenJoinMinistry?: () => void; 
-  activeMinistryId?: string; // New prop for sync
+  onOpenJoinMinistry?: () => void;
+  activeMinistryId?: string;
 }
+
+const isValidMinistryId = (id: string) => id && id !== 'undefined' && id !== 'null';
 
 export const DashboardLayout: React.FC<Props> = ({ 
   children, onLogout, title,
   currentTab, onTabChange, mainNavItems, managementNavItems, notifications, onNotificationsUpdate,
   onInstall, isStandalone, onSwitchMinistry, onOpenJoinMinistry, activeMinistryId
 }) => {
-  const { currentUser, themeMode, setThemeMode, sidebarOpen, setSidebarOpen, ministryId: storeMinistryId, availableMinistries } = useAppStore(); // Use availableMinistries from store
+  const { currentUser, themeMode, setThemeMode, sidebarOpen, setSidebarOpen, ministryId: storeMinistryId, availableMinistries } = useAppStore(); 
+  // ... (rest of states) ...
   const [imgError, setImgError] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [ministryMenuOpen, setMinistryMenuOpen] = useState(false);
   const ministryMenuRef = useRef<HTMLDivElement>(null);
 
-  // Use prop if available (source of truth from App), otherwise fallback to store
   const currentMinistryId = activeMinistryId || storeMinistryId;
 
-  useClickOutside(ministryMenuRef, () => {
-    if (ministryMenuOpen) setMinistryMenuOpen(false);
-  });
+  // ... (useClickOutside)
+  useClickOutside(ministryMenuRef, () => setMinistryMenuOpen(false));
 
+  // ... (activeItem logic) ...
   const activeItem = [...mainNavItems, ...managementNavItems].find(item => item.id === currentTab);
   const activeLabel = activeItem ? activeItem.label : (currentTab === 'profile' ? 'Meu Perfil' : currentTab === 'super-admin' ? 'Super Admin' : 'Visão Geral');
   const ActiveIcon = activeItem ? activeItem.icon : (currentTab === 'super-admin' ? <Shield size={20}/> : <Layout size={20}/>);
 
-  const toggleTheme = () => {
-      if (themeMode === 'system') setThemeMode('light');
-      else if (themeMode === 'light') setThemeMode('dark');
-      else setThemeMode('system');
-  };
+  const toggleTheme = () => setThemeMode(themeMode === 'dark' ? 'light' : 'dark');
 
-  const handleHardReload = async () => {
+  const handleHardReload = () => {
     setIsUpdating(true);
-    setTimeout(() => {
-      window.location.reload();
-    }, 500);
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+            for(let registration of registrations) {
+                registration.unregister();
+            }
+            window.location.reload();
+        });
+    } else {
+        window.location.reload();
+    }
   };
 
-  // Helper to check validity based on fetched list
-  const isValidMinistryId = (id: string) => availableMinistries.some(m => m.id === id);
-
-  // --- MODERN NAV BUTTON DESIGN (Pill Style) ---
   const renderNavButton = (item: NavItem) => {
+    // ... (no change) ...
     const isActive = currentTab === item.id;
     return (
       <button
@@ -92,6 +95,7 @@ export const DashboardLayout: React.FC<Props> = ({
   };
 
   const renderUserAvatar = (size: string = "w-8 h-8") => {
+    // ... (no change) ...
     if (currentUser?.avatar_url) {
       return (
         <img src={currentUser.avatar_url} alt={currentUser.name} className={`${size} rounded-full object-cover border border-zinc-200 dark:border-zinc-700 shadow-sm`} />
@@ -104,7 +108,7 @@ export const DashboardLayout: React.FC<Props> = ({
     );
   };
 
-  // --- MOBILE BOTTOM NAV COMPONENT ---
+  // ... (MobileBottomNav) ...
   const MobileBottomNav = () => {
     const isDashboard = currentTab === 'dashboard';
     const isCalendar = currentTab === 'calendar';
@@ -199,8 +203,13 @@ export const DashboardLayout: React.FC<Props> = ({
                     onClick={() => setMinistryMenuOpen(!ministryMenuOpen)}
                     className="flex items-center justify-between w-full group cursor-pointer p-1 -ml-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                  >
-                     <div className="text-left overflow-hidden">
-                        <h1 className="text-sm font-bold text-zinc-900 dark:text-white tracking-tight truncate leading-tight">{title}</h1>
+                     <div className="text-left overflow-hidden w-full">
+                        {title ? (
+                            <h1 className="text-sm font-bold text-zinc-900 dark:text-white tracking-tight truncate leading-tight">{title}</h1>
+                        ) : (
+                            // SKELETON LOADER para evitar o flicker do UUID
+                            <div className="h-4 w-3/4 bg-zinc-200 dark:bg-zinc-800 rounded animate-pulse mb-0.5"></div>
+                        )}
                         <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate font-medium">Espaço de Trabalho</p>
                      </div>
                      <ChevronDown size={14} className="text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-transform duration-200" style={{ transform: ministryMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />
@@ -208,12 +217,12 @@ export const DashboardLayout: React.FC<Props> = ({
 
                  {/* Dropdown Menu - Ministry Switcher */}
                  {ministryMenuOpen && (
+                    // ... (no changes here)
                     <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-[#121214] rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-800 z-50 overflow-hidden animate-slide-up ring-1 ring-black/5 divide-y divide-zinc-100 dark:divide-zinc-800/50 min-w-[240px]">
                        <div className="px-3 py-2 bg-zinc-50/50 dark:bg-zinc-900/50">
                            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Meus Ministérios</p>
                        </div>
                        
-                       {/* Lista filtrada para mostrar apenas ministérios válidos (do banco) */}
                        {currentUser?.allowedMinistries?.filter(isValidMinistryId).map(mid => {
                            const isCurrent = currentMinistryId === mid;
                            const config = availableMinistries.find(m => m.id === mid) || { label: mid, id: mid };
@@ -253,7 +262,7 @@ export const DashboardLayout: React.FC<Props> = ({
            </div>
         </div>
 
-        {/* Navigation Section */}
+        {/* ... (rest of sidebar remains the same) ... */}
         <div className="flex-1 overflow-y-auto px-4 py-2 custom-scrollbar space-y-8">
           <div>
             <p className="px-3 text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-2">Menu Principal</p>
@@ -271,7 +280,6 @@ export const DashboardLayout: React.FC<Props> = ({
             </div>
           )}
 
-          {/* SUPER ADMIN BUTTON */}
           {currentUser?.isSuperAdmin && (
               <div>
                   <p className="px-3 text-[10px] font-bold text-purple-500 dark:text-purple-400 uppercase tracking-widest mb-2">Global Admin</p>
@@ -290,7 +298,7 @@ export const DashboardLayout: React.FC<Props> = ({
           )}
         </div>
 
-        {/* Footer Profile - Refined */}
+        {/* Footer Profile */}
         <div className="p-4 border-t border-zinc-200/60 dark:border-zinc-800/60 bg-zinc-50/30 dark:bg-zinc-900/10 backdrop-blur-sm">
             <button 
                 onClick={() => onTabChange('profile')}
