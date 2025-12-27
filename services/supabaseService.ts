@@ -5,32 +5,44 @@ import {
     TeamMemberProfile, AuditLogEntry, User, MemberMap, GlobalConflictMap
 } from '../types';
 
-// Environment variables
-const getEnv = (key: string) => {
-    try {
-        // @ts-ignore
-        if (typeof import.meta !== 'undefined' && import.meta.env) {
-            // @ts-ignore
-            return import.meta.env[key] || '';
-        }
-    } catch (e) {
-        // ignore error
-    }
-    return '';
-};
+// Environment variables handling with extreme safety
+let supabaseUrl = '';
+let supabaseKey = '';
 
-export const SUPABASE_URL = getEnv('VITE_SUPABASE_URL');
-export const SUPABASE_KEY = getEnv('VITE_SUPABASE_KEY');
+try {
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+        // @ts-ignore
+        supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+        // @ts-ignore
+        supabaseKey = import.meta.env.VITE_SUPABASE_KEY || '';
+    }
+} catch (e) {
+    console.warn('Error accessing environment variables:', e);
+}
+
+// Fallback to process.env if available (for some non-Vite setups)
+if (!supabaseUrl && typeof process !== 'undefined' && process.env) {
+    supabaseUrl = process.env.VITE_SUPABASE_URL || '';
+    supabaseKey = process.env.VITE_SUPABASE_KEY || '';
+}
+
+export const SUPABASE_URL = supabaseUrl;
+export const SUPABASE_KEY = supabaseKey;
 
 let supabase: SupabaseClient | null = null;
 
 if (SUPABASE_URL && SUPABASE_KEY) {
-    supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-        auth: {
-            persistSession: true,
-            autoRefreshToken: true,
-        }
-    });
+    try {
+        supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+            auth: {
+                persistSession: true,
+                autoRefreshToken: true,
+            }
+        });
+    } catch (e) {
+        console.error("Failed to initialize Supabase client:", e);
+    }
 }
 
 export const getSupabase = () => supabase;
@@ -59,6 +71,7 @@ export const loginWithGoogle = async () => {
 export const logout = async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
+    localStorage.clear();
 };
 
 export const registerWithEmail = async (email: string, password: string, name: string, ministries: string[], orgId?: string, roles?: string[]) => {
