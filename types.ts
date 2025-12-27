@@ -183,6 +183,7 @@ export interface User {
   role: 'admin' | 'member';
   ministryId?: string; 
   allowedMinistries?: string[]; 
+  lastMinistryId?: string; // New: Persistência da última escolha
   organizationId?: string; // New: SaaS Tenant ID
   isSuperAdmin?: boolean; // New: Super Admin Flag
   whatsapp?: string;
