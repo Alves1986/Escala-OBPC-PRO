@@ -69,6 +69,39 @@ const getCurrentOrgId = async (): Promise<string> => {
     return data?.organization_id || DEFAULT_ORG_ID;
 };
 
+// --- MEMBERSHIP & ACCESS CONTROL ---
+
+// Busca quais ministérios o usuário tem acesso (Nova Tabela + Fallback)
+export const fetchUserAllowedMinistries = async (userId: string, orgId: string): Promise<string[]> => {
+    if (!supabase) return ['midia'];
+
+    try {
+        // 1. Tenta buscar na nova tabela de memberships
+        const { data: memberships, error } = await supabase
+            .from('organization_memberships')
+            .select('ministry_id')
+            .eq('profile_id', userId)
+            .eq('organization_id', orgId);
+
+        if (!error && memberships && memberships.length > 0) {
+            return memberships.map((m: any) => m.ministry_id);
+        }
+
+        // 2. Fallback: Se não houver memberships, busca no array legado do perfil
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('allowed_ministries')
+            .eq('id', userId)
+            .single();
+
+        return safeParseArray(profile?.allowed_ministries);
+
+    } catch (e) {
+        console.error("Erro ao buscar permissões de ministério:", e);
+        return ['midia']; // Fail safe
+    }
+};
+
 // --- SUPER ADMIN: Organization Management ---
 
 export const fetchOrganizationsWithStats = async (): Promise<Organization[]> => {
@@ -269,6 +302,17 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
             whatsapp: phone, 
             functions: functions || []
         });
+        
+        // ADDED: Create Memberships
+        for (const mid of ministries) {
+            await supabase.from('organization_memberships').insert({
+                organization_id: defaultOrgId,
+                profile_id: data.user.id,
+                ministry_id: mid,
+                role: 'member'
+            });
+        }
+
         await sendNotificationSQL(mainMinistry, { title: "Novo Membro", message: `${name} acabou de se cadastrar na equipe!`, type: 'success', actionLink: 'members' });
     }
     return { success: true, message: "Cadastro realizado!" };
@@ -279,8 +323,17 @@ export const sendPasswordResetEmail = async (email: string) => { if (!supabase) 
 
 export const fetchMinistryMembers = async (ministryId: string): Promise<{ memberMap: MemberMap, publicList: TeamMemberProfile[] }> => {
     if (!supabase) return { memberMap: {}, publicList: [] };
+    
+    // Updated: Fetch members via Memberships Table (if available) or fallback to profiles
+    // For now, staying safe with profile scan to support both legacy and new
     const { data } = await supabase.from('profiles').select('*');
-    const filteredData = (data || []).filter((p: any) => { const allowed = safeParseArray(p.allowed_ministries); return allowed.includes(ministryId) || p.ministry_id === ministryId; });
+    
+    // Filter profiles that have access to this ministry
+    const filteredData = (data || []).filter((p: any) => { 
+        const allowed = safeParseArray(p.allowed_ministries); 
+        return allowed.includes(ministryId) || p.ministry_id === ministryId; 
+    });
+    
     const publicList: TeamMemberProfile[] = filteredData.map((p: any) => ({
         id: p.id, 
         name: p.name, 
@@ -290,8 +343,9 @@ export const fetchMinistryMembers = async (ministryId: string): Promise<{ member
         roles: safeParseArray(p.functions), 
         birthDate: p.birth_date, 
         isAdmin: p.is_admin,
-        organizationId: p.organization_id // Mapped new field
+        organizationId: p.organization_id
     }));
+    
     const memberMap: MemberMap = {};
     publicList.forEach(m => { if (m.roles) { m.roles.forEach(r => { if (!memberMap[r]) memberMap[r] = []; memberMap[r].push(m.name); }); } });
     return { memberMap, publicList };
@@ -301,12 +355,26 @@ export const joinMinistry = async (ministryId: string, roles: string[]) => {
     if (!supabase) return { success: false, message: "Erro" };
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false };
-    const { data: profile } = await supabase.from('profiles').select('allowed_ministries, functions').eq('id', user.id).single();
+    
+    const { data: profile } = await supabase.from('profiles').select('allowed_ministries, functions, organization_id').eq('id', user.id).single();
+    
+    // 1. Update Legacy Array
     const currentAllowed = safeParseArray(profile?.allowed_ministries);
     const currentFunctions = safeParseArray(profile?.functions);
     const newAllowed = [...new Set([...currentAllowed, ministryId])];
     const newFunctions = [...new Set([...currentFunctions, ...roles])];
+    
     const { error } = await supabase.from('profiles').update({ allowed_ministries: newAllowed, functions: newFunctions, ministry_id: ministryId }).eq('id', user.id);
+    
+    // 2. Insert into New Membership Table
+    const orgId = profile?.organization_id || DEFAULT_ORG_ID;
+    await supabase.from('organization_memberships').upsert({
+        organization_id: orgId,
+        profile_id: user.id,
+        ministry_id: ministryId,
+        role: 'member'
+    }, { onConflict: 'organization_id, profile_id, ministry_id' });
+
     return { success: !error, message: error ? error.message : "Entrou no ministério!" };
 };
 

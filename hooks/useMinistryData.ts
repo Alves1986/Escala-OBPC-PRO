@@ -4,6 +4,7 @@ import { User, ScheduleMap, AttendanceMap, AvailabilityMap, AppNotification, Ann
 import { useMinistryQueries, keys } from './useMinistryQueries';
 import { useQueryClient } from '@tanstack/react-query';
 import { getSupabase } from '../services/supabaseService';
+import { useAppStore } from '../store/appStore';
 
 export function useMinistryData(ministryId: string | null, currentMonth: string, currentUser: User | null) {
   const mid = ministryId || 'midia';
@@ -22,6 +23,20 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   } = useMinistryQueries(mid, currentMonth, currentUser);
 
   const queryClient = useQueryClient();
+  const { setMinistryId } = useAppStore();
+
+  // --- ACCESS CONTROL CHECK ---
+  useEffect(() => {
+      // Se o usuário estiver logado e o ministério atual não estiver na lista de permitidos
+      // (ex: foi removido do membership), força o redirecionamento para um válido.
+      if (currentUser && currentUser.allowedMinistries && !currentUser.isSuperAdmin) {
+          if (!currentUser.allowedMinistries.includes(mid)) {
+              console.warn(`Acesso revogado ao ministério ${mid}. Redirecionando...`);
+              const fallback = currentUser.allowedMinistries[0] || 'midia';
+              setMinistryId(fallback);
+          }
+      }
+  }, [mid, currentUser, setMinistryId]);
 
   // --- Derived State (Transforming Query Data to match old hook interface) ---
   

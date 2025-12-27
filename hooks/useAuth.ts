@@ -94,10 +94,12 @@ export function useAuth() {
             // Normalização de dados para evitar undefined
             if (profile) {
                 const userMinistry = profile.ministry_id || 'midia';
-                const safeAllowed = Array.isArray(profile.allowed_ministries) ? profile.allowed_ministries : [userMinistry];
-                const safeFunctions = Array.isArray(profile.functions) ? profile.functions : [];
                 // Se organization_id vier nulo do banco (antes da migração), usa fallback
                 const safeOrgId = profile.organization_id || '00000000-0000-0000-0000-000000000000';
+                const safeFunctions = Array.isArray(profile.functions) ? profile.functions : [];
+
+                // BUSCA AVANÇADA DE PERMISSÕES (Memberships)
+                const allowedMinistries = await Supabase.fetchUserAllowedMinistries(profile.id, safeOrgId);
 
                 setCurrentUser({
                     id: profile.id,
@@ -105,7 +107,7 @@ export function useAuth() {
                     email: profile.email || user.email,
                     role: profile.is_admin ? 'admin' : 'member',
                     ministryId: userMinistry,
-                    allowedMinistries: safeAllowed,
+                    allowedMinistries: allowedMinistries, // Lista populada via tabela de memberships
                     organizationId: safeOrgId,
                     isSuperAdmin: !!profile.is_super_admin, // New mapping
                     avatar_url: profile.avatar_url,
