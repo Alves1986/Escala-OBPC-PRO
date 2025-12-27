@@ -7,9 +7,12 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 export interface Organization {
   id: string;
   name: string;
-  slug?: string; // New
-  active?: boolean; // New
+  slug?: string;
+  active?: boolean;
   createdAt?: string;
+  // Stats (populated by RPC)
+  userCount?: number;
+  ministryCount?: number;
 }
 
 // --- DYNAMIC MINISTRY TYPE ---
@@ -123,7 +126,8 @@ export const ALL_TABS = [
   'report',
   'events',
   'send-announcements',
-  'members'
+  'members',
+  'super-admin' // New Tab
 ];
 
 // 2. Pacote Padrão (Full) - Novos ministérios herdam isso

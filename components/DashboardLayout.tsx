@@ -1,6 +1,6 @@
 
 import React, { ReactNode, useState, useRef } from 'react';
-import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles, Building2, Home, Calendar, Megaphone, CalendarCheck } from 'lucide-react';
+import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles, Building2, Home, Calendar, Megaphone, CalendarCheck, Shield } from 'lucide-react';
 import { User, AppNotification, MinistryDef } from '../types'; // Remove MINISTRIES import
 import { NotificationCenter } from './NotificationCenter';
 import { useClickOutside } from '../hooks/useClickOutside';
@@ -48,8 +48,8 @@ export const DashboardLayout: React.FC<Props> = ({
   });
 
   const activeItem = [...mainNavItems, ...managementNavItems].find(item => item.id === currentTab);
-  const activeLabel = activeItem ? activeItem.label : (currentTab === 'profile' ? 'Meu Perfil' : 'Visão Geral');
-  const ActiveIcon = activeItem ? activeItem.icon : <Layout size={20}/>;
+  const activeLabel = activeItem ? activeItem.label : (currentTab === 'profile' ? 'Meu Perfil' : currentTab === 'super-admin' ? 'Super Admin' : 'Visão Geral');
+  const ActiveIcon = activeItem ? activeItem.icon : (currentTab === 'super-admin' ? <Shield size={20}/> : <Layout size={20}/>);
 
   const toggleTheme = () => {
       if (themeMode === 'system') setThemeMode('light');
@@ -269,6 +269,24 @@ export const DashboardLayout: React.FC<Props> = ({
                     {managementNavItems.map(item => renderNavButton(item))}
                 </div>
             </div>
+          )}
+
+          {/* SUPER ADMIN BUTTON */}
+          {currentUser?.isSuperAdmin && (
+              <div>
+                  <p className="px-3 text-[10px] font-bold text-purple-500 dark:text-purple-400 uppercase tracking-widest mb-2">Global Admin</p>
+                  <button
+                    onClick={() => { onTabChange('super-admin'); setSidebarOpen(false); }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 group mb-1 ${
+                      currentTab === 'super-admin'
+                        ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20' 
+                        : 'text-zinc-500 dark:text-zinc-400 hover:bg-purple-50 dark:hover:bg-purple-900/10 hover:text-purple-600 dark:hover:text-purple-400'
+                    }`}
+                  >
+                    <Shield size={18} />
+                    <span className="flex-1 text-left tracking-tight">Super Admin</span>
+                  </button>
+              </div>
           )}
         </div>
 

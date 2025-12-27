@@ -54,6 +54,7 @@ const EventsScreen = React.lazy(() => import('./components/EventsScreen').then(m
 const RankingScreen = React.lazy(() => import('./components/RankingScreen').then(module => ({ default: module.RankingScreen })));
 const MembersScreen = React.lazy(() => import('./components/MembersScreen').then(module => ({ default: module.MembersScreen })));
 const SocialMediaScreen = React.lazy(() => import('./components/SocialMediaScreen').then(module => ({ default: module.SocialMediaScreen })));
+const SuperAdminDashboard = React.lazy(() => import('./components/SuperAdminDashboard').then(module => ({ default: module.SuperAdminDashboard })));
 
 // Loading Spinner
 const LoadingFallback = () => (
@@ -424,7 +425,7 @@ const InnerApp = () => {
                             schedule={schedule} 
                             attendance={attendance} 
                             availability={availability}
-                            availabilityNotes={availabilityNotes} // Passando notas para a tabela 
+                            availabilityNotes={availabilityNotes}
                             members={membersMap} 
                             allMembers={publicMembers.map(m => m.name)} 
                             memberProfiles={publicMembers} 
@@ -440,6 +441,11 @@ const InnerApp = () => {
                             onlineUsers={onlineUsers} 
                         />
                     </div>
+                )}
+
+                {/* SUPER ADMIN DASHBOARD */}
+                {currentTab === 'super-admin' && currentUser?.isSuperAdmin && (
+                    <SuperAdminDashboard />
                 )}
 
                 {/* Other Tabs Mapped & Filtered */}

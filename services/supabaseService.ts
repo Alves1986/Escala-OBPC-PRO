@@ -71,6 +71,29 @@ const getCurrentOrgId = async (): Promise<string> => {
 
 // --- SUPER ADMIN: Organization Management ---
 
+export const fetchOrganizationsWithStats = async (): Promise<Organization[]> => {
+    if (!supabase) return [];
+    
+    // Use the RPC function for efficient aggregation
+    const { data, error } = await supabase.rpc('get_organizations_with_stats');
+    
+    if (error) {
+        console.error("Error fetching orgs with stats:", error);
+        // Fallback simple fetch if RPC fails
+        return fetchAllOrganizations();
+    }
+    
+    return (data || []).map((o: any) => ({
+        id: o.id,
+        name: o.name,
+        slug: o.slug,
+        active: o.active,
+        createdAt: o.created_at,
+        userCount: o.user_count,
+        ministryCount: o.ministry_count
+    }));
+};
+
 export const fetchAllOrganizations = async (): Promise<Organization[]> => {
     if (!supabase) return [];
     const { data, error } = await supabase
@@ -109,6 +132,15 @@ export const saveOrganization = async (id: string | null, name: string, slug?: s
 
     if (error) return { success: false, message: error.message };
     return { success: true, message: "Organização salva com sucesso!" };
+};
+
+export const toggleOrganizationStatus = async (id: string, currentStatus: boolean): Promise<boolean> => {
+    if (!supabase) return false;
+    const { error } = await supabase
+        .from('organizations')
+        .update({ active: !currentStatus })
+        .eq('id', id);
+    return !error;
 };
 
 // --- SUPER ADMIN: Ministry Management (Generic) ---
