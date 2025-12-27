@@ -3,6 +3,13 @@ export type Role = string;
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
+// --- NEW ORGANIZATION TYPE ---
+export interface Organization {
+  id: string;
+  name: string;
+  createdAt?: string;
+}
+
 export interface MemberMap {
   [role: string]: string[];
 }
@@ -38,6 +45,7 @@ export interface MinistrySettings {
     availabilityEnd?: string;   // ISO String
     spotifyClientId?: string;   // New
     spotifyClientSecret?: string; // New
+    organizationId?: string;    // New: Link to parent organization
 }
 
 // --- NEW AUDIT TYPES ---
@@ -197,6 +205,7 @@ export interface User {
   role: 'admin' | 'member';
   ministryId?: string; 
   allowedMinistries?: string[]; 
+  organizationId?: string; // New: SaaS Tenant ID
   whatsapp?: string;
   birthDate?: string; 
   functions?: string[];
@@ -213,9 +222,11 @@ export interface TeamMemberProfile {
     roles?: string[];
     createdAt?: string;
     isAdmin?: boolean;
+    organizationId?: string; // New
 }
 
 export interface AppState {
+  organizationId: string | null; // New state
   ministryId: string | null;
   currentUser: User | null;
   currentMonth: string; 

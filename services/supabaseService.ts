@@ -97,8 +97,18 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
     if (error) return { success: false, message: error.message };
     if (data.user) {
         const mainMinistry = ministries[0] || 'midia';
+        // Atribui ID padrão de Organização (Fallback para Single Tenant)
+        const defaultOrgId = '00000000-0000-0000-0000-000000000000';
+        
         await supabase.from('profiles').insert({
-            id: data.user.id, email, name, ministry_id: mainMinistry, allowed_ministries: ministries, whatsapp: phone, functions: functions || []
+            id: data.user.id, 
+            email, 
+            name, 
+            ministry_id: mainMinistry, 
+            allowed_ministries: ministries, 
+            organization_id: defaultOrgId, // New field assignment
+            whatsapp: phone, 
+            functions: functions || []
         });
         await sendNotificationSQL(mainMinistry, { title: "Novo Membro", message: `${name} acabou de se cadastrar na equipe!`, type: 'success', actionLink: 'members' });
     }
@@ -113,7 +123,15 @@ export const fetchMinistryMembers = async (ministryId: string): Promise<{ member
     const { data } = await supabase.from('profiles').select('*');
     const filteredData = (data || []).filter((p: any) => { const allowed = safeParseArray(p.allowed_ministries); return allowed.includes(ministryId) || p.ministry_id === ministryId; });
     const publicList: TeamMemberProfile[] = filteredData.map((p: any) => ({
-        id: p.id, name: p.name, email: p.email, whatsapp: p.whatsapp, avatar_url: p.avatar_url, roles: safeParseArray(p.functions), birthDate: p.birth_date, isAdmin: p.is_admin
+        id: p.id, 
+        name: p.name, 
+        email: p.email, 
+        whatsapp: p.whatsapp, 
+        avatar_url: p.avatar_url, 
+        roles: safeParseArray(p.functions), 
+        birthDate: p.birth_date, 
+        isAdmin: p.is_admin,
+        organizationId: p.organization_id // Mapped new field
     }));
     const memberMap: MemberMap = {};
     publicList.forEach(m => { if (m.roles) { m.roles.forEach(r => { if (!memberMap[r]) memberMap[r] = []; memberMap[r].push(m.name); }); } });

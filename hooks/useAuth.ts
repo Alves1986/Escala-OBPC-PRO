@@ -18,6 +18,7 @@ export function useAuth() {
             role: 'admin',
             ministryId: 'midia',
             allowedMinistries: ['midia'],
+            organizationId: 'demo-org-001',
             avatar_url: '',
             whatsapp: '11999999999',
             functions: ['Projeção']
@@ -42,14 +43,20 @@ export function useAuth() {
         }
 
         try {
-            // Busca segura do perfil
-            let { data: profile, error: fetchError } = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle();
+            // Busca segura do perfil INCLUINDO organization_id
+            let { data: profile, error: fetchError } = await sb
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .maybeSingle();
             
             // LÓGICA DE AUTO-CORREÇÃO (SELF-HEALING) ROBUSTA
             if (!profile || fetchError) {
                 console.warn("Perfil ausente ou erro de schema. Tentando recriar perfil básico.", user.email);
                 
                 const defaultMinistry = 'midia';
+                // Fallback para organização padrão se não existir no banco
+                const defaultOrgId = '00000000-0000-0000-0000-000000000000';
                 const metaName = user.user_metadata?.full_name || user.user_metadata?.name;
                 const emailName = user.email?.split('@')[0];
                 const displayName = metaName || emailName || 'Membro';
@@ -61,8 +68,8 @@ export function useAuth() {
                     avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || '',
                     ministry_id: defaultMinistry,
                     allowed_ministries: [defaultMinistry],
+                    organization_id: defaultOrgId, // Atribui organização padrão
                     role: 'member',
-                    // Não enviamos created_at aqui se o banco tiver default now() para evitar erro de coluna
                 };
 
                 // Tenta inserir na tabela profiles manualmente
@@ -87,6 +94,8 @@ export function useAuth() {
                 const userMinistry = profile.ministry_id || 'midia';
                 const safeAllowed = Array.isArray(profile.allowed_ministries) ? profile.allowed_ministries : [userMinistry];
                 const safeFunctions = Array.isArray(profile.functions) ? profile.functions : [];
+                // Se organization_id vier nulo do banco (antes da migração), usa fallback
+                const safeOrgId = profile.organization_id || '00000000-0000-0000-0000-000000000000';
 
                 setCurrentUser({
                     id: profile.id,
@@ -95,6 +104,7 @@ export function useAuth() {
                     role: profile.is_admin ? 'admin' : 'member',
                     ministryId: userMinistry,
                     allowedMinistries: safeAllowed,
+                    organizationId: safeOrgId,
                     avatar_url: profile.avatar_url,
                     whatsapp: profile.whatsapp,
                     birthDate: profile.birth_date,
