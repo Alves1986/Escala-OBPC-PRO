@@ -5,7 +5,6 @@ import { useAppStore } from './store/appStore';
 import { useAuth } from './hooks/useAuth';
 import { useToast, ToastProvider } from './components/Toast';
 import * as Supabase from './services/supabaseService';
-import { SUPABASE_URL, SUPABASE_KEY } from './services/supabaseService';
 import { DEFAULT_TABS } from './types';
 import { useMinistryData } from './hooks/useMinistryData';
 import { useOnlinePresence } from './hooks/useOnlinePresence';
@@ -201,7 +200,7 @@ const InnerApp = () => {
     });
   };
 
-  if ((!SUPABASE_URL || !SUPABASE_KEY) && !isDemoMode) {
+  if ((!Supabase.SUPABASE_URL || !Supabase.SUPABASE_KEY) && !isDemoMode) {
       return <SetupScreen onEnterDemo={() => setIsDemoMode(true)} />;
   }
 
