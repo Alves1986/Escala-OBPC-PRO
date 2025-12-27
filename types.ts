@@ -7,6 +7,8 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 export interface Organization {
   id: string;
   name: string;
+  slug?: string; // New
+  active?: boolean; // New
   createdAt?: string;
 }
 
@@ -15,6 +17,7 @@ export interface MinistryDef {
   id: string; // Corresponds to 'code' in DB (e.g., 'midia')
   label: string; // e.g., 'Comunicação / Mídia'
   enabledTabs?: string[]; // Optional: For future feature toggling per ministry
+  organizationId?: string; // Link to parent
 }
 
 export interface MemberMap {
@@ -173,6 +176,7 @@ export interface User {
   ministryId?: string; 
   allowedMinistries?: string[]; 
   organizationId?: string; // New: SaaS Tenant ID
+  isSuperAdmin?: boolean; // New: Super Admin Flag
   whatsapp?: string;
   birthDate?: string; 
   functions?: string[];

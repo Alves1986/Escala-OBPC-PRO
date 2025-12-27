@@ -19,6 +19,7 @@ export function useAuth() {
             ministryId: 'midia',
             allowedMinistries: ['midia'],
             organizationId: 'demo-org-001',
+            isSuperAdmin: true, // Demo Super Admin
             avatar_url: '',
             whatsapp: '11999999999',
             functions: ['Projeção']
@@ -43,7 +44,7 @@ export function useAuth() {
         }
 
         try {
-            // Busca segura do perfil INCLUINDO organization_id
+            // Busca segura do perfil INCLUINDO organization_id e is_super_admin
             let { data: profile, error: fetchError } = await sb
                 .from('profiles')
                 .select('*')
@@ -70,6 +71,7 @@ export function useAuth() {
                     allowed_ministries: [defaultMinistry],
                     organization_id: defaultOrgId, // Atribui organização padrão
                     role: 'member',
+                    is_super_admin: false,
                 };
 
                 // Tenta inserir na tabela profiles manualmente
@@ -105,6 +107,7 @@ export function useAuth() {
                     ministryId: userMinistry,
                     allowedMinistries: safeAllowed,
                     organizationId: safeOrgId,
+                    isSuperAdmin: !!profile.is_super_admin, // New mapping
                     avatar_url: profile.avatar_url,
                     whatsapp: profile.whatsapp,
                     birthDate: profile.birth_date,

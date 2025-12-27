@@ -4,7 +4,7 @@ import {
     User, MemberMap, 
     AppNotification, TeamMemberProfile, AvailabilityMap, SwapRequest, 
     ScheduleMap, RepertoireItem, Announcement, GlobalConflictMap, 
-    AttendanceMap, AuditLogEntry, MinistrySettings, MinistryDef,
+    AttendanceMap, AuditLogEntry, MinistrySettings, MinistryDef, Organization,
     RankingEntry, AvailabilityNotesMap, RankingHistoryItem, DEFAULT_TABS
 } from '../types';
 
@@ -69,6 +69,79 @@ const getCurrentOrgId = async (): Promise<string> => {
     return data?.organization_id || DEFAULT_ORG_ID;
 };
 
+// --- SUPER ADMIN: Organization Management ---
+
+export const fetchAllOrganizations = async (): Promise<Organization[]> => {
+    if (!supabase) return [];
+    const { data, error } = await supabase
+        .from('organizations')
+        .select('*')
+        .order('created_at', { ascending: false });
+    
+    if (error) {
+        console.error("Error fetching organizations:", error);
+        return [];
+    }
+    
+    return (data || []).map((o: any) => ({
+        id: o.id,
+        name: o.name,
+        slug: o.slug,
+        active: o.active,
+        createdAt: o.created_at
+    }));
+};
+
+export const saveOrganization = async (id: string | null, name: string, slug?: string): Promise<{ success: boolean, message: string }> => {
+    if (!supabase) return { success: false, message: "Offline" };
+    
+    const payload: any = { name };
+    if (slug) payload.slug = slug;
+
+    let error;
+    if (id) {
+        const { error: updateError } = await supabase.from('organizations').update(payload).eq('id', id);
+        error = updateError;
+    } else {
+        const { error: insertError } = await supabase.from('organizations').insert(payload);
+        error = insertError;
+    }
+
+    if (error) return { success: false, message: error.message };
+    return { success: true, message: "Organização salva com sucesso!" };
+};
+
+// --- SUPER ADMIN: Ministry Management (Generic) ---
+
+// Used by Super Admin to manage ministries of ANY organization
+export const saveOrganizationMinistry = async (orgId: string, code: string, label: string): Promise<{ success: boolean, message: string }> => {
+    if (!supabase) return { success: false, message: "Offline" };
+
+    const { error } = await supabase
+        .from('organization_ministries')
+        .upsert({ 
+            organization_id: orgId, 
+            code: code.trim().toLowerCase(), 
+            label: label.trim() 
+        }, { onConflict: 'organization_id, code' });
+
+    if (error) return { success: false, message: error.message };
+    return { success: true, message: "Ministério salvo!" };
+};
+
+export const deleteOrganizationMinistry = async (orgId: string, code: string): Promise<{ success: boolean, message: string }> => {
+    if (!supabase) return { success: false, message: "Offline" };
+
+    const { error } = await supabase
+        .from('organization_ministries')
+        .delete()
+        .eq('organization_id', orgId)
+        .eq('code', code);
+
+    if (error) return { success: false, message: error.message };
+    return { success: true, message: "Ministério removido." };
+};
+
 // --- UTILS ---
 const safeParseArray = (value: any): string[] => {
     if (!value) return [];
@@ -112,9 +185,9 @@ export const fetchOrganizationMinistries = async (organizationId: string): Promi
         // Fallback for empty DB (Retrocompatibility during migration)
         if (orgId === DEFAULT_ORG_ID) {
             return [
-                { id: 'midia', label: 'Comunicação / Mídia', enabledTabs: DEFAULT_TABS },
-                { id: 'louvor', label: 'Louvor / Adoração', enabledTabs: DEFAULT_TABS },
-                { id: 'infantil', label: 'Ministério Infantil', enabledTabs: DEFAULT_TABS }
+                { id: 'midia', label: 'Comunicação / Mídia', enabledTabs: DEFAULT_TABS, organizationId: orgId },
+                { id: 'louvor', label: 'Louvor / Adoração', enabledTabs: DEFAULT_TABS, organizationId: orgId },
+                { id: 'infantil', label: 'Ministério Infantil', enabledTabs: DEFAULT_TABS, organizationId: orgId }
             ];
         }
         return [];
@@ -124,7 +197,8 @@ export const fetchOrganizationMinistries = async (organizationId: string): Promi
     return data.map((m: any) => ({
         id: m.code,
         label: m.label,
-        enabledTabs: DEFAULT_TABS // Default behavior for now
+        enabledTabs: DEFAULT_TABS, // Default behavior for now
+        organizationId: orgId
     }));
 };
 
