@@ -57,9 +57,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   }), [settingsQuery.data]);
 
   // Setters wrappers that trigger refetches or optimistic updates
-  // In a full refactor, components would use useMutation directly.
-  // Here we provide "fake" setters that invalidate queries to refresh data.
-
   const refreshData = async () => {
       await queryClient.invalidateQueries({ predicate: (query) => 
           query.queryKey[0] === 'schedule' || 
@@ -80,7 +77,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
 
     channel
         // 1. SCHEDULE & EVENTS
-        // Updates when an event is created/deleted/edited
         .on(
             'postgres_changes', 
             { event: '*', schema: 'public', table: 'events', filter: `ministry_id=eq.${mid}` }, 
@@ -88,8 +84,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
                 queryClient.invalidateQueries({ queryKey: keys.schedule(mid, currentMonth) });
             }
         )
-        // Updates when someone is assigned/removed/confirms (Assumes ministry_id exists on assignments or linked via trigger)
-        // Compliance with "Filtro obrigatório: ministry_id" for Escala
         .on(
             'postgres_changes', 
             { event: '*', schema: 'public', table: 'schedule_assignments', filter: `ministry_id=eq.${mid}` }, 
@@ -100,22 +94,27 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
             }
         )
         // 2. NOTIFICATIONS
-        // Updates when a new notification is sent
-        // Compliance with "contexto" via ministry_id filter
         .on(
             'postgres_changes', 
             { event: 'INSERT', schema: 'public', table: 'notifications', filter: `ministry_id=eq.${mid}` }, 
             () => {
-                // Invalidate all notifications queries to update the bell icon count
                 queryClient.invalidateQueries({ queryKey: ['notifications'] });
             }
         )
-        // 3. SWAPS (Extra UX improvement)
+        // 3. SWAPS
         .on(
             'postgres_changes', 
             { event: '*', schema: 'public', table: 'swap_requests', filter: `ministry_id=eq.${mid}` }, 
             () => {
                 queryClient.invalidateQueries({ queryKey: keys.swapRequests(mid) });
+            }
+        )
+        // 4. SETTINGS CHANGE (To update Roles automatically)
+        .on(
+            'postgres_changes', 
+            { event: 'UPDATE', schema: 'public', table: 'ministry_settings', filter: `ministry_id=eq.${mid}` }, 
+            () => {
+                queryClient.invalidateQueries({ queryKey: keys.settings(mid) });
             }
         )
         .subscribe();
@@ -137,8 +136,8 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     announcements: announcementsQuery.data || [],
     repertoire: repertoireQuery.data || [],
     swapRequests: swapsQuery.data || [],
-    globalConflicts: conflictsQuery.data || {}, // New
-    auditLogs: auditLogsQuery.data || [], // New
+    globalConflicts: conflictsQuery.data || {}, 
+    auditLogs: auditLogsQuery.data || [], 
     roles,
     ministryTitle,
     availabilityWindow,

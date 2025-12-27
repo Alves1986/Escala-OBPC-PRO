@@ -2,10 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
     Building2, Users, Layers, Activity, Plus, Edit2, 
-    ToggleLeft, ToggleRight, Search, Loader2, CheckCircle2 
+    ToggleLeft, ToggleRight, Search, Loader2, CheckCircle2, Trash2 
 } from 'lucide-react';
-import { Organization } from '../types';
-import { fetchOrganizationsWithStats, saveOrganization, toggleOrganizationStatus } from '../services/supabaseService';
+import { Organization, MinistryDef } from '../types';
+import { fetchOrganizationsWithStats, saveOrganization, toggleOrganizationStatus, saveOrganizationMinistry, deleteOrganizationMinistry } from '../services/supabaseService';
 import { useToast } from './Toast';
 
 export const SuperAdminDashboard: React.FC = () => {
@@ -19,7 +19,12 @@ export const SuperAdminDashboard: React.FC = () => {
     const [formData, setFormData] = useState({ name: "", slug: "" });
     const [saving, setSaving] = useState(false);
 
-    const { addToast } = useToast();
+    // Ministry Management State
+    const [newMinistryCode, setNewMinistryCode] = useState("");
+    const [newMinistryLabel, setNewMinistryLabel] = useState("");
+    const [ministrySaving, setMinistrySaving] = useState(false);
+
+    const { addToast, confirmAction } = useToast();
 
     useEffect(() => {
         loadData();
@@ -35,6 +40,8 @@ export const SuperAdminDashboard: React.FC = () => {
     const handleEdit = (org: Organization) => {
         setEditingOrg(org);
         setFormData({ name: org.name, slug: org.slug || "" });
+        setNewMinistryCode("");
+        setNewMinistryLabel("");
         setIsModalOpen(true);
     };
 
@@ -53,12 +60,50 @@ export const SuperAdminDashboard: React.FC = () => {
         
         if (res.success) {
             addToast(res.message, "success");
-            setIsModalOpen(false);
+            if(!editingOrg) setIsModalOpen(false); // Only close if creating new, stay open to manage ministries if editing
             loadData();
         } else {
             addToast(res.message, "error");
         }
         setSaving(false);
+    };
+
+    const handleAddMinistry = async () => {
+        if (!editingOrg) return;
+        if (!newMinistryCode || !newMinistryLabel) return addToast("Preencha código e nome.", "warning");
+
+        setMinistrySaving(true);
+        const res = await saveOrganizationMinistry(editingOrg.id, newMinistryCode, newMinistryLabel);
+        if (res.success) {
+            addToast(res.message, "success");
+            setNewMinistryCode("");
+            setNewMinistryLabel("");
+            // Reload orgs to update list inside modal
+            const data = await fetchOrganizationsWithStats();
+            setOrganizations(data);
+            // Update current editingOrg reference
+            const updatedOrg = data.find(o => o.id === editingOrg.id);
+            if (updatedOrg) setEditingOrg(updatedOrg);
+        } else {
+            addToast(res.message, "error");
+        }
+        setMinistrySaving(false);
+    };
+
+    const handleDeleteMinistry = async (code: string) => {
+        if (!editingOrg) return;
+        confirmAction("Remover Ministério", `Isso pode quebrar o acesso de usuários vinculados ao ministério '${code}'. Continuar?`, async () => {
+            const res = await deleteOrganizationMinistry(editingOrg.id, code);
+            if (res.success) {
+                addToast("Ministério removido.", "info");
+                const data = await fetchOrganizationsWithStats();
+                setOrganizations(data);
+                const updatedOrg = data.find(o => o.id === editingOrg.id);
+                if (updatedOrg) setEditingOrg(updatedOrg);
+            } else {
+                addToast(res.message, "error");
+            }
+        });
     };
 
     const handleToggleStatus = async (org: Organization) => {
@@ -206,56 +251,110 @@ export const SuperAdminDashboard: React.FC = () => {
                 )}
             </div>
 
-            {/* Modal */}
+            {/* Edit / Create Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-2xl w-full max-w-md border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+                    <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-2xl w-full max-w-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="p-6 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 flex justify-between items-center">
                             <h3 className="font-bold text-lg text-zinc-800 dark:text-white">
                                 {editingOrg ? 'Editar Organização' : 'Nova Organização'}
                             </h3>
                             <button onClick={() => setIsModalOpen(false)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">✕</button>
                         </div>
-                        <form onSubmit={handleSave} className="p-6 space-y-4">
-                            <div>
-                                <label className="text-xs font-bold text-zinc-500 uppercase block mb-1">Nome da Organização</label>
-                                <input 
-                                    value={formData.name}
-                                    onChange={e => setFormData({...formData, name: e.target.value})}
-                                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 outline-none focus:ring-2 focus:ring-purple-500 text-zinc-800 dark:text-white"
-                                    placeholder="Ex: Igreja Central"
-                                    autoFocus
-                                />
-                            </div>
-                            <div>
-                                <label className="text-xs font-bold text-zinc-500 uppercase block mb-1">Slug (URL amigável)</label>
-                                <input 
-                                    value={formData.slug}
-                                    onChange={e => setFormData({...formData, slug: e.target.value.toLowerCase().replace(/\s+/g, '-')})}
-                                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 outline-none focus:ring-2 focus:ring-purple-500 text-zinc-800 dark:text-white"
-                                    placeholder="ex: igreja-central"
-                                />
-                                <p className="text-[10px] text-zinc-400 mt-1">Opcional. Usado para links personalizados.</p>
-                            </div>
-                            
-                            <div className="pt-2 flex justify-end gap-3">
-                                <button 
-                                    type="button" 
-                                    onClick={() => setIsModalOpen(false)}
-                                    className="px-4 py-2 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 font-bold text-sm"
-                                >
-                                    Cancelar
-                                </button>
-                                <button 
-                                    type="submit" 
-                                    disabled={saving}
-                                    className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-bold text-sm flex items-center gap-2 disabled:opacity-50"
-                                >
-                                    {saving && <Loader2 className="animate-spin" size={14}/>}
-                                    Salvar
-                                </button>
-                            </div>
-                        </form>
+                        
+                        <div className="p-6 overflow-y-auto custom-scrollbar space-y-6">
+                            {/* Org Form */}
+                            <form onSubmit={handleSave} className="space-y-4">
+                                <div>
+                                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-1">Nome da Organização</label>
+                                    <input 
+                                        value={formData.name}
+                                        onChange={e => setFormData({...formData, name: e.target.value})}
+                                        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 outline-none focus:ring-2 focus:ring-purple-500 text-zinc-800 dark:text-white"
+                                        placeholder="Ex: Igreja Central"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-1">Slug (URL amigável)</label>
+                                    <input 
+                                        value={formData.slug}
+                                        onChange={e => setFormData({...formData, slug: e.target.value.toLowerCase().replace(/\s+/g, '-')})}
+                                        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 outline-none focus:ring-2 focus:ring-purple-500 text-zinc-800 dark:text-white"
+                                        placeholder="ex: igreja-central"
+                                    />
+                                </div>
+                                <div className="flex justify-end">
+                                    <button 
+                                        type="submit" 
+                                        disabled={saving}
+                                        className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-bold text-sm flex items-center gap-2 disabled:opacity-50"
+                                    >
+                                        {saving && <Loader2 className="animate-spin" size={14}/>}
+                                        Salvar Dados
+                                    </button>
+                                </div>
+                            </form>
+
+                            {/* Ministry Manager Section (Only for existing Orgs) */}
+                            {editingOrg && (
+                                <div className="border-t border-zinc-200 dark:border-zinc-700 pt-6">
+                                    <h4 className="font-bold text-zinc-800 dark:text-white mb-4 flex items-center gap-2">
+                                        <Layers size={18}/> Ministérios da Organização
+                                    </h4>
+                                    
+                                    <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded-xl p-4 mb-4 border border-zinc-200 dark:border-zinc-700">
+                                        <div className="flex flex-col sm:flex-row gap-2 items-end">
+                                            <div className="flex-1 w-full">
+                                                <label className="text-[10px] font-bold text-zinc-400 uppercase mb-1 block">Código (ID)</label>
+                                                <input 
+                                                    value={newMinistryCode}
+                                                    onChange={e => setNewMinistryCode(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+                                                    placeholder="ex: jovens"
+                                                    className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm"
+                                                />
+                                            </div>
+                                            <div className="flex-1 w-full">
+                                                <label className="text-[10px] font-bold text-zinc-400 uppercase mb-1 block">Nome Exibição</label>
+                                                <input 
+                                                    value={newMinistryLabel}
+                                                    onChange={e => setNewMinistryLabel(e.target.value)}
+                                                    placeholder="ex: Ministério de Jovens"
+                                                    className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm"
+                                                />
+                                            </div>
+                                            <button 
+                                                onClick={handleAddMinistry}
+                                                disabled={ministrySaving}
+                                                className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold text-sm disabled:opacity-50"
+                                            >
+                                                {ministrySaving ? <Loader2 className="animate-spin" size={16}/> : <Plus size={16}/>}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        {editingOrg.ministries && editingOrg.ministries.length > 0 ? (
+                                            editingOrg.ministries.map(min => (
+                                                <div key={min.code} className="flex justify-between items-center p-3 bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-lg shadow-sm">
+                                                    <div>
+                                                        <p className="font-bold text-sm text-zinc-800 dark:text-zinc-200">{min.label}</p>
+                                                        <p className="text-xs text-zinc-500 font-mono">{min.code}</p>
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => handleDeleteMinistry(min.code)}
+                                                        className="text-zinc-400 hover:text-red-500 p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                                    >
+                                                        <Trash2 size={16}/>
+                                                    </button>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <p className="text-center text-sm text-zinc-400 py-4 italic">Nenhum ministério cadastrado.</p>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

@@ -71,7 +71,6 @@ const getCurrentOrgId = async (): Promise<string> => {
 
 // --- MEMBERSHIP & ACCESS CONTROL ---
 
-// Busca quais ministérios o usuário tem acesso (Nova Tabela + Fallback)
 export const fetchUserAllowedMinistries = async (userId: string, orgId: string): Promise<string[]> => {
     if (!supabase) return ['midia'];
 
@@ -107,13 +106,12 @@ export const fetchUserAllowedMinistries = async (userId: string, orgId: string):
 export const fetchOrganizationsWithStats = async (): Promise<Organization[]> => {
     if (!supabase) return [];
     
-    // Use the RPC function for efficient aggregation
-    const { data, error } = await supabase.rpc('get_organizations_with_stats');
+    // Use the RPC function for efficient aggregation including nested ministries
+    const { data, error } = await supabase.rpc('get_orgs_with_details');
     
     if (error) {
         console.error("Error fetching orgs with stats:", error);
-        // Fallback simple fetch if RPC fails
-        return fetchAllOrganizations();
+        return fetchAllOrganizations(); // Fallback
     }
     
     return (data || []).map((o: any) => ({
@@ -123,7 +121,14 @@ export const fetchOrganizationsWithStats = async (): Promise<Organization[]> => 
         active: o.active,
         createdAt: o.created_at,
         userCount: o.user_count,
-        ministryCount: o.ministry_count
+        // RPC returns JSONB array for ministries
+        ministries: (o.ministries || []).map((m: any) => ({
+            id: m.id,
+            code: m.code,
+            label: m.label,
+            organizationId: o.id
+        })),
+        ministryCount: (o.ministries || []).length
     }));
 };
 
@@ -176,27 +181,48 @@ export const toggleOrganizationStatus = async (id: string, currentStatus: boolea
     return !error;
 };
 
-// --- SUPER ADMIN: Ministry Management (Generic) ---
+// --- SUPER ADMIN: Ministry Management (Relational) ---
 
-// Used by Super Admin to manage ministries of ANY organization
 export const saveOrganizationMinistry = async (orgId: string, code: string, label: string): Promise<{ success: boolean, message: string }> => {
     if (!supabase) return { success: false, message: "Offline" };
 
-    const { error } = await supabase
-        .from('organization_ministries')
-        .upsert({ 
-            organization_id: orgId, 
-            code: code.trim().toLowerCase(), 
-            label: label.trim() 
-        }, { onConflict: 'organization_id, code' });
+    const cleanCode = code.trim().toLowerCase().replace(/\s+/g, '-');
 
-    if (error) return { success: false, message: error.message };
-    return { success: true, message: "Ministério salvo!" };
+    try {
+        // 1. Insert/Update into organization_ministries (The Source of Truth)
+        const { data: ministry, error } = await supabase
+            .from('organization_ministries')
+            .upsert({ 
+                organization_id: orgId, 
+                code: cleanCode, 
+                label: label.trim() 
+            }, { onConflict: 'organization_id, code' })
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        // 2. Ensure a ministry_settings row exists and is linked
+        if (ministry) {
+            await supabase.from('ministry_settings').upsert({
+                organization_id: orgId,
+                ministry_id: cleanCode, // Legacy support
+                organization_ministry_id: ministry.id, // New FK
+                display_name: label.trim(),
+                roles: [] // Default empty roles if new
+            }, { onConflict: 'organization_id, ministry_id' }); // Conflict key depends on current schema
+        }
+
+        return { success: true, message: "Ministério salvo com sucesso!" };
+    } catch(err: any) {
+        return { success: false, message: err.message };
+    }
 };
 
 export const deleteOrganizationMinistry = async (orgId: string, code: string): Promise<{ success: boolean, message: string }> => {
     if (!supabase) return { success: false, message: "Offline" };
 
+    // Cascade delete on DB handles settings, but we call delete on the parent
     const { error } = await supabase
         .from('organization_ministries')
         .delete()
@@ -237,7 +263,7 @@ export const fetchOrganizationMinistries = async (organizationId: string): Promi
 
     const { data, error } = await supabase
         .from('organization_ministries')
-        .select('code, label')
+        .select('id, code, label')
         .eq('organization_id', orgId)
         .order('label');
 
@@ -250,9 +276,9 @@ export const fetchOrganizationMinistries = async (organizationId: string): Promi
         // Fallback for empty DB (Retrocompatibility during migration)
         if (orgId === DEFAULT_ORG_ID) {
             return [
-                { id: 'midia', label: 'Comunicação / Mídia', enabledTabs: DEFAULT_TABS, organizationId: orgId },
-                { id: 'louvor', label: 'Louvor / Adoração', enabledTabs: DEFAULT_TABS, organizationId: orgId },
-                { id: 'infantil', label: 'Ministério Infantil', enabledTabs: DEFAULT_TABS, organizationId: orgId }
+                { id: 'uuid-1', code: 'midia', label: 'Comunicação / Mídia', enabledTabs: DEFAULT_TABS, organizationId: orgId },
+                { id: 'uuid-2', code: 'louvor', label: 'Louvor / Adoração', enabledTabs: DEFAULT_TABS, organizationId: orgId },
+                { id: 'uuid-3', code: 'infantil', label: 'Ministério Infantil', enabledTabs: DEFAULT_TABS, organizationId: orgId }
             ];
         }
         return [];
@@ -260,7 +286,8 @@ export const fetchOrganizationMinistries = async (organizationId: string): Promi
 
     // Map DB columns to App Types
     return data.map((m: any) => ({
-        id: m.code,
+        id: m.id,
+        code: m.code,
         label: m.label,
         enabledTabs: DEFAULT_TABS, // Default behavior for now
         organizationId: orgId
@@ -383,8 +410,55 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar: 
 export const updateMemberData = async (memberId: string, data: { name?: string, roles?: string[], whatsapp?: string }) => { if (!supabase) return { success: false, message: "Offline" }; const updates: any = {}; if (data.name) updates.name = data.name; if (data.roles) updates.functions = data.roles; if (data.whatsapp) updates.whatsapp = data.whatsapp; const { error } = await supabase.from('profiles').update(updates).eq('id', memberId); return { success: !error, message: error ? error.message : "Membro atualizado com sucesso!" }; };
 export const toggleAdminSQL = async (email: string, status: boolean, ministryId: string) => { if (!supabase) return; await supabase.functions.invoke('push-notification', { body: { action: 'toggle_admin', targetEmail: email, status, ministryId } }); };
 export const deleteMember = async (ministryId: string, memberId: string, name: string) => { if (!supabase) return { success: false }; const { error } = await supabase.functions.invoke('push-notification', { body: { action: 'delete_member', memberId, ministryId } }); return { success: !error, message: error ? "Erro" : "Removido" }; };
-export const fetchMinistrySettings = async (ministryId: string): Promise<MinistrySettings> => { if (!supabase) return { displayName: '', roles: [] }; const { data } = await supabase.from('ministry_settings').select('*').eq('ministry_id', ministryId).single(); if (!data) return { displayName: '', roles: [] }; return { displayName: data.display_name, roles: safeParseArray(data.roles), availabilityStart: data.availability_start, availabilityEnd: data.availability_end, spotifyClientId: data.spotify_client_id, spotifyClientSecret: data.spotify_client_secret }; };
-export const saveMinistrySettings = async (ministryId: string, displayName?: string, roles?: string[], availabilityStart?: string, availabilityEnd?: string, spotifyClientId?: string, spotifyClientSecret?: string) => { if (!supabase) return; const updates: any = {}; if (displayName !== undefined) updates.display_name = displayName; if (roles !== undefined) updates.roles = roles; if (availabilityStart !== undefined) updates.availability_start = availabilityStart; if (availabilityEnd !== undefined) updates.availability_end = availabilityEnd; if (spotifyClientId !== undefined) updates.spotify_client_id = spotifyClientId; if (spotifyClientSecret !== undefined) updates.spotify_client_secret = spotifyClientSecret; await supabase.from('ministry_settings').upsert({ ministry_id: ministryId, ...updates }); };
+
+// --- SETTINGS WITH STRICT TENANT SCOPING ---
+export const fetchMinistrySettings = async (ministryCode: string): Promise<MinistrySettings> => { 
+    if (!supabase) return { displayName: '', roles: [] }; 
+    const orgId = await getCurrentOrgId(); // Ensure tenant context
+
+    // Try finding settings by matching code AND org
+    const { data } = await supabase
+        .from('ministry_settings')
+        .select('*')
+        .eq('ministry_id', ministryCode) // Legacy identifier
+        .eq('organization_id', orgId)
+        .single();
+    
+    if (!data) return { displayName: '', roles: [] }; 
+    
+    return { 
+        id: data.id,
+        organizationMinistryId: data.organization_ministry_id,
+        displayName: data.display_name, 
+        roles: safeParseArray(data.roles), 
+        availabilityStart: data.availability_start, 
+        availabilityEnd: data.availability_end, 
+        spotifyClientId: data.spotify_client_id, 
+        spotifyClientSecret: data.spotify_client_secret,
+        organizationId: data.organization_id
+    }; 
+};
+
+export const saveMinistrySettings = async (ministryId: string, displayName?: string, roles?: string[], availabilityStart?: string, availabilityEnd?: string, spotifyClientId?: string, spotifyClientSecret?: string) => { 
+    if (!supabase) return; 
+    const orgId = await getCurrentOrgId();
+
+    const updates: any = {}; 
+    if (displayName !== undefined) updates.display_name = displayName; 
+    if (roles !== undefined) updates.roles = roles; 
+    if (availabilityStart !== undefined) updates.availability_start = availabilityStart; 
+    if (availabilityEnd !== undefined) updates.availability_end = availabilityEnd; 
+    if (spotifyClientId !== undefined) updates.spotify_client_id = spotifyClientId; 
+    if (spotifyClientSecret !== undefined) updates.spotify_client_secret = spotifyClientSecret; 
+    
+    // Scoped upsert
+    await supabase.from('ministry_settings').upsert({ 
+        ministry_id: ministryId, 
+        organization_id: orgId,
+        ...updates 
+    }, { onConflict: 'organization_id, ministry_id' }); 
+};
+
 export const fetchMinistrySchedule = async (ministryId: string, month: string) => { if (!supabase) return { events: [], schedule: {}, attendance: {} }; const startDate = `${month}-01`; const [y, m] = month.split('-').map(Number); const nextMonth = new Date(y, m, 1).toISOString().slice(0, 7); const { data: eventsData } = await supabase.from('events').select('*').eq('ministry_id', ministryId).gte('date_time', startDate).lt('date_time', `${nextMonth}-01`).order('date_time'); const events = (eventsData || []).map((e: any) => ({ id: e.id, iso: e.date_time.slice(0, 16), title: e.title, date: e.date_time.slice(0, 10), time: e.date_time.slice(11, 16), dateDisplay: e.date_time.slice(0, 10).split('-').reverse().slice(0, 2).join('/'), organizationId: e.organization_id })); const eventIds = events.map(e => e.id); const schedule: ScheduleMap = {}; const attendance: AttendanceMap = {}; if (eventIds.length > 0) { const { data: assigns } = await supabase.from('schedule_assignments').select('event_id, role, member_id, confirmed, profiles(name)').in('event_id', eventIds); (assigns || []).forEach((a: any) => { const evt = events.find(e => e.id === a.event_id); if (evt && a.profiles) { const key = `${evt.iso}_${a.role}`; schedule[key] = a.profiles.name; if (a.confirmed) attendance[key] = true; } }); } return { events, schedule, attendance }; };
 
 // --- WRITE OPS UPDATED FOR ORG ID ---

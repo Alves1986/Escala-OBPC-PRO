@@ -13,14 +13,16 @@ export interface Organization {
   // Stats (populated by RPC)
   userCount?: number;
   ministryCount?: number;
+  ministries?: MinistryDef[]; // Lista de ministérios da org
 }
 
 // --- DYNAMIC MINISTRY TYPE ---
 export interface MinistryDef {
-  id: string; // Corresponds to 'code' in DB (e.g., 'midia')
-  label: string; // e.g., 'Comunicação / Mídia'
-  enabledTabs?: string[]; // Optional: For future feature toggling per ministry
-  organizationId?: string; // Link to parent
+  id: string;   // UUID do banco (organization_ministries.id)
+  code: string; // Identificador de URL/Legado (ex: 'midia', 'louvor')
+  label: string; // Nome de exibição (ex: 'Comunicação / Mídia')
+  enabledTabs?: string[]; 
+  organizationId?: string; 
 }
 
 export interface MemberMap {
@@ -53,13 +55,15 @@ export interface AvailabilityNotesMap {
 }
 
 export interface MinistrySettings {
+    id?: string;
+    organizationMinistryId?: string; // FK para tabela relacional
     displayName: string;
     roles: string[];
     availabilityStart?: string; // ISO String
     availabilityEnd?: string;   // ISO String
     spotifyClientId?: string;   // New
     spotifyClientSecret?: string; // New
-    organizationId?: string;    // New: Link to parent organization
+    organizationId?: string;    // Link to parent organization
 }
 
 // --- NEW AUDIT TYPES ---
