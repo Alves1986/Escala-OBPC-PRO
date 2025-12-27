@@ -19,28 +19,21 @@ interface AppState {
   toggleSidebar: () => void;
 }
 
-// Recupera a última escolha salva localmente ou deixa vazio para ser preenchido pelo Auth
-const storedMinistryId = typeof window !== 'undefined' ? localStorage.getItem('last_ministry_id') : null;
-
 export const useAppStore = create<AppState>((set) => ({
   currentUser: null,
-  ministryId: storedMinistryId || '', // Inicia vazio ou com cache local, nunca hardcoded 'midia'
+  ministryId: 'midia', // Valor inicial temporário, será sobrescrito pelo App.tsx
   organizationId: null,
   availableMinistries: [],
   themeMode: (localStorage.getItem('themeMode') as ThemeMode) || 'system',
   sidebarOpen: false,
 
   setCurrentUser: (user) => set((state) => {
-      // Prioridade: User Profile (DB) > State Atual (Runtime) > LocalStorage
-      // A lógica principal de escolha acontece no useAuth, aqui apenas sincronizamos se vier do user
-      const newMinistryId = user?.lastMinistryId || user?.ministryId || state.ministryId;
+      // Auto-update context if user changes
+      const newMinistryId = user?.ministryId || state.ministryId;
       const newOrgId = user?.organizationId || state.organizationId;
       return { currentUser: user, ministryId: newMinistryId, organizationId: newOrgId };
   }),
-  setMinistryId: (id) => {
-      if (typeof window !== 'undefined') localStorage.setItem('last_ministry_id', id);
-      set({ ministryId: id });
-  },
+  setMinistryId: (id) => set({ ministryId: id }),
   setOrganizationId: (id) => set({ organizationId: id }),
   setAvailableMinistries: (ministries) => set({ availableMinistries: ministries }),
   setThemeMode: (mode) => {
