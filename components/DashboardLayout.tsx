@@ -1,7 +1,7 @@
 
 import React, { ReactNode, useState, useRef } from 'react';
 import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles, Building2, Home, Calendar, Megaphone, CalendarCheck } from 'lucide-react';
-import { User, AppNotification, isValidMinistry, getMinistryConfig } from '../types';
+import { User, AppNotification, MinistryDef } from '../types'; // Remove MINISTRIES import
 import { NotificationCenter } from './NotificationCenter';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useAppStore } from '../store/appStore';
@@ -34,7 +34,7 @@ export const DashboardLayout: React.FC<Props> = ({
   currentTab, onTabChange, mainNavItems, managementNavItems, notifications, onNotificationsUpdate,
   onInstall, isStandalone, onSwitchMinistry, onOpenJoinMinistry, activeMinistryId
 }) => {
-  const { currentUser, themeMode, setThemeMode, sidebarOpen, setSidebarOpen, ministryId: storeMinistryId } = useAppStore();
+  const { currentUser, themeMode, setThemeMode, sidebarOpen, setSidebarOpen, ministryId: storeMinistryId, availableMinistries } = useAppStore(); // Use availableMinistries from store
   const [imgError, setImgError] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [ministryMenuOpen, setMinistryMenuOpen] = useState(false);
@@ -63,6 +63,9 @@ export const DashboardLayout: React.FC<Props> = ({
       window.location.reload();
     }, 500);
   };
+
+  // Helper to check validity based on fetched list
+  const isValidMinistryId = (id: string) => availableMinistries.some(m => m.id === id);
 
   // --- MODERN NAV BUTTON DESIGN (Pill Style) ---
   const renderNavButton = (item: NavItem) => {
@@ -210,10 +213,10 @@ export const DashboardLayout: React.FC<Props> = ({
                            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Meus Ministérios</p>
                        </div>
                        
-                       {/* Lista filtrada para mostrar apenas ministérios válidos */}
-                       {currentUser?.allowedMinistries?.filter(isValidMinistry).map(mid => {
+                       {/* Lista filtrada para mostrar apenas ministérios válidos (do banco) */}
+                       {currentUser?.allowedMinistries?.filter(isValidMinistryId).map(mid => {
                            const isCurrent = currentMinistryId === mid;
-                           const config = getMinistryConfig(mid);
+                           const config = availableMinistries.find(m => m.id === mid) || { label: mid, id: mid };
                            return (
                                <button
                                    key={mid}

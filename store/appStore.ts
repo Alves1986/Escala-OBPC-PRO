@@ -1,17 +1,19 @@
 
 import { create } from 'zustand';
-import { User, ThemeMode } from '../types';
+import { User, ThemeMode, MinistryDef } from '../types';
 
 interface AppState {
   currentUser: User | null;
   ministryId: string;
-  organizationId: string | null; // New
+  organizationId: string | null;
+  availableMinistries: MinistryDef[]; // Lista carregada do banco
   themeMode: ThemeMode;
   sidebarOpen: boolean;
   
   setCurrentUser: (user: User | null) => void;
   setMinistryId: (id: string) => void;
-  setOrganizationId: (id: string | null) => void; // New
+  setOrganizationId: (id: string | null) => void;
+  setAvailableMinistries: (ministries: MinistryDef[]) => void;
   setThemeMode: (mode: ThemeMode) => void;
   setSidebarOpen: (open: boolean) => void;
   toggleSidebar: () => void;
@@ -19,8 +21,9 @@ interface AppState {
 
 export const useAppStore = create<AppState>((set) => ({
   currentUser: null,
-  ministryId: 'midia',
+  ministryId: 'midia', // Valor inicial temporário, será sobrescrito pelo App.tsx
   organizationId: null,
+  availableMinistries: [],
   themeMode: (localStorage.getItem('themeMode') as ThemeMode) || 'system',
   sidebarOpen: false,
 
@@ -32,6 +35,7 @@ export const useAppStore = create<AppState>((set) => ({
   }),
   setMinistryId: (id) => set({ ministryId: id }),
   setOrganizationId: (id) => set({ organizationId: id }),
+  setAvailableMinistries: (ministries) => set({ availableMinistries: ministries }),
   setThemeMode: (mode) => {
       localStorage.setItem('themeMode', mode);
       set({ themeMode: mode });

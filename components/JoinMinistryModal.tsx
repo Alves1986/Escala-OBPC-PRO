@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, Check, Loader2, Plus, Building2 } from 'lucide-react';
-import { MINISTRIES, DEFAULT_ROLES } from '../types';
+import { DEFAULT_ROLES } from '../types';
 import { fetchMinistrySettings } from '../services/supabaseService';
+import { useAppStore } from '../store/appStore';
 
 interface Props {
   isOpen: boolean;
@@ -17,9 +18,12 @@ export const JoinMinistryModal: React.FC<Props> = ({ isOpen, onClose, onJoin, al
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
   const [loadingRoles, setLoadingRoles] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  
+  const { availableMinistries } = useAppStore();
 
   // Filtra ministérios disponíveis (exclui os que o usuário já tem)
-  const availableMinistries = MINISTRIES.filter(m => !alreadyJoined.includes(m.id));
+  // Usa a lista do banco via store
+  const availableToJoin = availableMinistries.filter(m => !alreadyJoined.includes(m.id));
 
   // Carrega as funções quando um ministério é selecionado
   useEffect(() => {
@@ -85,13 +89,15 @@ export const JoinMinistryModal: React.FC<Props> = ({ isOpen, onClose, onJoin, al
           {/* 1. Seleção de Ministério */}
           <div>
             <label className="text-xs font-bold text-zinc-500 uppercase block mb-2">Escolha o Ministério</label>
-            {availableMinistries.length === 0 ? (
+            {availableToJoin.length === 0 ? (
                 <div className="p-4 bg-zinc-100 dark:bg-zinc-900 rounded-xl text-center text-zinc-500 text-sm">
-                    Você já participa de todos os ministérios disponíveis!
+                    {availableMinistries.length === 0 
+                        ? 'Nenhum ministério carregado.' 
+                        : 'Você já participa de todos os ministérios disponíveis!'}
                 </div>
             ) : (
                 <div className="grid grid-cols-1 gap-2">
-                    {availableMinistries.map(m => (
+                    {availableToJoin.map(m => (
                         <button
                             key={m.id}
                             onClick={() => setSelectedMinistry(m.id)}

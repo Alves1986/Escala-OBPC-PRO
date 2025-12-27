@@ -4,8 +4,8 @@ import {
     User, MemberMap, 
     AppNotification, TeamMemberProfile, AvailabilityMap, SwapRequest, 
     ScheduleMap, RepertoireItem, Announcement, GlobalConflictMap, 
-    AttendanceMap, AuditLogEntry, MinistrySettings,
-    RankingEntry, AvailabilityNotesMap, RankingHistoryItem
+    AttendanceMap, AuditLogEntry, MinistrySettings, MinistryDef,
+    RankingEntry, AvailabilityNotesMap, RankingHistoryItem, DEFAULT_TABS
 } from '../types';
 
 // ============================================================================
@@ -88,6 +88,44 @@ const safeParseArray = (value: any): string[] => {
         return [cleaned];
     }
     return [];
+};
+
+// --- NEW FUNCTION: Fetch Ministries by Organization ---
+export const fetchOrganizationMinistries = async (organizationId: string): Promise<MinistryDef[]> => {
+    if (!supabase) return [];
+    
+    // Fallback if orgId is missing
+    const orgId = organizationId || DEFAULT_ORG_ID;
+
+    const { data, error } = await supabase
+        .from('organization_ministries')
+        .select('code, label')
+        .eq('organization_id', orgId)
+        .order('label');
+
+    if (error) {
+        console.error("Error fetching ministries:", error);
+        return [];
+    }
+
+    if (!data || data.length === 0) {
+        // Fallback for empty DB (Retrocompatibility during migration)
+        if (orgId === DEFAULT_ORG_ID) {
+            return [
+                { id: 'midia', label: 'Comunicação / Mídia', enabledTabs: DEFAULT_TABS },
+                { id: 'louvor', label: 'Louvor / Adoração', enabledTabs: DEFAULT_TABS },
+                { id: 'infantil', label: 'Ministério Infantil', enabledTabs: DEFAULT_TABS }
+            ];
+        }
+        return [];
+    }
+
+    // Map DB columns to App Types
+    return data.map((m: any) => ({
+        id: m.code,
+        label: m.label,
+        enabledTabs: DEFAULT_TABS // Default behavior for now
+    }));
 };
 
 export const loginWithEmail = async (email: string, pass: string) => {

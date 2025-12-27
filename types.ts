@@ -10,6 +10,13 @@ export interface Organization {
   createdAt?: string;
 }
 
+// --- DYNAMIC MINISTRY TYPE ---
+export interface MinistryDef {
+  id: string; // Corresponds to 'code' in DB (e.g., 'midia')
+  label: string; // e.g., 'Comunicação / Mídia'
+  enabledTabs?: string[]; // Optional: For future feature toggling per ministry
+}
+
 export interface MemberMap {
   [role: string]: string[];
 }
@@ -118,52 +125,6 @@ export const ALL_TABS = [
 
 // 2. Pacote Padrão (Full) - Novos ministérios herdam isso
 export const DEFAULT_TABS = [...ALL_TABS];
-
-// 3. Tabela de Configuração dos Ministérios - READ ONLY / HARDCODED
-export const MINISTRIES = [
-  { 
-    id: 'midia', 
-    label: 'Comunicação / Mídia', 
-    enabledTabs: DEFAULT_TABS 
-  },
-  { 
-    id: 'louvor', 
-    label: 'Louvor / Adoração', 
-    enabledTabs: DEFAULT_TABS 
-  },
-  { 
-    id: 'infantil', 
-    label: 'Ministério Infantil', 
-    // REGRA DE NEGÓCIO: Remove abas de repertório para o Infantil
-    enabledTabs: DEFAULT_TABS.filter(t => !['repertoire', 'repertoire-manager'].includes(t)) 
-  }
-] as const;
-
-// 4. Tipos Derivados (Type Safety)
-export type ValidMinistryId = typeof MINISTRIES[number]['id'];
-
-// Interface baseada na constante
-export interface MinistryDef {
-  id: ValidMinistryId;
-  label: string;
-  enabledTabs: string[];
-}
-
-export const KNOWN_MINISTRIES = MINISTRIES.map(m => m.id);
-
-// 5. Type Guard: Valida se uma string é um ID de ministério válido
-export const isValidMinistry = (id: any): id is ValidMinistryId => {
-    return MINISTRIES.some(m => m.id === id);
-};
-
-// 6. Helper para obter configuração (Seguro)
-export const getMinistryConfig = (id: string | null): MinistryDef => {
-  if (isValidMinistry(id)) {
-      return MINISTRIES.find(m => m.id === id)!;
-  }
-  // Fallback seguro: Retorna o primeiro da lista (Midia) se o ID for inválido
-  return MINISTRIES[0];
-};
 
 export interface GlobalConflict {
     ministryId: string; 

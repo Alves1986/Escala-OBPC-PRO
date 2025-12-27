@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, UserPlus, ArrowLeft, Check, ChevronDown, KeyRound, Layers, ShieldCheck, Sparkles } from 'lucide-react';
-import { loginWithEmail, loginWithGoogle, registerWithEmail, fetchMinistrySettings, sendPasswordResetEmail } from '../services/supabaseService';
+import { loginWithEmail, loginWithGoogle, registerWithEmail, fetchMinistrySettings, sendPasswordResetEmail, fetchOrganizationMinistries } from '../services/supabaseService';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { TypewriterBackground } from './TypewriterBackground';
-import { MINISTRIES, DEFAULT_ROLES } from '../types';
+import { DEFAULT_ROLES, MinistryDef } from '../types';
 
 interface Props {
   onLoginSuccess?: () => void; 
@@ -23,7 +23,10 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
   const [regSelectedMinistries, setRegSelectedMinistries] = useState<string[]>([]);
   const [regSelectedRoles, setRegSelectedRoles] = useState<string[]>([]);
   
+  // Dynamic lists for registration
+  const [ministriesList, setMinistriesList] = useState<MinistryDef[]>([]);
   const [availableRoles, setAvailableRoles] = useState<string[]>([]);
+  
   const [loadingRoles, setLoadingRoles] = useState(false);
   
   // Specific loading state to differentiate between actions
@@ -39,6 +42,15 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
     if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
     setErrorMsg("");
     setSuccessMsg("");
+  }, [view]);
+
+  // Load Ministries for Registration (Defaults to default org for now)
+  useEffect(() => {
+      async function loadMinistries() {
+          const list = await fetchOrganizationMinistries('00000000-0000-0000-0000-000000000000');
+          setMinistriesList(list);
+      }
+      if (view === 'register') loadMinistries();
   }, [view]);
 
   useEffect(() => {
@@ -298,7 +310,9 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                         <div className="space-y-1.5">
                             <label className="text-[10px] uppercase text-zinc-500 font-bold flex items-center gap-1 ml-1"><Layers size={12}/> Ministérios</label>
                             <div className="grid grid-cols-1 gap-2 bg-[#18181b]/50 border border-white/5 p-2 rounded-xl max-h-32 overflow-y-auto custom-scrollbar">
-                                {MINISTRIES.map(m => {
+                                {ministriesList.length === 0 ? (
+                                    <p className="text-zinc-500 text-xs p-2 text-center">Carregando...</p>
+                                ) : ministriesList.map(m => {
                                     const isSelected = regSelectedMinistries.includes(m.id);
                                     return (
                                         <button key={m.id} type="button" onClick={() => toggleMinistry(m.id)} disabled={isGlobalLoading} className={`flex items-center justify-between p-2.5 rounded-lg border text-xs font-medium transition-all ${isSelected ? 'bg-teal-500/20 border-teal-500/40 text-teal-300' : 'bg-transparent border-transparent text-zinc-400 hover:bg-white/5'}`}>
