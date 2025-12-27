@@ -28,6 +28,7 @@ export interface CustomEvent {
   date: string; // YYYY-MM-DD
   time: string; // HH:mm
   iso: string; // Helper for UI
+  organizationId?: string; // New
 }
 
 export interface AvailabilityMap {
@@ -55,6 +56,7 @@ export interface AuditLogEntry {
   action: string; // "Edited Schedule", "Removed Member", etc.
   details: string; // "Joao changed Drummer from Pedro to Lucas"
   author: string; // Who did it
+  organizationId?: string; // New
 }
 
 export interface AppNotification {
@@ -65,7 +67,8 @@ export interface AppNotification {
   timestamp: string;
   read: boolean;
   actionLink?: string;
-  ministryId?: string; // Added for cross-ministry support
+  ministryId?: string; 
+  organizationId?: string; // New
 }
 
 export interface Announcement {
@@ -78,6 +81,7 @@ export interface Announcement {
   author: string;
   readBy: { userId: string; name: string; timestamp: string }[];
   likedBy: { userId: string; name: string; timestamp: string }[]; 
+  organizationId?: string; // New
 }
 
 export interface ScheduleIssue {
@@ -182,6 +186,7 @@ export interface SwapRequest {
   status: 'pending' | 'completed' | 'cancelled';
   createdAt: string;
   takenByName?: string;
+  organizationId?: string; // New
 }
 
 export interface RepertoireItem {
@@ -194,6 +199,7 @@ export interface RepertoireItem {
   createdAt: string;
   content?: string; // Chords/Lyrics content
   key?: string; // Musical Key (e.g., "G")
+  organizationId?: string; // New
 }
 
 export interface User {

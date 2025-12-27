@@ -54,6 +54,21 @@ if (SUPABASE_URL && SUPABASE_KEY) {
 
 export const getSupabase = () => supabase;
 
+// DEFAULT ORGANIZATION ID (Fallback for legacy data)
+const DEFAULT_ORG_ID = '00000000-0000-0000-0000-000000000000';
+
+// Helper to get current user's organization ID quickly
+const getCurrentOrgId = async (): Promise<string> => {
+    if (!supabase) return DEFAULT_ORG_ID;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return DEFAULT_ORG_ID;
+    
+    // Check cached profile in Zustand store if possible, or fetch
+    // For safety in service layer, we fetch or assume default if simple
+    const { data } = await supabase.from('profiles').select('organization_id').eq('id', user.id).single();
+    return data?.organization_id || DEFAULT_ORG_ID;
+};
+
 // --- UTILS ---
 const safeParseArray = (value: any): string[] => {
     if (!value) return [];
@@ -98,7 +113,7 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
     if (data.user) {
         const mainMinistry = ministries[0] || 'midia';
         // Atribui ID padrão de Organização (Fallback para Single Tenant)
-        const defaultOrgId = '00000000-0000-0000-0000-000000000000';
+        const defaultOrgId = DEFAULT_ORG_ID;
         
         await supabase.from('profiles').insert({
             id: data.user.id, 
@@ -158,24 +173,39 @@ export const toggleAdminSQL = async (email: string, status: boolean, ministryId:
 export const deleteMember = async (ministryId: string, memberId: string, name: string) => { if (!supabase) return { success: false }; const { error } = await supabase.functions.invoke('push-notification', { body: { action: 'delete_member', memberId, ministryId } }); return { success: !error, message: error ? "Erro" : "Removido" }; };
 export const fetchMinistrySettings = async (ministryId: string): Promise<MinistrySettings> => { if (!supabase) return { displayName: '', roles: [] }; const { data } = await supabase.from('ministry_settings').select('*').eq('ministry_id', ministryId).single(); if (!data) return { displayName: '', roles: [] }; return { displayName: data.display_name, roles: safeParseArray(data.roles), availabilityStart: data.availability_start, availabilityEnd: data.availability_end, spotifyClientId: data.spotify_client_id, spotifyClientSecret: data.spotify_client_secret }; };
 export const saveMinistrySettings = async (ministryId: string, displayName?: string, roles?: string[], availabilityStart?: string, availabilityEnd?: string, spotifyClientId?: string, spotifyClientSecret?: string) => { if (!supabase) return; const updates: any = {}; if (displayName !== undefined) updates.display_name = displayName; if (roles !== undefined) updates.roles = roles; if (availabilityStart !== undefined) updates.availability_start = availabilityStart; if (availabilityEnd !== undefined) updates.availability_end = availabilityEnd; if (spotifyClientId !== undefined) updates.spotify_client_id = spotifyClientId; if (spotifyClientSecret !== undefined) updates.spotify_client_secret = spotifyClientSecret; await supabase.from('ministry_settings').upsert({ ministry_id: ministryId, ...updates }); };
-export const fetchMinistrySchedule = async (ministryId: string, month: string) => { if (!supabase) return { events: [], schedule: {}, attendance: {} }; const startDate = `${month}-01`; const [y, m] = month.split('-').map(Number); const nextMonth = new Date(y, m, 1).toISOString().slice(0, 7); const { data: eventsData } = await supabase.from('events').select('*').eq('ministry_id', ministryId).gte('date_time', startDate).lt('date_time', `${nextMonth}-01`).order('date_time'); const events = (eventsData || []).map((e: any) => ({ id: e.id, iso: e.date_time.slice(0, 16), title: e.title, date: e.date_time.slice(0, 10), time: e.date_time.slice(11, 16), dateDisplay: e.date_time.slice(0, 10).split('-').reverse().slice(0, 2).join('/') })); const eventIds = events.map(e => e.id); const schedule: ScheduleMap = {}; const attendance: AttendanceMap = {}; if (eventIds.length > 0) { const { data: assigns } = await supabase.from('schedule_assignments').select('event_id, role, member_id, confirmed, profiles(name)').in('event_id', eventIds); (assigns || []).forEach((a: any) => { const evt = events.find(e => e.id === a.event_id); if (evt && a.profiles) { const key = `${evt.iso}_${a.role}`; schedule[key] = a.profiles.name; if (a.confirmed) attendance[key] = true; } }); } return { events, schedule, attendance }; };
-export const createMinistryEvent = async (ministryId: string, event: { title: string, date: string, time: string }) => { if (!supabase) return; await supabase.from('events').insert({ ministry_id: ministryId, title: event.title, date_time: `${event.date}T${event.time}:00` }); await logAction(ministryId, 'Criou Evento', `Evento: ${event.title} em ${event.date}`); };
-export const updateMinistryEvent = async (ministryId: string, oldIso: string, newTitle: string, newIso: string, applyToAll: boolean) => { if (!supabase) return; const { data: event } = await supabase.from('events').select('id').eq('ministry_id', ministryId).eq('date_time', oldIso + ':00').single(); if (event) { await supabase.from('events').update({ title: newTitle, date_time: newIso + ':00' }).eq('id', event.id); await logAction(ministryId, 'Editou Evento', `De ${oldIso} para ${newIso} - ${newTitle}`); } };
+export const fetchMinistrySchedule = async (ministryId: string, month: string) => { if (!supabase) return { events: [], schedule: {}, attendance: {} }; const startDate = `${month}-01`; const [y, m] = month.split('-').map(Number); const nextMonth = new Date(y, m, 1).toISOString().slice(0, 7); const { data: eventsData } = await supabase.from('events').select('*').eq('ministry_id', ministryId).gte('date_time', startDate).lt('date_time', `${nextMonth}-01`).order('date_time'); const events = (eventsData || []).map((e: any) => ({ id: e.id, iso: e.date_time.slice(0, 16), title: e.title, date: e.date_time.slice(0, 10), time: e.date_time.slice(11, 16), dateDisplay: e.date_time.slice(0, 10).split('-').reverse().slice(0, 2).join('/'), organizationId: e.organization_id })); const eventIds = events.map(e => e.id); const schedule: ScheduleMap = {}; const attendance: AttendanceMap = {}; if (eventIds.length > 0) { const { data: assigns } = await supabase.from('schedule_assignments').select('event_id, role, member_id, confirmed, profiles(name)').in('event_id', eventIds); (assigns || []).forEach((a: any) => { const evt = events.find(e => e.id === a.event_id); if (evt && a.profiles) { const key = `${evt.iso}_${a.role}`; schedule[key] = a.profiles.name; if (a.confirmed) attendance[key] = true; } }); } return { events, schedule, attendance }; };
+
+// --- WRITE OPS UPDATED FOR ORG ID ---
+export const createMinistryEvent = async (ministryId: string, event: { title: string, date: string, time: string, organizationId?: string }) => { 
+    if (!supabase) return; 
+    const orgId = event.organizationId || await getCurrentOrgId();
+    await supabase.from('events').insert({ 
+        ministry_id: ministryId, 
+        title: event.title, 
+        date_time: `${event.date}T${event.time}:00`,
+        organization_id: orgId
+    }); 
+    await logAction(ministryId, 'Criou Evento', `Evento: ${event.title} em ${event.date}`, orgId); 
+};
+
+export const updateMinistryEvent = async (ministryId: string, oldIso: string, newTitle: string, newIso: string, applyToAll: boolean) => { if (!supabase) return; const { data: event } = await supabase.from('events').select('id, organization_id').eq('ministry_id', ministryId).eq('date_time', oldIso + ':00').single(); if (event) { await supabase.from('events').update({ title: newTitle, date_time: newIso + ':00' }).eq('id', event.id); await logAction(ministryId, 'Editou Evento', `De ${oldIso} para ${newIso} - ${newTitle}`, event.organization_id); } };
 export const deleteMinistryEvent = async (ministryId: string, iso: string) => { if (!supabase) return; const date_time = iso.length === 16 ? iso + ':00' : iso; await supabase.from('events').delete().eq('ministry_id', ministryId).eq('date_time', date_time); await logAction(ministryId, 'Excluiu Evento', `Data: ${iso}`); };
 
 // --- AUDIT LOG ---
-const logAction = async (ministryId: string, action: string, details: string) => {
+const logAction = async (ministryId: string, action: string, details: string, organizationId?: string) => {
     if (!supabase) return;
     try {
         const { data: { user } } = await supabase.auth.getUser();
         const author = user?.user_metadata?.full_name || user?.email || 'Sistema';
+        const orgId = organizationId || await getCurrentOrgId();
         
         await supabase.from('audit_logs').insert({
             ministry_id: ministryId,
             action,
             details,
             author_name: author,
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            organization_id: orgId
         });
     } catch (e) { console.error("Audit fail", e); }
 };
@@ -193,7 +223,8 @@ export const fetchAuditLogs = async (ministryId: string): Promise<AuditLogEntry[
         date: l.created_at,
         action: l.action,
         details: l.details,
-        author: l.author_name
+        author: l.author_name,
+        organizationId: l.organization_id
     }));
 };
 
@@ -204,7 +235,7 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
         const role = roleParts.join('_');
         const date_time = iso + ':00';
         
-        const { data: event } = await supabase.from('events').select('id, title').eq('ministry_id', ministryId).eq('date_time', date_time).single();
+        const { data: event } = await supabase.from('events').select('id, title, organization_id').eq('ministry_id', ministryId).eq('date_time', date_time).single();
         if (!event) return false;
 
         let memberId = null;
@@ -215,10 +246,17 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
 
         if (!memberId) {
             await supabase.from('schedule_assignments').delete().eq('event_id', event.id).eq('role', role);
-            await logAction(ministryId, 'Removeu Escala', `${role} removido de ${event.title} (${iso})`);
+            await logAction(ministryId, 'Removeu Escala', `${role} removido de ${event.title} (${iso})`, event.organization_id);
         } else {
-            await supabase.from('schedule_assignments').upsert({ event_id: event.id, role, member_id: memberId, confirmed: false }, { onConflict: 'event_id,role' });
-            await logAction(ministryId, 'Alterou Escala', `${memberName} escalado como ${role} em ${event.title} (${iso})`);
+            await supabase.from('schedule_assignments').upsert({ 
+                event_id: event.id, 
+                role, 
+                member_id: memberId, 
+                confirmed: false,
+                ministry_id: ministryId, // Ensure ministry is set for filtering
+                organization_id: event.organization_id // Inherit org from event
+            }, { onConflict: 'event_id,role' });
+            await logAction(ministryId, 'Alterou Escala', `${memberName} escalado como ${role} em ${event.title} (${iso})`, event.organization_id);
         }
         return true;
     } catch (e) {
@@ -227,9 +265,9 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
     }
 };
 
-export const toggleAssignmentConfirmation = async (ministryId: string, key: string) => { if (!supabase) return false; try { const [iso, ...roleParts] = key.split('_'); const role = roleParts.join('_'); const date_time = iso + ':00'; const { data: event } = await supabase.from('events').select('id, title').eq('ministry_id', ministryId).eq('date_time', date_time).single(); if (!event) return false; const { data: assign } = await supabase.from('schedule_assignments').select('confirmed, member_id').eq('event_id', event.id).eq('role', role).single(); if (assign) { await supabase.from('schedule_assignments').update({ confirmed: !assign.confirmed }).eq('event_id', event.id).eq('role', role); await logAction(ministryId, 'Status Presença', `Status alterado para ${!assign.confirmed} (${role})`); return true; } } catch(e) { console.error(e); } return false; };
-export const clearScheduleForMonth = async (ministryId: string, month: string) => { if (!supabase) return; const startDate = `${month}-01T00:00:00`; const [y, m] = month.split('-').map(Number); const nextMonth = new Date(y, m, 1).toISOString(); const { data: events } = await supabase.from('events').select('id').eq('ministry_id', ministryId).gte('date_time', startDate).lt('date_time', nextMonth); const eventIds = events?.map((e: any) => e.id) || []; if (eventIds.length > 0) { await supabase.from('schedule_assignments').delete().in('event_id', eventIds); await logAction(ministryId, 'Limpeza Mensal', `Escala limpa para ${month}`); } };
-export const resetToDefaultEvents = async (ministryId: string, month: string) => { if (!supabase) return; const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-'); const [y, m] = month.split('-').map(Number); const startDate = `${month}-01T00:00:00`; const nextMonth = new Date(y, m, 1).toISOString(); try { await clearScheduleForMonth(cleanMid, month); const { error: deleteError } = await supabase.from('events').delete().eq('ministry_id', cleanMid).gte('date_time', startDate).lt('date_time', nextMonth); if (deleteError) throw deleteError; const daysInMonth = new Date(y, m, 0).getDate(); const eventsToInsert = []; for (let d = 1; d <= daysInMonth; d++) { const date = new Date(y, m - 1, d, 12, 0, 0); const dayOfWeek = date.getDay(); const dateStr = `${month}-${String(d).padStart(2, '0')}`; if (dayOfWeek === 0) { eventsToInsert.push({ ministry_id: cleanMid, title: "Culto da Família", date_time: `${dateStr}T18:00:00` }); } else if (dayOfWeek === 3) { eventsToInsert.push({ ministry_id: cleanMid, title: "Culto de Doutrina", date_time: `${dateStr}T19:30:00` }); } } if (eventsToInsert.length > 0) { await supabase.from('events').insert(eventsToInsert); } await logAction(ministryId, 'Reset Eventos', `Eventos padrão restaurados para ${month}`); } catch (error) { console.error("Erro ao restaurar eventos:", error); } };
+export const toggleAssignmentConfirmation = async (ministryId: string, key: string) => { if (!supabase) return false; try { const [iso, ...roleParts] = key.split('_'); const role = roleParts.join('_'); const date_time = iso + ':00'; const { data: event } = await supabase.from('events').select('id, title, organization_id').eq('ministry_id', ministryId).eq('date_time', date_time).single(); if (!event) return false; const { data: assign } = await supabase.from('schedule_assignments').select('confirmed, member_id').eq('event_id', event.id).eq('role', role).single(); if (assign) { await supabase.from('schedule_assignments').update({ confirmed: !assign.confirmed }).eq('event_id', event.id).eq('role', role); await logAction(ministryId, 'Status Presença', `Status alterado para ${!assign.confirmed} (${role})`, event.organization_id); return true; } } catch(e) { console.error(e); } return false; };
+export const clearScheduleForMonth = async (ministryId: string, month: string) => { if (!supabase) return; const startDate = `${month}-01T00:00:00`; const [y, m] = month.split('-').map(Number); const nextMonth = new Date(y, m, 1).toISOString(); const { data: events } = await supabase.from('events').select('id, organization_id').eq('ministry_id', ministryId).gte('date_time', startDate).lt('date_time', nextMonth); const eventIds = events?.map((e: any) => e.id) || []; if (eventIds.length > 0) { await supabase.from('schedule_assignments').delete().in('event_id', eventIds); await logAction(ministryId, 'Limpeza Mensal', `Escala limpa para ${month}`, events![0]?.organization_id); } };
+export const resetToDefaultEvents = async (ministryId: string, month: string) => { if (!supabase) return; const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-'); const orgId = await getCurrentOrgId(); const [y, m] = month.split('-').map(Number); const startDate = `${month}-01T00:00:00`; const nextMonth = new Date(y, m, 1).toISOString(); try { await clearScheduleForMonth(cleanMid, month); const { error: deleteError } = await supabase.from('events').delete().eq('ministry_id', cleanMid).gte('date_time', startDate).lt('date_time', nextMonth); if (deleteError) throw deleteError; const daysInMonth = new Date(y, m, 0).getDate(); const eventsToInsert = []; for (let d = 1; d <= daysInMonth; d++) { const date = new Date(y, m - 1, d, 12, 0, 0); const dayOfWeek = date.getDay(); const dateStr = `${month}-${String(d).padStart(2, '0')}`; if (dayOfWeek === 0) { eventsToInsert.push({ ministry_id: cleanMid, title: "Culto da Família", date_time: `${dateStr}T18:00:00`, organization_id: orgId }); } else if (dayOfWeek === 3) { eventsToInsert.push({ ministry_id: cleanMid, title: "Culto de Doutrina", date_time: `${dateStr}T19:30:00`, organization_id: orgId }); } } if (eventsToInsert.length > 0) { await supabase.from('events').insert(eventsToInsert); } await logAction(ministryId, 'Reset Eventos', `Eventos padrão restaurados para ${month}`, orgId); } catch (error) { console.error("Erro ao restaurar eventos:", error); } };
 
 export const fetchMinistryAvailability = async (ministryId: string) => {
     if (!supabase) return { availability: {}, notes: {} };
@@ -266,9 +304,11 @@ export const fetchMinistryAvailability = async (ministryId: string) => {
 export const saveMemberAvailability = async (ministryId: string, memberName: string, dates: string[], notes: Record<string, string>, targetMonth: string) => {
     if (!supabase) return { error: { message: "Sem conexão com banco de dados." } };
     try {
-        const { data: profile, error: profileError } = await supabase.from('profiles').select('id').eq('name', memberName).single();
+        const { data: profile, error: profileError } = await supabase.from('profiles').select('id, organization_id').eq('name', memberName).single();
         if (profileError || !profile) throw new Error(`Membro "${memberName}" não encontrado. Contate o admin.`);
         const memberId = profile.id;
+        const orgId = profile.organization_id || DEFAULT_ORG_ID;
+
         const monthDates = dates.filter(d => d.startsWith(targetMonth));
         const monthNotes: Record<string, string> = {};
         Object.entries(notes).forEach(([key, val]) => { if (key.startsWith(targetMonth) && val && val.trim() !== "") monthNotes[key] = val; });
@@ -279,7 +319,8 @@ export const saveMemberAvailability = async (ministryId: string, memberName: str
             ministry_id: ministryId,
             month: targetMonth, 
             dates: monthDates, 
-            notes: monthNotes 
+            notes: monthNotes,
+            organization_id: orgId 
         }, { onConflict: 'member_id, ministry_id, month' }); // Updated conflict constraint
         
         if (upsertError) {
@@ -295,17 +336,18 @@ export const saveMemberAvailability = async (ministryId: string, memberName: str
     }
 };
 
-export const fetchNotificationsSQL = async (ministryIds: string[], userId: string): Promise<AppNotification[]> => { if (!supabase) return []; const { data: notifs } = await supabase.from('notifications').select('*').in('ministry_id', ministryIds).order('created_at', { ascending: false }).limit(20); const { data: reads } = await supabase.from('notification_reads').select('notification_id').eq('user_id', userId); const readSet = new Set(reads?.map((r: any) => r.notification_id)); return (notifs || []).map((n: any) => ({ id: n.id, ministryId: n.ministry_id, title: n.title, message: n.message, type: n.type, actionLink: n.action_link, timestamp: n.created_at, read: readSet.has(n.id) })); };
-export const sendNotificationSQL = async (ministryId: string, notification: { title: string, message: string, type?: string, actionLink?: string }) => { if (!supabase) return; const { data, error } = await supabase.from('notifications').insert({ ministry_id: ministryId, title: notification.title, message: notification.message, type: notification.type || 'info', action_link: notification.actionLink }).select(); await supabase.functions.invoke('push-notification', { body: { ministryId, title: notification.title, message: notification.message, type: notification.type, actionLink: notification.actionLink } }); return !error; };
+export const fetchNotificationsSQL = async (ministryIds: string[], userId: string): Promise<AppNotification[]> => { if (!supabase) return []; const { data: notifs } = await supabase.from('notifications').select('*').in('ministry_id', ministryIds).order('created_at', { ascending: false }).limit(20); const { data: reads } = await supabase.from('notification_reads').select('notification_id').eq('user_id', userId); const readSet = new Set(reads?.map((r: any) => r.notification_id)); return (notifs || []).map((n: any) => ({ id: n.id, ministryId: n.ministry_id, title: n.title, message: n.message, type: n.type, actionLink: n.action_link, timestamp: n.created_at, read: readSet.has(n.id), organizationId: n.organization_id })); };
+export const sendNotificationSQL = async (ministryId: string, notification: { title: string, message: string, type?: string, actionLink?: string, organizationId?: string }) => { if (!supabase) return; const orgId = notification.organizationId || await getCurrentOrgId(); const { data, error } = await supabase.from('notifications').insert({ ministry_id: ministryId, title: notification.title, message: notification.message, type: notification.type || 'info', action_link: notification.actionLink, organization_id: orgId }).select(); await supabase.functions.invoke('push-notification', { body: { ministryId, title: notification.title, message: notification.message, type: notification.type, actionLink: notification.actionLink } }); return !error; };
 export const markNotificationsReadSQL = async (ids: string[], userId: string) => { if (!supabase) return; const inserts = ids.map(id => ({ notification_id: id, user_id: userId })); await supabase.from('notification_reads').insert(inserts); };
 export const clearAllNotificationsSQL = async (ministryId: string) => { if (!supabase) return; await supabase.from('notifications').delete().eq('ministry_id', ministryId); };
-export const fetchAnnouncementsSQL = async (ministryId: string): Promise<Announcement[]> => { if (!supabase) return []; const today = new Date().toISOString(); const { data } = await supabase.from('announcements').select('*, announcement_interactions(user_id, interaction_type, profiles(name))').eq('ministry_id', ministryId).gte('expiration_date', today).order('created_at', { ascending: false }); return (data || []).map((a: any) => { const interactions = a.announcement_interactions || []; const readBy = interactions.filter((i: any) => i.interaction_type === 'read').map((i: any) => ({ userId: i.user_id, name: i.profiles?.name, timestamp: '' })); const likedBy = interactions.filter((i: any) => i.interaction_type === 'like').map((i: any) => ({ userId: i.user_id, name: i.profiles?.name, timestamp: '' })); return { id: a.id, title: a.title, message: a.message, type: a.type, timestamp: a.created_at, expirationDate: a.expiration_date, author: a.author_name, readBy, likedBy }; }); };
-export const createAnnouncementSQL = async (ministryId: string, ann: { title: string, message: string, type: string, expirationDate: string }, authorName: string) => { if (!supabase) return; await supabase.from('announcements').insert({ ministry_id: ministryId, title: ann.title, message: ann.message, type: ann.type, expiration_date: ann.expirationDate, author_name: authorName }); };
+export const fetchAnnouncementsSQL = async (ministryId: string): Promise<Announcement[]> => { if (!supabase) return []; const today = new Date().toISOString(); const { data } = await supabase.from('announcements').select('*, announcement_interactions(user_id, interaction_type, profiles(name))').eq('ministry_id', ministryId).gte('expiration_date', today).order('created_at', { ascending: false }); return (data || []).map((a: any) => { const interactions = a.announcement_interactions || []; const readBy = interactions.filter((i: any) => i.interaction_type === 'read').map((i: any) => ({ userId: i.user_id, name: i.profiles?.name, timestamp: '' })); const likedBy = interactions.filter((i: any) => i.interaction_type === 'like').map((i: any) => ({ userId: i.user_id, name: i.profiles?.name, timestamp: '' })); return { id: a.id, title: a.title, message: a.message, type: a.type, timestamp: a.created_at, expirationDate: a.expiration_date, author: a.author_name, readBy, likedBy, organizationId: a.organization_id }; }); };
+export const createAnnouncementSQL = async (ministryId: string, ann: { title: string, message: string, type: string, expirationDate: string }, authorName: string) => { if (!supabase) return; const orgId = await getCurrentOrgId(); await supabase.from('announcements').insert({ ministry_id: ministryId, title: ann.title, message: ann.message, type: ann.type, expiration_date: ann.expirationDate, author_name: authorName, organization_id: orgId }); };
 export const interactAnnouncementSQL = async (announcementId: string, userId: string, userName: string, type: 'read' | 'like') => { if (!supabase) return; if (type === 'read') { await supabase.from('announcement_interactions').insert({ announcement_id: announcementId, user_id: userId, interaction_type: 'read' }).select(); } else { const { data } = await supabase.from('announcement_interactions').select('id').eq('announcement_id', announcementId).eq('user_id', userId).eq('interaction_type', 'like'); if (data && data.length > 0) { await supabase.from('announcement_interactions').delete().eq('id', data[0].id); } else { await supabase.from('announcement_interactions').insert({ announcement_id: announcementId, user_id: userId, interaction_type: 'like' }); } } };
-export const fetchSwapRequests = async (ministryId: string): Promise<SwapRequest[]> => { if (!supabase) return []; const { data } = await supabase.from('swap_requests').select('*').eq('ministry_id', ministryId).order('created_at', { ascending: false }); return (data || []).map((r: any) => ({ id: r.id, ministryId: r.ministry_id, requesterName: r.requester_name, requesterId: r.requester_id, role: r.role, eventIso: r.event_iso, eventTitle: r.event_title, status: r.status, createdAt: r.created_at, takenByName: r.taken_by_name })); };
+export const fetchSwapRequests = async (ministryId: string): Promise<SwapRequest[]> => { if (!supabase) return []; const { data } = await supabase.from('swap_requests').select('*').eq('ministry_id', ministryId).order('created_at', { ascending: false }); return (data || []).map((r: any) => ({ id: r.id, ministryId: r.ministry_id, requesterName: r.requester_name, requesterId: r.requester_id, role: r.role, eventIso: r.event_iso, eventTitle: r.event_title, status: r.status, createdAt: r.created_at, takenByName: r.taken_by_name, organizationId: r.organization_id })); };
 
 export const createSwapRequestSQL = async (ministryId: string, request: SwapRequest) => { 
     if (!supabase) return true; 
+    const orgId = request.organizationId || await getCurrentOrgId();
     const { error } = await supabase.from('swap_requests').insert({ 
         ministry_id: ministryId, 
         requester_id: request.requesterId, 
@@ -313,7 +355,8 @@ export const createSwapRequestSQL = async (ministryId: string, request: SwapRequ
         role: request.role, 
         event_iso: request.eventIso, 
         event_title: request.eventTitle, 
-        status: 'pending' 
+        status: 'pending',
+        organization_id: orgId
     }); 
     
     if (!error) {
@@ -321,7 +364,8 @@ export const createSwapRequestSQL = async (ministryId: string, request: SwapRequ
             title: "🔄 Pedido de Troca",
             message: `${request.requesterName} solicitou troca para ${request.role}.`,
             type: 'warning',
-            actionLink: 'swaps'
+            actionLink: 'swaps',
+            organizationId: orgId
         });
     }
 
@@ -344,14 +388,16 @@ export const performSwapSQL = async (ministryId: string, reqId: string, takerNam
         });
         if (error) throw error;
         const result = data as { success: boolean, message: string };
+        const orgId = await getCurrentOrgId(); // Assumes current user takes it
         if (result.success) {
             await sendNotificationSQL(ministryId, { 
                 title: "✅ Troca Realizada", 
                 message: `${takerName} assumiu a escala. O pedido foi finalizado com sucesso.`, 
                 type: 'success',
-                actionLink: 'calendar'
+                actionLink: 'calendar',
+                organizationId: orgId
             });
-            await logAction(ministryId, 'Troca Escala', `${takerName} assumiu vaga de troca (Pedido ${reqId})`);
+            await logAction(ministryId, 'Troca Escala', `${takerName} assumiu vaga de troca (Pedido ${reqId})`, orgId);
         }
         return result;
     } catch (err: any) {
@@ -371,12 +417,14 @@ export const fetchRepertoire = async (ministryId: string): Promise<RepertoireIte
         addedBy: r.added_by, 
         createdAt: r.created_at,
         content: r.content, // New field
-        key: r.key // New field
+        key: r.key, // New field
+        organizationId: r.organization_id
     })); 
 };
 
 export const addToRepertoire = async (ministryId: string, item: { title: string, link: string, date: string, addedBy: string, content?: string, key?: string }) => { 
     if (!supabase) return true; 
+    const orgId = await getCurrentOrgId();
     const { error } = await supabase.from('repertoire').insert({ 
         ministry_id: ministryId, 
         title: item.title, 
@@ -384,7 +432,8 @@ export const addToRepertoire = async (ministryId: string, item: { title: string,
         event_date: item.date, 
         added_by: item.addedBy,
         content: item.content, // New field
-        key: item.key // New field
+        key: item.key, // New field
+        organization_id: orgId
     }); 
     return !error; 
 };
