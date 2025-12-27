@@ -1,18 +1,20 @@
 
+// ... (imports existentes)
 import React, { ReactNode, useState, useRef } from 'react';
 import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles, Building2, Home, Calendar, Megaphone, CalendarCheck, Shield } from 'lucide-react';
-import { User, AppNotification, MinistryDef } from '../types'; // Remove MINISTRIES import
+import { User, AppNotification, MinistryDef } from '../types'; 
 import { NotificationCenter } from './NotificationCenter';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useAppStore } from '../store/appStore';
 
-interface NavItem {
+// ... (interfaces existentes)
+export interface NavItem {
   id: string;
   label: string;
   icon: React.ReactNode;
 }
 
-interface Props {
+export interface Props {
   children: ReactNode;
   onLogout: () => void;
   title: string;
@@ -21,30 +23,33 @@ interface Props {
   mainNavItems: NavItem[];
   managementNavItems: NavItem[];
   notifications: AppNotification[];
-  onNotificationsUpdate: (n: AppNotification[]) => void;
+  onNotificationsUpdate: (notifications: AppNotification[]) => void;
   onInstall?: () => void;
   isStandalone?: boolean;
   onSwitchMinistry?: (id: string) => void;
-  onOpenJoinMinistry?: () => void; 
-  activeMinistryId?: string; // New prop for sync
+  onOpenJoinMinistry?: () => void;
+  activeMinistryId?: string;
 }
+
+// Helper para validar UUIDs ou IDs
+const isValidMinistryId = (id: string) => id && id !== 'undefined' && id !== 'null';
 
 export const DashboardLayout: React.FC<Props> = ({ 
   children, onLogout, title,
   currentTab, onTabChange, mainNavItems, managementNavItems, notifications, onNotificationsUpdate,
   onInstall, isStandalone, onSwitchMinistry, onOpenJoinMinistry, activeMinistryId
 }) => {
-  const { currentUser, themeMode, setThemeMode, sidebarOpen, setSidebarOpen, ministryId: storeMinistryId, availableMinistries } = useAppStore(); // Use availableMinistries from store
+  const { currentUser, themeMode, setThemeMode, sidebarOpen, setSidebarOpen, ministryId: storeMinistryId, availableMinistries } = useAppStore(); 
+  
   const [imgError, setImgError] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [ministryMenuOpen, setMinistryMenuOpen] = useState(false);
   const ministryMenuRef = useRef<HTMLDivElement>(null);
 
-  // Use prop if available (source of truth from App), otherwise fallback to store
   const currentMinistryId = activeMinistryId || storeMinistryId;
 
   useClickOutside(ministryMenuRef, () => {
-    if (ministryMenuOpen) setMinistryMenuOpen(false);
+      if (ministryMenuOpen) setMinistryMenuOpen(false);
   });
 
   const activeItem = [...mainNavItems, ...managementNavItems].find(item => item.id === currentTab);
@@ -52,23 +57,25 @@ export const DashboardLayout: React.FC<Props> = ({
   const ActiveIcon = activeItem ? activeItem.icon : (currentTab === 'super-admin' ? <Shield size={20}/> : <Layout size={20}/>);
 
   const toggleTheme = () => {
-      if (themeMode === 'system') setThemeMode('light');
-      else if (themeMode === 'light') setThemeMode('dark');
-      else setThemeMode('system');
+      setThemeMode(themeMode === 'light' ? 'dark' : 'light');
   };
 
-  const handleHardReload = async () => {
-    setIsUpdating(true);
-    setTimeout(() => {
-      window.location.reload();
-    }, 500);
+  const handleHardReload = () => {
+      setIsUpdating(true);
+      if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(registrations => {
+              for(let registration of registrations) {
+                  registration.unregister();
+              }
+              window.location.reload();
+          });
+      } else {
+          window.location.reload();
+      }
   };
 
-  // Helper to check validity based on fetched list
-  const isValidMinistryId = (id: string) => availableMinistries.some(m => m.id === id);
-
-  // --- MODERN NAV BUTTON DESIGN (Pill Style) ---
   const renderNavButton = (item: NavItem) => {
+    // ... (Lógica do botão permanece a mesma)
     const isActive = currentTab === item.id;
     return (
       <button
@@ -92,6 +99,7 @@ export const DashboardLayout: React.FC<Props> = ({
   };
 
   const renderUserAvatar = (size: string = "w-8 h-8") => {
+    // ... (Avatar igual)
     if (currentUser?.avatar_url) {
       return (
         <img src={currentUser.avatar_url} alt={currentUser.name} className={`${size} rounded-full object-cover border border-zinc-200 dark:border-zinc-700 shadow-sm`} />
@@ -104,7 +112,7 @@ export const DashboardLayout: React.FC<Props> = ({
     );
   };
 
-  // --- MOBILE BOTTOM NAV COMPONENT ---
+  // ... (MobileBottomNav - Mantém igual)
   const MobileBottomNav = () => {
     const isDashboard = currentTab === 'dashboard';
     const isCalendar = currentTab === 'calendar';
@@ -129,7 +137,6 @@ export const DashboardLayout: React.FC<Props> = ({
              <span className={`text-[10px] transition-colors duration-300 ${isCalendar ? 'font-bold text-teal-700 dark:text-teal-400 translate-y-[-2px]' : 'font-medium text-zinc-400 dark:text-zinc-500'}`}>Escala</span>
           </button>
 
-          {/* Central Action Button */}
           <div className="relative -top-6 group">
             <button 
                 onClick={() => onTabChange('availability')}
@@ -168,17 +175,13 @@ export const DashboardLayout: React.FC<Props> = ({
   return (
     <div className="flex h-screen overflow-hidden bg-[#f8fafc] dark:bg-[#09090b] font-sans text-zinc-900 dark:text-zinc-100 selection:bg-teal-500/20 selection:text-teal-700 dark:selection:text-teal-300">
       
-      {/* Mobile Backdrop */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-[95] bg-zinc-900/40 backdrop-blur-sm lg:hidden transition-opacity duration-300" onClick={() => setSidebarOpen(false)} />
       )}
 
-      {/* Sidebar - Modern & Minimalist */}
       <aside 
         className={`fixed inset-y-0 left-0 z-[100] w-72 bg-white/95 dark:bg-[#0c0c0e]/95 backdrop-blur-2xl border-r border-zinc-200/60 dark:border-zinc-800/60 transform transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] lg:translate-x-0 lg:static lg:inset-0 flex flex-col shadow-2xl lg:shadow-none ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
-        
-        {/* Sidebar Header */}
         <div className="px-5 py-6 shrink-0">
            <div className="flex items-center gap-3">
                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-teal-500/20 text-white shrink-0">
@@ -199,24 +202,29 @@ export const DashboardLayout: React.FC<Props> = ({
                     onClick={() => setMinistryMenuOpen(!ministryMenuOpen)}
                     className="flex items-center justify-between w-full group cursor-pointer p-1 -ml-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                  >
-                     <div className="text-left overflow-hidden">
-                        <h1 className="text-sm font-bold text-zinc-900 dark:text-white tracking-tight truncate leading-tight">{title}</h1>
+                     <div className="text-left overflow-hidden w-full">
+                        {title ? (
+                            <h1 className="text-sm font-bold text-zinc-900 dark:text-white tracking-tight truncate leading-tight">{title}</h1>
+                        ) : (
+                            <div className="h-4 w-3/4 bg-zinc-200 dark:bg-zinc-800 rounded animate-pulse mb-0.5"></div>
+                        )}
                         <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate font-medium">Espaço de Trabalho</p>
                      </div>
                      <ChevronDown size={14} className="text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-transform duration-200" style={{ transform: ministryMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />
                  </button>
 
-                 {/* Dropdown Menu - Ministry Switcher */}
                  {ministryMenuOpen && (
                     <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-[#121214] rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-800 z-50 overflow-hidden animate-slide-up ring-1 ring-black/5 divide-y divide-zinc-100 dark:divide-zinc-800/50 min-w-[240px]">
                        <div className="px-3 py-2 bg-zinc-50/50 dark:bg-zinc-900/50">
                            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Meus Ministérios</p>
                        </div>
                        
-                       {/* Lista filtrada para mostrar apenas ministérios válidos (do banco) */}
                        {currentUser?.allowedMinistries?.filter(isValidMinistryId).map(mid => {
                            const isCurrent = currentMinistryId === mid;
-                           const config = availableMinistries.find(m => m.id === mid) || { label: mid, id: mid };
+                           const config = availableMinistries.find(m => m.id === mid);
+                           // Correção da exibição do Label: Se não achar na lista (ainda carregando), não exibe ID feio
+                           const displayLabel = config ? config.label : 'Carregando...';
+
                            return (
                                <button
                                    key={mid}
@@ -227,7 +235,7 @@ export const DashboardLayout: React.FC<Props> = ({
                                    className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors ${isCurrent ? 'bg-zinc-50 dark:bg-zinc-800/50' : ''}`}
                                >
                                    <span className={`${isCurrent ? 'text-zinc-900 dark:text-white font-semibold' : 'text-zinc-600 dark:text-zinc-300'}`}>
-                                       {config.label}
+                                       {displayLabel}
                                    </span>
                                    {isCurrent && <Check size={14} className="text-teal-600 dark:text-teal-400" />}
                                </button>
@@ -253,7 +261,7 @@ export const DashboardLayout: React.FC<Props> = ({
            </div>
         </div>
 
-        {/* Navigation Section */}
+        {/* ... (Resto do componente mantido exatamente igual) ... */}
         <div className="flex-1 overflow-y-auto px-4 py-2 custom-scrollbar space-y-8">
           <div>
             <p className="px-3 text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-2">Menu Principal</p>
@@ -271,7 +279,6 @@ export const DashboardLayout: React.FC<Props> = ({
             </div>
           )}
 
-          {/* SUPER ADMIN BUTTON */}
           {currentUser?.isSuperAdmin && (
               <div>
                   <p className="px-3 text-[10px] font-bold text-purple-500 dark:text-purple-400 uppercase tracking-widest mb-2">Global Admin</p>
@@ -290,7 +297,6 @@ export const DashboardLayout: React.FC<Props> = ({
           )}
         </div>
 
-        {/* Footer Profile - Refined */}
         <div className="p-4 border-t border-zinc-200/60 dark:border-zinc-800/60 bg-zinc-50/30 dark:bg-zinc-900/10 backdrop-blur-sm">
             <button 
                 onClick={() => onTabChange('profile')}
@@ -338,10 +344,8 @@ export const DashboardLayout: React.FC<Props> = ({
         </div>
       </aside>
 
-      {/* Main Content Area */}
       <main className={`flex-1 flex flex-col min-w-0 max-w-full bg-transparent transition-all duration-300 overflow-hidden relative`}>
         
-        {/* Mobile Header - Sticky Glass */}
         <header className="lg:hidden h-16 px-4 flex items-center justify-between sticky top-0 z-30 bg-white/80 dark:bg-[#09090b]/80 backdrop-blur-xl border-b border-zinc-200/50 dark:border-zinc-800/50">
             <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center shadow-md text-white">
@@ -366,7 +370,6 @@ export const DashboardLayout: React.FC<Props> = ({
             </div>
         </header>
 
-        {/* Desktop Top Bar - Minimalist */}
         <header className="hidden lg:flex h-16 px-8 items-center justify-between sticky top-0 z-30 bg-[#f8fafc]/80 dark:bg-[#09090b]/80 backdrop-blur-xl border-b border-zinc-200/50 dark:border-zinc-800/50 transition-all">
              <div className="flex items-center gap-3">
                  <div className="text-zinc-400 dark:text-zinc-500">
@@ -398,14 +401,12 @@ export const DashboardLayout: React.FC<Props> = ({
              </div>
         </header>
 
-        {/* Content Scroll Area */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-8 custom-scrollbar relative w-full">
             <div className="max-w-6xl mx-auto w-full min-h-full pb-32 lg:pb-12">
                 {children}
             </div>
         </div>
 
-        {/* Mobile Bottom Navigation */}
         <MobileBottomNav />
 
       </main>

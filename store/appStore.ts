@@ -19,21 +19,32 @@ interface AppState {
   toggleSidebar: () => void;
 }
 
+// 1. Tenta recuperar do storage IMEDIATAMENTE para evitar flicker
+const storedMinistryId = typeof window !== 'undefined' ? localStorage.getItem('ministry_id') : null;
+
 export const useAppStore = create<AppState>((set) => ({
   currentUser: null,
-  ministryId: 'midia', // Valor inicial temporário, será sobrescrito pelo App.tsx
+  // 2. Inicializa com valor do storage ou vazio (evita fallback prematuro para 'midia')
+  ministryId: storedMinistryId || '', 
   organizationId: null,
   availableMinistries: [],
   themeMode: (localStorage.getItem('themeMode') as ThemeMode) || 'system',
   sidebarOpen: false,
 
   setCurrentUser: (user) => set((state) => {
-      // Auto-update context if user changes
-      const newMinistryId = user?.ministryId || state.ministryId;
-      const newOrgId = user?.organizationId || state.organizationId;
-      return { currentUser: user, ministryId: newMinistryId, organizationId: newOrgId };
+      // Mantém o ID atual se já estiver carregado corretamente
+      const currentId = state.ministryId || user?.ministryId;
+      return { 
+          currentUser: user, 
+          ministryId: currentId, // Prioriza o estado atual da sessão
+          organizationId: user?.organizationId || state.organizationId 
+      };
   }),
-  setMinistryId: (id) => set({ ministryId: id }),
+  setMinistryId: (id) => {
+      // 3. Persiste a escolha sempre que for alterada
+      if (typeof window !== 'undefined') localStorage.setItem('ministry_id', id);
+      set({ ministryId: id });
+  },
   setOrganizationId: (id) => set({ organizationId: id }),
   setAvailableMinistries: (ministries) => set({ availableMinistries: ministries }),
   setThemeMode: (mode) => {
