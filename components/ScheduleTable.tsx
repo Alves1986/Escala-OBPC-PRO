@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis, GlobalConflictMap, TeamMemberProfile, AvailabilityNotesMap } from '../types';
-import { CheckCircle2, AlertTriangle, Trash2, Edit, Clock, User, ChevronDown, ChevronLeft, ChevronRight, X, Search, AlertOctagon, XCircle, Settings, FileText } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Trash2, Edit, Clock, User, ChevronDown, ChevronLeft, ChevronRight, X, Search, AlertOctagon, Settings, FileText } from 'lucide-react';
 import { useClickOutside } from '../hooks/useClickOutside';
 
 interface Props {
@@ -46,11 +46,13 @@ const SelectorDropdown = ({
     const dropdownRef = useRef<HTMLDivElement>(null);
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
+    // Close on outside click
     useClickOutside(dropdownRef, () => {
         onClose();
     });
 
     useEffect(() => {
+        // Auto-focus search with a slight delay to ensure render
         setTimeout(() => searchInputRef.current?.focus(), 50);
     }, []);
 
@@ -77,9 +79,14 @@ const SelectorDropdown = ({
         return availabilityNotes[key];
     };
 
+    const handleSelect = (opt: string) => {
+        onChange(opt);
+        onClose();
+    };
+
     return createPortal(
         <>
-            {isMobile && <div className="fixed inset-0 z-[99998] bg-black/60 backdrop-blur-sm transition-opacity" onClick={onClose} />}
+            {isMobile && <div className="fixed inset-0 z-[99998] bg-black/60 backdrop-blur-sm transition-opacity" onMouseDown={onClose} />}
             <div 
                 ref={dropdownRef}
                 id="member-selector-portal"
@@ -90,6 +97,8 @@ const SelectorDropdown = ({
                     }
                 `}
                 style={isMobile ? {} : { top: position.top, left: position.left, width: position.width }}
+                onMouseDown={(e) => e.stopPropagation()} // Prevent bubble to schedule table handlers
+                onClick={(e) => e.stopPropagation()}
             >
                 {isMobile && (
                     <div className="p-4 border-b border-zinc-100 dark:border-zinc-700 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900/50">
@@ -100,18 +109,20 @@ const SelectorDropdown = ({
                 <div className="p-2 border-b border-zinc-100 dark:border-zinc-700 sticky top-0 bg-white dark:bg-zinc-800 z-10">
                     <div className="relative">
                         <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400"/>
-                        <input ref={searchInputRef} placeholder="Buscar membro..." value={search} onChange={e => setSearch(e.target.value)} className="w-full text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-8 p-2 focus:ring-2 focus:ring-zinc-500 outline-none transition-all text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400" />
+                        <input 
+                            ref={searchInputRef} 
+                            placeholder="Buscar membro..." 
+                            value={search} 
+                            onChange={e => setSearch(e.target.value)} 
+                            className="w-full text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-8 p-2 focus:ring-2 focus:ring-zinc-500 outline-none transition-all text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400" 
+                        />
                     </div>
                 </div>
                 <div className="overflow-y-auto custom-scrollbar p-1 flex-1">
                     <button 
                         type="button"
-                        onMouseDown={(e) => { 
-                            e.preventDefault(); // Prevents input blur
-                            e.stopPropagation(); 
-                            onChange(""); 
-                            onClose(); 
-                        }} 
+                        onMouseDown={(e) => e.preventDefault()} // Prevents focus loss from input
+                        onClick={() => handleSelect("")}
                         className="w-full text-left px-3 py-2.5 text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center gap-2 mb-1 border border-transparent transition-colors uppercase tracking-wide"
                     >
                         <Trash2 size={14} /> Remover da Escala
@@ -131,12 +142,8 @@ const SelectorDropdown = ({
                             {showSeparator && <div className="px-3 py-2 text-[10px] uppercase font-bold text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 mt-1 mb-1 border-t border-b border-zinc-100 dark:border-zinc-800">Indisponíveis</div>}
                             <button
                                 type="button"
-                                onMouseDown={(e) => { 
-                                    e.preventDefault(); // Critical: Prevents search input from blurring before click is registered
-                                    e.stopPropagation(); 
-                                    onChange(opt); 
-                                    onClose(); 
-                                }}
+                                onMouseDown={(e) => e.preventDefault()} // Prevents search input from blurring
+                                onClick={() => handleSelect(opt)} // Actual selection logic
                                 className={`w-full text-left px-3 py-2 text-sm rounded-lg flex items-center justify-between group transition-colors mb-0.5 ${value === opt ? 'bg-zinc-100 dark:bg-zinc-700' : isAvailable ? 'hover:bg-zinc-50 dark:hover:bg-zinc-800' : 'opacity-80 hover:opacity-100 hover:bg-zinc-50 dark:hover:bg-zinc-800 grayscale hover:grayscale-0'}`}
                             >
                                 <div className="flex items-center gap-3 overflow-hidden flex-1 min-w-0 pointer-events-none">
@@ -182,13 +189,13 @@ const MemberSelector = ({
     const selectedProfile = memberProfiles.find(p => p.name === value);
     const getInitials = (name: string) => name ? name.charAt(0).toUpperCase() : '?';
 
+    // Calculate position when opening
     useEffect(() => {
         if (isOpen && triggerRef.current && window.innerWidth >= 768) {
             const rect = triggerRef.current.getBoundingClientRect();
             const spaceBelow = window.innerHeight - rect.bottom;
             const openUp = spaceBelow < 320; 
             
-            // Ajuste para não sair da tela horizontalmente
             let leftPos = rect.left;
             const minWidth = Math.max(rect.width, 240);
             if (leftPos + minWidth > window.innerWidth) {
@@ -206,7 +213,11 @@ const MemberSelector = ({
     return (
         <div className="relative w-full" ref={triggerRef}>
             <div 
-                onClick={(e) => { e.stopPropagation(); if(!isOpen) setIsOpen(true); }}
+                onClick={(e) => { 
+                    e.stopPropagation(); 
+                    e.preventDefault();
+                    setIsOpen(!isOpen); 
+                }}
                 className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-all bg-white dark:bg-zinc-900 shadow-sm ${
                     hasError 
                     ? 'border-red-300 bg-red-50 dark:bg-red-900/10' 
@@ -216,7 +227,7 @@ const MemberSelector = ({
                 }`}
             >
                 {value ? (
-                    <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex items-center gap-2 min-w-0 pointer-events-none">
                         {selectedProfile?.avatar_url ? (
                             <img src={selectedProfile.avatar_url} alt="" className="w-5 h-5 rounded-full object-cover shrink-0 ring-1 ring-zinc-200 dark:ring-zinc-700" />
                         ) : (
@@ -229,23 +240,14 @@ const MemberSelector = ({
                         </span>
                     </div>
                 ) : (
-                    <span className="text-xs text-zinc-400 italic pl-1">Vazio</span>
+                    <span className="text-xs text-zinc-400 italic pl-1 pointer-events-none">Vazio</span>
                 )}
                 <ChevronDown size={12} className={`text-zinc-400 shrink-0 ml-1 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </div>
 
-            {/* Error/Warning Icons */}
             <div className="absolute -top-1.5 -right-1.5 flex gap-1 pointer-events-none">
-                {hasWarning && (
-                    <div className="bg-amber-500 text-white p-0.5 rounded-full shadow-md">
-                        <AlertTriangle size={8} fill="currentColor" />
-                    </div>
-                )}
-                {hasError && (
-                    <div className="bg-red-500 text-white p-0.5 rounded-full shadow-md">
-                        <AlertOctagon size={8} fill="currentColor" />
-                    </div>
-                )}
+                {hasWarning && <div className="bg-amber-500 text-white p-0.5 rounded-full shadow-md"><AlertTriangle size={8} fill="currentColor" /></div>}
+                {hasError && <div className="bg-red-500 text-white p-0.5 rounded-full shadow-md"><AlertOctagon size={8} fill="currentColor" /></div>}
             </div>
 
             {isOpen && (
@@ -268,8 +270,8 @@ const MemberSelector = ({
     );
 };
 
-const ScheduleRow = React.memo(({ event, columns, schedule, attendance, availabilityLookup, availabilityNotes, members, memberProfiles, scheduleIssues, globalConflicts, onCellChange, onAttendanceToggle, onDeleteEvent, onEditEvent, memberStats, readOnly, onlineUsers }: any) => {
-    
+// Simplified Row Component without strict memoization to ensure updates flow correctly
+const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup, availabilityNotes, members, memberProfiles, scheduleIssues, globalConflicts, onCellChange, onAttendanceToggle, onDeleteEvent, onEditEvent, memberStats, readOnly, onlineUsers }: any) => {
     const time = event.iso.split('T')[1];
 
     return (
@@ -352,13 +354,9 @@ const ScheduleRow = React.memo(({ event, columns, schedule, attendance, availabi
             })}
         </tr>
     );
-}, (prev, next) => {
-    if (prev.readOnly !== next.readOnly || prev.memberStats !== next.memberStats || prev.event.iso !== next.event.iso || prev.memberProfiles !== next.memberProfiles || prev.globalConflicts !== next.globalConflicts || prev.onlineUsers !== next.onlineUsers || prev.availabilityLookup !== next.availabilityLookup || prev.availabilityNotes !== next.availabilityNotes) return false;
-    const keys = next.columns.map((c: any) => `${next.event.iso}_${c.keySuffix}`);
-    return !keys.some((k: string) => prev.schedule[k] !== next.schedule[k] || prev.attendance[k] !== next.attendance[k]);
-});
+};
 
-export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, schedule, attendance, availability, availabilityNotes, members, allMembers, memberProfiles, scheduleIssues, globalConflicts, onCellChange, onAttendanceToggle, onDeleteEvent, onEditEvent, memberStats, ministryId, readOnly = false, onlineUsers = [] }) => {
+export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attendance, availability, availabilityNotes, members, allMembers, memberProfiles, scheduleIssues, globalConflicts, onCellChange, onAttendanceToggle, onDeleteEvent, onEditEvent, memberStats, ministryId, readOnly = false, onlineUsers = [] }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
@@ -408,7 +406,6 @@ export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, sched
     <div className={`relative group ${readOnly ? 'opacity-70 pointer-events-none' : 'opacity-100'}`}>
       <div className="hidden md:block bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 transition-opacity duration-200 overflow-hidden relative">
           
-          {/* Seta Esquerda */}
           {showLeftArrow && (
             <>
                 <div className="absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-white dark:from-zinc-900 to-transparent z-20 pointer-events-none" />
@@ -422,7 +419,6 @@ export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, sched
             </>
           )}
 
-          {/* Seta Direita */}
           {showRightArrow && (
             <>
                 <div className="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-white dark:from-zinc-900 to-transparent z-20 pointer-events-none" />
@@ -555,4 +551,4 @@ export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, sched
       </div>
     </div>
   );
-});
+};
