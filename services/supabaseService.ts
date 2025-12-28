@@ -502,6 +502,7 @@ export const fetchAuditLogs = async (ministryId: string): Promise<AuditLogEntry[
     }));
 };
 
+// FIX: Robust assignment saving that handles duplicate names and organization scoping
 export const saveScheduleAssignment = async (ministryId: string, key: string, memberName: string) => {
     if (!supabase) return true;
     try {
@@ -509,51 +510,68 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
         const role = roleParts.join('_');
         const date_time = iso + ':00';
         
-        const { data: event } = await supabase.from('events').select('id, title, organization_id').eq('ministry_id', ministryId).eq('date_time', date_time).single();
-        if (!event) return false;
-
-        let memberId = null;
-        if (memberName && memberName.trim() !== "") {
-            const cleanName = memberName.trim();
-            // FIX: Scope by Organization ID to avoid duplicates across tenants (SaaS Fix)
-            let query = supabase.from('profiles').select('id').eq('name', cleanName);
-            
-            // If the event has an organization attached, restrict search to that org
-            const targetOrgId = event.organization_id || await getCurrentOrgId();
-            if (targetOrgId && targetOrgId !== DEFAULT_ORG_ID) {
-                query = query.eq('organization_id', targetOrgId);
-            }
-            
-            // Use maybeSingle to prevent error if 0 rows, but ideally should be 1
-            const { data: member } = await query.limit(1).maybeSingle();
-            
-            if (member) {
-                memberId = member.id;
-            } else {
-                console.error(`CRITICAL: Membro '${memberName}' não encontrado no banco de dados (Org: ${targetOrgId}).`);
-                return false; 
-            }
+        // 1. Get Event to find Organization ID
+        const { data: event, error: eventError } = await supabase.from('events').select('id, title, organization_id').eq('ministry_id', ministryId).eq('date_time', date_time).single();
+        
+        if (eventError || !event) {
+            console.error("Evento não encontrado:", date_time, ministryId);
+            return false;
         }
 
-        if (!memberId) {
-            // If explicit empty string was passed (removal), proceed to delete
-            if (memberName === "") {
-                await supabase.from('schedule_assignments').delete().eq('event_id', event.id).eq('role', role);
-                await logAction(ministryId, 'Removeu Escala', `${role} removido de ${event.title} (${iso})`, event.organization_id);
+        // 2. Handle Removal
+        if (memberName === "") {
+            await supabase.from('schedule_assignments').delete().eq('event_id', event.id).eq('role', role);
+            await logAction(ministryId, 'Removeu Escala', `${role} removido de ${event.title} (${iso})`, event.organization_id);
+            return true;
+        }
+
+        // 3. Find Member
+        if (memberName && memberName.trim() !== "") {
+            const cleanName = memberName.trim();
+            
+            // Start query
+            let query = supabase.from('profiles').select('id');
+            
+            // Scope by Organization ID to ensure we get the member from the correct org
+            const targetOrgId = event.organization_id;
+            if (targetOrgId) {
+                 query = query.eq('organization_id', targetOrgId);
             }
-        } else {
-            // Upsert assignment
-            await supabase.from('schedule_assignments').upsert({ 
+            
+            // Search by name
+            query = query.eq('name', cleanName).limit(1);
+            
+            // Use simple array fetch instead of maybeSingle() to prevent crash on duplicate names
+            const { data: members, error: memberError } = await query;
+            
+            if (memberError || !members || members.length === 0) {
+                console.error(`Membro '${cleanName}' não encontrado na org '${targetOrgId}'`);
+                return false;
+            }
+            
+            // Take the first matching member
+            const memberId = members[0].id;
+
+            // 4. Save Assignment
+            const { error: saveError } = await supabase.from('schedule_assignments').upsert({ 
                 event_id: event.id, 
                 role, 
                 member_id: memberId, 
                 confirmed: false,
                 ministry_id: ministryId, 
-                organization_id: event.organization_id 
+                organization_id: targetOrgId 
             }, { onConflict: 'event_id,role' });
-            await logAction(ministryId, 'Alterou Escala', `${memberName} escalado como ${role} em ${event.title} (${iso})`, event.organization_id);
+
+            if (saveError) {
+                console.error("Erro ao salvar:", saveError);
+                return false;
+            }
+
+            await logAction(ministryId, 'Alterou Escala', `${memberName} escalado como ${role} em ${event.title} (${iso})`, targetOrgId);
+            return true;
         }
-        return true;
+        
+        return false;
     } catch (e) {
         console.error("Save schedule error:", e);
         return false;
