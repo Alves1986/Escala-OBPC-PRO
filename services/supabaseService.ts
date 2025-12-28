@@ -52,8 +52,6 @@ if (SUPABASE_URL && SUPABASE_KEY) {
     } catch (e) {
         console.error("Failed to initialize Supabase client:", e);
     }
-} else {
-    console.warn("⚠️ Variáveis de ambiente do Supabase (VITE_SUPABASE_URL, VITE_SUPABASE_KEY) não encontradas. Algumas funcionalidades podem falhar.");
 }
 
 export const getSupabase = () => supabase;
