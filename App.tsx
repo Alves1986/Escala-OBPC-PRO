@@ -19,7 +19,6 @@ import {
   Calendar as CalendarIcon, Trophy, Loader2, Share2, MousePointerClick, Briefcase, History, FileText, ChevronRight
 } from 'lucide-react';
 
-import { SetupScreen } from './components/SetupScreen';
 import { LoadingScreen } from './components/LoadingScreen';
 import { LoginScreen } from './components/LoginScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -59,7 +58,6 @@ const LoadingFallback = () => (
 );
 
 const InnerApp = () => {
-  const [isDemoMode, setIsDemoMode] = useState(false);
   const { currentUser, loadingAuth } = useAuth();
   const { setCurrentUser, setMinistryId, setAvailableMinistries, availableMinistries, ministryId: storeMinistryId, themeMode } = useAppStore();
   const { addToast, confirmAction } = useToast();
@@ -200,10 +198,6 @@ const InnerApp = () => {
         try { window.history.replaceState(null, '', '/'); } catch(e) {}
     });
   };
-
-  if ((!SUPABASE_URL || !SUPABASE_KEY) && !isDemoMode) {
-      return <SetupScreen onEnterDemo={() => setIsDemoMode(true)} />;
-  }
 
   if (loadingAuth) return <LoadingScreen />;
   if (!currentUser) return <LoginScreen isLoading={loadingAuth} />;
