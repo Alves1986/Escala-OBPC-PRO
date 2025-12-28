@@ -528,24 +528,37 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
         // 3. Find Member
         if (memberName && memberName.trim() !== "") {
             const cleanName = memberName.trim();
-            
-            // Start query
-            let query = supabase.from('profiles').select('id');
-            
-            // Scope by Organization ID to ensure we get the member from the correct org
             const targetOrgId = event.organization_id;
-            if (targetOrgId) {
-                 query = query.eq('organization_id', targetOrgId);
+            
+            // TRY 1: Strict Match (Name + Org ID from Event)
+            // This is ideal for SaaS multi-tenancy
+            let { data: members } = await supabase
+                .from('profiles')
+                .select('id, organization_id')
+                .eq('name', cleanName)
+                .eq('organization_id', targetOrgId)
+                .limit(1);
+            
+            // TRY 2: Loose Fallback (Name only)
+            // If the event has a legacy or mismatched Org ID (e.g. from before migration),
+            // but the member exists in the system (likely in the user's current view/org),
+            // we find them by name to allow saving. This fixes the "Blocked" issue.
+            if (!members || members.length === 0) {
+                 console.warn(`Membro '${cleanName}' não encontrado na org '${targetOrgId}'. Tentando busca global...`);
+                 
+                 const { data: looseMembers } = await supabase
+                    .from('profiles')
+                    .select('id, organization_id')
+                    .eq('name', cleanName)
+                    .limit(1);
+                 
+                 if (looseMembers && looseMembers.length > 0) {
+                     members = looseMembers;
+                 }
             }
             
-            // Search by name
-            query = query.eq('name', cleanName).limit(1);
-            
-            // Use simple array fetch instead of maybeSingle() to prevent crash on duplicate names
-            const { data: members, error: memberError } = await query;
-            
-            if (memberError || !members || members.length === 0) {
-                console.error(`Membro '${cleanName}' não encontrado na org '${targetOrgId}'`);
+            if (!members || members.length === 0) {
+                console.error(`Membro '${cleanName}' não encontrado no banco.`);
                 return false;
             }
             
