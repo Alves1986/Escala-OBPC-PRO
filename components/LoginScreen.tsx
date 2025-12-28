@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, UserPlus, ArrowLeft, Check, ChevronDown, KeyRound, Layers, ShieldCheck, Sparkles } from 'lucide-react';
-import { loginWithEmail, loginWithGoogle, registerWithEmail, fetchMinistrySettings, sendPasswordResetEmail, fetchOrganizationMinistries } from '../services/supabaseService';
+import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, UserPlus, ArrowLeft, Check, ChevronDown, KeyRound, Layers, ShieldCheck, Sparkles, Building2 } from 'lucide-react';
+import { loginWithEmail, loginWithGoogle, registerWithEmail, fetchMinistrySettings, sendPasswordResetEmail, fetchOrganizationMinistries, getOrganizationPublicData } from '../services/supabaseService';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { TypewriterBackground } from './TypewriterBackground';
 import { DEFAULT_ROLES, MinistryDef } from '../types';
@@ -23,6 +23,9 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
   const [regSelectedMinistries, setRegSelectedMinistries] = useState<string[]>([]);
   const [regSelectedRoles, setRegSelectedRoles] = useState<string[]>([]);
   
+  // Invite System State
+  const [inviteOrg, setInviteOrg] = useState<{id: string, name: string} | null>(null);
+  
   // Dynamic lists for registration
   const [ministriesList, setMinistriesList] = useState<MinistryDef[]>([]);
   const [availableRoles, setAvailableRoles] = useState<string[]>([]);
@@ -38,20 +41,45 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  // 1. Detect Invite Link on Mount
+  useEffect(() => {
+      const checkInvite = async () => {
+          const params = new URLSearchParams(window.location.search);
+          const inviteId = params.get('invite');
+          
+          if (inviteId) {
+              const orgData = await getOrganizationPublicData(inviteId);
+              if (orgData) {
+                  setInviteOrg(orgData);
+                  setView('register'); // Auto-switch to register
+                  // Optional: Clean URL
+                  // window.history.replaceState({}, '', '/'); 
+              }
+          }
+      };
+      checkInvite();
+  }, []);
+
   useEffect(() => {
     if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
     setErrorMsg("");
     setSuccessMsg("");
   }, [view]);
 
-  // Load Ministries for Registration (Defaults to default org for now)
+  // Load Ministries for Registration (Uses Invite ID if present, otherwise default)
   useEffect(() => {
       async function loadMinistries() {
-          const list = await fetchOrganizationMinistries('00000000-0000-0000-0000-000000000000');
+          const targetOrgId = inviteOrg?.id || '00000000-0000-0000-0000-000000000000';
+          const list = await fetchOrganizationMinistries(targetOrgId);
           setMinistriesList(list);
+          // If invited, maybe auto-select first ministry?
+          if (inviteOrg && list.length > 0 && regSelectedMinistries.length === 0) {
+              // Optional: auto select first ministry for UX convenience
+              // setRegSelectedMinistries([list[0].id]);
+          }
       }
       if (view === 'register') loadMinistries();
-  }, [view]);
+  }, [view, inviteOrg]);
 
   useEffect(() => {
     async function fetchDynamicRoles() {
@@ -102,7 +130,18 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
       }
       setLoadingAction('email');
       setErrorMsg("");
-      const result = await registerWithEmail(regEmail.trim(), regPassword.trim(), regName.trim(), regSelectedMinistries, undefined, regSelectedRoles);
+      
+      // Pass inviteOrg.id if present
+      const result = await registerWithEmail(
+          regEmail.trim(), 
+          regPassword.trim(), 
+          regName.trim(), 
+          regSelectedMinistries, 
+          undefined, 
+          regSelectedRoles,
+          inviteOrg?.id // Target Org ID
+      );
+
       if (result.success) {
           setSuccessMsg(result.message);
           setTimeout(() => {
@@ -174,6 +213,19 @@ export const LoginScreen: React.FC<Props> = ({ isLoading = false }) => {
                         </h1>
                     </div>
                 </div>
+
+                {/* INVITE BANNER */}
+                {inviteOrg && view === 'register' && (
+                    <div className="mb-6 bg-indigo-500/20 border border-indigo-500/30 p-4 rounded-xl flex items-center gap-3 animate-slide-up">
+                        <div className="p-2 bg-indigo-500/20 rounded-lg shrink-0 text-indigo-300">
+                            <Building2 size={20} />
+                        </div>
+                        <div>
+                            <p className="text-[10px] text-indigo-300 font-bold uppercase tracking-wider">Convite Especial</p>
+                            <p className="text-sm text-white font-medium">Você está entrando em: <br/><strong className="text-indigo-200">{inviteOrg.name}</strong></p>
+                        </div>
+                    </div>
+                )}
 
                 {view === 'login' && (
                     <div className="space-y-5 animate-slide-up">
