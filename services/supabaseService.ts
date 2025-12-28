@@ -525,15 +525,26 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
         if (!event) return false;
 
         let memberId = null;
-        if (memberName) {
-            const { data: member } = await supabase.from('profiles').select('id').eq('name', memberName).single();
-            if (member) memberId = member.id;
+        if (memberName && memberName.trim() !== "") {
+            // Trim whitespace to ensure match
+            const cleanName = memberName.trim();
+            const { data: member } = await supabase.from('profiles').select('id').eq('name', cleanName).single();
+            if (member) {
+                memberId = member.id;
+            } else {
+                console.error(`CRITICAL: Membro '${memberName}' não encontrado no banco de dados. Salvamento abortado para prevenir perda de dados.`);
+                return false; // ABORT: Don't delete existing assignment if lookup fails
+            }
         }
 
         if (!memberId) {
-            await supabase.from('schedule_assignments').delete().eq('event_id', event.id).eq('role', role);
-            await logAction(ministryId, 'Removeu Escala', `${role} removido de ${event.title} (${iso})`, event.organization_id);
+            // If explicit empty string was passed (removal), proceed to delete
+            if (memberName === "") {
+                await supabase.from('schedule_assignments').delete().eq('event_id', event.id).eq('role', role);
+                await logAction(ministryId, 'Removeu Escala', `${role} removido de ${event.title} (${iso})`, event.organization_id);
+            }
         } else {
+            // Upsert assignment
             await supabase.from('schedule_assignments').upsert({ 
                 event_id: event.id, 
                 role, 

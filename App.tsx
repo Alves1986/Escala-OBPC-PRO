@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
@@ -417,7 +418,14 @@ const InnerApp = () => {
                             memberProfiles={publicMembers} 
                             scheduleIssues={{}} 
                             globalConflicts={globalConflicts} 
-                            onCellChange={async (key, val) => { await Supabase.saveScheduleAssignment(ministryId, key, val); refreshData(); }} 
+                            onCellChange={async (key, val) => { 
+                                const success = await Supabase.saveScheduleAssignment(ministryId, key, val); 
+                                if (success) {
+                                    refreshData(); 
+                                } else {
+                                    addToast("Erro ao salvar: Membro não encontrado ou dados inválidos.", "error");
+                                }
+                            }} 
                             onAttendanceToggle={async (key) => { await Supabase.toggleAssignmentConfirmation(ministryId, key); refreshData(); }} 
                             onDeleteEvent={async (iso, title) => confirmAction("Remover?", `Remover "${title}"?`, async () => { await Supabase.deleteMinistryEvent(ministryId, iso.split('T')[0] + 'T' + iso.split('T')[1]); refreshData(); })} 
                             onEditEvent={(event) => setEventDetailsModal({ isOpen: true, event })} 

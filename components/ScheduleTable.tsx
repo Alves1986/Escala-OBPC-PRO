@@ -104,7 +104,12 @@ const SelectorDropdown = ({
                     </div>
                 </div>
                 <div className="overflow-y-auto custom-scrollbar p-1 flex-1">
-                    <button onClick={() => { onChange(""); onClose(); }} className="w-full text-left px-3 py-2.5 text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center gap-2 mb-1 border border-transparent transition-colors uppercase tracking-wide"><Trash2 size={14} /> Remover da Escala</button>
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); onChange(""); onClose(); }} 
+                        className="w-full text-left px-3 py-2.5 text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center gap-2 mb-1 border border-transparent transition-colors uppercase tracking-wide"
+                    >
+                        <Trash2 size={14} /> Remover da Escala
+                    </button>
                     {filteredOptions.length === 0 && <div className="p-6 text-center text-sm text-zinc-400 flex flex-col items-center gap-2"><User size={24} className="opacity-20"/> Nenhum membro encontrado.</div>}
                     {filteredOptions.map((opt: string, idx: number) => {
                         const profile = memberProfiles?.find((p: any) => p.name === opt);
@@ -119,7 +124,7 @@ const SelectorDropdown = ({
                             <React.Fragment key={opt}>
                             {showSeparator && <div className="px-3 py-2 text-[10px] uppercase font-bold text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 mt-1 mb-1 border-t border-b border-zinc-100 dark:border-zinc-800">Indisponíveis</div>}
                             <button
-                                onClick={() => { onChange(opt); onClose(); }}
+                                onClick={(e) => { e.stopPropagation(); onChange(opt); onClose(); }}
                                 className={`w-full text-left px-3 py-2 text-sm rounded-lg flex items-center justify-between group transition-colors mb-0.5 ${value === opt ? 'bg-zinc-100 dark:bg-zinc-700' : isAvailable ? 'hover:bg-zinc-50 dark:hover:bg-zinc-800' : 'opacity-80 hover:opacity-100 hover:bg-zinc-50 dark:hover:bg-zinc-800 grayscale hover:grayscale-0'}`}
                             >
                                 <div className="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
@@ -189,7 +194,7 @@ const MemberSelector = ({
     return (
         <div className="relative w-full" ref={triggerRef}>
             <div 
-                onClick={() => !isOpen && setIsOpen(true)}
+                onClick={(e) => { e.stopPropagation(); if(!isOpen) setIsOpen(true); }}
                 className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-all bg-white dark:bg-zinc-900 shadow-sm ${
                     hasError 
                     ? 'border-red-300 bg-red-50 dark:bg-red-900/10' 
