@@ -11,7 +11,7 @@ interface Props {
   schedule: ScheduleMap;
   attendance: AttendanceMap;
   availability: AvailabilityMap;
-  availabilityNotes?: AvailabilityNotesMap; // Added notes
+  availabilityNotes?: AvailabilityNotesMap; 
   members: Record<string, string[]>;
   allMembers: string[]; 
   memberProfiles?: TeamMemberProfile[];
@@ -94,7 +94,7 @@ const SelectorDropdown = ({
                 {isMobile && (
                     <div className="p-4 border-b border-zinc-100 dark:border-zinc-700 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900/50">
                         <span className="font-bold text-zinc-700 dark:text-zinc-200">{label || 'Selecionar Membro'}</span>
-                        <button onClick={onClose} className="p-1 bg-zinc-200 dark:bg-zinc-700 rounded-full text-zinc-500"><X size={16} /></button>
+                        <button type="button" onClick={onClose} className="p-1 bg-zinc-200 dark:bg-zinc-700 rounded-full text-zinc-500"><X size={16} /></button>
                     </div>
                 )}
                 <div className="p-2 border-b border-zinc-100 dark:border-zinc-700 sticky top-0 bg-white dark:bg-zinc-800 z-10">
@@ -105,7 +105,13 @@ const SelectorDropdown = ({
                 </div>
                 <div className="overflow-y-auto custom-scrollbar p-1 flex-1">
                     <button 
-                        onClick={(e) => { e.stopPropagation(); onChange(""); onClose(); }} 
+                        type="button"
+                        onMouseDown={(e) => { 
+                            e.preventDefault(); // Prevents input blur
+                            e.stopPropagation(); 
+                            onChange(""); 
+                            onClose(); 
+                        }} 
                         className="w-full text-left px-3 py-2.5 text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center gap-2 mb-1 border border-transparent transition-colors uppercase tracking-wide"
                     >
                         <Trash2 size={14} /> Remover da Escala
@@ -124,10 +130,16 @@ const SelectorDropdown = ({
                             <React.Fragment key={opt}>
                             {showSeparator && <div className="px-3 py-2 text-[10px] uppercase font-bold text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 mt-1 mb-1 border-t border-b border-zinc-100 dark:border-zinc-800">Indisponíveis</div>}
                             <button
-                                onClick={(e) => { e.stopPropagation(); onChange(opt); onClose(); }}
+                                type="button"
+                                onMouseDown={(e) => { 
+                                    e.preventDefault(); // Critical: Prevents search input from blurring before click is registered
+                                    e.stopPropagation(); 
+                                    onChange(opt); 
+                                    onClose(); 
+                                }}
                                 className={`w-full text-left px-3 py-2 text-sm rounded-lg flex items-center justify-between group transition-colors mb-0.5 ${value === opt ? 'bg-zinc-100 dark:bg-zinc-700' : isAvailable ? 'hover:bg-zinc-50 dark:hover:bg-zinc-800' : 'opacity-80 hover:opacity-100 hover:bg-zinc-50 dark:hover:bg-zinc-800 grayscale hover:grayscale-0'}`}
                             >
-                                <div className="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
+                                <div className="flex items-center gap-3 overflow-hidden flex-1 min-w-0 pointer-events-none">
                                     <div className="relative shrink-0">
                                         {profile?.avatar_url ? (
                                             <img src={profile.avatar_url} alt="" className={`w-8 h-8 rounded-full object-cover border ${isAvailable ? 'border-zinc-200 dark:border-zinc-700' : 'border-zinc-200 dark:border-zinc-600'}`} />
@@ -146,7 +158,7 @@ const SelectorDropdown = ({
                                         )}
                                     </div>
                                 </div>
-                                {count > 0 && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ml-2 ${count > 4 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400'}`}>{count}x</span>}
+                                {count > 0 && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ml-2 pointer-events-none ${count > 4 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400'}`}>{count}x</span>}
                             </button>
                             </React.Fragment>
                         );
@@ -274,8 +286,8 @@ const ScheduleRow = React.memo(({ event, columns, schedule, attendance, availabi
                     </div>
                     {!readOnly && (
                         <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => onEditEvent(event)} className="text-zinc-400 hover:text-blue-500 p-1"><Edit size={14} /></button>
-                            <button onClick={() => onDeleteEvent(event.iso, event.title)} className="text-zinc-400 hover:text-red-500 p-1"><Trash2 size={14} /></button>
+                            <button type="button" onClick={() => onEditEvent(event)} className="text-zinc-400 hover:text-blue-500 p-1"><Edit size={14} /></button>
+                            <button type="button" onClick={() => onDeleteEvent(event.iso, event.title)} className="text-zinc-400 hover:text-red-500 p-1"><Trash2 size={14} /></button>
                         </div>
                     )}
                 </div>
@@ -330,7 +342,7 @@ const ScheduleRow = React.memo(({ event, columns, schedule, attendance, availabi
                                 </div>
                             )}
                             {currentValue && (
-                                <button onClick={() => onAttendanceToggle(key)} className={`p-1 rounded-md transition-colors flex-shrink-0 ${isConfirmed ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' : 'text-zinc-300 hover:text-zinc-400 bg-transparent'}`} title={isConfirmed ? "Confirmado" : "Pendente"}>
+                                <button type="button" onClick={() => onAttendanceToggle(key)} className={`p-1 rounded-md transition-colors flex-shrink-0 ${isConfirmed ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' : 'text-zinc-300 hover:text-zinc-400 bg-transparent'}`} title={isConfirmed ? "Confirmado" : "Pendente"}>
                                     <CheckCircle2 size={16} />
                                 </button>
                             )}
@@ -475,7 +487,7 @@ export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, sched
                               <span className="flex items-center gap-1"><Clock size={12}/> {event.iso.split('T')[1]}</span>
                           </div>
                       </div>
-                      {!readOnly && <div className="flex gap-1 ml-2"><button onClick={() => onEditEvent(event)} className="p-2 text-zinc-400 hover:text-blue-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"><Edit size={16}/></button><button onClick={() => onDeleteEvent(event.iso, event.title)} className="p-2 text-zinc-400 hover:text-red-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"><Trash2 size={16}/></button></div>}
+                      {!readOnly && <div className="flex gap-1 ml-2"><button type="button" onClick={() => onEditEvent(event)} className="p-2 text-zinc-400 hover:text-blue-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"><Edit size={16}/></button><button type="button" onClick={() => onDeleteEvent(event.iso, event.title)} className="p-2 text-zinc-400 hover:text-red-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"><Trash2 size={16}/></button></div>}
                   </div>
                   
                   {columns.length === 0 ? (
@@ -528,7 +540,7 @@ export const ScheduleTable: React.FC<Props> = React.memo(({ events, roles, sched
                                                     onlineUsers={onlineUsers} 
                                                   />
                                               </div>
-                                              {currentValue && <button onClick={() => onAttendanceToggle(key)} className={`p-2.5 rounded-lg transition-colors border ${isConfirmed ? 'text-emerald-600 bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800' : 'text-zinc-300 bg-zinc-50 border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700'}`}><CheckCircle2 size={18} /></button>}
+                                              {currentValue && <button type="button" onClick={() => onAttendanceToggle(key)} className={`p-2.5 rounded-lg transition-colors border ${isConfirmed ? 'text-emerald-600 bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800' : 'text-zinc-300 bg-zinc-50 border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700'}`}><CheckCircle2 size={18} /></button>}
                                           </div>
                                           {hasLocalConflict && <p className="text-[10px] text-red-500 mt-1 flex items-center gap-1 font-medium"><AlertOctagon size={10}/> Indisponível</p>}
                                           {hasGlobalConflict && <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1 font-bold animate-pulse"><AlertTriangle size={10}/> {globalConflictMsg}</div>}

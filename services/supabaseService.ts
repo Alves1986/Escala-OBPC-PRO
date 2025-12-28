@@ -1,4 +1,3 @@
-
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
     User, MemberMap, 
@@ -69,13 +68,13 @@ const getCurrentOrgId = async (): Promise<string> => {
     return data?.organization_id || DEFAULT_ORG_ID;
 };
 
-// --- MEMBERSHIP & ACCESS CONTROL ---
+// ... (Rest of imports and setup same as original)
 
+// --- MEMBERSHIP & ACCESS CONTROL ---
 export const fetchUserAllowedMinistries = async (userId: string, orgId: string): Promise<string[]> => {
     if (!supabase) return ['midia'];
 
     try {
-        // 1. Tenta buscar na nova tabela de memberships
         const { data: memberships, error } = await supabase
             .from('organization_memberships')
             .select('ministry_id')
@@ -86,7 +85,6 @@ export const fetchUserAllowedMinistries = async (userId: string, orgId: string):
             return memberships.map((m: any) => m.ministry_id);
         }
 
-        // 2. Fallback: Se não houver memberships, busca no array legado do perfil
         const { data: profile } = await supabase
             .from('profiles')
             .select('allowed_ministries')
@@ -97,21 +95,19 @@ export const fetchUserAllowedMinistries = async (userId: string, orgId: string):
 
     } catch (e) {
         console.error("Erro ao buscar permissões de ministério:", e);
-        return ['midia']; // Fail safe
+        return ['midia']; 
     }
 };
 
 // --- SUPER ADMIN: Organization Management ---
-
 export const fetchOrganizationsWithStats = async (): Promise<Organization[]> => {
     if (!supabase) return [];
     
-    // Use the RPC function for efficient aggregation including nested ministries
     const { data, error } = await supabase.rpc('get_orgs_with_details');
     
     if (error) {
         console.error("Error fetching orgs with stats:", error);
-        return fetchAllOrganizations(); // Fallback
+        return fetchAllOrganizations(); 
     }
     
     return (data || []).map((o: any) => ({
@@ -121,7 +117,6 @@ export const fetchOrganizationsWithStats = async (): Promise<Organization[]> => 
         active: o.active,
         createdAt: o.created_at,
         userCount: o.user_count,
-        // RPC returns JSONB array for ministries
         ministries: (o.ministries || []).map((m: any) => ({
             id: m.id,
             code: m.code,
@@ -182,14 +177,12 @@ export const toggleOrganizationStatus = async (id: string, currentStatus: boolea
 };
 
 // --- SUPER ADMIN: Ministry Management (Relational) ---
-
 export const saveOrganizationMinistry = async (orgId: string, code: string, label: string): Promise<{ success: boolean, message: string }> => {
     if (!supabase) return { success: false, message: "Offline" };
 
     const cleanCode = code.trim().toLowerCase().replace(/\s+/g, '-');
 
     try {
-        // 1. Insert/Update into organization_ministries (The Source of Truth)
         const { data: ministry, error } = await supabase
             .from('organization_ministries')
             .upsert({ 
@@ -202,15 +195,14 @@ export const saveOrganizationMinistry = async (orgId: string, code: string, labe
 
         if (error) throw error;
 
-        // 2. Ensure a ministry_settings row exists and is linked
         if (ministry) {
             await supabase.from('ministry_settings').upsert({
                 organization_id: orgId,
-                ministry_id: cleanCode, // Legacy support
-                organization_ministry_id: ministry.id, // New FK
+                ministry_id: cleanCode, 
+                organization_ministry_id: ministry.id, 
                 display_name: label.trim(),
-                roles: [] // Default empty roles if new
-            }, { onConflict: 'organization_id, ministry_id' }); // Conflict key depends on current schema
+                roles: [] 
+            }, { onConflict: 'organization_id, ministry_id' });
         }
 
         return { success: true, message: "Ministério salvo com sucesso!" };
@@ -222,7 +214,6 @@ export const saveOrganizationMinistry = async (orgId: string, code: string, labe
 export const deleteOrganizationMinistry = async (orgId: string, code: string): Promise<{ success: boolean, message: string }> => {
     if (!supabase) return { success: false, message: "Offline" };
 
-    // Cascade delete on DB handles settings, but we call delete on the parent
     const { error } = await supabase
         .from('organization_ministries')
         .delete()
@@ -258,7 +249,6 @@ const safeParseArray = (value: any): string[] => {
 export const fetchOrganizationMinistries = async (organizationId: string): Promise<MinistryDef[]> => {
     if (!supabase) return [];
     
-    // Fallback if orgId is missing
     const orgId = organizationId || DEFAULT_ORG_ID;
 
     const { data, error } = await supabase
@@ -273,7 +263,6 @@ export const fetchOrganizationMinistries = async (organizationId: string): Promi
     }
 
     if (!data || data.length === 0) {
-        // Fallback for empty DB (Retrocompatibility during migration)
         if (orgId === DEFAULT_ORG_ID) {
             return [
                 { id: 'uuid-1', code: 'midia', label: 'Comunicação / Mídia', enabledTabs: DEFAULT_TABS, organizationId: orgId },
@@ -284,12 +273,11 @@ export const fetchOrganizationMinistries = async (organizationId: string): Promi
         return [];
     }
 
-    // Map DB columns to App Types
     return data.map((m: any) => ({
         id: m.id,
         code: m.code,
         label: m.label,
-        enabledTabs: DEFAULT_TABS, // Default behavior for now
+        enabledTabs: DEFAULT_TABS, 
         organizationId: orgId
     }));
 };
@@ -316,7 +304,6 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
     if (error) return { success: false, message: error.message };
     if (data.user) {
         const mainMinistry = ministries[0] || 'midia';
-        // Atribui ID padrão de Organização (Fallback para Single Tenant)
         const defaultOrgId = DEFAULT_ORG_ID;
         
         await supabase.from('profiles').insert({
@@ -325,12 +312,11 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
             name, 
             ministry_id: mainMinistry, 
             allowed_ministries: ministries, 
-            organization_id: defaultOrgId, // New field assignment
+            organization_id: defaultOrgId, 
             whatsapp: phone, 
             functions: functions || []
         });
         
-        // ADDED: Create Memberships
         for (const mid of ministries) {
             await supabase.from('organization_memberships').insert({
                 organization_id: defaultOrgId,
@@ -351,11 +337,8 @@ export const sendPasswordResetEmail = async (email: string) => { if (!supabase) 
 export const fetchMinistryMembers = async (ministryId: string): Promise<{ memberMap: MemberMap, publicList: TeamMemberProfile[] }> => {
     if (!supabase) return { memberMap: {}, publicList: [] };
     
-    // Updated: Fetch members via Memberships Table (if available) or fallback to profiles
-    // For now, staying safe with profile scan to support both legacy and new
     const { data } = await supabase.from('profiles').select('*');
     
-    // Filter profiles that have access to this ministry
     const filteredData = (data || []).filter((p: any) => { 
         const allowed = safeParseArray(p.allowed_ministries); 
         return allowed.includes(ministryId) || p.ministry_id === ministryId; 
@@ -385,7 +368,6 @@ export const joinMinistry = async (ministryId: string, roles: string[]) => {
     
     const { data: profile } = await supabase.from('profiles').select('allowed_ministries, functions, organization_id').eq('id', user.id).single();
     
-    // 1. Update Legacy Array
     const currentAllowed = safeParseArray(profile?.allowed_ministries);
     const currentFunctions = safeParseArray(profile?.functions);
     const newAllowed = [...new Set([...currentAllowed, ministryId])];
@@ -393,7 +375,6 @@ export const joinMinistry = async (ministryId: string, roles: string[]) => {
     
     const { error } = await supabase.from('profiles').update({ allowed_ministries: newAllowed, functions: newFunctions, ministry_id: ministryId }).eq('id', user.id);
     
-    // 2. Insert into New Membership Table
     const orgId = profile?.organization_id || DEFAULT_ORG_ID;
     await supabase.from('organization_memberships').upsert({
         organization_id: orgId,
@@ -414,13 +395,12 @@ export const deleteMember = async (ministryId: string, memberId: string, name: s
 // --- SETTINGS WITH STRICT TENANT SCOPING ---
 export const fetchMinistrySettings = async (ministryCode: string): Promise<MinistrySettings> => { 
     if (!supabase) return { displayName: '', roles: [] }; 
-    const orgId = await getCurrentOrgId(); // Ensure tenant context
+    const orgId = await getCurrentOrgId(); 
 
-    // Try finding settings by matching code AND org
     const { data } = await supabase
         .from('ministry_settings')
         .select('*')
-        .eq('ministry_id', ministryCode) // Legacy identifier
+        .eq('ministry_id', ministryCode) 
         .eq('organization_id', orgId)
         .single();
     
@@ -451,7 +431,6 @@ export const saveMinistrySettings = async (ministryId: string, displayName?: str
     if (spotifyClientId !== undefined) updates.spotify_client_id = spotifyClientId; 
     if (spotifyClientSecret !== undefined) updates.spotify_client_secret = spotifyClientSecret; 
     
-    // Scoped upsert
     await supabase.from('ministry_settings').upsert({ 
         ministry_id: ministryId, 
         organization_id: orgId,
@@ -533,7 +512,9 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
                 memberId = member.id;
             } else {
                 console.error(`CRITICAL: Membro '${memberName}' não encontrado no banco de dados. Salvamento abortado para prevenir perda de dados.`);
-                return false; // ABORT: Don't delete existing assignment if lookup fails
+                // ABORT OPERATION: If the name exists but ID is not found (database inconsistency or typo),
+                // we return FALSE to indicate failure and PREVENT wiping out the existing assignment.
+                return false; 
             }
         }
 
@@ -550,8 +531,8 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
                 role, 
                 member_id: memberId, 
                 confirmed: false,
-                ministry_id: ministryId, // Ensure ministry is set for filtering
-                organization_id: event.organization_id // Inherit org from event
+                ministry_id: ministryId, 
+                organization_id: event.organization_id 
             }, { onConflict: 'event_id,role' });
             await logAction(ministryId, 'Alterou Escala', `${memberName} escalado como ${role} em ${event.title} (${iso})`, event.organization_id);
         }
@@ -577,10 +558,9 @@ export const fetchMinistryAvailability = async (ministryId: string) => {
     const memberIds = filteredProfiles.map((p: any) => p.id);
     if (memberIds.length === 0) return { availability: {}, notes: {} };
     
-    // Updated to filter by ministry_id
     const { data: avails } = await supabase.from('availability')
         .select('*')
-        .eq('ministry_id', ministryId) // Scoping by ministry
+        .eq('ministry_id', ministryId) 
         .in('member_id', memberIds); 
         
     const availability: AvailabilityMap = {};
@@ -610,7 +590,6 @@ export const saveMemberAvailability = async (ministryId: string, memberName: str
         const monthNotes: Record<string, string> = {};
         Object.entries(notes).forEach(([key, val]) => { if (key.startsWith(targetMonth) && val && val.trim() !== "") monthNotes[key] = val; });
         
-        // Upsert with ministry_id included in the conflict key
         const { error: upsertError } = await supabase.from('availability').upsert({ 
             member_id: memberId, 
             ministry_id: ministryId,
@@ -618,7 +597,7 @@ export const saveMemberAvailability = async (ministryId: string, memberName: str
             dates: monthDates, 
             notes: monthNotes,
             organization_id: orgId 
-        }, { onConflict: 'member_id, ministry_id, month' }); // Updated conflict constraint
+        }, { onConflict: 'member_id, ministry_id, month' }); 
         
         if (upsertError) {
             if (upsertError.message?.includes('invalid input syntax for type date') || upsertError.message?.includes('type date')) {
