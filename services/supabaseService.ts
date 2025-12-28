@@ -1,3 +1,4 @@
+
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
     User, MemberMap, 
@@ -337,7 +338,15 @@ export const sendPasswordResetEmail = async (email: string) => { if (!supabase) 
 export const fetchMinistryMembers = async (ministryId: string): Promise<{ memberMap: MemberMap, publicList: TeamMemberProfile[] }> => {
     if (!supabase) return { memberMap: {}, publicList: [] };
     
-    const { data } = await supabase.from('profiles').select('*');
+    const orgId = await getCurrentOrgId();
+
+    // UPDATE: Filter by Org ID first to allow duplicates across orgs (SaaS fix)
+    let query = supabase.from('profiles').select('*');
+    if (orgId && orgId !== DEFAULT_ORG_ID) {
+        query = query.eq('organization_id', orgId);
+    }
+    
+    const { data } = await query;
     
     const filteredData = (data || []).filter((p: any) => { 
         const allowed = safeParseArray(p.allowed_ministries); 
@@ -505,15 +514,23 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
 
         let memberId = null;
         if (memberName && memberName.trim() !== "") {
-            // Trim whitespace to ensure match
             const cleanName = memberName.trim();
-            const { data: member } = await supabase.from('profiles').select('id').eq('name', cleanName).single();
+            // FIX: Scope by Organization ID to avoid duplicates across tenants (SaaS Fix)
+            let query = supabase.from('profiles').select('id').eq('name', cleanName);
+            
+            // If the event has an organization attached, restrict search to that org
+            const targetOrgId = event.organization_id || await getCurrentOrgId();
+            if (targetOrgId && targetOrgId !== DEFAULT_ORG_ID) {
+                query = query.eq('organization_id', targetOrgId);
+            }
+            
+            // Use maybeSingle to prevent error if 0 rows, but ideally should be 1
+            const { data: member } = await query.limit(1).maybeSingle();
+            
             if (member) {
                 memberId = member.id;
             } else {
-                console.error(`CRITICAL: Membro '${memberName}' não encontrado no banco de dados. Salvamento abortado para prevenir perda de dados.`);
-                // ABORT OPERATION: If the name exists but ID is not found (database inconsistency or typo),
-                // we return FALSE to indicate failure and PREVENT wiping out the existing assignment.
+                console.error(`CRITICAL: Membro '${memberName}' não encontrado no banco de dados (Org: ${targetOrgId}).`);
                 return false; 
             }
         }
