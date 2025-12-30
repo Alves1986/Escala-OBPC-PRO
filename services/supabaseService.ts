@@ -335,18 +335,26 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
 export const logout = async () => { if (supabase) await supabase.auth.signOut(); window.location.reload(); };
 export const sendPasswordResetEmail = async (email: string) => { if (!supabase) return { success: false }; const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/reset-password' }); return { success: !error, message: error ? error.message : "Email enviado!" }; };
 
+// --- ROBUST MEMBER FETCHING ---
 export const fetchMinistryMembers = async (ministryId: string): Promise<{ memberMap: MemberMap, publicList: TeamMemberProfile[] }> => {
     if (!supabase) return { memberMap: {}, publicList: [] };
     
     const orgId = await getCurrentOrgId();
 
-    // UPDATE: Filter by Org ID first to allow duplicates across orgs (SaaS fix)
+    // Strategy 1: Strict Org Filter (Standard SaaS)
     let query = supabase.from('profiles').select('*');
     if (orgId && orgId !== DEFAULT_ORG_ID) {
         query = query.eq('organization_id', orgId);
     }
     
-    const { data } = await query;
+    let { data } = await query;
+    
+    // Strategy 2: Fallback for Legacy/Broken Data (If 0 results, try broader fetch filtered by ministry match only)
+    if (!data || data.length === 0) {
+        console.warn(`No members found for Org ${orgId}. Trying legacy fallback...`);
+        const { data: legacyData } = await supabase.from('profiles').select('*');
+        data = legacyData;
+    }
     
     const filteredData = (data || []).filter((p: any) => { 
         const allowed = safeParseArray(p.allowed_ministries); 
@@ -502,6 +510,8 @@ export const fetchAuditLogs = async (ministryId: string): Promise<AuditLogEntry[
     }));
 };
 
+// --- ROBUST SAVE SCHEDULE ---
+// Handles name duplicates and Org ID mismatches gracefully
 export const saveScheduleAssignment = async (ministryId: string, key: string, memberName: string) => {
     if (!supabase) return true;
     try {
@@ -509,7 +519,7 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
         const role = roleParts.join('_');
         const date_time = iso + ':00';
         
-        // 1. Obter o Evento
+        // 1. Get Event
         const { data: event, error: eventError } = await supabase.from('events').select('id, title, organization_id').eq('ministry_id', ministryId).eq('date_time', date_time).single();
         
         if (eventError || !event) {
@@ -517,19 +527,19 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
             return false;
         }
 
-        // 2. Lidar com Remoção
+        // 2. Handle Removal
         if (memberName === "") {
             await supabase.from('schedule_assignments').delete().eq('event_id', event.id).eq('role', role);
             await logAction(ministryId, 'Removeu Escala', `${role} removido de ${event.title} (${iso})`, event.organization_id);
             return true;
         }
 
-        // 3. Encontrar Membro (Com Fallback)
+        // 3. Find Member with Fallback
         if (memberName && memberName.trim() !== "") {
             const cleanName = memberName.trim();
             const targetOrgId = event.organization_id;
             
-            // TENTATIVA 1: Busca Estrita (Nome + ID da Organização do Evento)
+            // TRY 1: Strict Match (Name + Org ID from Event)
             let { data: members } = await supabase
                 .from('profiles')
                 .select('id, organization_id')
@@ -537,7 +547,8 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
                 .eq('organization_id', targetOrgId)
                 .limit(1);
             
-            // TENTATIVA 2: Fallback Robusto (Apenas Nome)
+            // TRY 2: Loose Fallback (Name only)
+            // This catches cases where event has old ID or member has new ID
             if (!members || members.length === 0) {
                  console.warn(`Membro '${cleanName}' não encontrado na org '${targetOrgId}'. Tentando busca global...`);
                  const { data: looseMembers } = await supabase
@@ -557,10 +568,10 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
             }
             
             const memberId = members[0].id;
-            // Usar o ID da organização do MEMBRO encontrado para auto-correção
-            const finalOrgId = members[0].organization_id || targetOrgId || '00000000-0000-0000-0000-000000000000';
+            // CRITICAL: Use the MEMBER'S organization ID to fix the record
+            const finalOrgId = members[0].organization_id || targetOrgId || DEFAULT_ORG_ID;
 
-            // 4. Salvar
+            // 4. Save Assignment
             const { error: saveError } = await supabase.from('schedule_assignments').upsert({ 
                 event_id: event.id, 
                 role, 
@@ -590,14 +601,26 @@ export const toggleAssignmentConfirmation = async (ministryId: string, key: stri
 export const clearScheduleForMonth = async (ministryId: string, month: string) => { if (!supabase) return; const startDate = `${month}-01T00:00:00`; const [y, m] = month.split('-').map(Number); const nextMonth = new Date(y, m, 1).toISOString(); const { data: events } = await supabase.from('events').select('id, organization_id').eq('ministry_id', ministryId).gte('date_time', startDate).lt('date_time', nextMonth); const eventIds = events?.map((e: any) => e.id) || []; if (eventIds.length > 0) { await supabase.from('schedule_assignments').delete().in('event_id', eventIds); await logAction(ministryId, 'Limpeza Mensal', `Escala limpa para ${month}`, events![0]?.organization_id); } };
 export const resetToDefaultEvents = async (ministryId: string, month: string) => { if (!supabase) return; const cleanMid = ministryId.trim().toLowerCase().replace(/\s+/g, '-'); const orgId = await getCurrentOrgId(); const [y, m] = month.split('-').map(Number); const startDate = `${month}-01T00:00:00`; const nextMonth = new Date(y, m, 1).toISOString(); try { await clearScheduleForMonth(cleanMid, month); const { error: deleteError } = await supabase.from('events').delete().eq('ministry_id', cleanMid).gte('date_time', startDate).lt('date_time', nextMonth); if (deleteError) throw deleteError; const daysInMonth = new Date(y, m, 0).getDate(); const eventsToInsert = []; for (let d = 1; d <= daysInMonth; d++) { const date = new Date(y, m - 1, d, 12, 0, 0); const dayOfWeek = date.getDay(); const dateStr = `${month}-${String(d).padStart(2, '0')}`; if (dayOfWeek === 0) { eventsToInsert.push({ ministry_id: cleanMid, title: "Culto da Família", date_time: `${dateStr}T18:00:00`, organization_id: orgId }); } else if (dayOfWeek === 3) { eventsToInsert.push({ ministry_id: cleanMid, title: "Culto de Doutrina", date_time: `${dateStr}T19:30:00`, organization_id: orgId }); } } if (eventsToInsert.length > 0) { await supabase.from('events').insert(eventsToInsert); } await logAction(ministryId, 'Reset Eventos', `Eventos padrão restaurados para ${month}`, orgId); } catch (error) { console.error("Erro ao restaurar eventos:", error); } };
 
+// --- ROBUST AVAILABILITY FETCH ---
 export const fetchMinistryAvailability = async (ministryId: string) => {
     if (!supabase) return { availability: {}, notes: {} };
-    const { data: profiles } = await supabase.from('profiles').select('id, name, allowed_ministries, ministry_id');
-    if (!profiles) return { availability: {}, notes: {} };
+    
+    const orgId = await getCurrentOrgId();
+    
+    // 1. Get Members for this specific organization
+    // Using a simple query to ensure we only get relevant members for availability
+    const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name, allowed_ministries, ministry_id')
+        .eq('organization_id', orgId);
+
+    if (!profiles || profiles.length === 0) return { availability: {}, notes: {} };
+    
     const filteredProfiles = profiles.filter((p: any) => {
         const allowed = safeParseArray(p.allowed_ministries);
         return allowed.includes(ministryId) || p.ministry_id === ministryId;
     });
+    
     const memberIds = filteredProfiles.map((p: any) => p.id);
     if (memberIds.length === 0) return { availability: {}, notes: {} };
     
