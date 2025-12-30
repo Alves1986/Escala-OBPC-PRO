@@ -20,13 +20,24 @@ export default defineConfig(({ mode }) => {
     },
     envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
     define: {
+      // Inject Supabase vars safely as global constants
       '__SUPABASE_URL__': JSON.stringify(env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || ''),
       '__SUPABASE_KEY__': JSON.stringify(env.VITE_SUPABASE_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''),
+      // Provide API Key globally if needed, but rely on import.meta.env primarily
       'process.env.API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY || env.API_KEY || ''),
-      'process.env': {},
     },
     build: {
       outDir: 'dist',
+      sourcemap: false,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vendor: ['react', 'react-dom', 'lucide-react', '@tanstack/react-query', 'zustand'],
+            pdf: ['jspdf', 'jspdf-autotable'],
+            supabase: ['@supabase/supabase-js']
+          }
+        }
+      }
     },
     publicDir: 'public',
     test: {

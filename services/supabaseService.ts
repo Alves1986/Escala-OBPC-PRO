@@ -11,42 +11,31 @@ import {
 declare const __SUPABASE_URL__: string;
 declare const __SUPABASE_KEY__: string;
 
-// Helper for safe environment variable access
-const getEnv = (key: string) => {
-  try {
-    // @ts-ignore
-    if (typeof import.meta !== 'undefined' && import.meta.env) {
-      // @ts-ignore
-      return import.meta.env[key];
-    }
-  } catch (e) {}
-  
-  try {
-    // @ts-ignore
-    if (typeof process !== 'undefined' && process.env) {
-      // @ts-ignore
-      return process.env[key];
-    }
-  } catch (e) {}
-  
-  return undefined;
+// Safe Access: Priority to Vite env, fallback to injected global constants
+const getEnv = (key: string, globalVal?: string) => {
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
+    return import.meta.env[key];
+  }
+  if (globalVal) return globalVal;
+  return "";
 };
 
-const rawUrl = getEnv('VITE_SUPABASE_URL');
-const rawKey = getEnv('VITE_SUPABASE_KEY');
-
-export const SUPABASE_URL = (rawUrl || (typeof __SUPABASE_URL__ !== 'undefined' ? __SUPABASE_URL__ : "") || "").trim();
-export const SUPABASE_KEY = (rawKey || (typeof __SUPABASE_KEY__ !== 'undefined' ? __SUPABASE_KEY__ : "") || "").trim();
+export const SUPABASE_URL = getEnv('VITE_SUPABASE_URL', typeof __SUPABASE_URL__ !== 'undefined' ? __SUPABASE_URL__ : "").trim();
+export const SUPABASE_KEY = getEnv('VITE_SUPABASE_KEY', typeof __SUPABASE_KEY__ !== 'undefined' ? __SUPABASE_KEY__ : "").trim();
 
 let supabase: SupabaseClient | null = null;
 
 if (SUPABASE_URL && SUPABASE_KEY) {
-    supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-        auth: {
-            persistSession: true,
-            autoRefreshToken: true,
-        }
-    });
+    try {
+        supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+            auth: {
+                persistSession: true,
+                autoRefreshToken: true,
+            }
+        });
+    } catch(e) {
+        console.error("Failed to initialize Supabase client:", e);
+    }
 }
 
 export const getSupabase = () => supabase;
@@ -187,13 +176,10 @@ export const saveMinistrySettings = async (ministryId: string, displayName?: str
 
 export const fetchOrganizationMinistries = async (orgId: string): Promise<MinistryDef[]> => {
     if (!supabase) return [];
-    // If table doesn't exist, return empty or mock. Assuming it exists.
-    // Fallback to settings if organization_ministries table is not used
-    // But for this app, let's assume we fetch from 'organization_ministries'
     try {
         const { data } = await supabase.from('organization_ministries').select('*').eq('organization_id', orgId);
         return data?.map((m: any) => ({
-            id: m.code, // using code as ID for frontend compatibility
+            id: m.code, 
             code: m.code,
             label: m.label,
             enabledTabs: safeParseArray(m.enabled_tabs),
@@ -274,7 +260,6 @@ export const deleteMinistryEvent = async (ministryId: string, identifier: string
 
 export const saveScheduleAssignment = async (ministryId: string, key: string, memberName: string) => {
     if (!supabase) return;
-    // key format: YYYY-MM-DDTHH:mm_Role
     const [iso, role] = key.split('_');
     const [date, time] = iso.split('T');
     
@@ -319,7 +304,7 @@ export const fetchMinistryMembers = async (ministryId: string) => {
         .select('*')
         .or(`ministry_id.eq.${ministryId},allowed_ministries.cs.{${ministryId}}`);
         
-    const memberMap: MemberMap = {}; // Legacy support if needed
+    const memberMap: MemberMap = {}; 
     const publicList: TeamMemberProfile[] = (profiles || []).map((p: any) => ({
         id: p.id,
         name: p.name,
@@ -332,7 +317,6 @@ export const fetchMinistryMembers = async (ministryId: string) => {
         organizationId: p.organization_id
     }));
 
-    // Populate map by roles
     publicList.forEach(m => {
         m.roles?.forEach(r => {
             if (!memberMap[r]) memberMap[r] = [];
@@ -354,7 +338,6 @@ export const removeMemberFromMinistry = async (memberId: string, ministryId: str
     try {
         const orgId = await getCurrentOrgId();
 
-        // 1. Validar membro e organização
         const { data: profile, error: profileFetchError } = await supabase
             .from('profiles')
             .select('id, name, organization_id, allowed_ministries, ministry_id')
@@ -365,7 +348,6 @@ export const removeMemberFromMinistry = async (memberId: string, ministryId: str
             return { success: false, message: "Membro não encontrado." };
         }
 
-        // 2. Remover da tabela de relacionamento (se existir)
         try {
             await supabase
                 .from('organization_memberships')
@@ -377,7 +359,6 @@ export const removeMemberFromMinistry = async (memberId: string, ministryId: str
                 });
         } catch(e) {}
 
-        // 3. Atualizar Perfil
         const currentAllowed = safeParseArray(profile.allowed_ministries);
         const newAllowed = currentAllowed.filter((m: string) => m !== ministryId);
         
@@ -394,16 +375,14 @@ export const removeMemberFromMinistry = async (memberId: string, ministryId: str
 
         if (updateError) throw new Error("Erro ao atualizar perfil: " + updateError.message);
 
-        // 4. Limpar escalas futuras
         await supabase
             .from('schedule_assignments')
             .delete()
             .match({ 
-                member_name: profile.name, // Usually linked by ID, but legacy uses Name often
+                member_name: profile.name, 
                 ministry_id: ministryId 
             });
 
-        // 5. Log
         await logAction(ministryId, 'Membro Removido', `Membro ${profile.name} removido do ministério.`, orgId);
 
         return { success: true, message: "Membro removido do ministério com sucesso." };
@@ -429,7 +408,6 @@ export const fetchMinistryAvailability = async (ministryId: string) => {
         availability[row.member_name].push(row.date_key);
         
         if (row.note) {
-            // Note key: MemberName_YYYY-MM-00 (convention)
             const month = row.date_key.substring(0, 7);
             notes[`${row.member_name}_${month}-00`] = row.note;
         }
@@ -443,7 +421,6 @@ export const fetchMinistryAvailability = async (ministryId: string) => {
 export const fetchNotificationsSQL = async (ministries: string[], userId: string): Promise<AppNotification[]> => {
     if (!supabase) return [];
     
-    // 1. Fetch unread notifications for this user
     const { data: userNotifs } = await supabase
         .from('notifications')
         .select('*')
@@ -451,9 +428,6 @@ export const fetchNotificationsSQL = async (ministries: string[], userId: string
         .order('created_at', { ascending: false })
         .limit(20);
 
-    // 2. Check read status (assuming a separate table or jsonb array, 
-    //    but for simplicity, let's assume 'notifications' table has a 'read_by' array)
-    
     return (userNotifs || []).map((n: any) => {
         const readBy = safeParseArray(n.read_by);
         return {
@@ -471,10 +445,6 @@ export const fetchNotificationsSQL = async (ministries: string[], userId: string
 
 export const markNotificationsReadSQL = async (ids: string[], userId: string) => {
     if (!supabase) return;
-    
-    // This is tricky with array columns in standard SQL updates without stored procedures.
-    // We will do it one by one or use an RPC if available. 
-    // For now, let's assume we just fetch, append, and update (not atomic but works for low traffic)
     
     for (const id of ids) {
         const { data } = await supabase.from('notifications').select('read_by').eq('id', id).single();
@@ -511,7 +481,6 @@ export const fetchAnnouncementsSQL = async (ministryId: string): Promise<Announc
     const { data } = await supabase
         .from('announcements')
         .select('*')
-        // .eq('ministry_id', ministryId) // Global or ministry specific? Let's assume ministry
         .order('created_at', { ascending: false });
 
     return (data || []).map((a: any) => ({
@@ -522,8 +491,8 @@ export const fetchAnnouncementsSQL = async (ministryId: string): Promise<Announc
         timestamp: a.created_at,
         expirationDate: a.expiration_date,
         author: a.author,
-        readBy: a.read_by || [], // Expecting JSONB
-        likedBy: a.liked_by || [], // Expecting JSONB
+        readBy: a.read_by || [], 
+        likedBy: a.liked_by || [], 
         organizationId: a.organization_id
     }));
 };
@@ -610,18 +579,14 @@ export const updateRepertoireItem = async (id: string, updates: Partial<Repertoi
 };
 
 export const fetchGlobalSchedules = async (monthIso: string, excludeMinistryId: string): Promise<GlobalConflictMap> => {
-    // This requires a view or complex query across all assignments
-    // For now, mock or simple implementation
     if (!supabase) return {};
     
-    // Fetch all assignments for the month excluding current ministry
     const { data } = await supabase
         .from('schedule_assignments')
         .select('*')
-        .neq('ministry_id', excludeMinistryId); // Requires RLS to allow reading other ministries if admin/global
+        .neq('ministry_id', excludeMinistryId);
 
     const conflicts: GlobalConflictMap = {};
-    // Process data... logic depends on DB structure
     return conflicts; 
 };
 
@@ -637,9 +602,7 @@ export const fetchAuditLogs = async (ministryId: string): Promise<AuditLogEntry[
 };
 
 export const fetchRankingData = async (ministryId: string): Promise<RankingEntry[]> => {
-    // This usually aggregates data from a view
     if (!supabase) return [];
-    // Mocking return for now as it depends on a complex view
     return [];
 };
 
@@ -648,7 +611,6 @@ export const fetchRankingData = async (ministryId: string): Promise<RankingEntry
 export const fetchOrganizationsWithStats = async (): Promise<Organization[]> => {
     if (!supabase) return [];
     const { data } = await supabase.from('organizations').select('*');
-    // Stats would require extra queries or a view
     return (data || []).map((o: any) => ({
         id: o.id,
         name: o.name,
@@ -677,7 +639,6 @@ export const toggleOrganizationStatus = async (id: string, active: boolean) => {
 
 export const saveOrganizationMinistry = async (orgId: string, code: string, label: string) => {
     if (!supabase) return { success: false, message: "Offline" };
-    // Assuming table 'organization_ministries'
     const { error } = await supabase.from('organization_ministries').insert({
         organization_id: orgId,
         code,
