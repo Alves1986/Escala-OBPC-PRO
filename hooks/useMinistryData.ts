@@ -145,14 +145,14 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     refreshData,
     
     // Legacy setters (No-ops or re-implementations)
-    setEvents: () => refreshData(), 
-    setSchedule: () => refreshData(),
-    setAttendance: () => refreshData(),
-    setPublicMembers: () => refreshData(),
-    setAvailability: () => refreshData(),
-    setNotifications: () => refreshData(),
-    setRepertoire: () => refreshData(),
-    setMinistryTitle: () => refreshData(),
-    setAvailabilityWindow: () => refreshData()
+    setEvents: (_?: any) => refreshData(), 
+    setSchedule: (_?: any) => refreshData(),
+    setAttendance: (_?: any) => refreshData(),
+    setPublicMembers: (_?: any) => refreshData(),
+    setAvailability: (_?: any) => refreshData(),
+    setNotifications: (_?: any) => refreshData(),
+    setRepertoire: (_?: any) => refreshData(),
+    setMinistryTitle: (_?: any) => refreshData(),
+    setAvailabilityWindow: (_?: any) => refreshData()
   };
 }
