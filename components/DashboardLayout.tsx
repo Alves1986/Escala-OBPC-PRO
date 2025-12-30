@@ -1,3 +1,4 @@
+
 // ... (imports existentes)
 import React, { ReactNode, useState, useRef } from 'react';
 import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles, Building2, Home, Calendar, Megaphone, CalendarCheck, Shield } from 'lucide-react';
@@ -16,7 +17,7 @@ export interface NavItem {
 export interface Props {
   children: ReactNode;
   onLogout: () => void;
-  title: string | undefined | null; // Allow null/undefined for skeleton
+  title: string;
   currentTab: string;
   onTabChange: (tab: string) => void;
   mainNavItems: NavItem[];
@@ -205,7 +206,6 @@ export const DashboardLayout: React.FC<Props> = ({
                         {title ? (
                             <h1 className="text-sm font-bold text-zinc-900 dark:text-white tracking-tight truncate leading-tight">{title}</h1>
                         ) : (
-                            // SKELETON: Exibe pulso se o título for undefined/null para evitar flash do ID
                             <div className="h-4 w-3/4 bg-zinc-200 dark:bg-zinc-800 rounded animate-pulse mb-0.5"></div>
                         )}
                         <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate font-medium">Espaço de Trabalho</p>
@@ -222,10 +222,8 @@ export const DashboardLayout: React.FC<Props> = ({
                        {currentUser?.allowedMinistries?.filter(isValidMinistryId).map(mid => {
                            const isCurrent = currentMinistryId === mid;
                            const config = availableMinistries.find(m => m.id === mid);
-                           
-                           // SAFE LABEL LOGIC: Never show ID.
-                           // If config or label missing, show loading or fallback, but not ID.
-                           const displayLabel = config?.label || <span className="italic opacity-50">Carregando...</span>;
+                           // Correção da exibição do Label: Se não achar na lista (ainda carregando), não exibe ID feio
+                           const displayLabel = config ? config.label : 'Carregando...';
 
                            return (
                                <button

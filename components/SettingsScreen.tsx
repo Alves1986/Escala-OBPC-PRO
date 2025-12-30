@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Settings, Save, Moon, Sun, BellRing, Monitor, Loader2, CalendarClock, Lock, Unlock, BellOff, Check, ShieldCheck, ArrowRight } from 'lucide-react';
 import { useToast } from './Toast';
@@ -6,7 +7,7 @@ import { ThemeMode } from '../types';
 import { sendNotificationSQL } from '../services/supabaseService';
 
 interface Props {
-  initialTitle: string | undefined | null; // Allow undefined/null for loading state
+  initialTitle: string;
   ministryId: string | null;
   themeMode: ThemeMode;
   onSetThemeMode: (mode: ThemeMode) => void;
@@ -24,7 +25,7 @@ export const SettingsScreen: React.FC<Props> = ({
     onSaveTitle, onAnnounceUpdate, onEnableNotifications, 
     onSaveAvailabilityWindow, availabilityWindow, isAdmin = false 
 }) => {
-  const [tempTitle, setTempTitle] = useState(initialTitle || "");
+  const [tempTitle, setTempTitle] = useState(initialTitle);
   const [availStart, setAvailStart] = useState("");
   const [availEnd, setAvailEnd] = useState("");
   
@@ -32,8 +33,6 @@ export const SettingsScreen: React.FC<Props> = ({
   const [isNotifLoading, setIsNotifLoading] = useState(false);
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
   const { addToast } = useToast();
-
-  const isLoadingTitle = !initialTitle; // Derived loading state based on prop existence
 
   const toLocalInput = (isoString?: string) => {
       if (!isoString) return "";
@@ -59,12 +58,6 @@ export const SettingsScreen: React.FC<Props> = ({
           setAvailEnd(toLocalInput(availabilityWindow.end));
       }
   }, [availabilityWindow]);
-
-  // Update tempTitle when initialTitle loads (only if user hasn't edited yet? 
-  // No, always update on load to show correct db value)
-  useEffect(() => {
-      if (initialTitle) setTempTitle(initialTitle);
-  }, [initialTitle]);
 
   useEffect(() => {
       if ('Notification' in window) setNotifPermission(Notification.permission);
@@ -270,13 +263,8 @@ export const SettingsScreen: React.FC<Props> = ({
             <div>
                 <label className="text-xs font-bold text-zinc-500 uppercase block mb-2">Nome do Ministério</label>
                 <div className="flex gap-2">
-                    {/* SAFE INPUT: Skeleton loader if title is not yet available to avoid ID flashing */}
-                    {isLoadingTitle ? (
-                        <div className="flex-1 h-10 bg-zinc-100 dark:bg-zinc-900 rounded-lg animate-pulse"></div>
-                    ) : (
-                        <input type="text" value={tempTitle} onChange={(e) => setTempTitle(e.target.value)} className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100" />
-                    )}
-                    <button onClick={() => onSaveTitle(tempTitle)} disabled={isLoadingTitle} className="bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded-lg transition-colors disabled:opacity-50"><Save size={18}/></button>
+                    <input type="text" value={tempTitle} onChange={(e) => setTempTitle(e.target.value)} className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900 dark:text-zinc-100" />
+                    <button onClick={() => onSaveTitle(tempTitle)} className="bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded-lg transition-colors"><Save size={18}/></button>
                 </div>
             </div>
             )}
