@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis, GlobalConflictMap, TeamMemberProfile, AvailabilityNotesMap } from '../types';
@@ -80,7 +79,17 @@ const SelectorDropdown = ({
     };
 
     const handleSelect = (opt: string) => {
-        onChange(opt);
+        if (opt === "") {
+            onChange(""); // Clear assignment
+        } else {
+            // Find profile to send UUID
+            const profile = memberProfiles?.find((p: any) => p.name === opt);
+            if (profile) {
+                onChange(profile.id);
+            } else {
+                console.error("Profile not found for selection:", opt);
+            }
+        }
         onClose();
     };
 
