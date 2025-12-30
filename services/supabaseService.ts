@@ -502,7 +502,6 @@ export const fetchAuditLogs = async (ministryId: string): Promise<AuditLogEntry[
     }));
 };
 
-// FIX: Robust assignment saving that handles duplicate names and organization scoping
 export const saveScheduleAssignment = async (ministryId: string, key: string, memberName: string) => {
     if (!supabase) return true;
     try {
@@ -510,7 +509,7 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
         const role = roleParts.join('_');
         const date_time = iso + ':00';
         
-        // 1. Get Event to find Organization ID
+        // 1. Obter o Evento
         const { data: event, error: eventError } = await supabase.from('events').select('id, title, organization_id').eq('ministry_id', ministryId).eq('date_time', date_time).single();
         
         if (eventError || !event) {
@@ -518,20 +517,19 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
             return false;
         }
 
-        // 2. Handle Removal
+        // 2. Lidar com Remoção
         if (memberName === "") {
             await supabase.from('schedule_assignments').delete().eq('event_id', event.id).eq('role', role);
             await logAction(ministryId, 'Removeu Escala', `${role} removido de ${event.title} (${iso})`, event.organization_id);
             return true;
         }
 
-        // 3. Find Member
+        // 3. Encontrar Membro (Com Fallback)
         if (memberName && memberName.trim() !== "") {
             const cleanName = memberName.trim();
             const targetOrgId = event.organization_id;
             
-            // TRY 1: Strict Match (Name + Org ID from Event)
-            // This is ideal for SaaS multi-tenancy
+            // TENTATIVA 1: Busca Estrita (Nome + ID da Organização do Evento)
             let { data: members } = await supabase
                 .from('profiles')
                 .select('id, organization_id')
@@ -539,13 +537,9 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
                 .eq('organization_id', targetOrgId)
                 .limit(1);
             
-            // TRY 2: Loose Fallback (Name only)
-            // If the event has a legacy or mismatched Org ID (e.g. from before migration),
-            // but the member exists in the system (likely in the user's current view/org),
-            // we find them by name to allow saving. This fixes the "Blocked" issue.
+            // TENTATIVA 2: Fallback Robusto (Apenas Nome)
             if (!members || members.length === 0) {
                  console.warn(`Membro '${cleanName}' não encontrado na org '${targetOrgId}'. Tentando busca global...`);
-                 
                  const { data: looseMembers } = await supabase
                     .from('profiles')
                     .select('id, organization_id')
@@ -558,21 +552,22 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
             }
             
             if (!members || members.length === 0) {
-                console.error(`Membro '${cleanName}' não encontrado no banco.`);
+                console.error(`Membro '${cleanName}' não encontrado no banco de dados.`);
                 return false;
             }
             
-            // Take the first matching member
             const memberId = members[0].id;
+            // Usar o ID da organização do MEMBRO encontrado para auto-correção
+            const finalOrgId = members[0].organization_id || targetOrgId || '00000000-0000-0000-0000-000000000000';
 
-            // 4. Save Assignment
+            // 4. Salvar
             const { error: saveError } = await supabase.from('schedule_assignments').upsert({ 
                 event_id: event.id, 
                 role, 
                 member_id: memberId, 
                 confirmed: false,
                 ministry_id: ministryId, 
-                organization_id: targetOrgId 
+                organization_id: finalOrgId 
             }, { onConflict: 'event_id,role' });
 
             if (saveError) {
@@ -580,13 +575,13 @@ export const saveScheduleAssignment = async (ministryId: string, key: string, me
                 return false;
             }
 
-            await logAction(ministryId, 'Alterou Escala', `${memberName} escalado como ${role} em ${event.title} (${iso})`, targetOrgId);
+            await logAction(ministryId, 'Alterou Escala', `${memberName} escalado como ${role} em ${event.title} (${iso})`, finalOrgId);
             return true;
         }
         
         return false;
     } catch (e) {
-        console.error("Save schedule error:", e);
+        console.error("Erro ao salvar escala:", e);
         return false;
     }
 };
