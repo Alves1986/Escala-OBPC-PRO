@@ -129,13 +129,12 @@ const InnerApp = () => {
   
   // Get active config from available list
   const ministryConfig = useMemo(() => {
-      // Se não encontrou na lista (ex: carregando), retorna objeto seguro
+      // Se não encontrou na lista (ex: carregando), retorna objeto seguro com Label vazio
       return availableMinistries.find(m => m.id === ministryId) || { 
           id: ministryId, 
           code: ministryId,
-          label: '', 
+          label: '', // Default empty to avoid showing ID
           enabledTabs: DEFAULT_TABS,
-          // isLoading: true 
       };
   }, [ministryId, availableMinistries]);
 
@@ -153,10 +152,31 @@ const InnerApp = () => {
     membersMap, publicMembers, availability,
     availabilityNotes, notifications, announcements, 
     repertoire, swapRequests, globalConflicts, auditLogs, roles, 
-    ministryTitle, availabilityWindow, 
+    ministryTitle, // This usually comes from Settings DB
+    availabilityWindow, 
     refreshData, isLoading: loadingData,
     setAvailability, setNotifications // Legacy setters used in callbacks
   } = useMinistryData(ministryId, currentMonth, currentUser);
+
+  // --- LOGIC: Safe Ministry Title Display ---
+  // Nunca exibe o ID. Prioridade: 
+  // 1. Nome personalizado (ministryTitle vindo do banco)
+  // 2. Label da configuração global (ministryConfig.label)
+  // 3. undefined (para mostrar Skeleton)
+  const safeMinistryTitle = useMemo(() => {
+      // Verifica se ministryTitle é um nome real ou apenas o ID/Capitalized ID
+      const isGenericTitle = !ministryTitle || ministryTitle.toLowerCase() === ministryId.toLowerCase();
+      
+      if (ministryTitle && !isGenericTitle) {
+          return ministryTitle; // Use custom DB title
+      }
+      
+      if (ministryConfig.label) {
+          return ministryConfig.label; // Use Organization Config Label
+      }
+
+      return undefined; // Trigger Skeleton
+  }, [ministryTitle, ministryConfig, ministryId]);
 
   // Online Presence
   const onlineUsers = useOnlinePresence(currentUser?.id, currentUser?.name);
@@ -250,7 +270,7 @@ const InnerApp = () => {
     <ErrorBoundary>
         <DashboardLayout
             onLogout={handleLogout}
-            title={ministryTitle || 'Carregando...'}
+            title={safeMinistryTitle} // Pass undefined/null while loading to trigger skeleton
             currentTab={currentTab}
             onTabChange={setCurrentTab}
             mainNavItems={MAIN_NAV}
@@ -266,6 +286,7 @@ const InnerApp = () => {
                 setMinistryId(id);
                 if (currentUser && currentUser.id) await Supabase.updateProfileMinistry(currentUser.id, id);
                 
+                // Find label safely for toast
                 const label = availableMinistries.find(m => m.id === id)?.label || 'Ministério';
                 addToast(`Alternado para ${label}`, 'info');
                 refreshData();
@@ -388,8 +409,8 @@ const InnerApp = () => {
                                         <History size={16}/> <span>Histórico</span>
                                     </button>
                                     <ToolsMenu 
-                                        onExportIndividual={(member) => generateIndividualPDF(ministryTitle, currentMonth, member, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), schedule)} 
-                                        onExportFull={() => generateFullSchedulePDF(ministryTitle, currentMonth, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), roles, schedule)} 
+                                        onExportIndividual={(member) => generateIndividualPDF(safeMinistryTitle || 'Ministério', currentMonth, member, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), schedule)} 
+                                        onExportFull={() => generateFullSchedulePDF(safeMinistryTitle || 'Ministério', currentMonth, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), roles, schedule)} 
                                         onClearMonth={() => confirmAction("Limpar?", "Limpar escala?", () => Supabase.clearScheduleForMonth(ministryId, currentMonth).then(refreshData))} 
                                         onResetEvents={() => confirmAction("Restaurar?", "Restaurar eventos?", () => Supabase.resetToDefaultEvents(ministryId, currentMonth).then(refreshData))}
                                         allMembers={publicMembers.map(m => m.name)} 
@@ -451,7 +472,7 @@ const InnerApp = () => {
                 
                 {currentTab === 'announcements' && safeEnabledTabs.includes('announcements') && <AnnouncementsScreen announcements={announcements} currentUser={currentUser} onMarkRead={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'read').then(refreshData)} onToggleLike={(id) => Supabase.interactAnnouncementSQL(id, currentUser.id!, currentUser.name, 'like').then(refreshData)} />}
                 {currentTab === 'profile' && <ProfileScreen user={currentUser} onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId); refreshData(); }} availableRoles={roles} />}
-                {currentTab === 'settings' && safeEnabledTabs.includes('settings') && <SettingsScreen initialTitle={ministryTitle} ministryId={ministryId} themeMode={themeMode} onSetThemeMode={(m) => useAppStore.getState().setThemeMode(m)} onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, newTitle); refreshData(); }} onSaveAvailabilityWindow={async (start, end) => { await Supabase.saveMinistrySettings(ministryId, undefined, undefined, start, end); refreshData(); }} availabilityWindow={availabilityWindow} isAdmin={isAdmin} />}
+                {currentTab === 'settings' && safeEnabledTabs.includes('settings') && <SettingsScreen initialTitle={safeMinistryTitle} ministryId={ministryId} themeMode={themeMode} onSetThemeMode={(m) => useAppStore.getState().setThemeMode(m)} onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, newTitle); refreshData(); }} onSaveAvailabilityWindow={async (start, end) => { await Supabase.saveMinistrySettings(ministryId, undefined, undefined, start, end); refreshData(); }} availabilityWindow={availabilityWindow} isAdmin={isAdmin} />}
                 {currentTab === 'members' && isAdmin && safeEnabledTabs.includes('members') && <MembersScreen members={publicMembers} onlineUsers={onlineUsers} currentUser={currentUser} availableRoles={roles} onToggleAdmin={async (email, currentStatus, name) => { await Supabase.toggleAdminSQL(email, !currentStatus, ministryId); refreshData(); }} onRemoveMember={async (id, name) => { await Supabase.deleteMember(ministryId, id, name); refreshData(); }} />}
                 {currentTab === 'events' && isAdmin && safeEnabledTabs.includes('events') && <EventsScreen customEvents={events.map(e => ({ ...e, iso: e.iso }))} onCreateEvent={async (evt) => { await Supabase.createMinistryEvent(ministryId, evt); refreshData(); }} onDeleteEvent={async (iso) => { await Supabase.deleteMinistryEvent(ministryId, iso); refreshData(); }} currentMonth={currentMonth} onMonthChange={setCurrentMonth} />}
                 {currentTab === 'report' && isAdmin && safeEnabledTabs.includes('report') && <AvailabilityReportScreen availability={availability} registeredMembers={publicMembers} membersMap={membersMap} currentMonth={currentMonth} onMonthChange={setCurrentMonth} availableRoles={roles} onRefresh={async () => { await refreshData(); }} />}
@@ -461,7 +482,7 @@ const InnerApp = () => {
             </Suspense>
 
             {/* Modals e Overlays */}
-            <InstallBanner isVisible={showInstallBanner} onInstall={() => (window as any).deferredPrompt.prompt()} onDismiss={() => setShowInstallBanner(false)} appName={ministryTitle} />
+            <InstallBanner isVisible={showInstallBanner} onInstall={() => (window as any).deferredPrompt.prompt()} onDismiss={() => setShowInstallBanner(false)} appName={safeMinistryTitle || 'Gestão Escala'} />
             <InstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />
             <JoinMinistryModal isOpen={showJoinModal} onClose={() => setShowJoinModal(false)} onJoin={async (id, r) => { await Supabase.joinMinistry(id, r); window.location.reload(); }} alreadyJoined={currentUser.allowedMinistries || []} />
             <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ ...e, iso: e.iso }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, e); refreshData(); }} onRemove={async (id) => { refreshData(); }} />
