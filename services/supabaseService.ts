@@ -8,9 +8,33 @@ import {
     GlobalConflictMap
 } from '../types';
 
-// Environment Variables
-export const SUPABASE_URL = (import.meta as any).env.VITE_SUPABASE_URL || '';
-export const SUPABASE_KEY = (import.meta as any).env.VITE_SUPABASE_KEY || '';
+// Globals injected by Vite via define
+declare const __SUPABASE_URL__: string;
+declare const __SUPABASE_KEY__: string;
+
+let supabaseUrl = '';
+let supabaseKey = '';
+
+// 1. Try Injected Globals (Build-time env vars from vite.config.ts)
+try {
+    // @ts-ignore
+    if (typeof __SUPABASE_URL__ !== 'undefined') supabaseUrl = __SUPABASE_URL__;
+    // @ts-ignore
+    if (typeof __SUPABASE_KEY__ !== 'undefined') supabaseKey = __SUPABASE_KEY__;
+} catch(e) {}
+
+// 2. Try import.meta.env (Vite Standard) safely
+try {
+  // @ts-ignore
+  const meta = import.meta;
+  if (!supabaseUrl && meta && meta.env) {
+    supabaseUrl = meta.env.VITE_SUPABASE_URL || '';
+    supabaseKey = meta.env.VITE_SUPABASE_KEY || '';
+  }
+} catch (e) {}
+
+export const SUPABASE_URL = supabaseUrl;
+export const SUPABASE_KEY = supabaseKey;
 
 // Supabase Client
 export const supabase = (SUPABASE_URL && SUPABASE_KEY) 
