@@ -56,7 +56,7 @@ const getCurrentOrgId = async (): Promise<string> => {
 };
 
 // --- FIX: RESOLVE MINISTRY IDENTITY (UUID vs SLUG) ---
-// Função auxiliar para encontrar todas as variações de ID de um ministério
+// Versão reforçada para garantir que encontramos o par UUID <-> Code
 const resolveMinistryIds = async (identifier: string, orgId: string) => {
     if (!supabase) return { ids: [identifier], mainId: identifier };
     
@@ -64,27 +64,29 @@ const resolveMinistryIds = async (identifier: string, orgId: string) => {
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}/.test(identifier);
     
     try {
+        // Tenta encontrar o ministério na tabela de definição da organização
         let query = supabase.from('organization_ministries').select('id, code').eq('organization_id', orgId);
         
         if (isUUID) {
             query = query.eq('id', identifier);
         } else {
-            query = query.eq('code', identifier);
+            // Se for slug, normaliza
+            query = query.eq('code', identifier.trim().toLowerCase());
         }
         
         const { data } = await query.maybeSingle();
         
         if (data) {
-            // Retorna array com UUID e Slug para buscas "OR"
+            // SUCESSO: Temos o par oficial.
             return { 
-                ids: [data.id, data.code].filter(Boolean), 
-                mainId: data.id, // Prefere UUID para novos registros
+                ids: [data.id, data.code].filter(Boolean), // Array com [UUID, Slug]
+                mainId: data.id, // O UUID é sempre o ID principal
                 code: data.code
             };
         }
     } catch (e) { console.error("Error resolving IDs:", e); }
 
-    // Fallback
+    // Fallback: Se não achou na tabela 'organization_ministries', assume que o identificador passado é o único conhecido
     return { ids: [identifier], mainId: identifier, code: identifier };
 };
 
@@ -280,19 +282,21 @@ export const updateMemberData = async (memberId: string, data: { name?: string, 
 export const toggleAdminSQL = async (email: string, status: boolean, ministryId: string) => { if (!supabase) return; await supabase.functions.invoke('push-notification', { body: { action: 'toggle_admin', targetEmail: email, status, ministryId } }); };
 export const deleteMember = async (ministryId: string, memberId: string, name: string) => { if (!supabase) return { success: false }; const { error } = await supabase.functions.invoke('push-notification', { body: { action: 'delete_member', memberId, ministryId } }); return { success: !error, message: error ? "Erro" : "Removido" }; };
 
-// --- FIX: SETTINGS FETCHING WITH ID RESOLUTION ---
+// --- FIX: SETTINGS FETCHING ROBUSTNESS ---
+// Busca configurações verificando tanto UUID quanto Slug/Code
 export const fetchMinistrySettings = async (ministryIdentifier: string): Promise<MinistrySettings> => { 
     if (!supabase) return { displayName: '', roles: [] }; 
     const orgId = await getCurrentOrgId(); 
     
-    // Resolve UUID vs Slug to find the correct record
     const { ids } = await resolveMinistryIds(ministryIdentifier, orgId);
 
+    // Consulta expandida: busca por ministry_id (slug ou uuid) OU por organization_ministry_id (fk)
+    // Isso garante que se o registro foi salvo com UUID, ele seja encontrado mesmo se buscado por slug e vice-versa
     const { data } = await supabase
         .from('ministry_settings')
         .select('*')
         .eq('organization_id', orgId)
-        .in('ministry_id', ids) // Busca por qualquer ID válido (UUID ou Slug)
+        .or(`ministry_id.in.(${ids.map(id => `"${id}"`).join(',')}),organization_ministry_id.in.(${ids.map(id => `"${id}"`).join(',')})`)
         .maybeSingle();
     
     if (!data) return { displayName: '', roles: [] }; 
@@ -310,11 +314,12 @@ export const fetchMinistrySettings = async (ministryIdentifier: string): Promise
     }; 
 };
 
-// --- FIX: SETTINGS SAVING WITH EXISTENCE CHECK ---
+// --- FIX: SETTINGS SAVING PERSISTENCE ---
+// Garante que ao salvar, atualizamos o registro existente correto ou criamos com o vínculo certo
 export const saveMinistrySettings = async (ministryIdentifier: string, displayName?: string, roles?: string[], availabilityStart?: string, availabilityEnd?: string, spotifyClientId?: string, spotifyClientSecret?: string) => { 
     if (!supabase) return; 
     const orgId = await getCurrentOrgId();
-    const { ids, mainId } = await resolveMinistryIds(ministryIdentifier, orgId);
+    const { ids, mainId, code } = await resolveMinistryIds(ministryIdentifier, orgId);
 
     const updates: any = {}; 
     if (displayName !== undefined) updates.display_name = displayName; 
@@ -324,21 +329,24 @@ export const saveMinistrySettings = async (ministryIdentifier: string, displayNa
     if (spotifyClientId !== undefined) updates.spotify_client_id = spotifyClientId; 
     if (spotifyClientSecret !== undefined) updates.spotify_client_secret = spotifyClientSecret; 
     
-    // Check if exists using ALL possible IDs
+    // Verifica existência usando a mesma lógica "OR" robusta do fetch
     const { data: existing } = await supabase
         .from('ministry_settings')
         .select('id')
         .eq('organization_id', orgId)
-        .in('ministry_id', ids)
+        .or(`ministry_id.in.(${ids.map(id => `"${id}"`).join(',')}),organization_ministry_id.in.(${ids.map(id => `"${id}"`).join(',')})`)
         .maybeSingle();
 
     if (existing) {
-        // Update existing record (keeps original ID, avoids dupe)
+        // Atualiza o registro existente
         await supabase.from('ministry_settings').update(updates).eq('id', existing.id);
     } else {
-        // Create new record using the best available ID (UUID preferred)
+        // Cria novo registro vinculando o UUID correto
+        // Se temos um UUID real (mainId), usamos como FK e como ID principal
+        // Se só temos slug (code), usamos como ministry_id
         await supabase.from('ministry_settings').insert({ 
-            ministry_id: mainId, 
+            ministry_id: mainId, // Prefer UUID
+            organization_ministry_id: mainId, // Foreign Key
             organization_id: orgId,
             ...updates 
         }); 

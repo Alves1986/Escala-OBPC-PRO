@@ -148,11 +148,22 @@ export const RolesModal = ({ isOpen, onClose, roles, onUpdate }: {
   isOpen: boolean; onClose: () => void; roles: Role[]; onUpdate: (r: Role[]) => void;
 }) => {
   const [newRole, setNewRole] = useState("");
+  const [localRoles, setLocalRoles] = useState<Role[]>([]);
   const { confirmAction } = useToast();
   
+  // Sync local state with props when modal opens or props update
+  useEffect(() => {
+    setLocalRoles(roles);
+  }, [roles]);
+
+  const handleUpdate = (updatedRoles: Role[]) => {
+    setLocalRoles(updatedRoles); // Immediate UI update
+    onUpdate(updatedRoles); // Persist to backend
+  };
+  
   const add = () => {
-    if (newRole && !roles.includes(newRole)) {
-      onUpdate([...roles, newRole]);
+    if (newRole && !localRoles.includes(newRole)) {
+      handleUpdate([...localRoles, newRole]);
       setNewRole("");
     }
   };
@@ -161,18 +172,18 @@ export const RolesModal = ({ isOpen, onClose, roles, onUpdate }: {
     confirmAction(
       "Remover Função",
       `Deseja realmente remover a função "${r}"? Isso removerá esta coluna da escala.`,
-      () => onUpdate(roles.filter(role => role !== r))
+      () => handleUpdate(localRoles.filter(role => role !== r))
     );
   };
 
   const moveRole = (index: number, direction: 'up' | 'down') => {
-      const newRoles = [...roles];
+      const newRoles = [...localRoles];
       if (direction === 'up' && index > 0) {
           [newRoles[index], newRoles[index - 1]] = [newRoles[index - 1], newRoles[index]];
       } else if (direction === 'down' && index < newRoles.length - 1) {
           [newRoles[index], newRoles[index + 1]] = [newRoles[index + 1], newRoles[index]];
       }
-      onUpdate(newRoles);
+      handleUpdate(newRoles);
   };
 
   return (
@@ -194,7 +205,7 @@ export const RolesModal = ({ isOpen, onClose, roles, onUpdate }: {
         </div>
 
         <div className="space-y-2">
-          {roles.map((r, index) => (
+          {localRoles.map((r, index) => (
             <div key={r} className="flex justify-between items-center p-3 bg-white dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm group">
               <div className="flex items-center gap-3">
                   <div className="p-1.5 bg-zinc-100 dark:bg-zinc-900 rounded text-zinc-400 cursor-grab active:cursor-grabbing">
@@ -214,7 +225,7 @@ export const RolesModal = ({ isOpen, onClose, roles, onUpdate }: {
                   </button>
                   <button 
                     onClick={() => moveRole(index, 'down')} 
-                    disabled={index === roles.length - 1}
+                    disabled={index === localRoles.length - 1}
                     className="p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-400 transition-colors"
                     title="Mover para baixo"
                   >
