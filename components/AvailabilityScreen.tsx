@@ -1,406 +1,230 @@
+
 import React, { useState, useEffect } from 'react';
-import { AvailabilityMap, AvailabilityNotesMap, User, TeamMemberProfile } from '../types';
+import { AvailabilityMap, AvailabilityNotesMap, User } from '../types';
+import { CalendarCheck, ChevronLeft, ChevronRight, Save, ShieldAlert, Loader2 } from 'lucide-react';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
-import { ChevronLeft, ChevronRight, Save, CheckCircle2, Moon, Sun, Lock, FileText, Ban, RefreshCw, Check, ShieldAlert } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface Props {
   availability: AvailabilityMap;
-  availabilityNotes: AvailabilityNotesMap;
-  setAvailability: React.Dispatch<React.SetStateAction<AvailabilityMap>>;
+  availabilityNotes?: AvailabilityNotesMap;
+  setAvailability: (data: any) => void;
   allMembersList: string[];
-  members?: TeamMemberProfile[];
-  currentMonth: string;
+  currentMonth: string; // YYYY-MM
   onMonthChange: (newMonth: string) => void;
   currentUser: User | null;
-  onSaveAvailability: (ministryId: string, memberId: string, dates: string[], notes: Record<string, string>, targetMonth: string) => Promise<void>;
-  availabilityWindow?: { start?: string, end?: string };
-  ministryId: string;
+  onSaveAvailability: (ministryId: string, memberId: string, dates: string[], notes: Record<string, string>, targetMonth: string) => Promise<any>;
+  availabilityWindow?: { start?: string; end?: string };
+  ministryId: string | null;
+  members?: any[];
 }
 
 export const AvailabilityScreen: React.FC<Props> = ({
   availability,
   availabilityNotes,
+  setAvailability,
   allMembersList,
-  members,
   currentMonth,
   onMonthChange,
   currentUser,
   onSaveAvailability,
   availabilityWindow,
-  ministryId
+  ministryId,
+  members
 }) => {
-  const { addToast } = useToast();
-  
-  // States
   const [selectedMember, setSelectedMember] = useState<string>("");
   const [tempDates, setTempDates] = useState<string[]>([]);
   const [generalNote, setGeneralNote] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  
+  const { addToast } = useToast();
   const isAdmin = currentUser?.role === 'admin';
-  const isBlockedMonth = tempDates.includes(`${currentMonth}-BLK`);
 
-  // Calendar Props
-  const [year, month] = currentMonth.split('-').map(Number);
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const firstDayOfWeek = new Date(year, month - 1, 1).getDay();
-  const blanks = Array.from({ length: firstDayOfWeek });
-  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-
-  // Check Window Status
-  const isWindowOpenForMembers = React.useMemo(() => {
-    if (!availabilityWindow?.start && !availabilityWindow?.end) return true;
-    if (availabilityWindow.start?.includes('1970')) return false;
-
-    const now = new Date();
-    let start = new Date(0);
-    let end = new Date(8640000000000000);
-
-    if (availabilityWindow.start) start = new Date(availabilityWindow.start);
-    if (availabilityWindow.end) end = new Date(availabilityWindow.end);
-
-    return now >= start && now <= end;
-  }, [availabilityWindow]);
-
-  const canEdit = isAdmin || isWindowOpenForMembers;
-
-  // Resolve membro real (ID e Objeto)
-  const memberObj = members?.find(m => m.name === selectedMember);
-  const memberId = memberObj?.id || "";
-
-  // Init Member Selection
   useEffect(() => {
     if (currentUser && !selectedMember) {
-      if (allMembersList.includes(currentUser.name)) {
-        setSelectedMember(currentUser.name);
-      } else if (allMembersList.length > 0) {
-        setSelectedMember(allMembersList[0]);
-      }
+      setSelectedMember(currentUser.name);
     }
-  }, [currentUser, allMembersList]);
+  }, [currentUser]);
 
-  // Load Data on Mount or Change (Usando memberId agora)
   useEffect(() => {
-    if (!selectedMember || !memberId) return;
+    if (selectedMember) {
+      const memberDates = availability[selectedMember] || [];
+      const currentMonthDates = memberDates.filter(d => d.startsWith(currentMonth));
+      setTempDates(currentMonthDates);
+      
+      const noteKey = `${selectedMember}_${currentMonth}-00`;
+      setGeneralNote(availabilityNotes?.[noteKey] || "");
+      
+      setHasUnsavedChanges(false);
+    }
+  }, [selectedMember, currentMonth, availability, availabilityNotes]);
 
-    // AQUI ESTÁ A MUDANÇA PRINCIPAL: Usa o ID para buscar os dados, não o nome
-    const storedDates = availability[memberId] || [];
-    const monthDates = storedDates.filter(d => d.startsWith(currentMonth));
-    setTempDates(monthDates);
-
-    const noteKey = `${memberId}_${currentMonth}-00`;
-    setGeneralNote(availabilityNotes?.[noteKey] || "");
-
-    setHasUnsavedChanges(false);
-    setSaveSuccess(false);
-  }, [selectedMember, memberId, currentMonth, availability, availabilityNotes]);
-
-  const handleToggleBlockMonth = () => {
-    if (!canEdit) return;
-    setHasUnsavedChanges(true);
-    setSaveSuccess(false);
-
-    if (isBlockedMonth) {
-      setTempDates([]);
+  const toggleDate = (day: number) => {
+    const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
+    let newDates = [...tempDates];
+    
+    if (newDates.includes(dateStr)) {
+        newDates = newDates.filter(d => d !== dateStr);
     } else {
-      setTempDates([`${currentMonth}-BLK`]);
+        newDates.push(dateStr);
     }
-  };
-
-  const handleToggleDate = (day: number) => {
-    if (!canEdit) {
-      addToast("O período de envio está fechado.", "warning");
-      return;
-    }
-
-    setHasUnsavedChanges(true);
-    setSaveSuccess(false);
-
-    const dateBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
-    const dateObj = new Date(year, month - 1, day);
-    const isSunday = dateObj.getDay() === 0;
-
-    const full = dateBase;
-    const morning = `${dateBase}_M`;
-    const night = `${dateBase}_N`;
-
-    let newDates = isBlockedMonth ? [] : [...tempDates];
-
-    const hadFull = newDates.includes(full);
-    const hadMorning = newDates.includes(morning);
-    const hadNight = newDates.includes(night);
-
-    newDates = newDates.filter(d => !d.startsWith(dateBase));
-
-    if (isSunday) {
-      if (!hadFull && !hadMorning && !hadNight) newDates.push(full);
-      else if (hadFull) newDates.push(morning);
-      else if (hadMorning) newDates.push(night);
-    } else {
-      if (!hadFull) newDates.push(full);
-    }
-
+    
     setTempDates(newDates);
+    setHasUnsavedChanges(true);
   };
 
   const handleSave = async () => {
-    if (!selectedMember || !memberId) {
-      addToast("Erro: Membro não encontrado.", "error");
-      return;
-    }
+      if (!selectedMember || !ministryId) return;
 
-    setIsSaving(true);
-
-    try {
-      const notesPayload: Record<string, string> = {};
-
-      if (generalNote.trim()) {
-        notesPayload[`${currentMonth}-00`] = generalNote.trim();
+      let memberId = "";
+      if (currentUser?.name === selectedMember) {
+          memberId = currentUser.id || "";
+      } else {
+          // If admin, we rely on the service to lookup by name if ID isn't available
+          // or we check if we have member objects (not passed in this context usually)
+          memberId = selectedMember;
       }
 
-      await onSaveAvailability(
-        ministryId,
-        memberId, // Passa o ID correto
-        tempDates,
-        notesPayload,
-        currentMonth
-      );
+      setIsSaving(true);
+      try {
+          const notesPayload: Record<string, string> = {};
+          if (generalNote.trim()) {
+              notesPayload[`${currentMonth}-00`] = generalNote.trim();
+          }
 
-      setHasUnsavedChanges(false);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+          const result = await onSaveAvailability(
+              ministryId, 
+              memberId, 
+              tempDates, 
+              notesPayload, 
+              currentMonth
+          );
+          
+          if (result && result.error) {
+              throw new Error(result.error.message);
+          }
 
-    } catch (e: any) {
-      console.error(e);
-      addToast(`Erro: ${e?.message || "Erro desconhecido"}`, "error");
-    } finally {
-      setIsSaving(false);
-    }
+          setHasUnsavedChanges(false);
+          setSaveSuccess(true);
+          
+          setAvailability((prev: any) => ({
+              ...prev,
+              [selectedMember]: [
+                  ...(prev[selectedMember] || []).filter((d: string) => !d.startsWith(currentMonth)),
+                  ...tempDates
+              ]
+          }));
+
+          setTimeout(() => setSaveSuccess(false), 3000);
+          addToast("Disponibilidade salva!", "success");
+          
+      } catch (e: any) {
+          console.error(e);
+          addToast(`Erro: ${e.message || "Falha ao salvar"}`, "error");
+      } finally {
+          setIsSaving(false);
+      }
   };
 
-  const getDayStatus = (day: number) => {
-    if (isBlockedMonth) return 'blocked';
-
-    const dateBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
-
-    if (tempDates.includes(dateBase)) return 'full';
-    if (tempDates.includes(`${dateBase}_M`)) return 'morning';
-    if (tempDates.includes(`${dateBase}_N`)) return 'night';
-
-    return 'none';
-  };
-
-  const handleMonthNav = (dir: number) => {
-    if (hasUnsavedChanges) {
-      if (!window.confirm("Há alterações não salvas. Descartar?")) return;
-    }
-
-    onMonthChange(adjustMonth(currentMonth, dir));
-  };
+  const [year, month] = currentMonth.split('-').map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const startDay = new Date(year, month - 1, 1).getDay();
 
   return (
-    <div className="space-y-4 animate-fade-in max-w-4xl mx-auto pb-32">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
-            <div>
-                <h2 className="text-xl md:text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
-                    <CheckCircle2 className="text-emerald-500"/> Minha Disponibilidade
-                </h2>
-                <p className="text-zinc-500 text-xs md:text-sm mt-1">
-                    Toque nos dias para marcar (Dom: Dia/Manhã/Noite).
-                </p>
-            </div>
-            
-            <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end bg-zinc-50 dark:bg-zinc-900/50 p-1.5 rounded-xl border border-zinc-100 dark:border-zinc-800">
-                {isAdmin && (
-                    <select 
-                        value={selectedMember} 
-                        onChange={(e) => {
-                            if(hasUnsavedChanges && !confirm("Descartar alterações?")) return;
-                            setSelectedMember(e.target.value);
-                        }}
-                        className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg py-1.5 px-3 text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none max-w-[140px]"
-                    >
-                        {allMembersList.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                )}
-                
-                <div className="flex items-center gap-2">
-                    <button onClick={() => handleMonthNav(-1)} className="p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-300"><ChevronLeft size={16}/></button>
-                    <span className="text-xs md:text-sm font-bold min-w-[70px] text-center capitalize">{getMonthName(currentMonth)}</span>
-                    <button onClick={() => handleMonthNav(1)} className="p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-300"><ChevronRight size={16}/></button>
-                </div>
-            </div>
+    <div className="space-y-6 animate-fade-in max-w-4xl mx-auto pb-24">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-200 dark:border-zinc-700 pb-4 gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+            <CalendarCheck className="text-emerald-500"/> Disponibilidade
+          </h2>
+          <p className="text-zinc-500 text-sm mt-1">
+            Informe os dias em que você <strong>NÃO</strong> poderá servir.
+          </p>
         </div>
-
-        {/* --- STATUS WARNINGS --- */}
-        {!isWindowOpenForMembers && isAdmin && (
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/30 p-3 rounded-xl flex items-center gap-3 text-blue-800 dark:text-blue-200 animate-slide-up">
-                <ShieldAlert size={20} className="shrink-0" />
-                <div>
-                    <p className="font-bold text-xs md:text-sm">Modo Admin Ativo</p>
-                    <p className="text-[10px] md:text-xs opacity-80">A janela está <strong>fechada</strong> para membros, mas você tem permissão para editar.</p>
-                </div>
+        
+        <div className="flex items-center gap-4 bg-white dark:bg-zinc-800 p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm w-full md:w-auto justify-center">
+            <button onClick={() => onMonthChange(adjustMonth(currentMonth, -1))} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md text-zinc-500"><ChevronLeft size={20}/></button>
+            <div className="text-center min-w-[100px]">
+                <span className="block text-sm font-bold text-zinc-800 dark:text-zinc-100 capitalize">{getMonthName(currentMonth)}</span>
             </div>
-        )}
-
-        {!isWindowOpenForMembers && !isAdmin && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 p-3 rounded-xl flex items-center gap-3 text-red-800 dark:text-red-200 animate-slide-up">
-                <Lock size={20} className="shrink-0" />
-                <div>
-                    <p className="font-bold text-xs md:text-sm">Edição Encerrada</p>
-                    <p className="text-[10px] md:text-xs opacity-80">O prazo para envio de disponibilidade já terminou. Contate a liderança.</p>
-                </div>
-            </div>
-        )}
-
-        {/* Calendar Area */}
-        <div className={`transition-opacity duration-300 ${!canEdit ? 'opacity-60 pointer-events-none grayscale-[0.5]' : ''}`}>
-            
-            <button 
-                onClick={handleToggleBlockMonth}
-                className={`w-full mb-4 py-3 px-4 rounded-xl border flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
-                    isBlockedMonth 
-                    ? 'bg-red-50 dark:bg-red-900/20 border-red-500 text-red-600 dark:text-red-400'
-                    : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-700'
-                }`}
-            >
-                <Ban size={16} />
-                <span className="text-xs md:text-sm font-bold">
-                    {isBlockedMonth ? 'MÊS BLOQUEADO (Toque para liberar)' : 'Marcar mês inteiro como indisponível'}
-                </span>
-            </button>
-
-            <div className={`bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 p-3 md:p-6 relative overflow-hidden transition-all duration-300 ${isBlockedMonth ? 'ring-2 ring-red-500/20 opacity-50' : ''}`}>
-                
-                {isBlockedMonth && (
-                    <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
-                        <div className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm p-4 rounded-2xl border border-red-200 dark:border-red-900 shadow-xl">
-                            <p className="text-red-500 font-bold text-sm flex items-center gap-2"><Ban size={16}/> Indisponível este mês</p>
-                        </div>
-                    </div>
-                )}
-
-                <div className="grid grid-cols-7 gap-1 mb-2">
-                    {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(d => (
-                        <div key={d} className="text-center text-[10px] md:text-xs font-bold text-zinc-400 py-1">{d}</div>
-                    ))}
-                </div>
-                
-                <div className="grid grid-cols-7 gap-1 md:gap-3">
-                    {blanks.map((_, i) => <div key={`blank-${i}`} />)}
-                    {days.map(day => {
-                        const status = getDayStatus(day);
-                        let btnClass = "bg-zinc-50 dark:bg-zinc-900/50 text-zinc-400 border-zinc-200 dark:border-zinc-700";
-                        let content = <span className="text-xs md:text-sm font-bold">{day}</span>;
-
-                        if (status === 'full') {
-                            btnClass = "bg-emerald-500 text-white border-emerald-600 shadow-sm";
-                            content = (
-                                <>
-                                    <CheckCircle2 size={12} className="mb-0.5 md:mb-1" />
-                                    <span className="text-xs md:text-sm font-bold leading-none">{day}</span>
-                                </>
-                            );
-                        } else if (status === 'morning') {
-                            btnClass = "bg-amber-400 text-white border-amber-500 shadow-sm";
-                            content = (
-                                <>
-                                    <Sun size={12} className="mb-0.5 md:mb-1" />
-                                    <span className="text-xs md:text-sm font-bold leading-none">{day}</span>
-                                </>
-                            );
-                        } else if (status === 'night') {
-                            btnClass = "bg-indigo-500 text-white border-indigo-600 shadow-sm";
-                            content = (
-                                <>
-                                    <Moon size={12} className="mb-0.5 md:mb-1" />
-                                    <span className="text-xs md:text-sm font-bold leading-none">{day}</span>
-                                </>
-                            );
-                        }
-
-                        return (
-                            <button
-                                key={day}
-                                onClick={() => handleToggleDate(day)}
-                                className={`aspect-square rounded-lg md:rounded-xl border flex flex-col items-center justify-center transition-all active:scale-90 ${btnClass}`}
-                            >
-                                {content}
-                            </button>
-                        );
-                    })}
-                </div>
-
-                <div className="flex flex-wrap gap-2 md:gap-4 mt-6 justify-center bg-zinc-50 dark:bg-zinc-900/50 p-2 md:p-3 rounded-xl border border-zinc-100 dark:border-zinc-800">
-                    <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-zinc-600 dark:text-zinc-400">
-                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm"></div> Livre
-                    </div>
-                    <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-zinc-600 dark:text-zinc-400">
-                        <div className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm"></div> Manhã
-                    </div>
-                    <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-zinc-600 dark:text-zinc-400">
-                        <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-sm"></div> Noite
-                    </div>
-                </div>
-            </div>
-
-            <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 p-4 mt-4">
-                <div className="flex items-center gap-2 mb-2">
-                    <FileText size={16} className="text-zinc-400" />
-                    <h3 className="text-xs md:text-sm font-bold text-zinc-700 dark:text-zinc-300">Observações (Opcional)</h3>
-                </div>
-                <textarea 
-                    value={generalNote}
-                    onChange={e => { setGeneralNote(e.target.value); setHasUnsavedChanges(true); setSaveSuccess(false); }}
-                    placeholder="Ex: Chego atrasado no dia 15..."
-                    className="w-full h-16 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none placeholder:text-zinc-400 text-zinc-800 dark:text-zinc-200"
-                    disabled={!canEdit}
-                />
-            </div>
+            <button onClick={() => onMonthChange(adjustMonth(currentMonth, 1))} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md text-zinc-500"><ChevronRight size={20}/></button>
         </div>
+      </div>
 
-        {/* Floating Action Bar */}
-        <div className={`fixed bottom-24 lg:bottom-6 left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-500 ease-out transform ${hasUnsavedChanges || saveSuccess ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}`}>
-            <div className={`
-                backdrop-blur-xl rounded-2xl shadow-2xl p-2 pl-5 pr-2 w-[90%] max-w-sm flex items-center justify-between pointer-events-auto border ring-1 ring-black/5 transition-colors duration-300
-                ${saveSuccess 
-                    ? 'bg-emerald-500 border-emerald-400 text-white' 
-                    : 'bg-zinc-900/90 dark:bg-white/95 text-white dark:text-zinc-900 border-zinc-700/50 dark:border-zinc-200/50'
-                }
-            `}>
-                <div className="flex items-center gap-3">
-                    {saveSuccess ? (
-                        <CheckCircle2 size={20} className="text-white animate-bounce" />
-                    ) : (
-                        <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse shadow-[0_0_8px_2px_rgba(250,204,21,0.5)]"></div>
-                    )}
-                    <span className="text-xs font-bold uppercase tracking-wider">
-                        {saveSuccess ? 'Salvo com sucesso!' : 'Alterações pendentes'}
-                    </span>
-                </div>
-                
-                {!saveSuccess && (
-                    <button 
-                        onClick={handleSave}
-                        disabled={isSaving}
-                        className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-emerald-600/30 active:scale-95 transition-all flex items-center gap-2 text-sm disabled:opacity-70 disabled:cursor-not-allowed group"
-                    >
-                        {isSaving ? <RefreshCw className="animate-spin" size={16}/> : <Save size={16} className="group-hover:scale-110 transition-transform"/>}
-                        Salvar
-                    </button>
-                )}
-                
-                {saveSuccess && (
-                    <div className="px-4 py-2">
-                        <Check size={20} className="text-white/80" />
-                    </div>
-                )}
-            </div>
-        </div>
+      {isAdmin && (
+          <div className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700">
+              <label className="text-xs font-bold text-zinc-500 uppercase block mb-2">Editando para:</label>
+              <select 
+                  value={selectedMember} 
+                  onChange={e => setSelectedMember(e.target.value)}
+                  className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                  {allMembersList.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+          </div>
+      )}
+
+      <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl border border-amber-200 dark:border-amber-800/30 flex items-start gap-3">
+          <ShieldAlert className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" size={20}/>
+          <div className="text-sm text-amber-800 dark:text-amber-200">
+              <p className="font-bold mb-1">Como preencher:</p>
+              <p>Clique nos dias em que você estará <strong>INDISPONÍVEL</strong> (viajando, trabalhando, etc). Dias em branco serão considerados livres para escala.</p>
+          </div>
+      </div>
+
+      <div className="bg-white dark:bg-zinc-800 rounded-2xl p-4 shadow-sm border border-zinc-200 dark:border-zinc-700">
+          <div className="grid grid-cols-7 mb-2">
+              {['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d => (
+                  <div key={d} className="text-center text-xs font-bold text-zinc-400 uppercase py-2">{d}</div>
+              ))}
+          </div>
+          <div className="grid grid-cols-7 gap-2">
+              {Array.from({ length: startDay }).map((_, i) => <div key={`empty-${i}`} />)}
+              {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
+                  const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
+                  const isSelected = tempDates.includes(dateStr);
+                  
+                  return (
+                      <button
+                          key={day}
+                          onClick={() => toggleDate(day)}
+                          className={`aspect-square rounded-xl flex flex-col items-center justify-center transition-all relative group
+                              ${isSelected 
+                                  ? 'bg-red-500 text-white shadow-md shadow-red-500/30' 
+                                  : 'bg-zinc-50 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-100 dark:border-zinc-800'
+                              }
+                          `}
+                      >
+                          <span className="text-sm font-bold">{day}</span>
+                          {isSelected && <span className="text-[10px] font-medium mt-1">OFF</span>}
+                      </button>
+                  );
+              })}
+          </div>
+      </div>
+
+      <div className="bg-white dark:bg-zinc-800 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-700">
+          <label className="text-xs font-bold text-zinc-500 uppercase block mb-2">Observações Gerais (Opcional)</label>
+          <textarea
+              value={generalNote}
+              onChange={e => { setGeneralNote(e.target.value); setHasUnsavedChanges(true); }}
+              placeholder="Ex: Chegarei atrasado no dia 15..."
+              className="w-full h-24 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+          />
+          
+          <button 
+              onClick={handleSave}
+              disabled={isSaving || !hasUnsavedChanges}
+              className={`w-full mt-4 py-3 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all shadow-lg
+                  ${saveSuccess ? 'bg-green-600' : hasUnsavedChanges ? 'bg-emerald-600 hover:bg-emerald-700 active:scale-95 shadow-emerald-600/20' : 'bg-zinc-300 dark:bg-zinc-700 cursor-not-allowed'}
+              `}
+          >
+              {isSaving ? <Loader2 className="animate-spin" size={20}/> : <Save size={20}/>}
+              {saveSuccess ? 'Salvo com Sucesso!' : isSaving ? 'Salvando...' : 'Salvar Disponibilidade'}
+          </button>
+      </div>
     </div>
   );
 };

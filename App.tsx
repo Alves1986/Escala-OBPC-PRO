@@ -1,4 +1,3 @@
-// ... (previous imports)
 import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
@@ -53,7 +52,6 @@ import { EventDetailsModal } from './components/EventDetailsModal';
 import { StatsModal } from './components/StatsModal';
 import { ConfirmationModal } from './components/ConfirmationModal';
 
-// ... (LoadingFallback remains same)
 const LoadingFallback = () => (
   <div className="flex items-center justify-center h-full min-h-[50vh]">
     <Loader2 className="animate-spin text-teal-500" size={32} />
@@ -61,38 +59,47 @@ const LoadingFallback = () => (
 );
 
 const InnerApp = () => {
-  // ... (Hooks and States remain same)
   const [isDemoMode, setIsDemoMode] = useState(false);
   const { currentUser, loadingAuth } = useAuth();
   const { setCurrentUser, setMinistryId, setAvailableMinistries, availableMinistries, ministryId: storeMinistryId, themeMode } = useAppStore();
   const { addToast, confirmAction } = useToast();
   
+  // Date State
   const [currentMonth, setCurrentMonth] = useState(() => getLocalDateISOString().slice(0, 7));
 
-  // ... (UseEffects remain same)
+  // Initialize Global Store
   useEffect(() => {
       if (currentUser) {
           useAppStore.getState().setCurrentUser(currentUser);
       }
   }, [currentUser]);
 
+  // --- PORTEIRO V2.0: Carregar Ministérios do Banco ---
   useEffect(() => {
       const loadOrganizationMinistries = async () => {
           if (!currentUser?.organizationId) return;
 
           try {
+              // 1. Fetch ministries from DB for the user's organization
               const fetchedMinistries = await Supabase.fetchOrganizationMinistries(currentUser.organizationId);
               setAvailableMinistries(fetchedMinistries);
 
+              // 2. Validate current ministryId (VITAL FIX)
+              // Verifica se o ID que está no store (vindo do localStorage) existe na lista real do banco
               const isCurrentIdValid = fetchedMinistries.some(m => m.id === storeMinistryId);
               
               if (storeMinistryId && isCurrentIdValid) {
+                  // Se o ID atual é válido, NÃO FAZ NADA. Mantém o que estava no localStorage.
                   return; 
               }
 
+              // 3. Fallback logic: Se o ID do storage for inválido ou vazio
               if (fetchedMinistries.length > 0) {
+                  // Tenta pegar o primeiro permitido do usuário
                   const firstAllowed = currentUser.allowedMinistries?.find(mid => fetchedMinistries.some(fm => fm.id === mid));
+                  // Se não tiver allowed específico, pega o primeiro da organização
                   const target = firstAllowed || fetchedMinistries[0].id;
+                  
                   console.log(`Ministério atual (${storeMinistryId}) inválido ou vazio. Definindo para: ${target}`);
                   setMinistryId(target);
               }
@@ -107,6 +114,7 @@ const InnerApp = () => {
       }
   }, [currentUser?.organizationId, currentUser?.allowedMinistries]); 
 
+  // Theme effect
   useEffect(() => {
     const root = window.document.documentElement;
     if (themeMode === 'dark' || (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -116,17 +124,22 @@ const InnerApp = () => {
     }
   }, [themeMode]);
 
+  // Use the refactored Hook (now backed by React Query)
   const ministryId = useAppStore(state => state.ministryId);
   
+  // Get active config from available list
   const ministryConfig = useMemo(() => {
+      // Se não encontrou na lista (ex: carregando), retorna objeto seguro
       return availableMinistries.find(m => m.id === ministryId) || { 
           id: ministryId, 
           code: ministryId,
           label: '', 
           enabledTabs: DEFAULT_TABS,
+          // isLoading: true 
       };
   }, [ministryId, availableMinistries]);
 
+  // Tab State
   const [currentTab, setCurrentTab] = useState(() => {
       if (typeof window !== 'undefined') {
           const params = new URLSearchParams(window.location.search);
@@ -142,11 +155,13 @@ const InnerApp = () => {
     repertoire, swapRequests, globalConflicts, auditLogs, roles, 
     ministryTitle, availabilityWindow, 
     refreshData, isLoading: loadingData,
-    setAvailability, setNotifications
+    setAvailability, setNotifications // Legacy setters used in callbacks
   } = useMinistryData(ministryId, currentMonth, currentUser);
 
+  // Online Presence
   const onlineUsers = useOnlinePresence(currentUser?.id, currentUser?.name);
 
+  // Modals
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
@@ -158,7 +173,10 @@ const InnerApp = () => {
   const [isRolesModalOpen, setRolesModalOpen] = useState(false);
   const [isAuditModalOpen, setAuditModalOpen] = useState(false);
 
+  // --- LOGIC ---
+
   useEffect(() => {
+      // URL Tab Sync
       const url = new URL(window.location.href);
       if (url.searchParams.get('tab') !== currentTab) {
           if (!window.location.hash.includes('access_token')) {
@@ -169,6 +187,7 @@ const InnerApp = () => {
   }, [currentTab]);
 
   useEffect(() => {
+      // PWA Prompt
       const handlePwaReady = () => setShowInstallBanner(true);
       window.addEventListener('pwa-ready', handlePwaReady);
       return () => window.removeEventListener('pwa-ready', handlePwaReady);
@@ -191,6 +210,7 @@ const InnerApp = () => {
 
   const isAdmin = currentUser.role === 'admin';
 
+  // Definição Completa das Abas (Source of Truth do Layout)
   const RAW_MAIN_NAV = [
     { id: 'dashboard', label: 'Início', icon: <LayoutDashboard size={20}/> },
     { id: 'announcements', label: 'Avisos', icon: <Megaphone size={20}/> },
@@ -220,6 +240,7 @@ const InnerApp = () => {
     { id: 'repertoire', label: 'Repertório', icon: <Music size={24} />, color: 'bg-pink-500', hover: 'hover:bg-pink-600' },
   ];
 
+  // FILTRAGEM DINÂMICA: Aplica a configuração do ministério ativo
   const safeEnabledTabs = ministryConfig.enabledTabs || DEFAULT_TABS;
   const MAIN_NAV = RAW_MAIN_NAV.filter(item => safeEnabledTabs.includes(item.id));
   const MANAGEMENT_NAV = RAW_MANAGEMENT_NAV.filter(item => safeEnabledTabs.includes(item.id));
@@ -249,6 +270,7 @@ const InnerApp = () => {
                 addToast(`Alternado para ${label}`, 'info');
                 refreshData();
                 
+                // Se a nova configuração não tiver a aba atual, volta pro dashboard
                 const newConfig = availableMinistries.find(m => m.id === id);
                 if (newConfig && newConfig.enabledTabs && !newConfig.enabledTabs.includes(currentTab)) {
                     setCurrentTab('dashboard');
@@ -258,7 +280,7 @@ const InnerApp = () => {
             activeMinistryId={ministryId}
         >
             <Suspense fallback={<LoadingFallback />}>
-                {/* ... (Dashboard and other tabs remain same) */}
+                {/* Dashboard */}
                 {currentTab === 'dashboard' && (
                     <div className="space-y-8 animate-fade-in max-w-5xl mx-auto">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -271,14 +293,19 @@ const InnerApp = () => {
                             <div className="w-full md:w-auto animate-fade-in" style={{ animationDelay: '0.1s' }}><WeatherWidget /></div>
                         </div>
 
+                        {/* Next Event */}
                         <div className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
                             {(() => {
                                 const now = new Date();
-                                const bufferMs = 2.5 * 60 * 60 * 1000;
+                                const bufferMs = 2.5 * 60 * 60 * 1000; // 2 horas e 30 minutos em milissegundos
                                 
                                 const upcoming = events.filter(e => {
                                     const eventDate = new Date(e.iso);
+                                    // A data de expiração é o horário do evento + 2h 30min
                                     const expirationDate = new Date(eventDate.getTime() + bufferMs);
+                                    
+                                    // O evento é válido se o momento atual for menor que a data de expiração
+                                    // Ou seja, ainda não passou de 2h30min após o início
                                     return expirationDate > now;
                                 }).sort((a, b) => a.iso.localeCompare(b.iso))[0];
 
@@ -286,6 +313,7 @@ const InnerApp = () => {
                             })()}
                         </div>
 
+                        {/* Quick Access Section - Desktop Only (Hidden on LG and below as requested) */}
                         <div className="hidden lg:block space-y-4 animate-slide-up" style={{ animationDelay: '0.3s' }}>
                             <h3 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-2">
                                 <MousePointerClick size={14}/> Acesso Rápido
@@ -316,6 +344,7 @@ const InnerApp = () => {
                     </div>
                 )}
 
+                {/* Calendar */}
                 {currentTab === 'calendar' && safeEnabledTabs.includes('calendar') && (
                     <div className="space-y-6 animate-fade-in">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -330,6 +359,7 @@ const InnerApp = () => {
                     </div>
                 )}
 
+                {/* Schedule Editor (Admin) */}
                 {currentTab === 'schedule-editor' && isAdmin && safeEnabledTabs.includes('schedule-editor') && (
                     <div className="space-y-6 animate-fade-in">
                         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-6 border-b border-zinc-200 dark:border-zinc-800 pb-6">
@@ -339,12 +369,34 @@ const InnerApp = () => {
                                 </h2>
                                 <p className="text-zinc-500 dark:text-zinc-400 mt-2">Gerencie a escala oficial de {getMonthName(currentMonth)}.</p>
                             </div>
+                            
+                            {/* Toolbar Container: Actions + Date Nav */}
                             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
+                                
+                                {/* Actions Group */}
                                 <div className="flex items-center gap-2 overflow-x-auto no-scrollbar sm:overflow-visible pb-1 sm:pb-0">
-                                    <button onClick={() => setRolesModalOpen(true)} className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-sm font-bold whitespace-nowrap border border-zinc-200 dark:border-zinc-700"><Briefcase size={16}/> <span>Funções</span></button>
-                                    <button onClick={() => setAuditModalOpen(true)} className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-sm font-bold whitespace-nowrap border border-zinc-200 dark:border-zinc-700"><History size={16}/> <span>Histórico</span></button>
-                                    <ToolsMenu onExportIndividual={(member) => generateIndividualPDF(ministryTitle, currentMonth, member, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), schedule)} onExportFull={() => generateFullSchedulePDF(ministryTitle, currentMonth, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), roles, schedule)} onClearMonth={() => confirmAction("Limpar?", "Limpar escala?", () => Supabase.clearScheduleForMonth(ministryId, currentMonth).then(refreshData))} onResetEvents={() => confirmAction("Restaurar?", "Restaurar eventos?", () => Supabase.resetToDefaultEvents(ministryId, currentMonth).then(refreshData))} allMembers={publicMembers.map(m => m.name)} />
+                                    <button 
+                                        onClick={() => setRolesModalOpen(true)}
+                                        className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-sm font-bold whitespace-nowrap border border-zinc-200 dark:border-zinc-700"
+                                    >
+                                        <Briefcase size={16}/> <span>Funções</span>
+                                    </button>
+                                    <button 
+                                        onClick={() => setAuditModalOpen(true)}
+                                        className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-sm font-bold whitespace-nowrap border border-zinc-200 dark:border-zinc-700"
+                                    >
+                                        <History size={16}/> <span>Histórico</span>
+                                    </button>
+                                    <ToolsMenu 
+                                        onExportIndividual={(member) => generateIndividualPDF(ministryTitle, currentMonth, member, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), schedule)} 
+                                        onExportFull={() => generateFullSchedulePDF(ministryTitle, currentMonth, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), roles, schedule)} 
+                                        onClearMonth={() => confirmAction("Limpar?", "Limpar escala?", () => Supabase.clearScheduleForMonth(ministryId, currentMonth).then(refreshData))} 
+                                        onResetEvents={() => confirmAction("Restaurar?", "Restaurar eventos?", () => Supabase.resetToDefaultEvents(ministryId, currentMonth).then(refreshData))}
+                                        allMembers={publicMembers.map(m => m.name)} 
+                                    />
                                 </div>
+                                
+                                {/* Date Navigator */}
                                 <div className="flex items-center justify-between gap-1 bg-white dark:bg-zinc-800 p-1 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm sm:ml-2">
                                     <button onClick={() => setCurrentMonth(adjustMonth(currentMonth, -1))} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg text-zinc-500 dark:text-zinc-400 transition-colors"><ArrowLeft size={18}/></button>
                                     <span className="text-sm font-bold min-w-[90px] text-center text-zinc-800 dark:text-zinc-100 tabular-nums">{currentMonth}</span>
@@ -352,33 +404,45 @@ const InnerApp = () => {
                                 </div>
                             </div>
                         </div>
-                        <ScheduleTable events={events} roles={roles} schedule={schedule} attendance={attendance} availability={availability} availabilityNotes={availabilityNotes} members={membersMap} allMembers={publicMembers.map(m => m.name)} memberProfiles={publicMembers} scheduleIssues={{}} globalConflicts={globalConflicts} onCellChange={async (key, val) => { const success = await Supabase.saveScheduleAssignment(ministryId, key, val); if (success) { refreshData(); } else { addToast("Erro ao salvar: Membro não encontrado ou dados inválidos.", "error"); }}} onAttendanceToggle={async (key) => { await Supabase.toggleAssignmentConfirmation(ministryId, key); refreshData(); }} onDeleteEvent={async (iso, title) => confirmAction("Remover?", `Remover "${title}"?`, async () => { await Supabase.deleteMinistryEvent(ministryId, iso.split('T')[0] + 'T' + iso.split('T')[1]); refreshData(); })} onEditEvent={(event) => setEventDetailsModal({ isOpen: true, event })} memberStats={Object.values(schedule).reduce<Record<string, number>>((acc, val) => { const v = val as string; if(v) acc[v] = (acc[v] || 0) + 1; return acc; }, {})} ministryId={ministryId} readOnly={false} onlineUsers={onlineUsers} />
+                        
+                        <ScheduleTable 
+                            events={events} 
+                            roles={roles} 
+                            schedule={schedule} 
+                            attendance={attendance} 
+                            availability={availability}
+                            availabilityNotes={availabilityNotes}
+                            members={membersMap} 
+                            allMembers={publicMembers.map(m => m.name)} 
+                            memberProfiles={publicMembers} 
+                            scheduleIssues={{}} 
+                            globalConflicts={globalConflicts} 
+                            onCellChange={async (key, val) => { 
+                                const success = await Supabase.saveScheduleAssignment(ministryId, key, val); 
+                                if (success) {
+                                    refreshData(); 
+                                } else {
+                                    addToast("Erro ao salvar: Membro não encontrado ou dados inválidos.", "error");
+                                }
+                            }} 
+                            onAttendanceToggle={async (key) => { await Supabase.toggleAssignmentConfirmation(ministryId, key); refreshData(); }} 
+                            onDeleteEvent={async (iso, title) => confirmAction("Remover?", `Remover "${title}"?`, async () => { await Supabase.deleteMinistryEvent(ministryId, iso.split('T')[0] + 'T' + iso.split('T')[1]); refreshData(); })} 
+                            onEditEvent={(event) => setEventDetailsModal({ isOpen: true, event })} 
+                            memberStats={Object.values(schedule).reduce<Record<string, number>>((acc, val) => { const v = val as string; if(v) acc[v] = (acc[v] || 0) + 1; return acc; }, {})} 
+                            ministryId={ministryId} 
+                            readOnly={false} 
+                            onlineUsers={onlineUsers} 
+                        />
                     </div>
                 )}
 
-                {currentTab === 'super-admin' && currentUser?.isSuperAdmin && <SuperAdminDashboard />}
-
-                {/* MODIFIED: Pass full member objects and use UUID in callback */}
-                {currentTab === 'availability' && safeEnabledTabs.includes('availability') && (
-                    <AvailabilityScreen 
-                        availability={availability} 
-                        availabilityNotes={availabilityNotes} 
-                        setAvailability={setAvailability} 
-                        allMembersList={publicMembers.map(m => m.name)}
-                        members={publicMembers} // NEW: Pass array of member objects
-                        currentMonth={currentMonth} 
-                        onMonthChange={setCurrentMonth} 
-                        currentUser={currentUser} 
-                        // UPDATED: onSaveAvailability now expects memberId as second arg, which we pass from screen
-                        onSaveAvailability={async (mid, memberId, dates, notes, month) => { 
-                            await Supabase.saveMemberAvailability(mid, memberId, dates, notes, month); 
-                            refreshData(); 
-                        }} 
-                        availabilityWindow={availabilityWindow} 
-                        ministryId={ministryId} 
-                    />
+                {/* SUPER ADMIN DASHBOARD */}
+                {currentTab === 'super-admin' && currentUser?.isSuperAdmin && (
+                    <SuperAdminDashboard />
                 )}
 
+                {/* Other Tabs Mapped & Filtered */}
+                {currentTab === 'availability' && safeEnabledTabs.includes('availability') && <AvailabilityScreen availability={availability} availabilityNotes={availabilityNotes} setAvailability={setAvailability} allMembersList={publicMembers.map(m => m.name)} currentMonth={currentMonth} onMonthChange={setCurrentMonth} currentUser={currentUser} onSaveAvailability={async (mid, m, d, n, t) => { await Supabase.saveMemberAvailability(mid, m, d, n, t); refreshData(); }} availabilityWindow={availabilityWindow} ministryId={ministryId} />}
                 {currentTab === 'swaps' && safeEnabledTabs.includes('swaps') && <SwapRequestsScreen schedule={schedule} currentUser={currentUser} requests={swapRequests} visibleEvents={events} onCreateRequest={async (role, iso, title) => { await Supabase.createSwapRequestSQL(ministryId, { id: '', ministryId, requesterName: currentUser.name, requesterId: currentUser.id, role, eventIso: iso, eventTitle: title, status: 'pending', createdAt: new Date().toISOString() }); refreshData(); }} onAcceptRequest={async (reqId) => { await Supabase.performSwapSQL(ministryId, reqId, currentUser.name, currentUser.id!); refreshData(); }} onCancelRequest={async (reqId) => { await Supabase.cancelSwapRequestSQL(reqId); addToast("Pedido removido com sucesso.", "info"); refreshData(); }} />}
                 {currentTab === 'ranking' && safeEnabledTabs.includes('ranking') && <RankingScreen ministryId={ministryId} currentUser={currentUser} />}
                 
@@ -401,22 +465,7 @@ const InnerApp = () => {
             <InstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />
             <JoinMinistryModal isOpen={showJoinModal} onClose={() => setShowJoinModal(false)} onJoin={async (id, r) => { await Supabase.joinMinistry(id, r); window.location.reload(); }} alreadyJoined={currentUser.allowedMinistries || []} />
             <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ ...e, iso: e.iso }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, e); refreshData(); }} onRemove={async (id) => { refreshData(); }} />
-            {/* UPDATED AvailabilityModal call signature if needed, but it seems internal logic handles it or it uses name. Assuming Modal is legacy, main screen is updated. If Modal uses name, it might still work if saveMemberAvailability handles name fallback, but here we strictly changed save to UUID. If Modal passes name, it will fail. However, instructions were specific to AvailabilityScreen. I will not touch Modal to respect constraints unless necessary. Wait, Modal calls onUpdate(member, dates). If onUpdate calls save with member string, it breaks. But AvailabilityModal is Admin tool. I should update its onUpdate handler in App.tsx if it's used. */}
-            <AvailabilityModal 
-                isOpen={isAvailModalOpen} 
-                onClose={() => setAvailModalOpen(false)} 
-                members={publicMembers.map(m => m.name)} 
-                availability={availability} 
-                // Quick Fix: Look up ID here for Modal usage too
-                onUpdate={async (memberName, dates) => { 
-                    const memberObj = publicMembers.find(m => m.name === memberName);
-                    if (memberObj) {
-                        await Supabase.saveMemberAvailability(ministryId, memberObj.id, dates, {}, currentMonth); 
-                        refreshData();
-                    }
-                }} 
-                currentMonth={currentMonth} 
-            />
+            <AvailabilityModal isOpen={isAvailModalOpen} onClose={() => setAvailModalOpen(false)} members={publicMembers.map(m => m.name)} availability={availability} onUpdate={async (m, d) => { await Supabase.saveMemberAvailability(ministryId, m, d, {}, currentMonth); refreshData(); }} currentMonth={currentMonth} />
             <RolesModal isOpen={isRolesModalOpen} onClose={() => setRolesModalOpen(false)} roles={roles} onUpdate={async (r) => { await Supabase.saveMinistrySettings(ministryId, undefined, r); refreshData(); }} />
             <AuditModal isOpen={isAuditModalOpen} onClose={() => setAuditModalOpen(false)} logs={auditLogs} />
             
