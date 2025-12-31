@@ -56,7 +56,7 @@ const getCurrentOrgId = async (): Promise<string> => {
 };
 
 // --- FIX: RESOLVE MINISTRY IDENTITY (UUID vs SLUG) ---
-// Versão reforçada para garantir que encontramos o par UUID <-> Code
+// Função crítica para RLS: Garante que operamos com o UUID correto do banco
 const resolveMinistryIds = async (identifier: string, orgId: string) => {
     if (!supabase) return { ids: [identifier], mainId: identifier };
     
@@ -64,33 +64,29 @@ const resolveMinistryIds = async (identifier: string, orgId: string) => {
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}/.test(identifier);
     
     try {
-        // Tenta encontrar o ministério na tabela de definição da organização
         let query = supabase.from('organization_ministries').select('id, code').eq('organization_id', orgId);
         
         if (isUUID) {
             query = query.eq('id', identifier);
         } else {
-            // Se for slug, normaliza
             query = query.eq('code', identifier.trim().toLowerCase());
         }
         
         const { data } = await query.maybeSingle();
         
         if (data) {
-            // SUCESSO: Temos o par oficial.
             return { 
-                ids: [data.id, data.code].filter(Boolean), // Array com [UUID, Slug]
-                mainId: data.id, // O UUID é sempre o ID principal
+                ids: [data.id, data.code].filter(Boolean), 
+                mainId: data.id, // Sempre prefira o UUID para inserts/updates
                 code: data.code
             };
         }
     } catch (e) { console.error("Error resolving IDs:", e); }
 
-    // Fallback: Se não achou na tabela 'organization_ministries', assume que o identificador passado é o único conhecido
     return { ids: [identifier], mainId: identifier, code: identifier };
 };
 
-// ... (Authentication exports) ...
+// ... (Auth exports mantidos iguais) ...
 export const loginWithEmail = async (email: string, pass: string) => {
     if (!supabase) return { success: true, message: "Demo Login" };
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
@@ -154,6 +150,7 @@ export const fetchUserAllowedMinistries = async (userId: string, orgId: string):
     } catch (e) { return ['midia']; }
 };
 
+// ... (Org Stats & CRUD - Mantidos) ...
 export const fetchOrganizationsWithStats = async (): Promise<Organization[]> => {
     if (!supabase) return [];
     const { data, error } = await supabase.rpc('get_orgs_with_details');
@@ -283,15 +280,13 @@ export const toggleAdminSQL = async (email: string, status: boolean, ministryId:
 export const deleteMember = async (ministryId: string, memberId: string, name: string) => { if (!supabase) return { success: false }; const { error } = await supabase.functions.invoke('push-notification', { body: { action: 'delete_member', memberId, ministryId } }); return { success: !error, message: error ? "Erro" : "Removido" }; };
 
 // --- FIX: SETTINGS FETCHING ROBUSTNESS ---
-// Busca configurações verificando tanto UUID quanto Slug/Code
 export const fetchMinistrySettings = async (ministryIdentifier: string): Promise<MinistrySettings> => { 
     if (!supabase) return { displayName: '', roles: [] }; 
     const orgId = await getCurrentOrgId(); 
     
+    // Resolvemos para buscar tanto por Slug quanto por UUID
     const { ids } = await resolveMinistryIds(ministryIdentifier, orgId);
 
-    // Consulta expandida: busca por ministry_id (slug ou uuid) OU por organization_ministry_id (fk)
-    // Isso garante que se o registro foi salvo com UUID, ele seja encontrado mesmo se buscado por slug e vice-versa
     const { data } = await supabase
         .from('ministry_settings')
         .select('*')
@@ -315,11 +310,10 @@ export const fetchMinistrySettings = async (ministryIdentifier: string): Promise
 };
 
 // --- FIX: SETTINGS SAVING PERSISTENCE ---
-// Garante que ao salvar, atualizamos o registro existente correto ou criamos com o vínculo certo
 export const saveMinistrySettings = async (ministryIdentifier: string, displayName?: string, roles?: string[], availabilityStart?: string, availabilityEnd?: string, spotifyClientId?: string, spotifyClientSecret?: string) => { 
     if (!supabase) return; 
     const orgId = await getCurrentOrgId();
-    const { ids, mainId, code } = await resolveMinistryIds(ministryIdentifier, orgId);
+    const { ids, mainId } = await resolveMinistryIds(ministryIdentifier, orgId);
 
     const updates: any = {}; 
     if (displayName !== undefined) updates.display_name = displayName; 
@@ -329,7 +323,7 @@ export const saveMinistrySettings = async (ministryIdentifier: string, displayNa
     if (spotifyClientId !== undefined) updates.spotify_client_id = spotifyClientId; 
     if (spotifyClientSecret !== undefined) updates.spotify_client_secret = spotifyClientSecret; 
     
-    // Verifica existência usando a mesma lógica "OR" robusta do fetch
+    // Busca registro existente usando UUID ou Slug
     const { data: existing } = await supabase
         .from('ministry_settings')
         .select('id')
@@ -338,15 +332,11 @@ export const saveMinistrySettings = async (ministryIdentifier: string, displayNa
         .maybeSingle();
 
     if (existing) {
-        // Atualiza o registro existente
         await supabase.from('ministry_settings').update(updates).eq('id', existing.id);
     } else {
-        // Cria novo registro vinculando o UUID correto
-        // Se temos um UUID real (mainId), usamos como FK e como ID principal
-        // Se só temos slug (code), usamos como ministry_id
         await supabase.from('ministry_settings').insert({ 
-            ministry_id: mainId, // Prefer UUID
-            organization_ministry_id: mainId, // Foreign Key
+            ministry_id: mainId, // Preferencia para UUID
+            organization_ministry_id: mainId, 
             organization_id: orgId,
             ...updates 
         }); 
@@ -362,19 +352,18 @@ export const fetchMinistryAvailability = async (ministryId: string) => {
     const { data: profiles } = await supabase.from('profiles').select('id, name, allowed_ministries, ministry_id').eq('organization_id', orgId);
     if (!profiles) return { availability: {}, notes: {} };
     
+    // Filtra membros que pertencem a este ministério (por Slug ou UUID)
     const filteredProfiles = profiles.filter((p: any) => {
         const allowed = safeParseArray(p.allowed_ministries);
-        // Check both UUID and Slug
         return ids.some(id => allowed.includes(id) || p.ministry_id === id);
     });
     
     const memberIds = filteredProfiles.map((p: any) => p.id);
     if (memberIds.length === 0) return { availability: {}, notes: {} };
     
-    // Fetch availability for any matching ministry ID variant
     const { data: avails } = await supabase.from('availability')
         .select('*')
-        .in('ministry_id', ids)
+        .in('ministry_id', ids) // Busca por qualquer variação do ID
         .in('member_id', memberIds); 
         
     const availability: AvailabilityMap = {};
@@ -388,7 +377,7 @@ export const fetchMinistryAvailability = async (ministryId: string) => {
             if (a.notes) { Object.entries(a.notes).forEach(([dayKey, note]) => { notes[`${profile.name}_${dayKey}`] = note as string; }); }
         }
     });
-    // Deduplicate
+    // Remove duplicatas
     Object.keys(availability).forEach(key => { availability[key] = [...new Set(availability[key])]; });
     return { availability, notes };
 };
@@ -402,13 +391,13 @@ export const saveMemberAvailability = async (ministryId: string, memberName: str
         
         const memberId = profile.id;
         const orgId = profile.organization_id || DEFAULT_ORG_ID;
-        const { ids, mainId } = await resolveMinistryIds(ministryId, orgId);
+        const { ids, mainId } = await resolveMinistryIds(ministryId, orgId); // IDs resolvidos
 
         const monthDates = dates.filter(d => d.startsWith(targetMonth));
         const monthNotes: Record<string, string> = {};
         Object.entries(notes).forEach(([key, val]) => { if (key.startsWith(targetMonth) && val && val.trim() !== "") monthNotes[key] = val; });
         
-        // 1. Check if record exists for ANY valid ID (Slug or UUID)
+        // 1. Verifica se já existe (usando UUID ou Slug)
         const { data: existingRecord } = await supabase
             .from('availability')
             .select('id')
@@ -418,7 +407,7 @@ export const saveMemberAvailability = async (ministryId: string, memberName: str
             .maybeSingle();
 
         if (existingRecord) {
-            // 2. UPDATE existing record (preserves ID, fixes duplicated rows issues)
+            // 2. ATUALIZA (mantém o ID do registro)
             const { error: updateError } = await supabase
                 .from('availability')
                 .update({ 
@@ -430,16 +419,16 @@ export const saveMemberAvailability = async (ministryId: string, memberName: str
                 
             if (updateError) throw updateError;
         } else {
-            // 3. INSERT new record (uses preferred UUID)
+            // 3. INSERE (usa o UUID principal, se disponível, ou o Slug)
             const { error: insertError } = await supabase
                 .from('availability')
                 .insert({ 
                     member_id: memberId, 
-                    ministry_id: mainId, // Use UUID
+                    ministry_id: mainId, // Preferência para UUID
                     month: targetMonth, 
                     dates: monthDates, 
                     notes: monthNotes,
-                    organization_id: orgId 
+                    organization_id: orgId // CRÍTICO: RLS exige isso
                 });
                 
             if (insertError) throw insertError;
