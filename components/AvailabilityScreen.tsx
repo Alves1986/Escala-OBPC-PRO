@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { AvailabilityMap, AvailabilityNotesMap, User } from '../types';
+import { AvailabilityMap, AvailabilityNotesMap, User, TeamMemberProfile } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
 import { ChevronLeft, ChevronRight, Save, CheckCircle2, Moon, Sun, Lock, FileText, Info, Ban, Unlock, RefreshCw, Check, ShieldAlert } from 'lucide-react';
 import { useToast } from './Toast';
@@ -9,11 +8,12 @@ interface Props {
   availability: AvailabilityMap;
   availabilityNotes: AvailabilityNotesMap;
   setAvailability: React.Dispatch<React.SetStateAction<AvailabilityMap>>;
-  allMembersList: string[];
+  allMembersList: string[]; // For dropdown visual
+  members?: TeamMemberProfile[]; // New prop for UUID lookup
   currentMonth: string;
   onMonthChange: (newMonth: string) => void;
   currentUser: User | null;
-  onSaveAvailability: (ministryId: string, member: string, dates: string[], notes: Record<string, string>, targetMonth: string) => Promise<void>;
+  onSaveAvailability: (ministryId: string, memberId: string, dates: string[], notes: Record<string, string>, targetMonth: string) => Promise<void>;
   availabilityWindow?: { start?: string, end?: string };
   ministryId: string;
 }
@@ -22,6 +22,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
   availability,
   availabilityNotes,
   allMembersList,
+  members,
   currentMonth,
   onMonthChange,
   currentUser,
@@ -49,25 +50,18 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const blanks = Array.from({ length: firstDayOfWeek });
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
-  // Check Window Status (Pure Logic - Is it open for REGULAR members?)
+  // Check Window Status
   const isWindowOpenForMembers = React.useMemo(() => {
-      // Se não houver configuração, assume aberto
       if (!availabilityWindow?.start && !availabilityWindow?.end) return true;
-      
-      // Verifica bloqueio manual (1970)
       if (availabilityWindow.start?.includes('1970')) return false;
-
       const now = new Date();
       let start = new Date(0);
       let end = new Date(8640000000000000); 
-
       if (availabilityWindow.start) start = new Date(availabilityWindow.start);
       if (availabilityWindow.end) end = new Date(availabilityWindow.end);
-      
       return now >= start && now <= end;
   }, [availabilityWindow]);
 
-  // Can the current user edit? (Admins bypass the lock)
   const canEdit = isAdmin || isWindowOpenForMembers;
 
   // Init Member Selection
@@ -86,11 +80,9 @@ export const AvailabilityScreen: React.FC<Props> = ({
     if (!selectedMember) return;
 
     const storedDates = availability[selectedMember] || [];
-    // Filtra apenas datas deste mês para o estado local
     const monthDates = storedDates.filter(d => d.startsWith(currentMonth));
     setTempDates(monthDates);
     
-    // Key: Nome_YYYY-MM-00
     const noteKey = `${selectedMember}_${currentMonth}-00`;
     setGeneralNote(availabilityNotes?.[noteKey] || "");
     
@@ -102,11 +94,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
       if (!canEdit) return;
       setHasUnsavedChanges(true);
       setSaveSuccess(false);
-
       if (isBlockedMonth) {
-          setTempDates([]); // Clear block
+          setTempDates([]); 
       } else {
-          setTempDates([`${currentMonth}-BLK`]); // Set block
+          setTempDates([`${currentMonth}-BLK`]);
       }
   };
 
@@ -128,7 +119,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
       let newDates = isBlockedMonth ? [] : [...tempDates];
       
-      // Remove any existing entry for this day
       const hadFull = newDates.includes(full);
       const hadMorning = newDates.includes(morning);
       const hadNight = newDates.includes(night);
@@ -136,13 +126,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
       newDates = newDates.filter(d => !d.startsWith(dateBase));
 
       if (isSunday) {
-          // Cycle: Empty -> Full -> Morning -> Night -> Empty
           if (!hadFull && !hadMorning && !hadNight) newDates.push(full);
           else if (hadFull) newDates.push(morning);
           else if (hadMorning) newDates.push(night);
-          // else if (hadNight) -> Empty (already filtered)
       } else {
-          // Cycle: Empty -> Full -> Empty
           if (!hadFull) newDates.push(full);
       }
       
@@ -151,16 +138,23 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   const handleSave = async () => {
       if (!selectedMember) return;
+
+      // RESOLUÇÃO DE ID AQUI
+      const memberObj = members?.find(m => m.name === selectedMember);
+      if (!memberObj) {
+          addToast("Erro: Membro não encontrado na lista oficial.", "error");
+          return;
+      }
+
       setIsSaving(true);
       try {
           const notesPayload: Record<string, string> = {};
-          
           if (generalNote.trim()) {
               notesPayload[`${currentMonth}-00`] = generalNote.trim();
           }
 
-          // FIX: Pass ministryId explicitly as the first argument
-          await onSaveAvailability(ministryId, selectedMember, tempDates, notesPayload, currentMonth);
+          // Passa ID (UUID)
+          await onSaveAvailability(ministryId, memberObj.id, tempDates, notesPayload, currentMonth);
           
           setHasUnsavedChanges(false);
           setSaveSuccess(true);
@@ -227,8 +221,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
         </div>
 
         {/* --- STATUS WARNINGS --- */}
-        
-        {/* Caso 1: Fechado para membros, mas Admin vendo */}
         {!isWindowOpenForMembers && isAdmin && (
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/30 p-3 rounded-xl flex items-center gap-3 text-blue-800 dark:text-blue-200 animate-slide-up">
                 <ShieldAlert size={20} className="shrink-0" />
@@ -239,7 +231,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
             </div>
         )}
 
-        {/* Caso 2: Fechado para membro comum */}
         {!isWindowOpenForMembers && !isAdmin && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 p-3 rounded-xl flex items-center gap-3 text-red-800 dark:text-red-200 animate-slide-up">
                 <Lock size={20} className="shrink-0" />
@@ -253,7 +244,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
         {/* Calendar Area */}
         <div className={`transition-opacity duration-300 ${!canEdit ? 'opacity-60 pointer-events-none grayscale-[0.5]' : ''}`}>
             
-            {/* Block Month Toggle */}
             <button 
                 onClick={handleToggleBlockMonth}
                 className={`w-full mb-4 py-3 px-4 rounded-xl border flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
@@ -270,7 +260,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
             <div className={`bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 p-3 md:p-6 relative overflow-hidden transition-all duration-300 ${isBlockedMonth ? 'ring-2 ring-red-500/20 opacity-50' : ''}`}>
                 
-                {/* Blocked Overlay */}
                 {isBlockedMonth && (
                     <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
                         <div className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm p-4 rounded-2xl border border-red-200 dark:border-red-900 shadow-xl">
@@ -279,14 +268,12 @@ export const AvailabilityScreen: React.FC<Props> = ({
                     </div>
                 )}
 
-                {/* Grid */}
                 <div className="grid grid-cols-7 gap-1 mb-2">
                     {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(d => (
                         <div key={d} className="text-center text-[10px] md:text-xs font-bold text-zinc-400 py-1">{d}</div>
                     ))}
                 </div>
                 
-                {/* Mobile Optimized Grid: Gap-1 for tightness, larger buttons on desktop */}
                 <div className="grid grid-cols-7 gap-1 md:gap-3">
                     {blanks.map((_, i) => <div key={`blank-${i}`} />)}
                     {days.map(day => {
@@ -345,7 +332,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
                 </div>
             </div>
 
-            {/* Notes */}
             <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 p-4 mt-4">
                 <div className="flex items-center gap-2 mb-2">
                     <FileText size={16} className="text-zinc-400" />
@@ -361,7 +347,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
             </div>
         </div>
 
-        {/* Floating Action Bar - Adjusted bottom position for mobile nav */}
+        {/* Floating Action Bar */}
         <div className={`fixed bottom-24 lg:bottom-6 left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-500 ease-out transform ${hasUnsavedChanges || saveSuccess ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}`}>
             <div className={`
                 backdrop-blur-xl rounded-2xl shadow-2xl p-2 pl-5 pr-2 w-[90%] max-w-sm flex items-center justify-between pointer-events-auto border ring-1 ring-black/5 transition-colors duration-300

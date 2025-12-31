@@ -11,38 +11,27 @@ import {
 // CONFIGURATION & ENVIRONMENT
 // ============================================================================
 
-// Globals injected by Vite via define
-declare const __SUPABASE_URL__: string;
-declare const __SUPABASE_KEY__: string;
+export let SUPABASE_URL = "";
+export let SUPABASE_KEY = "";
 
-// 1. Try Injected Globals (Build-time env vars)
-let injectedUrl = '';
-let injectedKey = '';
 try {
-    // @ts-ignore
-    if (typeof __SUPABASE_URL__ !== 'undefined') injectedUrl = __SUPABASE_URL__;
-    // @ts-ignore
-    if (typeof __SUPABASE_KEY__ !== 'undefined') injectedKey = __SUPABASE_KEY__;
-} catch(e) {}
-
-// 2. Try import.meta.env (Vite Standard)
-let metaUrl = '';
-let metaKey = '';
-try {
+  // Vite padrão
   // @ts-ignore
-  const meta = import.meta;
-  if (meta && meta.env) {
-    metaUrl = meta.env.VITE_SUPABASE_URL;
-    metaKey = meta.env.VITE_SUPABASE_KEY;
-  }
-} catch (e) {}
+  SUPABASE_URL = import.meta?.env?.VITE_SUPABASE_URL || "";
+  // @ts-ignore
+  SUPABASE_KEY = import.meta?.env?.VITE_SUPABASE_KEY || "";
+} catch {}
 
-export const SUPABASE_URL = injectedUrl || metaUrl || "";
-export const SUPABASE_KEY = injectedKey || metaKey || "";
+try {
+  // Fallback global (injeção via define)
+  // @ts-ignore
+  SUPABASE_URL = SUPABASE_URL || __SUPABASE_URL__ || "";
+  // @ts-ignore
+  SUPABASE_KEY = SUPABASE_KEY || __SUPABASE_KEY__ || "";
+} catch {}
 
-// Debug Log
-if ((!SUPABASE_URL || !SUPABASE_KEY) && typeof window !== 'undefined' && window.location.pathname !== '/setup') {
-  console.warn("⚠️ Sistema aguardando credenciais. Verifique o arquivo .env na raiz.");
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  console.warn("Supabase env não encontrado. Verificar .env ou define");
 }
 
 let supabase: SupabaseClient | null = null;
@@ -396,7 +385,7 @@ export const joinMinistry = async (ministryId: string, roles: string[]) => {
 
 export const updateProfileMinistry = async (userId: string, ministryId: string) => { if (!supabase) return; await supabase.from('profiles').update({ ministry_id: ministryId }).eq('id', userId); };
 export const updateUserProfile = async (name: string, whatsapp: string, avatar: string | undefined, functions: string[] | undefined, birthDate: string | undefined, currentMinistryId?: string) => { if (!supabase) return { success: false, message: "Offline" }; const { data: { user } } = await supabase.auth.getUser(); if (!user) return { success: false }; const updates: any = { name, whatsapp }; if (birthDate) updates.birth_date = birthDate; else updates.birth_date = null; if (avatar) updates.avatar_url = avatar; if (functions) updates.functions = functions; const { error } = await supabase.from('profiles').update(updates).eq('id', user.id); return { success: !error, message: error ? error.message : "Perfil atualizado!" }; };
-export const updateMemberData = async (memberId: string, data: { name?: string, roles?: string[], whatsapp?: string }) => { if (!supabase) return { success: false, message: "Offline" }; const updates: any = {}; if (data.name) updates.name = data.name; if (data.roles) updates.functions = data.roles; if (data.whatsapp) updates.whatsapp = data.whatsapp; const { error } = await supabase.from('profiles').update(updates).eq('id', memberId); return { success: !error, message: error ? error.message : "Membro atualizado com sucesso!" }; };
+export const updateMemberData = async (memberId: string, data: { name?: string, roles?: string[], whatsapp?: string }) => { if (!supabase) return { success: false, message: "Offline" }; const updates: any = { }; if (data.name) updates.name = data.name; if (data.roles) updates.functions = data.roles; if (data.whatsapp) updates.whatsapp = data.whatsapp; const { error } = await supabase.from('profiles').update(updates).eq('id', memberId); return { success: !error, message: error ? error.message : "Membro atualizado com sucesso!" }; };
 export const toggleAdminSQL = async (email: string, status: boolean, ministryId: string) => { if (!supabase) return; await supabase.functions.invoke('push-notification', { body: { action: 'toggle_admin', targetEmail: email, status, ministryId } }); };
 export const deleteMember = async (ministryId: string, memberId: string, name: string) => { if (!supabase) return { success: false }; const { error } = await supabase.functions.invoke('push-notification', { body: { action: 'delete_member', memberId, ministryId } }); return { success: !error, message: error ? "Erro" : "Removido" }; };
 
@@ -594,38 +583,52 @@ export const fetchMinistryAvailability = async (ministryId: string) => {
     return { availability, notes };
 };
 
-export const saveMemberAvailability = async (ministryId: string, memberName: string, dates: string[], notes: Record<string, string>, targetMonth: string) => {
-    if (!supabase) return { error: { message: "Sem conexão com banco de dados." } };
-    try {
-        const { data: profile, error: profileError } = await supabase.from('profiles').select('id, organization_id').eq('name', memberName).single();
-        if (profileError || !profile) throw new Error(`Membro "${memberName}" não encontrado. Contate o admin.`);
-        const memberId = profile.id;
-        const orgId = profile.organization_id || DEFAULT_ORG_ID;
+export const saveMemberAvailability = async (
+  ministryId: string,
+  memberId: string,
+  dates: string[],
+  notes: Record<string, string>,
+  targetMonth: string
+) => {
+  if (!supabase) return { error: { message: "Sem conexão" } };
 
-        const monthDates = dates.filter(d => d.startsWith(targetMonth));
-        const monthNotes: Record<string, string> = {};
-        Object.entries(notes).forEach(([key, val]) => { if (key.startsWith(targetMonth) && val && val.trim() !== "") monthNotes[key] = val; });
-        
-        const { error: upsertError } = await supabase.from('availability').upsert({ 
-            member_id: memberId, 
-            ministry_id: ministryId,
-            month: targetMonth, 
-            dates: monthDates, 
-            notes: monthNotes,
-            organization_id: orgId 
-        }, { onConflict: 'member_id, ministry_id, month' }); 
-        
-        if (upsertError) {
-            if (upsertError.message?.includes('invalid input syntax for type date') || upsertError.message?.includes('type date')) {
-                 throw new Error("⚠️ Erro de Banco de Dados: A coluna 'dates' não está configurada como Array. Por favor, execute o 'Script de Correção' no Supabase (SQL Editor).");
-            }
-            throw upsertError;
-        }
-        return { success: true };
-    } catch (err: any) {
-        console.error("CRITICAL SAVE ERROR:", err);
-        return { error: { message: err.message || "Falha desconhecida ao salvar." } };
-    }
+  try {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", memberId)
+      .single();
+
+    if (!profile) throw new Error("Perfil não encontrado");
+
+    const monthDates = dates.filter(d => d.startsWith(targetMonth));
+
+    const filteredNotes: Record<string, string> = {};
+    Object.entries(notes).forEach(([k, v]) => {
+      if (k.startsWith(targetMonth) && v?.trim()) filteredNotes[k] = v;
+    });
+
+    const { error } = await supabase
+      .from("availability")
+      .upsert(
+        {
+          member_id: memberId,
+          ministry_id: ministryId,
+          month: targetMonth,
+          dates: monthDates,
+          notes: filteredNotes,
+          organization_id: profile.organization_id
+        },
+        { onConflict: "member_id, ministry_id, month" }
+      );
+
+    if (error) throw error;
+
+    return { success: true };
+  } catch (err: any) {
+    console.error(err);
+    return { error: { message: err.message } };
+  }
 };
 
 export const fetchNotificationsSQL = async (ministryIds: string[], userId: string): Promise<AppNotification[]> => { if (!supabase) return []; const { data: notifs } = await supabase.from('notifications').select('*').in('ministry_id', ministryIds).order('created_at', { ascending: false }).limit(20); const { data: reads } = await supabase.from('notification_reads').select('notification_id').eq('user_id', userId); const readSet = new Set(reads?.map((r: any) => r.notification_id)); return (notifs || []).map((n: any) => ({ id: n.id, ministryId: n.ministry_id, title: n.title, message: n.message, type: n.type, actionLink: n.action_link, timestamp: n.created_at, read: readSet.has(n.id), organizationId: n.organization_id })); };
