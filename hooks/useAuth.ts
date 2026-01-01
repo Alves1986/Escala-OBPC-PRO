@@ -20,14 +20,13 @@ export function useAuth() {
             role: 'admin' as const,
             ministryId: 'midia',
             allowedMinistries: ['midia'],
-            organizationId: 'demo-org-001',
+            organizationId: '00000000-0000-0000-0000-000000000000',
             isSuperAdmin: true, 
             avatar_url: '',
             whatsapp: '11999999999',
             functions: ['Projeção']
         };
         setCurrentUser(demoUser);
-        // Garante que o store tenha o ID correto no demo
         if (!currentStoreId) setMinistryId('midia');
         setLoadingAuth(false);
         return;
@@ -49,57 +48,55 @@ export function useAuth() {
         }
 
         try {
-            // Busca segura do perfil
+            // Busca segura do perfil com organization_id obrigatório
             let { data: profile, error: fetchError } = await sb
                 .from('profiles')
                 .select('*')
                 .eq('id', user.id)
                 .maybeSingle();
             
-            // ... (Lógica de auto-correção existente omitida para brevidade, mantida igual) ...
             if (!profile || fetchError) {
-                 // Fallback de emergência (mantido igual ao original)
+                 console.warn("Profile incomplete or missing, using safe defaults.", fetchError);
                  profile = {
                     id: user.id,
                     email: user.email,
                     name: user.user_metadata?.full_name || 'Membro',
                     ministry_id: 'midia',
                     allowed_ministries: ['midia'],
-                    organization_id: '00000000-0000-0000-0000-000000000000',
+                    organization_id: '00000000-0000-0000-0000-000000000000', // Default Org ID
                     role: 'member',
                     is_super_admin: false
                  };
             }
 
             if (profile) {
+                // Ensure Org ID is present
                 const safeOrgId = profile.organization_id || '00000000-0000-0000-0000-000000000000';
+                
                 const allowedMinistries = await Supabase.fetchUserAllowedMinistries(profile.id, safeOrgId);
                 
-                // --- LÓGICA DE SELEÇÃO DE MINISTÉRIO (CORRIGIDA) ---
                 let activeMinistry = '';
 
-                // 1. Tenta pegar do LocalStorage (Persistência no Navegador)
+                // 1. LocalStorage
                 const localStored = localStorage.getItem('ministry_id');
                 if (localStored && allowedMinistries.includes(localStored)) {
                     activeMinistry = localStored;
                 }
 
-                // 2. Se não houver local, tenta pegar do Perfil do Usuário (DB - ministry_id)
+                // 2. Profile DB Preference
                 if (!activeMinistry && profile.ministry_id && allowedMinistries.includes(profile.ministry_id)) {
                     activeMinistry = profile.ministry_id;
                 }
 
-                // 3. Fallback: Pega o primeiro permitido
+                // 3. Fallback
                 if (!activeMinistry && allowedMinistries.length > 0) {
                     activeMinistry = allowedMinistries[0];
                 }
 
-                // 4. Último caso (Hard Fallback)
                 if (!activeMinistry) {
                     activeMinistry = 'midia'; 
                 }
 
-                // Atualiza o Store Global APENAS se mudou ou está vazio
                 if (currentStoreId !== activeMinistry) {
                     setMinistryId(activeMinistry);
                 }
@@ -109,9 +106,9 @@ export function useAuth() {
                     name: profile.name || 'Usuário',
                     email: profile.email || user.email,
                     role: profile.is_admin ? 'admin' : 'member',
-                    ministryId: activeMinistry, // Define o ativo calculado
+                    ministryId: activeMinistry,
                     allowedMinistries: allowedMinistries, 
-                    organizationId: safeOrgId,
+                    organizationId: safeOrgId, // Critical for RLS
                     isSuperAdmin: !!profile.is_super_admin, 
                     avatar_url: profile.avatar_url,
                     whatsapp: profile.whatsapp,
@@ -120,7 +117,7 @@ export function useAuth() {
                 });
             }
         } catch (e) {
-            console.error("Erro auth:", e);
+            console.error("Erro auth fatal:", e);
             await sb.auth.signOut();
             setCurrentUser(null);
         } finally {
