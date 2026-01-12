@@ -5,6 +5,7 @@ import { AppNotification } from '../types';
 import { markNotificationsReadSQL, clearAllNotificationsSQL, getSupabase } from '../services/supabaseService';
 import { useToast } from './Toast';
 import { useClickOutside } from '../hooks/useClickOutside';
+import { useAppStore } from '../store/appStore';
 
 interface Props {
   notifications: AppNotification[];
@@ -21,6 +22,10 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
   
   const unreadCount = notifications.filter(n => !n.read).length;
   const { confirmAction } = useToast();
+  const { currentUser } = useAppStore();
+  
+  // FIX: ERRO 1 - Strict organizationId check
+  const orgId = currentUser?.organizationId;
 
   useClickOutside(dropdownRef, () => {
     if (isOpen) setIsOpen(false);
@@ -37,29 +42,29 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
   }, []);
 
   const handleMarkAllRead = async () => {
-    // We mark all loaded notifications as read, regardless of ministry
     const supabase = getSupabase();
-    if (!supabase) return;
+    if (!supabase || !orgId) return; // Strict check
+    
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
     if (unreadIds.length === 0) return;
     
-    await markNotificationsReadSQL(unreadIds, user.id);
+    await markNotificationsReadSQL(unreadIds, user.id, orgId);
     
     const updated = notifications.map(n => ({...n, read: true}));
     onNotificationsUpdate(updated);
   };
 
   const handleClearAll = async () => {
-      if (!ministryId || !isAdmin) return;
+      if (!ministryId || !isAdmin || !orgId) return;
       
       confirmAction(
           "Excluir Histórico Global",
           "CUIDADO: Isso apagará todas as notificações para TODOS os membros da equipe DO MINISTÉRIO ATUAL. Essa ação não pode ser desfeita.",
           async () => {
-              await clearAllNotificationsSQL(ministryId);
+              await clearAllNotificationsSQL(ministryId, orgId);
               onNotificationsUpdate(notifications.filter(n => n.ministryId !== ministryId));
           }
       );
@@ -74,9 +79,6 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
 
       if (isDifferentMinistry && onSwitchMinistry && notification.ministryId) {
           onSwitchMinistry(notification.ministryId);
-          // Note: Navigation might need to happen after switch, usually state update handles view change.
-          // If we have a link, maybe we can set it in URL param or store it temporarily?
-          // For now, switching context is the primary "Quick Access".
       } 
       
       if (notification.actionLink && onNavigate && !isDifferentMinistry) {

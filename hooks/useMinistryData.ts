@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useMemo } from 'react';
 import { User, ScheduleMap, AttendanceMap, AvailabilityMap, AppNotification, Announcement, SwapRequest, RepertoireItem, TeamMemberProfile, MemberMap, Role, GlobalConflictMap, AvailabilityNotesMap, DEFAULT_ROLES } from '../types';
 import { useMinistryQueries, keys } from './useMinistryQueries';
@@ -7,7 +6,10 @@ import { getSupabase } from '../services/supabaseService';
 import { useAppStore } from '../store/appStore';
 
 export function useMinistryData(ministryId: string | null, currentMonth: string, currentUser: User | null) {
-  const mid = ministryId || 'midia';
+  // STRICT: No fallback to 'midia' or slugs.
+  // If ministryId is null or not a UUID, the queries will be disabled in useMinistryQueries
+  const mid = ministryId || ''; 
+  
   const {
     settingsQuery,
     scheduleQuery,
@@ -25,28 +27,26 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   const queryClient = useQueryClient();
   const { setMinistryId } = useAppStore();
 
-  // --- ACCESS CONTROL CHECK ---
   useEffect(() => {
-      // Se o usuário estiver logado e o ministério atual não estiver na lista de permitidos
-      // (ex: foi removido do membership), força o redirecionamento para um válido.
-      if (currentUser && currentUser.allowedMinistries && !currentUser.isSuperAdmin) {
-          if (!currentUser.allowedMinistries.includes(mid)) {
+      // Security Check: If user has lost access to this ministry, redirect
+      if (currentUser && currentUser.allowedMinistries && !currentUser.isSuperAdmin && mid) {
+          const hasAccess = currentUser.allowedMinistries.includes(mid);
+          if (!hasAccess && currentUser.allowedMinistries.length > 0) {
               console.warn(`Acesso revogado ao ministério ${mid}. Redirecionando...`);
-              const fallback = currentUser.allowedMinistries[0] || 'midia';
+              const fallback = currentUser.allowedMinistries[0];
               setMinistryId(fallback);
           }
       }
   }, [mid, currentUser, setMinistryId]);
 
-  // --- Derived State (Transforming Query Data to match old hook interface) ---
-  
-  const ministryTitle = settingsQuery.data?.displayName || (mid.charAt(0).toUpperCase() + mid.slice(1));
+  // Derived Title
+  const ministryTitle = settingsQuery.data?.displayName || (mid.length === 36 ? 'Carregando...' : (mid ? 'Ministério' : 'Selecione um Ministério'));
   
   const roles: Role[] = useMemo(() => {
       let r = settingsQuery.data?.roles || [];
-      if (r.length === 0) {
-          const cleanId = mid.trim().toLowerCase();
-          r = DEFAULT_ROLES[cleanId] || DEFAULT_ROLES['default'] || [];
+      // Default roles only if we have a valid ministry ID but no specific settings
+      if (r.length === 0 && mid) {
+          r = DEFAULT_ROLES['default'] || [];
       }
       return r;
   }, [settingsQuery.data, mid]);
@@ -56,7 +56,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       end: settingsQuery.data?.availabilityEnd
   }), [settingsQuery.data]);
 
-  // Setters wrappers that trigger refetches or optimistic updates
   const refreshData = async () => {
       await queryClient.invalidateQueries({ predicate: (query) => 
           query.queryKey[0] === 'schedule' || 
@@ -67,16 +66,16 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       });
   };
 
-  // --- SUPABASE REALTIME INTEGRATION ---
   useEffect(() => {
     const sb = getSupabase();
     if (!sb || !mid) return;
 
-    // Create a single channel for this ministry context
+    // Only subscribe if mid is valid
+    if (mid.length !== 36) return;
+
     const channel = sb.channel(`ministry-live-${mid}`);
 
     channel
-        // 1. SCHEDULE & EVENTS
         .on(
             'postgres_changes', 
             { event: '*', schema: 'public', table: 'events', filter: `ministry_id=eq.${mid}` }, 
@@ -93,7 +92,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
                 queryClient.invalidateQueries({ queryKey: keys.ranking(mid) });
             }
         )
-        // 2. NOTIFICATIONS
         .on(
             'postgres_changes', 
             { event: 'INSERT', schema: 'public', table: 'notifications', filter: `ministry_id=eq.${mid}` }, 
@@ -101,7 +99,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
                 queryClient.invalidateQueries({ queryKey: ['notifications'] });
             }
         )
-        // 3. SWAPS
         .on(
             'postgres_changes', 
             { event: '*', schema: 'public', table: 'swap_requests', filter: `ministry_id=eq.${mid}` }, 
@@ -109,7 +106,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
                 queryClient.invalidateQueries({ queryKey: keys.swapRequests(mid) });
             }
         )
-        // 4. SETTINGS CHANGE (To update Roles automatically)
         .on(
             'postgres_changes', 
             { event: 'UPDATE', schema: 'public', table: 'ministry_settings', filter: `ministry_id=eq.${mid}` }, 
@@ -143,8 +139,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     availabilityWindow,
     isLoading,
     refreshData,
-    
-    // Legacy setters (No-ops or re-implementations)
     setEvents: () => refreshData(), 
     setSchedule: () => refreshData(),
     setAttendance: () => refreshData(),

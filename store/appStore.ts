@@ -6,9 +6,10 @@ interface AppState {
   currentUser: User | null;
   ministryId: string;
   organizationId: string | null;
-  availableMinistries: MinistryDef[]; // Lista carregada do banco
+  availableMinistries: MinistryDef[]; 
   themeMode: ThemeMode;
   sidebarOpen: boolean;
+  isAppReady: boolean; // NEW: Global readiness flag
   
   setCurrentUser: (user: User | null) => void;
   setMinistryId: (id: string) => void;
@@ -17,31 +18,39 @@ interface AppState {
   setThemeMode: (mode: ThemeMode) => void;
   setSidebarOpen: (open: boolean) => void;
   toggleSidebar: () => void;
+  setAppReady: (ready: boolean) => void; // NEW
 }
 
-// 1. Tenta recuperar do storage IMEDIATAMENTE para evitar flicker
 const storedMinistryId = typeof window !== 'undefined' ? localStorage.getItem('ministry_id') : null;
 
 export const useAppStore = create<AppState>((set) => ({
   currentUser: null,
-  // 2. Inicializa com valor do storage ou vazio (evita fallback prematuro para 'midia')
   ministryId: storedMinistryId || '', 
   organizationId: null,
   availableMinistries: [],
   themeMode: (localStorage.getItem('themeMode') as ThemeMode) || 'system',
   sidebarOpen: false,
+  isAppReady: false, // Default to false
 
   setCurrentUser: (user) => set((state) => {
-      // Mantém o ID atual se já estiver carregado corretamente
-      const currentId = state.ministryId || user?.ministryId;
+      if (!user) {
+          return { currentUser: null, organizationId: null, isAppReady: false };
+      }
+
+      // FIX: ERRO 2 - Store Global não aceita usuário sem organizationId válido
+      if (!user.organizationId) {
+          console.error("[STORE] Attempted to set user without organizationId. Action blocked.");
+          return state; // Retorna estado anterior, rejeita atualização inválida
+      }
+
+      const currentId = state.ministryId || user.ministryId;
       return { 
           currentUser: user, 
-          ministryId: currentId, // Prioriza o estado atual da sessão
-          organizationId: user?.organizationId || state.organizationId 
+          ministryId: currentId,
+          organizationId: user.organizationId // Garante sync
       };
   }),
   setMinistryId: (id) => {
-      // 3. Persiste a escolha sempre que for alterada
       if (typeof window !== 'undefined') localStorage.setItem('ministry_id', id);
       set({ ministryId: id });
   },
@@ -53,4 +62,5 @@ export const useAppStore = create<AppState>((set) => ({
   },
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+  setAppReady: (ready) => set({ isAppReady: ready }),
 }));

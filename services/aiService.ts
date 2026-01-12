@@ -1,26 +1,9 @@
 
 import { GoogleGenAI } from "@google/genai";
 
-// Initialize Gemini Client Lazily with robust env check
+// FIX: Simplified Gemini Client initialization as per guidelines, directly using process.env.API_KEY.
 const getAiClient = () => {
-  let key = '';
-  try {
-      // @ts-ignore
-      if (import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) {
-          // @ts-ignore
-          key = import.meta.env.VITE_GEMINI_API_KEY;
-      }
-  } catch(e) {}
-
-  if (!key && typeof process !== 'undefined' && process.env) {
-      key = process.env.API_KEY || '';
-  }
-
-  if (!key) {
-    console.warn("API Key do Gemini não encontrada.");
-    throw new Error("Chave de API da Inteligência Artificial não configurada. Verifique o arquivo .env.");
-  }
-  return new GoogleGenAI({ apiKey: key });
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
 export const polishAnnouncementAI = async (text: string, tone: 'professional' | 'exciting' | 'urgent'): Promise<string> => {
@@ -32,8 +15,9 @@ export const polishAnnouncementAI = async (text: string, tone: 'professional' | 
             urgent: "direto, sério e com senso de prioridade"
         };
 
+        // FIX: Updated model name to 'gemini-3-flash-preview' for basic text tasks as per coding guidelines.
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: `
                 Act as a professional copywriter. Rewrite the announcement text below to be ${tonePrompt[tone]}. 
                 

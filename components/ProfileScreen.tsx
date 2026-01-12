@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { User } from '../types';
-import { User as UserIcon, Mail, Hash, Briefcase, Save, Key, Camera, Image as ImageIcon, Check, Calendar, Shield, Sparkles } from 'lucide-react';
+import { User as UserIcon, Mail, Hash, Briefcase, Save, Key, Camera, Shield, Sparkles } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface Props {
@@ -25,6 +24,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
     setWhatsapp(user.whatsapp || '');
     setAvatar(user.avatar_url || '');
     setBirthDate(user.birthDate || '');
+    // Funções vêm estritamente do user object (populado via membership no useAuth)
     setSelectedFunctions(user.functions || []);
   }, [user]);
 
@@ -37,7 +37,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
         img.src = event.target?.result as string;
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 250; // Reduced for performance
+          const MAX_WIDTH = 250; 
           const MAX_HEIGHT = 250;
           let width = img.width;
           let height = img.height;
@@ -59,7 +59,6 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
           
-          // Use stricter compression (0.6 quality)
           resolve(canvas.toDataURL('image/jpeg', 0.6));
         };
         img.onerror = (err) => reject(err);
@@ -71,7 +70,6 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      // Limit file size to 2MB to prevent browser freezing
       if (file.size > 2 * 1024 * 1024) {
         addToast("A imagem deve ter no máximo 2MB.", "error");
         return;
@@ -101,9 +99,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
     
     setLoading(true);
     try {
-      // Otimização: Só envia avatar se mudou, para evitar envio desnecessário de base64 grande
       const avatarToSend = avatar !== (user.avatar_url || '') ? avatar : undefined;
-      
       await onUpdateProfile(name, whatsapp, avatarToSend, selectedFunctions, birthDate);
     } catch (e) {
       addToast("Erro ao atualizar perfil", "error");
@@ -115,9 +111,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
   return (
     <div className="animate-fade-in max-w-4xl mx-auto pb-12">
       
-      {/* Profile Header Card */}
       <div className="relative bg-white dark:bg-zinc-800 rounded-3xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden mb-6">
-          {/* Cover Background */}
           <div className="h-28 md:h-32 bg-gradient-to-r from-teal-600 via-emerald-600 to-teal-800 relative">
               <div className="absolute inset-0 bg-black/10"></div>
               <div className="absolute bottom-0 left-0 w-full h-16 bg-gradient-to-t from-black/20 to-transparent"></div>
@@ -125,7 +119,6 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
 
           <div className="px-6 pb-6 relative">
               <div className="flex flex-col md:flex-row items-center md:items-end gap-4 -mt-10 md:-mt-12 mb-4">
-                  {/* Avatar Circle */}
                   <div className="relative group cursor-pointer shrink-0" onClick={() => fileInputRef.current?.click()}>
                       <div className="w-20 h-20 md:w-32 md:h-32 rounded-full overflow-hidden border-4 border-white dark:border-zinc-800 shadow-xl bg-zinc-100 dark:bg-zinc-700 flex items-center justify-center relative z-10">
                         {avatar ? (
@@ -140,14 +133,9 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                       <div className="absolute inset-0 z-20 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-[2px]">
                         <Camera className="text-white drop-shadow-md" size={28} />
                       </div>
-
-                      <div className="absolute bottom-1 right-1 z-30 bg-teal-600 text-white p-1.5 md:p-2 rounded-full shadow-lg border-2 border-white dark:border-zinc-800 pointer-events-none">
-                        <Camera size={12} />
-                      </div>
                   </div>
                   <input type="file" ref={fileInputRef} onChange={handleImageChange} accept="image/*" className="hidden" />
 
-                  {/* Name & Title */}
                   <div className="flex-1 text-center md:text-left mb-2 w-full">
                       <h1 className="text-xl md:text-2xl font-bold text-zinc-900 dark:text-white flex items-center justify-center md:justify-start gap-2 truncate">
                           {user.name} 
@@ -162,8 +150,6 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
       </div>
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Column 1: Personal Info */}
           <div className="lg:col-span-2 space-y-6">
               <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm">
                   <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-5 flex items-center gap-2">
@@ -180,7 +166,6 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                                   value={name} 
                                   onChange={e => setName(e.target.value)}
                                   className="w-full pl-10 pr-4 py-3 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700/50 rounded-xl focus:ring-2 focus:ring-teal-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all text-zinc-800 dark:text-zinc-100 text-sm font-medium placeholder:text-zinc-400"
-                                  placeholder="Como gostaria de ser chamado?"
                               />
                           </div>
                       </div>
@@ -194,7 +179,6 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                                   value={whatsapp} 
                                   onChange={e => setWhatsapp(e.target.value)}
                                   className="w-full pl-10 pr-4 py-3 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700/50 rounded-xl focus:ring-2 focus:ring-green-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all text-zinc-800 dark:text-zinc-100 text-sm font-medium placeholder:text-zinc-400"
-                                  placeholder="(00) 00000-0000"
                               />
                           </div>
                       </div>
@@ -202,12 +186,11 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                       <div className="space-y-1.5">
                           <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 ml-1">Data de Nascimento</label>
                           <div className="relative group">
-                              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-pink-500 transition-colors" size={18} />
                               <input 
                                   type="date" 
                                   value={birthDate} 
                                   onChange={e => setBirthDate(e.target.value)}
-                                  className="w-full pl-10 pr-4 py-3 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700/50 rounded-xl focus:ring-2 focus:ring-pink-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all text-zinc-800 dark:text-zinc-100 text-sm font-medium placeholder:text-zinc-400"
+                                  className="w-full pl-4 pr-4 py-3 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-700/50 rounded-xl focus:ring-2 focus:ring-pink-500 focus:bg-white dark:focus:bg-zinc-900 outline-none transition-all text-zinc-800 dark:text-zinc-100 text-sm font-medium placeholder:text-zinc-400"
                               />
                           </div>
                       </div>
@@ -227,7 +210,6 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                   </div>
               </div>
 
-              {/* Botão Salvar (Desktop - Wide) */}
               <button 
                   type="submit" 
                   disabled={loading}
@@ -237,7 +219,6 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
               </button>
           </div>
 
-          {/* Column 2: Roles/Functions */}
           <div className="space-y-6">
               <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm h-full flex flex-col">
                   <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-2">
@@ -267,22 +248,14 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
                                       }`}
                                   >
                                       {role}
-                                      {isSelected && <Check size={14} className="text-teal-500" />}
+                                      {isSelected && <Sparkles size={14} className="text-teal-500" />}
                                   </button>
                               );
                           })}
                       </div>
                   </div>
-
-                  <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-700">
-                      <div className="flex items-center gap-2 text-xs text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 p-3 rounded-lg">
-                          <Sparkles size={14} className="text-amber-500 shrink-0" />
-                          <span>Mantenha suas funções atualizadas para receber os convites corretos.</span>
-                      </div>
-                  </div>
               </div>
 
-              {/* Botão Salvar (Mobile) */}
               <button 
                   type="submit" 
                   disabled={loading}

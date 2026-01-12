@@ -3,24 +3,21 @@ export type Role = string;
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
-// --- NEW ORGANIZATION TYPE ---
 export interface Organization {
   id: string;
   name: string;
   slug?: string;
   active?: boolean;
   createdAt?: string;
-  // Stats (populated by RPC)
   userCount?: number;
   ministryCount?: number;
-  ministries?: MinistryDef[]; // Lista de ministérios da org
+  ministries?: MinistryDef[];
 }
 
-// --- DYNAMIC MINISTRY TYPE ---
 export interface MinistryDef {
-  id: string;   // UUID do banco (organization_ministries.id)
-  code: string; // Identificador de URL/Legado (ex: 'midia', 'louvor')
-  label: string; // Nome de exibição (ex: 'Comunicação / Mídia')
+  id: string;   
+  code: string; 
+  label: string; 
   enabledTabs?: string[]; 
   organizationId?: string; 
 }
@@ -30,7 +27,7 @@ export interface MemberMap {
 }
 
 export interface ScheduleMap {
-  [key: string]: string; // key format: "YYYY-MM-DDTHH:mm_Role" -> MemberName
+  [key: string]: string; 
 }
 
 export interface AttendanceMap {
@@ -40,40 +37,39 @@ export interface AttendanceMap {
 export interface CustomEvent {
   id: string;
   title: string;
-  date: string; // YYYY-MM-DD
-  time: string; // HH:mm
-  iso: string; // Helper for UI
-  organizationId?: string; // New
+  date: string; 
+  time: string; 
+  iso: string; 
+  organizationId?: string; 
 }
 
 export interface AvailabilityMap {
-  [memberName: string]: string[]; // Array of YYYY-MM-DD (prefix '+' for preferred)
+  [memberName: string]: string[]; 
 }
 
 export interface AvailabilityNotesMap {
-  [key: string]: string; // Key: "MemberName_YYYY-MM-DD" -> Note content
+  [key: string]: string; 
 }
 
 export interface MinistrySettings {
     id?: string;
-    organizationMinistryId?: string; // FK para tabela relacional
+    organizationMinistryId?: string;
     displayName: string;
     roles: string[];
-    availabilityStart?: string; // ISO String
-    availabilityEnd?: string;   // ISO String
-    spotifyClientId?: string;   // New
-    spotifyClientSecret?: string; // New
-    organizationId?: string;    // Link to parent organization
+    availabilityStart?: string;
+    availabilityEnd?: string;
+    spotifyClientId?: string;
+    spotifyClientSecret?: string;
+    organizationId?: string;
 }
 
-// --- NEW AUDIT TYPES ---
 export interface AuditLogEntry {
   id?: string;
-  date: string; // ISO String
-  action: string; // "Edited Schedule", "Removed Member", etc.
-  details: string; // "Joao changed Drummer from Pedro to Lucas"
-  author: string; // Who did it
-  organizationId?: string; // New
+  date: string;
+  action: string;
+  details: string;
+  author: string;
+  organizationId?: string;
 }
 
 export interface AppNotification {
@@ -85,20 +81,20 @@ export interface AppNotification {
   read: boolean;
   actionLink?: string;
   ministryId?: string; 
-  organizationId?: string; // New
+  organizationId?: string;
 }
 
 export interface Announcement {
   id: string;
   title: string;
-  message: string; // Now supports HTML/Rich Text
+  message: string;
   type: 'info' | 'success' | 'warning' | 'alert';
   timestamp: string;
   expirationDate?: string; 
   author: string;
   readBy: { userId: string; name: string; timestamp: string }[];
   likedBy: { userId: string; name: string; timestamp: string }[]; 
-  organizationId?: string; // New
+  organizationId?: string;
 }
 
 export interface ScheduleIssue {
@@ -111,9 +107,6 @@ export interface ScheduleAnalysis {
   [key: string]: ScheduleIssue;
 }
 
-// --- ORGANIZATION & MINISTRIES CONFIGURATION (SOURCE OF TRUTH) ---
-
-// 1. Definição de todas as abas possíveis no sistema
 export const ALL_TABS = [
   'dashboard', 
   'announcements', 
@@ -131,10 +124,9 @@ export const ALL_TABS = [
   'events',
   'send-announcements',
   'members',
-  'super-admin' // New Tab
+  'super-admin'
 ];
 
-// 2. Pacote Padrão (Full) - Novos ministérios herdam isso
 export const DEFAULT_TABS = [...ALL_TABS];
 
 export interface GlobalConflict {
@@ -153,25 +145,25 @@ export interface SwapRequest {
   requesterName: string;
   requesterId?: string;
   role: string;
-  eventIso: string; // YYYY-MM-DDTHH:mm
+  eventIso: string; 
   eventTitle: string;
   status: 'pending' | 'completed' | 'cancelled';
   createdAt: string;
   takenByName?: string;
-  organizationId?: string; // New
+  organizationId?: string;
 }
 
 export interface RepertoireItem {
   id: string;
   title: string;
   link: string;
-  date: string; // YYYY-MM-DD (Data do culto/evento)
+  date: string; 
   observation?: string;
   addedBy: string;
   createdAt: string;
-  content?: string; // Chords/Lyrics content
-  key?: string; // Musical Key (e.g., "G")
-  organizationId?: string; // New
+  content?: string; 
+  key?: string; 
+  organizationId?: string;
 }
 
 export interface User {
@@ -183,8 +175,8 @@ export interface User {
   role: 'admin' | 'member';
   ministryId?: string; 
   allowedMinistries?: string[]; 
-  organizationId?: string; // New: SaaS Tenant ID
-  isSuperAdmin?: boolean; // New: Super Admin Flag
+  organizationId?: string; 
+  isSuperAdmin?: boolean; 
   whatsapp?: string;
   birthDate?: string; 
   functions?: string[];
@@ -198,14 +190,14 @@ export interface TeamMemberProfile {
     whatsapp?: string;
     birthDate?: string; 
     avatar_url?: string;
-    roles?: string[];
+    roles?: string[]; // Cargos vindos de organization_memberships.functions
     createdAt?: string;
     isAdmin?: boolean;
-    organizationId?: string; // New
+    organizationId?: string;
 }
 
 export interface AppState {
-  organizationId: string | null; // New state
+  organizationId: string | null;
   ministryId: string | null;
   currentUser: User | null;
   currentMonth: string; 

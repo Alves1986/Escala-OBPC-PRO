@@ -2,8 +2,9 @@
 import { useState, useEffect } from 'react';
 import { User } from '../types';
 import * as Supabase from '../services/supabaseService';
-import { SUPABASE_URL } from '../services/supabaseService';
 import { useAppStore } from '../store/appStore';
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function useAuth() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -11,27 +12,6 @@ export function useAuth() {
   const { setMinistryId, ministryId: currentStoreId } = useAppStore();
 
   useEffect(() => {
-    // Modo Preview: Loga automaticamente com usuário fictício
-    if (SUPABASE_URL === 'https://preview.mode') {
-        const demoUser = {
-            id: 'demo-user-123',
-            name: 'Usuário Demo',
-            email: 'demo@teste.com',
-            role: 'admin' as const,
-            ministryId: 'midia',
-            allowedMinistries: ['midia'],
-            organizationId: '00000000-0000-0000-0000-000000000000',
-            isSuperAdmin: true, 
-            avatar_url: '',
-            whatsapp: '11999999999',
-            functions: ['Projeção']
-        };
-        setCurrentUser(demoUser);
-        if (!currentStoreId) setMinistryId('midia');
-        setLoadingAuth(false);
-        return;
-    }
-
     const sb = Supabase.getSupabase();
     if (!sb) {
         setLoadingAuth(false);
@@ -48,76 +28,98 @@ export function useAuth() {
         }
 
         try {
-            // Busca segura do perfil com organization_id obrigatório
+            // Limpa cache de org para forçar revalidação no boot
+            localStorage.removeItem(`org_id_${user.id}`);
+            
+            // Clean legacy Ministry ID cache if it is not a UUID
+            const cachedMid = localStorage.getItem('ministry_id');
+            if (cachedMid && !UUID_REGEX.test(cachedMid)) {
+                localStorage.removeItem('ministry_id');
+            }
+
             let { data: profile, error: fetchError } = await sb
                 .from('profiles')
                 .select('*')
                 .eq('id', user.id)
                 .maybeSingle();
             
-            if (!profile || fetchError) {
-                 console.warn("Profile incomplete or missing, using safe defaults.", fetchError);
-                 profile = {
-                    id: user.id,
-                    email: user.email,
-                    name: user.user_metadata?.full_name || 'Membro',
-                    ministry_id: 'midia',
-                    allowed_ministries: ['midia'],
-                    organization_id: '00000000-0000-0000-0000-000000000000', // Default Org ID
-                    role: 'member',
-                    is_super_admin: false
-                 };
+            if (fetchError) {
+                 console.error("[AUTH] Error fetching profile:", fetchError);
+                 setLoadingAuth(false);
+                 return;
             }
 
-            if (profile) {
-                // Ensure Org ID is present
-                const safeOrgId = profile.organization_id || '00000000-0000-0000-0000-000000000000';
-                
-                const allowedMinistries = await Supabase.fetchUserAllowedMinistries(profile.id, safeOrgId);
-                
-                let activeMinistry = '';
-
-                // 1. LocalStorage
-                const localStored = localStorage.getItem('ministry_id');
-                if (localStored && allowedMinistries.includes(localStored)) {
-                    activeMinistry = localStored;
-                }
-
-                // 2. Profile DB Preference
-                if (!activeMinistry && profile.ministry_id && allowedMinistries.includes(profile.ministry_id)) {
-                    activeMinistry = profile.ministry_id;
-                }
-
-                // 3. Fallback
-                if (!activeMinistry && allowedMinistries.length > 0) {
-                    activeMinistry = allowedMinistries[0];
-                }
-
-                if (!activeMinistry) {
-                    activeMinistry = 'midia'; 
-                }
-
-                if (currentStoreId !== activeMinistry) {
-                    setMinistryId(activeMinistry);
-                }
-
-                setCurrentUser({
-                    id: profile.id,
-                    name: profile.name || 'Usuário',
-                    email: profile.email || user.email,
-                    role: profile.is_admin ? 'admin' : 'member',
-                    ministryId: activeMinistry,
-                    allowedMinistries: allowedMinistries, 
-                    organizationId: safeOrgId, // Critical for RLS
-                    isSuperAdmin: !!profile.is_super_admin, 
-                    avatar_url: profile.avatar_url,
-                    whatsapp: profile.whatsapp,
-                    birthDate: profile.birth_date,
-                    functions: Array.isArray(profile.functions) ? profile.functions : []
-                });
+            if (!profile) {
+                 // Profile incompleto? Cria objeto básico APENAS para registro, 
+                 // mas se o usuário já deveria existir, isso é um erro.
+                 console.warn("[AUTH] Profile missing for authenticated user.");
+                 // Não podemos prosseguir sem organization_id validado no banco
+                 setLoadingAuth(false);
+                 return;
             }
+
+            // FIX: LOG OBRIGATÓRIO - Verificar organization_id
+            console.log('[AUTH] organization_id:', profile.organization_id);
+
+            // FIX: ERRO 1 - organization_id NUNCA PODE SER STRING VAZIA OU NULL
+            if (!profile.organization_id) {
+                // REGRA ABSOLUTA: Falhar explicitamente
+                throw new Error('ORGANIZATION_ID_MISSING: O perfil do usuário não possui uma organização vinculada.');
+            }
+
+            const orgId = profile.organization_id;
+
+            // 1. Obter Ministérios Permitidos (Retorna UUIDs)
+            // Agora passamos o orgId garantido
+            const allowedMinistries = await Supabase.fetchUserAllowedMinistries(profile.id, orgId);
+            
+            let activeMinistry = '';
+            
+            // 2. Tentar recuperar seleção salva, se válida e UUID
+            const localStored = localStorage.getItem('ministry_id');
+            if (localStored && UUID_REGEX.test(localStored) && allowedMinistries.includes(localStored)) {
+                activeMinistry = localStored;
+            }
+            
+            // 3. Fallback para ministério principal do perfil (se válido UUID e permitido)
+            if (!activeMinistry && profile.ministry_id && UUID_REGEX.test(profile.ministry_id) && allowedMinistries.includes(profile.ministry_id)) {
+                activeMinistry = profile.ministry_id;
+            }
+            
+            // 4. Fallback para o primeiro da lista
+            if (!activeMinistry && allowedMinistries.length > 0) {
+                activeMinistry = allowedMinistries[0];
+            }
+            
+            // Sincroniza Store
+            if (currentStoreId !== activeMinistry && activeMinistry) {
+                setMinistryId(activeMinistry);
+            }
+
+            // 6. BUSCA FUNÇÕES ESTRITAMENTE VIA MEMBERSHIP
+            let userFunctions: string[] = [];
+            if (activeMinistry) {
+                userFunctions = await Supabase.fetchUserFunctions(profile.id, activeMinistry, orgId);
+            }
+
+            setCurrentUser({
+                id: profile.id,
+                name: profile.name || 'Usuário',
+                email: profile.email || user.email,
+                role: profile.is_admin ? 'admin' : 'member',
+                ministryId: activeMinistry, 
+                allowedMinistries: allowedMinistries, 
+                organizationId: orgId, // FIX: Setado explicitamente da variável validada
+                isSuperAdmin: !!profile.is_super_admin, 
+                avatar_url: profile.avatar_url,
+                whatsapp: profile.whatsapp,
+                birthDate: profile.birth_date,
+                functions: userFunctions 
+            });
+
         } catch (e) {
-            console.error("Erro auth fatal:", e);
+            console.error("[AUTH] Fatal Error:", e);
+            // Em caso de erro crítico de dados (sem orgId), desloga para evitar estado inconsistente
             await sb.auth.signOut();
             setCurrentUser(null);
         } finally {

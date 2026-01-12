@@ -77,8 +77,16 @@ export const RankingScreen: React.FC<Props> = ({ ministryId, currentUser }) => {
   const [selectedHistory, setSelectedHistory] = useState<{ history: RankingHistoryItem[], name: string, points: number } | null>(null);
 
   const loadData = async () => {
+      // FIX: Guard against missing organizationId
+      if (!currentUser.organizationId) {
+          console.warn("[Ranking] OrganizationID missing");
+          setLoading(false);
+          return;
+      }
+
       setLoading(true);
-      const data = await fetchRankingData(ministryId);
+      const orgId = currentUser.organizationId;
+      const data = await fetchRankingData(ministryId, orgId);
       
       const sorted = data.sort((a, b) => {
           if (b.points !== a.points) {
@@ -92,8 +100,10 @@ export const RankingScreen: React.FC<Props> = ({ ministryId, currentUser }) => {
   };
 
   useEffect(() => {
-      loadData();
-  }, [ministryId]);
+      if (currentUser.organizationId) {
+          loadData();
+      }
+  }, [ministryId, currentUser.organizationId]);
 
   const getMedalColor = (index: number) => {
       if (index === 0) return 'text-yellow-500'; // Ouro

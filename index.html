@@ -1,27 +1,23 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#09090b" />
+    <meta name="theme-color" content="#020617" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Gestão Escala OBPC" />
-    <meta name="description" content="Sistema profissional de gestão de escalas ministeriais com IA e sincronização em tempo real." />
+    <meta name="apple-mobile-web-app-title" content="OBPC Pro" />
     
-    <title>Gestão Escala OBPC</title>
+    <title>Gestão Escala OBPC Pro</title>
     
-    <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.json" />
-    
-    <!-- Ícones do App -->
     <link rel="icon" type="image/png" href="https://i.ibb.co/nsFR8zNG/icon1.png" />
     <link rel="apple-touch-icon" href="https://i.ibb.co/nsFR8zNG/icon1.png" />
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
-    <!-- Theme Pre-loader -->
     <script>
       (function() {
         try {
@@ -46,51 +42,43 @@
             },
             colors: {
               brand: {
-                50: '#f0fdfa',
-                100: '#ccfbf1',
-                500: '#14b8a6',
-                600: '#0d9488',
-                700: '#0f766e',
-                900: '#134e4a',
+                50: '#ecfdf5',
+                100: '#d1fae5',
+                500: '#10b981',
+                600: '#059669',
+                700: '#047857',
+                900: '#064e3b',
+              },
+              midnight: {
+                50: '#f8fafc',
+                100: '#f1f5f9',
+                800: '#1e293b',
+                900: '#0f172a',
+                950: '#020617',
               }
             },
             animation: {
-              'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-              'fade-in': 'fadeIn 0.3s ease-out',
-              'wave': 'wave 2.5s infinite',
-              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-              'aurora': 'aurora 10s infinite linear',
-              'blob': 'blob 7s infinite',
+              'slide-up': 'slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
+              'fade-in': 'fadeIn 0.4s ease-out',
+              'shimmer': 'shimmer 2s infinite linear',
+              'float': 'float 6s ease-in-out infinite',
             },
             keyframes: {
               slideUp: {
-                '0%': { transform: 'translateY(20px)', opacity: '0' },
+                '0%': { transform: 'translateY(15px)', opacity: '0' },
                 '100%': { transform: 'translateY(0)', opacity: '1' },
               },
               fadeIn: {
                 '0%': { opacity: '0' },
                 '100%': { opacity: '1' },
               },
-              wave: {
-                '0%': { transform: 'rotate(0.0deg)' },
-                '10%': { transform: 'rotate(14.0deg)' },
-                '20%': { transform: 'rotate(-8.0deg)' },
-                '30%': { transform: 'rotate(14.0deg)' },
-                '40%': { transform: 'rotate(-4.0deg)' },
-                '50%': { transform: 'rotate(10.0deg)' },
-                '60%': { transform: 'rotate(0.0deg)' },
-                '100%': { transform: 'rotate(0.0deg)' },
+              shimmer: {
+                '0%': { backgroundPosition: '-200% 0' },
+                '100%': { backgroundPosition: '200% 0' },
               },
-              blob: {
-                '0%': { transform: 'translate(0px, 0px) scale(1)' },
-                '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
-                '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
-                '100%': { transform: 'translate(0px, 0px) scale(1)' },
-              },
-              aurora: {
-                '0%': { backgroundPosition: '0% 50%' },
-                '50%': { backgroundPosition: '100% 50%' },
-                '100%': { backgroundPosition: '0% 50%' },
+              float: {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-10px)' },
               }
             }
           }
@@ -99,60 +87,47 @@
     </script>
     <style>
       :root {
-        /* Textura de ruído mais sutil para um look premium */
-        --bg-noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+        --bg-noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.04'/%3E%3C/svg%3E");
       }
 
       body { 
-        @apply text-zinc-900 dark:text-zinc-100 transition-colors duration-300 antialiased;
-        background-color: #f8fafc; /* Slate-50 */
+        @apply text-slate-900 dark:text-slate-100 transition-colors duration-300 antialiased selection:bg-emerald-500/30 selection:text-emerald-900 dark:selection:text-emerald-100;
+        background-color: #f8fafc;
         background-image: 
-          radial-gradient(circle at 10% 20%, rgba(20, 184, 166, 0.03), transparent 20%), 
-          radial-gradient(circle at 90% 80%, rgba(99, 102, 241, 0.03), transparent 20%);
+          radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.05) 0px, transparent 50%),
+          radial-gradient(at 100% 100%, rgba(99, 102, 241, 0.05) 0px, transparent 50%);
         background-attachment: fixed;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
       }
 
-      /* Noise Texture Overlay */
+      .dark body {
+        background-color: #020617;
+        background-image: 
+          radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.08) 0px, transparent 50%),
+          radial-gradient(at 100% 100%, rgba(99, 102, 241, 0.08) 0px, transparent 50%);
+      }
+
       body::before {
         content: "";
         position: fixed;
         top: 0; left: 0; width: 100%; height: 100%;
         background-image: var(--bg-noise);
         pointer-events: none;
-        z-index: -1;
-        opacity: 0.6;
+        z-index: 50;
+        opacity: 0.5;
       }
 
-      .dark body {
-        background-color: #09090b; /* Zinc-950 */
-        background-image: 
-          radial-gradient(circle at 10% 20%, rgba(20, 184, 166, 0.02), transparent 20%), 
-          radial-gradient(circle at 90% 80%, rgba(99, 102, 241, 0.02), transparent 20%);
+      .glass-card {
+        @apply bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-white/20 dark:border-white/5 shadow-xl shadow-slate-200/50 dark:shadow-black/20;
       }
 
-      /* Custom Selection Color - Professional Teal */
-      ::selection {
-        background-color: rgba(13, 148, 136, 0.3); /* Brand 600 with opacity */
-        color: inherit;
-      }
-
-      /* Refined Scrollbar - Minimalist */
-      ::-webkit-scrollbar { width: 5px; height: 5px; }
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { 
-        @apply bg-zinc-300 dark:bg-zinc-800 rounded-full hover:bg-zinc-400 dark:hover:bg-zinc-700 transition-colors; 
+        @apply bg-slate-300 dark:bg-slate-800 rounded-full hover:bg-slate-400 dark:hover:bg-slate-700 transition-colors; 
       }
       
-      /* Utility for hiding scrollbar but keeping functionality */
-      .no-scrollbar::-webkit-scrollbar {
-          display: none;
-      }
-      .no-scrollbar {
-          -ms-overflow-style: none;  /* IE and Edge */
-          scrollbar-width: none;  /* Firefox */
-      }
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
   <script type="importmap">
 {
@@ -181,31 +156,9 @@
   }
 }
 </script>
-<!-- Capture Install Prompt Early -->
-<script>
-  window.deferredPrompt = null;
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    window.deferredPrompt = e;
-    window.dispatchEvent(new Event('pwa-ready'));
-  });
-</script>
 </head>
   <body>
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js', { scope: '/' })
-            .then(registration => {
-              console.log('SW registrado com sucesso:', registration.scope);
-            })
-            .catch(error => {
-              console.log('Falha ao registrar SW:', error);
-            });
-        });
-      }
-    </script>
   </body>
 </html>

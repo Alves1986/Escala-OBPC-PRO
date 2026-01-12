@@ -64,6 +64,8 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   const [cifraResults, setCifraResults] = useState<any[]>([]);
   const [cifraLoading, setCifraLoading] = useState(false);
 
+  const orgId = currentUser?.organizationId || '00000000-0000-0000-0000-000000000000';
+
   // Init
   useEffect(() => {
       const tokenFromHash = handleLoginCallback();
@@ -182,7 +184,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
     let successCount = 0;
 
     for (const item of draftItems) {
-        const success = await addToRepertoire(currentUser.ministryId, {
+        const success = await addToRepertoire(currentUser.ministryId, orgId, {
             title: item.title,
             link: item.link,
             date,
@@ -200,7 +202,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
 
         if (ministryId) {
             const dateFormatted = date.split('-').reverse().join('/');
-            await sendNotificationSQL(ministryId, {
+            await sendNotificationSQL(ministryId, orgId, {
                 title: "Novo Repertório",
                 message: `${successCount} músicas foram adicionadas para o culto de ${dateFormatted}.`,
                 type: 'info',
@@ -215,7 +217,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
 
   const handleDelete = (id: string) => {
       confirmAction("Excluir Item", "Tem certeza que deseja remover este item do repertório?", async () => {
-          await deleteFromRepertoire(id);
+          await deleteFromRepertoire(id, orgId);
           await setRepertoire([]); 
           addToast("Item removido.", "success");
       });
@@ -223,7 +225,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
 
   const handleSaveChordPreference = async (newKey: string, newContent: string) => {
       if (selectedChordItem) {
-          await updateRepertoireItem(selectedChordItem.id, { content: newContent, key: newKey });
+          await updateRepertoireItem(selectedChordItem.id, orgId, { content: newContent, key: newKey });
           // No need to refresh full list instantly, keeps UI smooth
           addToast("Cifra atualizada!", "success");
       }

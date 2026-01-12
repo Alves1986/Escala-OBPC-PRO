@@ -19,7 +19,7 @@ export const JoinMinistryModal: React.FC<Props> = ({ isOpen, onClose, onJoin, al
   const [loadingRoles, setLoadingRoles] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   
-  const { availableMinistries } = useAppStore();
+  const { availableMinistries, currentUser } = useAppStore();
 
   // Filtra ministérios disponíveis (exclui os que o usuário já tem)
   // Usa a lista do banco via store
@@ -34,12 +34,16 @@ export const JoinMinistryModal: React.FC<Props> = ({ isOpen, onClose, onJoin, al
         return;
       }
 
+      // FIX: ERRO 1 - Strict organizationId check
+      const orgId = currentUser?.organizationId;
+      if (!orgId) return;
+
       setLoadingRoles(true);
       const defaults = DEFAULT_ROLES[selectedMinistry] || [];
       
       try {
-        const settings = await fetchMinistrySettings(selectedMinistry);
-        const dynamicRoles = settings.roles;
+        const settings = await fetchMinistrySettings(selectedMinistry, orgId);
+        const dynamicRoles = settings?.roles;
         setAvailableRoles(dynamicRoles && dynamicRoles.length > 0 ? dynamicRoles : defaults);
       } catch (e) {
         setAvailableRoles(defaults);
@@ -49,7 +53,7 @@ export const JoinMinistryModal: React.FC<Props> = ({ isOpen, onClose, onJoin, al
     }
 
     fetchRoles();
-  }, [selectedMinistry]);
+  }, [selectedMinistry, currentUser]);
 
   const toggleRole = (role: string) => {
     if (selectedRoles.includes(role)) {

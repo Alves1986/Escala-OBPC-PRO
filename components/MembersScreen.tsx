@@ -10,7 +10,7 @@ interface Props {
   currentUser: User;
   onToggleAdmin: (email: string, currentStatus: boolean, name: string) => void;
   onRemoveMember: (id: string, name: string) => void;
-  onUpdateMember?: (id: string, data: { name: string, whatsapp: string, roles: string[] }) => void;
+  onUpdateMember?: (id: string, data: { name: string, whatsapp: string, roles: string[], ministryId?: string }) => void;
   availableRoles: string[];
 }
 
@@ -40,12 +40,11 @@ export const MembersScreen: React.FC<Props> = ({
 
             return matchesSearch && matchesRole && matchesOnline;
         })
-        .sort((a, b) => a.name.localeCompare(b.name)); // Ordenação alfabética
+        .sort((a, b) => a.name.localeCompare(b.name)); 
   }, [members, searchTerm, selectedRole, showOnlineOnly, onlineUsers]);
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto pb-28">
-        {/* Header com Controles Profissionais */}
         <div className="flex flex-col gap-6 border-b border-zinc-200 dark:border-zinc-700 pb-6">
            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                <div>
@@ -68,7 +67,6 @@ export const MembersScreen: React.FC<Props> = ({
                </div>
            </div>
 
-           {/* Barra de Ferramentas (Search & Filter) */}
            <div className="flex flex-col md:flex-row gap-3">
                <div className="relative flex-1">
                    <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"/>
@@ -96,7 +94,6 @@ export const MembersScreen: React.FC<Props> = ({
            </div>
         </div>
 
-        {/* Grid de Cards */}
         {filteredMembers.length === 0 ? (
             <div className="text-center py-16 bg-zinc-50 dark:bg-zinc-900/50 rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800">
                 <Users className="mx-auto mb-3 text-zinc-300 dark:text-zinc-700" size={48} />
@@ -109,8 +106,7 @@ export const MembersScreen: React.FC<Props> = ({
                 const isOnline = onlineUsers.includes(member.id);
                 const isSelf = currentUser.id === member.id;
                 
-                // Filter roles to show only those belonging to the current ministry
-                const relevantRoles = member.roles?.filter(role => availableRoles.includes(role)) || [];
+                const memberRoles = member.roles || [];
 
                 return (
                 <div key={member.id} className="bg-white dark:bg-zinc-800 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-4 relative group shadow-sm hover:shadow-md transition-all hover:border-zinc-300 dark:hover:border-zinc-700 animate-slide-up">
@@ -176,16 +172,14 @@ export const MembersScreen: React.FC<Props> = ({
                     </div>
 
                     <div className="flex flex-wrap gap-2 min-h-[26px]">
-                        {relevantRoles.length > 0 ? (
-                            relevantRoles.map(role => (
+                        {memberRoles.length > 0 ? (
+                            memberRoles.map(role => (
                                 <span key={role} className="text-[10px] font-semibold px-2.5 py-1 rounded-md bg-zinc-50 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-300 border border-zinc-100 dark:border-zinc-700/50">
                                     {role}
                                 </span>
                             ))
                         ) : (
-                            <span className="text-xs text-zinc-400 italic px-1">
-                                {member.roles && member.roles.length > 0 ? 'Outras funções' : 'Sem função definida'}
-                            </span>
+                            <span className="text-xs text-zinc-400 italic px-1">Sem função definida</span>
                         )}
                     </div>
 
@@ -213,14 +207,17 @@ export const MembersScreen: React.FC<Props> = ({
             </div>
         )}
 
-        {/* Edit Modal */}
-        <EditMemberModal 
-            isOpen={!!editingMember}
-            onClose={() => setEditingMember(null)}
-            member={editingMember}
-            availableRoles={availableRoles}
-            onSave={(id, data) => { if(onUpdateMember) onUpdateMember(id, data); }}
-        />
+        {editingMember && (
+            <EditMemberModal 
+                isOpen={!!editingMember}
+                onClose={() => setEditingMember(null)}
+                member={editingMember}
+                availableRoles={availableRoles}
+                onSave={(id, data) => { 
+                    if(onUpdateMember) onUpdateMember(id, { ...data, ministryId: currentUser.ministryId }); 
+                }}
+            />
+        )}
     </div>
   );
 };

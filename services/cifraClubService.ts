@@ -8,22 +8,9 @@ export interface CifraClubResult {
     key: string;
 }
 
+// FIX: Simplified Gemini initialization to use process.env.API_KEY string directly as per guidelines.
 const getAiClient = () => {
-    let key = '';
-    try {
-        // @ts-ignore
-        if (import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) {
-            // @ts-ignore
-            key = import.meta.env.VITE_GEMINI_API_KEY;
-        }
-    } catch(e) {}
-  
-    if (!key && typeof process !== 'undefined' && process.env) {
-        key = process.env.API_KEY || '';
-    }
-  
-    if (!key) return null;
-    return new GoogleGenAI({ apiKey: key });
+    return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
 // Cache simples para evitar chamadas repetitivas
@@ -36,10 +23,6 @@ export const searchCifraClub = async (query: string): Promise<CifraClubResult[]>
     }
 
     const ai = getAiClient();
-    if (!ai) {
-        console.warn("AI Key missing for Cifra Club search");
-        return [];
-    }
 
     try {
         const prompt = `
@@ -54,8 +37,9 @@ export const searchCifraClub = async (query: string): Promise<CifraClubResult[]>
             - key: O tom provável da música (ex: G, Cm, A#) ou "N/A" se não souber.
         `;
 
+        // FIX: Updated model name to 'gemini-3-flash-preview' for text-based retrieval tasks as per guidelines.
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: prompt,
             config: {
                 responseMimeType: "application/json",

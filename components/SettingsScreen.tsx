@@ -18,12 +18,13 @@ interface Props {
   onSaveAvailabilityWindow?: (start: string, end: string) => Promise<void>;
   availabilityWindow?: { start?: string, end?: string };
   isAdmin?: boolean;
+  orgId: string; // FIX: ERRO 1 - Mandatory orgId
 }
 
 export const SettingsScreen: React.FC<Props> = ({ 
     initialTitle, ministryId, themeMode, onSetThemeMode, onSaveTheme, 
     onSaveTitle, onAnnounceUpdate, onEnableNotifications, 
-    onSaveAvailabilityWindow, availabilityWindow, isAdmin = false 
+    onSaveAvailabilityWindow, availabilityWindow, isAdmin = false, orgId
 }) => {
   const [tempTitle, setTempTitle] = useState(initialTitle);
   const [availStart, setAvailStart] = useState("");
@@ -86,7 +87,7 @@ export const SettingsScreen: React.FC<Props> = ({
   const status = isWindowActive();
 
   const handleSaveAdvanced = async () => {
-      if (onSaveAvailabilityWindow && ministryId) {
+      if (onSaveAvailabilityWindow && ministryId && orgId) {
           const startISO = fromLocalInput(availStart);
           const endISO = fromLocalInput(availEnd);
           
@@ -101,14 +102,14 @@ export const SettingsScreen: React.FC<Props> = ({
           const isOpenNow = now >= s && now <= e;
 
           if (isOpenNow) {
-              await sendNotificationSQL(ministryId, {
+              await sendNotificationSQL(ministryId, orgId, {
                   title: "📅 Agenda Atualizada",
                   message: `A disponibilidade está aberta até ${e.toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit'})} às ${e.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}.`,
                   type: "info",
                   actionLink: "availability"
               });
           } else {
-              await sendNotificationSQL(ministryId, {
+              await sendNotificationSQL(ministryId, orgId, {
                   title: "🔒 Janela Encerrada",
                   message: "O período para envio de disponibilidade foi encerrado/alterado.",
                   type: "warning"
@@ -120,7 +121,7 @@ export const SettingsScreen: React.FC<Props> = ({
   };
 
   const handleQuickAction = async (action: 'block' | 'open') => {
-      if (!onSaveAvailabilityWindow || !ministryId) return;
+      if (!onSaveAvailabilityWindow || !ministryId || !orgId) return;
       
       const now = new Date();
       let newStartStr = "";
@@ -130,7 +131,7 @@ export const SettingsScreen: React.FC<Props> = ({
           newStartStr = "1970-01-01T00:00:00.000Z";
           newEndStr = "1970-01-01T00:00:00.000Z";
           
-          await sendNotificationSQL(ministryId, {
+          await sendNotificationSQL(ministryId, orgId, {
               title: "🔒 Janela Fechada",
               message: "O período para enviar disponibilidade foi encerrado.",
               type: "warning"
@@ -148,7 +149,7 @@ export const SettingsScreen: React.FC<Props> = ({
           addToast("Janela liberada por 7 dias.", "success");
 
           const endDateFormatted = nextWeek.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-          await sendNotificationSQL(ministryId, {
+          await sendNotificationSQL(ministryId, orgId, {
               title: "📅 Disponibilidade Liberada!",
               message: `A agenda está aberta até ${endDateFormatted}. Marque seus dias agora!`,
               type: "success",

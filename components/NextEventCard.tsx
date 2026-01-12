@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { CalendarClock, User, CheckCircle2, Clock, MapPin, AlertCircle, ShieldCheck, CalendarPlus, ChevronRight } from 'lucide-react';
+import { CalendarClock, User, CheckCircle2, Clock, MapPin, AlertCircle, ShieldCheck, CalendarPlus, ChevronRight, Sparkles } from 'lucide-react';
 import { Role, AttendanceMap, User as UserType, TeamMemberProfile } from '../types';
 import { getLocalDateISOString, generateGoogleCalendarUrl } from '../utils/dateUtils';
 
@@ -30,7 +30,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
     if (diffInMinutes < -60) {
       setTimeStatus('early');
       setMinutesToOpen(Math.abs(Math.floor(diffInMinutes + 60)));
-    } else if (diffInMinutes > 150) { // 2.5 hours = 150 minutes window
+    } else if (diffInMinutes > 150) {
       setTimeStatus('closed');
     } else {
       setTimeStatus('open');
@@ -64,11 +64,9 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
   };
 
   const team = getAssignedMembers();
-  const isToday = () => getLocalDateISOString() === event.iso.split('T')[0];
-  const eventIsToday = isToday();
+  const eventIsToday = getLocalDateISOString() === event.iso.split('T')[0];
   const eventTime = event.iso.split('T')[1];
 
-  // Helper render for primary action button
   const renderActionButton = (memberKey: string, isConfirmed: boolean, role: string) => {
       const googleCalUrl = generateGoogleCalendarUrl(
           `Escala: ${event.title}`,
@@ -78,18 +76,18 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
 
       if (isConfirmed) {
           return (
-              <div className="flex gap-2 w-full">
-                  <div className="flex-1 flex items-center justify-center gap-2 text-white bg-white/20 px-4 py-2.5 rounded-lg text-sm font-bold border border-white/20 backdrop-blur-sm shadow-inner">
-                      <ShieldCheck size={16} /> Presença Confirmada
+              <div className="flex gap-3 w-full">
+                  <div className="flex-1 flex items-center justify-center gap-3 text-white bg-emerald-500/20 px-6 py-4 rounded-[1.5rem] text-sm font-black uppercase tracking-widest border border-emerald-500/30 backdrop-blur-md shadow-lg shadow-emerald-500/10">
+                      <ShieldCheck size={20} className="text-emerald-400" /> Presença Confirmada
                   </div>
                   <a 
                       href={googleCalUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="p-2.5 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors border border-white/10"
-                      title="Adicionar ao Google Agenda"
+                      className="p-4 bg-white/10 text-white rounded-[1.5rem] hover:bg-white/20 transition-all border border-white/10 flex items-center justify-center"
+                      title="Google Agenda"
                   >
-                      <CalendarPlus size={20} />
+                      <CalendarPlus size={24} />
                   </a>
               </div>
           );
@@ -101,9 +99,9 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
                   href={googleCalUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 w-full py-2.5 bg-white text-teal-700 rounded-lg text-xs font-bold hover:bg-teal-50 transition-colors shadow-lg shadow-black/10"
+                  className="flex items-center justify-center gap-3 w-full py-4 bg-white text-emerald-950 rounded-[1.5rem] text-xs font-black uppercase tracking-widest hover:bg-emerald-50 transition-all shadow-2xl active:scale-95"
               >
-                  <CalendarPlus size={14} /> Salvar no Agenda
+                  <CalendarPlus size={18} /> Salvar no Agenda
               </a>
           );
       }
@@ -111,173 +109,136 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
       switch (timeStatus) {
           case 'early':
               return (
-                  <button disabled className="flex items-center justify-center gap-2 w-full py-2.5 bg-black/20 text-white/60 rounded-lg text-xs font-bold cursor-not-allowed border border-white/10">
-                      <Clock size={14} /> Check-in em {minutesToOpen} min
+                  <button disabled className="flex items-center justify-center gap-3 w-full py-4 bg-black/40 text-white/40 rounded-[1.5rem] text-xs font-black uppercase tracking-widest cursor-not-allowed border border-white/5">
+                      <Clock size={18} /> Check-in em {minutesToOpen} min
                   </button>
               );
           case 'closed':
               return (
-                  <button disabled className="flex items-center justify-center gap-2 w-full py-2.5 bg-red-500/20 text-red-100 rounded-lg text-xs font-bold cursor-not-allowed border border-red-500/20">
-                      <AlertCircle size={14} /> Encerrado
+                  <button disabled className="flex items-center justify-center gap-3 w-full py-4 bg-rose-500/20 text-rose-200 rounded-[1.5rem] text-xs font-black uppercase tracking-widest cursor-not-allowed border border-rose-500/30">
+                      <AlertCircle size={18} /> Período Encerrado
                   </button>
               );
           case 'open':
               return (
                   <button 
                       onClick={() => onConfirm(memberKey)}
-                      className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-white hover:bg-teal-50 text-teal-700 rounded-lg text-sm font-bold shadow-xl active:scale-95 transition-all"
+                      className="w-full flex items-center justify-center gap-3 px-8 py-5 bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-300 hover:to-teal-400 text-emerald-950 rounded-[1.5rem] text-sm font-black uppercase tracking-widest shadow-2xl shadow-emerald-500/30 active:scale-95 transition-all"
                   >
-                      <MapPin size={16} /> Confirmar Presença
+                      <MapPin size={20} /> Confirmar Presença Agora
                   </button>
               );
       }
   };
 
   return (
-    <div className="relative mb-8 rounded-[2rem] overflow-hidden bg-white dark:bg-zinc-900 shadow-2xl border border-zinc-200 dark:border-zinc-800 animate-slide-up group ring-1 ring-black/5">
+    <div className="relative mb-12 rounded-[3rem] overflow-hidden bg-white dark:bg-slate-900 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.14)] border border-slate-200 dark:border-slate-800 animate-slide-up ring-1 ring-black/5">
       
-      <div className="grid grid-cols-1 lg:grid-cols-3">
-          {/* Header Info - COM GRADIENTE PREMIUM */}
-          <div className="p-6 lg:p-10 lg:col-span-1 bg-gradient-to-br from-zinc-900 via-zinc-800 to-teal-900 relative overflow-hidden flex flex-col justify-between text-white">
+      <div className="grid grid-cols-1 lg:grid-cols-12">
+          {/* Main Info - High Fidelity Sidebar */}
+          <div className="lg:col-span-4 p-8 lg:p-12 bg-slate-950 relative overflow-hidden flex flex-col justify-between text-white">
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-600/20 via-slate-950 to-violet-600/10"></div>
+              <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 brightness-150 contrast-150 mix-blend-overlay"></div>
               
-              {/* Texture/Pattern Overlay */}
-              <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
-              
-              {/* Glow Effect */}
-              <div className="absolute -top-10 -left-10 w-48 h-48 bg-teal-500/10 rounded-full blur-[80px]"></div>
-
               <div className="relative z-10">
-                  <div className="flex items-center gap-2 mb-4">
-                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-teal-400">Próximo Evento</span>
+                  <div className="flex items-center gap-3 mb-6">
+                      <div className="px-3 py-1 rounded-full bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-500/30 flex items-center gap-1.5">
+                          <Sparkles size={12} fill="currentColor" /> Próximo
+                      </div>
                       {eventIsToday && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-teal-500 text-white text-[9px] font-black uppercase shadow-lg shadow-teal-500/30">
-                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span> Hoje
-                          </span>
+                          <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-emerald-400">
+                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> Hoje
+                          </div>
                       )}
                   </div>
-                  <h2 className="text-3xl lg:text-4xl font-black text-white leading-tight mb-3 tracking-tight drop-shadow-md">
+                  
+                  <h2 className="text-4xl lg:text-5xl font-black text-white leading-[1.1] mb-6 tracking-tighter">
                       {event.title}
                   </h2>
-                  <div className="flex flex-wrap items-center gap-3 text-zinc-300 text-sm font-medium">
-                      <span className="bg-white/10 px-3 py-1 rounded-full border border-white/5 backdrop-blur-sm">{event.dateDisplay}</span>
-                      <span className="w-1 h-1 rounded-full bg-teal-500/50"></span>
-                      <span className="flex items-center gap-1.5"><Clock size={14} className="text-teal-400"/> {eventTime}</span>
+                  
+                  <div className="space-y-4">
+                      <div className="flex items-center gap-3 text-emerald-400">
+                          <CalendarClock size={20} />
+                          <span className="text-lg font-bold tracking-tight">{event.dateDisplay}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-slate-300">
+                          <Clock size={20} />
+                          <span className="text-lg font-bold tracking-tight">{eventTime}</span>
+                      </div>
                   </div>
               </div>
               
-              <div className="hidden lg:block mt-10 relative z-10">
-                  <div className="text-[10px] text-zinc-400 mb-2 font-black uppercase tracking-widest">Sua Ação:</div>
-                  {/* Find current user status */}
+              <div className="mt-12 relative z-10">
                   {(() => {
                       const myRole = team.find(t => currentUser && t.name === currentUser.name);
                       if (myRole) {
                           const isConfirmed = attendance[myRole.key];
                           return renderActionButton(myRole.key, !!isConfirmed, myRole.role);
                       }
-                      return <div className="text-xs text-white/40 italic bg-black/30 p-3 rounded-xl border border-white/5 backdrop-blur-md">Você não está escalado para este evento.</div>;
+                      return (
+                          <div className="p-5 rounded-[1.5rem] bg-white/5 border border-white/10 backdrop-blur-md text-center">
+                              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-1">Status</p>
+                              <p className="text-xs font-bold text-slate-300">Você não está escalado neste evento.</p>
+                          </div>
+                      );
                   })()}
               </div>
           </div>
 
-          {/* Team List - Mantém Fundo Claro/Escuro para contraste */}
-          <div className="p-6 lg:p-10 lg:col-span-2 bg-white dark:bg-zinc-900 flex flex-col">
-              <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xs font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em]">Escala Oficial</h3>
-                  <div className="text-[10px] font-bold text-zinc-400 bg-zinc-50 dark:bg-zinc-800 px-2 py-1 rounded-full border border-zinc-100 dark:border-zinc-700">{team.length} Integrantes</div>
+          {/* Team Detail List */}
+          <div className="lg:col-span-8 p-8 lg:p-12 bg-white dark:bg-slate-900">
+              <div className="flex items-center justify-between mb-8">
+                  <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.3em]">Equipe Escalonada</h3>
+                  <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-full">{team.length} Integrantes</span>
               </div>
 
               {team.length === 0 ? (
-                  <div className="flex-1 py-12 text-center text-zinc-400 text-sm bg-zinc-50 dark:bg-zinc-800/30 rounded-[1.5rem] border-2 border-zinc-100 dark:border-zinc-800 border-dashed flex flex-col items-center justify-center gap-3">
-                      <div className="w-16 h-16 bg-zinc-100 dark:bg-zinc-800 rounded-full flex items-center justify-center opacity-40">
-                        <CalendarClock size={32} />
-                      </div>
-                      <span className="font-medium">Nenhuma escala definida ainda.</span>
+                  <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-[2.5rem]">
+                      <CalendarClock size={48} className="text-slate-200 dark:text-slate-800 mb-4" />
+                      <p className="text-slate-400 font-bold text-sm">Escala em processamento...</p>
                   </div>
               ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       {team.map((t, idx) => {
                           const isConfirmed = attendance[t.key];
                           const isMe = currentUser && t.name === currentUser.name;
                           const memberProfile = members.find(m => m.name === t.name);
-                          const hasAvatar = !!memberProfile?.avatar_url;
                           
                           return (
-                              <div key={idx} className={`group/card flex items-center p-4 rounded-2xl border transition-all duration-300 ${
+                              <div key={idx} className={`group flex items-center p-4 rounded-[2rem] border transition-all duration-500 ${
                                   isMe 
-                                  ? 'bg-teal-50/50 dark:bg-teal-900/10 border-teal-200 dark:border-teal-800 ring-2 ring-teal-500/10 shadow-lg shadow-teal-500/5' 
-                                  : 'bg-white dark:bg-zinc-800/50 border-zinc-100 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50/50 dark:hover:bg-zinc-800 shadow-sm'
+                                  ? 'bg-emerald-50/50 dark:bg-emerald-500/5 border-emerald-200 dark:border-emerald-800/50 ring-2 ring-emerald-500/10' 
+                                  : 'bg-slate-50/50 dark:bg-slate-800/40 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:border-slate-200 dark:hover:border-slate-700 hover:shadow-xl'
                               }`}>
-                                  {/* Avatar or Icon Container */}
-                                  <div className={`relative w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-all shadow-sm ${
-                                      hasAvatar 
-                                        ? '' // No bg color if image is present
-                                        : (isConfirmed 
-                                            ? 'bg-emerald-500 text-white' 
-                                            : 'bg-zinc-100 dark:bg-zinc-700 text-zinc-400 dark:text-zinc-500')
-                                  }`}>
-                                      {hasAvatar ? (
-                                          <>
-                                            <img 
-                                                src={memberProfile?.avatar_url} 
-                                                alt={t.name} 
-                                                className={`w-full h-full object-cover rounded-xl ${isConfirmed ? 'ring-2 ring-emerald-500' : ''}`} 
-                                            />
-                                            {isConfirmed && (
-                                                <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-white rounded-full p-0.5 border-2 border-white dark:border-zinc-900 shadow-sm">
-                                                    <CheckCircle2 size={10} />
-                                                </div>
-                                            )}
-                                          </>
-                                      ) : (
-                                          isConfirmed ? <CheckCircle2 size={20} /> : <User size={20} />
+                                  <div className="relative shrink-0">
+                                      <div className={`w-14 h-14 rounded-2xl overflow-hidden border-2 transition-all duration-500 ${isConfirmed ? 'border-emerald-500 shadow-lg shadow-emerald-500/20' : 'border-slate-200 dark:border-slate-700'}`}>
+                                          {memberProfile?.avatar_url ? (
+                                              <img src={memberProfile.avatar_url} className="w-full h-full object-cover" />
+                                          ) : (
+                                              <div className={`w-full h-full flex items-center justify-center font-black text-xl ${isConfirmed ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-400'}`}>
+                                                  {t.name.charAt(0)}
+                                              </div>
+                                          )}
+                                      </div>
+                                      {isConfirmed && (
+                                          <div className="absolute -top-2 -right-2 bg-emerald-500 text-white rounded-full p-1 border-4 border-white dark:border-slate-900 shadow-lg scale-110">
+                                              <CheckCircle2 size={12} />
+                                          </div>
                                       )}
                                   </div>
                                   
-                                  <div className="ml-4 flex-1 min-w-0">
-                                      <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-0.5">{t.role}</p>
-                                      <p className={`text-sm font-bold truncate ${isConfirmed ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-500 dark:text-zinc-400'}`}>
-                                          {t.name} {isMe && <span className="text-teal-600 dark:text-teal-400 font-black text-[9px] ml-1 bg-teal-100 dark:bg-teal-900/50 px-1.5 py-0.5 rounded-full">(VOCÊ)</span>}
+                                  <div className="ml-5 flex-1 min-w-0">
+                                      <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-widest mb-0.5">{t.role}</p>
+                                      <p className={`text-base font-black truncate tracking-tight ${isConfirmed ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
+                                          {t.name}
                                       </p>
+                                      {isMe && <span className="inline-block mt-1 text-[9px] font-black bg-emerald-500 text-white px-2 py-0.5 rounded-full uppercase tracking-tighter">Você</span>}
                                   </div>
                               </div>
                           );
                       })}
                   </div>
               )}
-
-              {/* Mobile Only Action Button */}
-              <div className="lg:hidden mt-8 pt-8 border-t border-zinc-100 dark:border-zinc-800">
-                  <div className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-4">Seu Status</div>
-                  {(() => {
-                      const myRole = team.find(t => currentUser && t.name === currentUser.name);
-                      if (myRole) {
-                          const isConfirmed = attendance[myRole.key];
-                          const googleCalUrl = generateGoogleCalendarUrl(`Escala: ${event.title}`, event.iso, `Função: ${myRole.role}`);
-                          
-                          if (isConfirmed) {
-                              return (
-                                <div className="flex gap-3 w-full">
-                                    <div className="flex-1 flex items-center justify-center gap-2 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-4 rounded-2xl text-sm font-black border border-emerald-200 dark:border-emerald-800 shadow-inner">
-                                        <ShieldCheck size={18} /> Confirmado
-                                    </div>
-                                    <a href={googleCalUrl} target="_blank" className="p-4 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-2xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors border border-zinc-200 dark:border-zinc-700 shadow-sm">
-                                        <CalendarPlus size={24} />
-                                    </a>
-                                </div>
-                              );
-                          }
-                          if (!eventIsToday) {
-                              return <a href={googleCalUrl} target="_blank" className="flex items-center justify-center gap-2 w-full py-4 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-2xl text-xs font-black hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors border border-zinc-200 dark:border-zinc-700 shadow-sm"><CalendarPlus size={18} /> Salvar no Agenda</a>;
-                          }
-                          switch (timeStatus) {
-                              case 'early': return <button disabled className="flex items-center justify-center gap-2 w-full py-4 bg-zinc-100 dark:bg-zinc-800 text-zinc-400 rounded-2xl text-xs font-black cursor-not-allowed border border-zinc-200 dark:border-zinc-700"><Clock size={18} /> Check-in em {minutesToOpen} min</button>;
-                              case 'closed': return <button disabled className="flex items-center justify-center gap-2 w-full py-4 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-2xl text-xs font-black cursor-not-allowed border border-red-100 dark:border-red-900/30"><AlertCircle size={18} /> Encerrado</button>;
-                              case 'open': return <button onClick={() => onConfirm(myRole.key)} className="w-full flex items-center justify-center gap-3 px-6 py-5 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl text-sm font-black shadow-xl shadow-teal-600/20 active:scale-95 transition-all"><MapPin size={20} /> Confirmar Agora</button>;
-                          }
-                      }
-                      return <div className="text-center text-xs text-zinc-400 font-bold italic py-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-100 dark:border-zinc-800">Você não está escalado.</div>;
-                  })()}
-              </div>
           </div>
       </div>
     </div>
