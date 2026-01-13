@@ -34,7 +34,8 @@ export const MembersScreen: React.FC<Props> = ({
             const matchesSearch = member.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                                   (member.email && member.email.toLowerCase().includes(searchTerm.toLowerCase()));
             
-            const matchesRole = selectedRole === "Todos" || (member.roles && member.roles.includes(selectedRole));
+            // Uso de 'functions' para cargos, não 'roles' (que é admin/member)
+            const matchesRole = selectedRole === "Todos" || (member.functions && member.functions.includes(selectedRole));
             
             const matchesOnline = showOnlineOnly ? onlineUsers.includes(member.id) : true;
 
@@ -106,7 +107,8 @@ export const MembersScreen: React.FC<Props> = ({
                 const isOnline = onlineUsers.includes(member.id);
                 const isSelf = currentUser.id === member.id;
                 
-                const memberRoles = member.roles || [];
+                // Mapeia functions (cargos)
+                const memberFunctions = member.functions || [];
 
                 return (
                 <div key={member.id} className="bg-white dark:bg-zinc-800 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-4 relative group shadow-sm hover:shadow-md transition-all hover:border-zinc-300 dark:hover:border-zinc-700 animate-slide-up">
@@ -172,10 +174,10 @@ export const MembersScreen: React.FC<Props> = ({
                     </div>
 
                     <div className="flex flex-wrap gap-2 min-h-[26px]">
-                        {memberRoles.length > 0 ? (
-                            memberRoles.map(role => (
-                                <span key={role} className="text-[10px] font-semibold px-2.5 py-1 rounded-md bg-zinc-50 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-300 border border-zinc-100 dark:border-zinc-700/50">
-                                    {role}
+                        {memberFunctions.length > 0 ? (
+                            memberFunctions.map(func => (
+                                <span key={func} className="text-[10px] font-semibold px-2.5 py-1 rounded-md bg-zinc-50 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-300 border border-zinc-100 dark:border-zinc-700/50">
+                                    {func}
                                 </span>
                             ))
                         ) : (

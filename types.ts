@@ -179,7 +179,7 @@ export interface User {
   isSuperAdmin?: boolean; 
   whatsapp?: string;
   birthDate?: string; 
-  functions?: string[];
+  functions?: string[]; // Cargos de ministério (EXCLUSIVO)
   createdAt?: string;
 }
 
@@ -190,7 +190,7 @@ export interface TeamMemberProfile {
     whatsapp?: string;
     birthDate?: string; 
     avatar_url?: string;
-    roles?: string[]; // Cargos vindos de organization_memberships.functions
+    functions?: string[]; // Cargos de ministério (EXCLUSIVO) - Renomeado de 'roles' para evitar conflito
     createdAt?: string;
     isAdmin?: boolean;
     organizationId?: string;

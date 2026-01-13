@@ -147,7 +147,7 @@ export const EventsScreen: React.FC<Props> = ({ customEvents, onCreateEvent, onD
                   const eventDateStr = evt.date || (evt.iso ? evt.iso.split('T')[0] : '');
                   
                   return (
-                    <div key={evt.id || evt.iso} className="flex justify-between items-center bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md transition-shadow group animate-slide-up">
+                    <div key={evt.id} className="flex justify-between items-center bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md transition-shadow group animate-slide-up">
                         <div className="flex items-center gap-4">
                             <div className="flex flex-col items-center justify-center w-14 h-14 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800/30 text-blue-600 dark:text-blue-400">
                                 <span className="text-xs font-bold uppercase">{eventDateStr ? new Date(eventDateStr + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '') : 'Dia'}</span>
@@ -164,7 +164,7 @@ export const EventsScreen: React.FC<Props> = ({ customEvents, onCreateEvent, onD
                         </div>
                         
                         <button 
-                            onClick={() => handleDelete(evt.iso ? evt.iso : evt.id)} 
+                            onClick={() => handleDelete(evt.id)} 
                             disabled={loading}
                             className="p-3 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors disabled:opacity-50"
                             title="Excluir Evento"

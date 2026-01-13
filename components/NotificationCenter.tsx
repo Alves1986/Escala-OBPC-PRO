@@ -33,7 +33,8 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
 
   // Verifica se é admin para liberar o botão de deletar
   React.useEffect(() => {
-      getSupabase()?.auth.getUser().then(({ data: { user } }) => {
+      // @ts-ignore
+      (getSupabase()?.auth as any).getUser().then(({ data: { user } }: any) => {
           if (user) {
              getSupabase()?.from('profiles').select('is_admin').eq('id', user.id).single()
                 .then(({ data }) => setIsAdmin(!!data?.is_admin));
@@ -45,7 +46,8 @@ export const NotificationCenter: React.FC<Props> = ({ notifications, ministryId,
     const supabase = getSupabase();
     if (!supabase || !orgId) return; // Strict check
     
-    const { data: { user } } = await supabase.auth.getUser();
+    // @ts-ignore
+    const { data: { user } } = await (supabase.auth as any).getUser();
     if (!user) return;
 
     const unreadIds = notifications.filter(n => !n.read).map(n => n.id);

@@ -1,11 +1,10 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { getSupabase } from '../services/supabaseService';
-import { RealtimeChannel } from '@supabase/supabase-js';
 
 export function useOnlinePresence(userId?: string, userName?: string, onStatusChange?: (name: string, status: 'online' | 'offline') => void) {
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  const channelRef = useRef<any | null>(null);
   
   // Use a short delay before enabling notifications to skip the initial sync burst
   const isSyncing = useRef(true);

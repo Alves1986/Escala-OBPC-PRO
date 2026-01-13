@@ -9,6 +9,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   // STRICT: No fallback to 'midia' or slugs.
   // If ministryId is null or not a UUID, the queries will be disabled in useMinistryQueries
   const mid = ministryId || ''; 
+  const orgId = currentUser?.organizationId || '';
   
   const {
     settingsQuery,
@@ -80,16 +81,16 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
             'postgres_changes', 
             { event: '*', schema: 'public', table: 'events', filter: `ministry_id=eq.${mid}` }, 
             () => {
-                queryClient.invalidateQueries({ queryKey: keys.schedule(mid, currentMonth) });
+                queryClient.invalidateQueries({ queryKey: keys.schedule(mid, currentMonth, orgId) });
             }
         )
         .on(
             'postgres_changes', 
             { event: '*', schema: 'public', table: 'schedule_assignments', filter: `ministry_id=eq.${mid}` }, 
             () => {
-                queryClient.invalidateQueries({ queryKey: keys.schedule(mid, currentMonth) });
-                queryClient.invalidateQueries({ queryKey: keys.auditLogs(mid) });
-                queryClient.invalidateQueries({ queryKey: keys.ranking(mid) });
+                queryClient.invalidateQueries({ queryKey: keys.schedule(mid, currentMonth, orgId) });
+                queryClient.invalidateQueries({ queryKey: keys.auditLogs(mid, orgId) });
+                queryClient.invalidateQueries({ queryKey: keys.ranking(mid, orgId) });
             }
         )
         .on(
@@ -103,14 +104,14 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
             'postgres_changes', 
             { event: '*', schema: 'public', table: 'swap_requests', filter: `ministry_id=eq.${mid}` }, 
             () => {
-                queryClient.invalidateQueries({ queryKey: keys.swapRequests(mid) });
+                queryClient.invalidateQueries({ queryKey: keys.swapRequests(mid, orgId) });
             }
         )
         .on(
             'postgres_changes', 
             { event: 'UPDATE', schema: 'public', table: 'ministry_settings', filter: `ministry_id=eq.${mid}` }, 
             () => {
-                queryClient.invalidateQueries({ queryKey: keys.settings(mid) });
+                queryClient.invalidateQueries({ queryKey: keys.settings(mid, orgId) });
             }
         )
         .subscribe();
@@ -118,7 +119,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     return () => {
         sb.removeChannel(channel);
     };
-  }, [mid, currentMonth, queryClient]);
+  }, [mid, currentMonth, queryClient, orgId]);
 
   return {
     events: scheduleQuery.data?.events || [],

@@ -245,27 +245,30 @@ export const EditMemberModal = ({ isOpen, onClose, member, availableRoles, onSav
 }) => {
     const [name, setName] = useState("");
     const [whatsapp, setWhatsapp] = useState("");
-    const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+    // Renomeando internamente apenas para UI, mas conceitualmente são 'cargos'
+    const [selectedFunctions, setSelectedFunctions] = useState<string[]>([]);
 
     useEffect(() => {
         if (member) {
             setName(member.name);
             setWhatsapp(member.whatsapp || "");
-            setSelectedRoles(member.roles || []);
+            // Carrega functions do membro, fallback para vazio
+            setSelectedFunctions(member.functions || []);
         }
     }, [member]);
 
-    const toggleRole = (role: string) => {
-        if (selectedRoles.includes(role)) {
-            setSelectedRoles(selectedRoles.filter(r => r !== role));
+    const toggleFunction = (role: string) => {
+        if (selectedFunctions.includes(role)) {
+            setSelectedFunctions(selectedFunctions.filter(r => r !== role));
         } else {
-            setSelectedRoles([...selectedRoles, role]);
+            setSelectedFunctions([...selectedFunctions, role]);
         }
     };
 
     const handleSave = () => {
         if (member) {
-            onSave(member.id, { name, whatsapp, roles: selectedRoles });
+            // Mapeia para a propriedade esperada pelo onSave (que no parent chama updateMemberData)
+            onSave(member.id, { name, whatsapp, roles: selectedFunctions });
             onClose();
         }
     };
@@ -296,11 +299,11 @@ export const EditMemberModal = ({ isOpen, onClose, member, availableRoles, onSav
                     <label className="text-xs font-bold text-zinc-500 uppercase block mb-2 ml-1 flex items-center gap-1"><Briefcase size={12}/> Funções (Cargos)</label>
                     <div className="flex flex-wrap gap-2">
                         {availableRoles.map(role => {
-                            const isSelected = selectedRoles.includes(role);
+                            const isSelected = selectedFunctions.includes(role);
                             return (
                                 <button
                                     key={role}
-                                    onClick={() => toggleRole(role)}
+                                    onClick={() => toggleFunction(role)}
                                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1 ${
                                         isSelected 
                                         ? 'bg-blue-600 text-white border-blue-500 shadow-md' 
