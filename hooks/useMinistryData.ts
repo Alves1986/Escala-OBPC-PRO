@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useMemo } from 'react';
 import { User, ScheduleMap, AttendanceMap, AvailabilityMap, AppNotification, Announcement, SwapRequest, RepertoireItem, TeamMemberProfile, MemberMap, Role, GlobalConflictMap, AvailabilityNotesMap, DEFAULT_ROLES } from '../types';
 import { useMinistryQueries, keys } from './useMinistryQueries';
@@ -26,7 +27,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   } = useMinistryQueries(mid, currentMonth, currentUser);
 
   const queryClient = useQueryClient();
-  const { setMinistryId } = useAppStore();
+  const { setMinistryId, availableMinistries } = useAppStore();
 
   useEffect(() => {
       // Security Check: If user has lost access to this ministry, redirect
@@ -47,10 +48,12 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       let r = settingsQuery.data?.roles || [];
       // Default roles only if we have a valid ministry ID but no specific settings
       if (r.length === 0 && mid) {
-          r = DEFAULT_ROLES['default'] || [];
+          const ministryDef = availableMinistries.find(m => m.id === mid);
+          const code = ministryDef?.code || '';
+          r = DEFAULT_ROLES[code] || DEFAULT_ROLES['default'] || [];
       }
       return r;
-  }, [settingsQuery.data, mid]);
+  }, [settingsQuery.data, mid, availableMinistries]);
 
   const availabilityWindow = useMemo(() => ({
       start: settingsQuery.data?.availabilityStart,

@@ -1,1 +1,0 @@
-// ARQUIVO OBSOLETO. PODE EXCLUIR. O Service Worker real está na pasta /public.

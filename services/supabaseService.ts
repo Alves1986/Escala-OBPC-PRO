@@ -1,4 +1,3 @@
-
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
   MinistrySettings, 
@@ -361,6 +360,7 @@ export const fetchOrganizationsWithStats = async () => {
     const { data, error } = await sb.from('organizations')
         .select(`
             *,
+            organization_event_templates (id, title, weekday, time, active),
             organization_ministries (id, code, label),
             profiles (count)
         `);
@@ -482,8 +482,9 @@ export const fetchMinistryAvailability = async (ministryId: string, orgId: strin
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId);
 
+    // FIX: JOIN com profiles para pegar o nome correto
     const { data, error } = await sb.from('availability')
-        .select('*')
+        .select('*, profiles(name)')
         .eq('ministry_id', ministryId)
         .eq('organization_id', validOrgId);
         
@@ -491,10 +492,21 @@ export const fetchMinistryAvailability = async (ministryId: string, orgId: strin
 
     const availability: any = {};
     const notes: any = {};
+    
     data?.forEach((row: any) => {
-        if (!availability[row.member_name]) availability[row.member_name] = [];
-        if (Array.isArray(row.dates)) availability[row.member_name] = row.dates;
-        if (row.notes) Object.entries(row.notes).forEach(([k, v]) => { notes[`${row.member_name}_${k}`] = v; });
+        // Preferência pelo nome vindo do perfil (relação), fallback para o campo member_name legado
+        const name = row.profiles?.name || row.member_name;
+        
+        if (name) {
+            if (!availability[name]) availability[name] = [];
+            if (Array.isArray(row.dates)) availability[name] = row.dates;
+            
+            if (row.notes) {
+                Object.entries(row.notes).forEach(([k, v]) => { 
+                    notes[`${name}_${k}`] = v; 
+                });
+            }
+        }
     });
     return { availability, notes };
 };
@@ -886,21 +898,83 @@ export const clearScheduleForMonth = async (ministryId: string, orgId: string, m
 export const resetToDefaultEvents = async (ministryId: string, orgId: string, month: string) => {
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId);
-    const start = `${month}-01`;
-    const end = `${month}-31`;
-    await sb.from('events').delete().eq('ministry_id', ministryId).eq('organization_id', validOrgId).gte('date_time', start).lte('date_time', end + 'T23:59:59');
-    const [y, m] = month.split('-').map(Number);
-    const date = new Date(y, m - 1, 1);
-    const inserts = [];
-    while (date.getMonth() === m - 1) {
-        if (date.getDay() === 0) { 
-            const dayStr = date.toISOString().split('T')[0];
-            inserts.push({ ministry_id: ministryId, organization_id: validOrgId, title: 'Culto da Família', date_time: `${dayStr}T18:00:00` });
-            inserts.push({ ministry_id: ministryId, organization_id: validOrgId, title: 'Escola Bíblica', date_time: `${dayStr}T09:00:00` });
-        }
-        date.setDate(date.getDate() + 1);
+
+    // 1. Definição do Intervalo do Mês
+    const [yStr, mStr] = month.split('-');
+    const year = parseInt(yStr);
+    const mIndex = parseInt(mStr) - 1; // JS Month is 0-indexed
+
+    // Data inicial: Primeiro dia do mês
+    const startIso = `${month}-01T00:00:00`;
+
+    // Data final: Último momento do mês
+    // new Date(year, month, 0) pega o último dia do mês anterior, então usamos mIndex + 1
+    const endDate = new Date(year, mIndex + 1, 0, 23, 59, 59);
+    const endIso = endDate.toISOString();
+
+    // 2. Buscar Eventos Existentes (Para não duplicar nem apagar)
+    // Selecionamos apenas a data para comparação
+    const { data: existingEvents, error: fetchError } = await sb.from('events')
+        .select('date_time')
+        .eq('ministry_id', ministryId)
+        .eq('organization_id', validOrgId)
+        .gte('date_time', startIso)
+        .lte('date_time', endIso);
+
+    if (fetchError) throw fetchError;
+
+    // Cria um Set de assinaturas "YYYY-MM-DDTHH:MM" para busca rápida O(1)
+    // Isso normaliza a comparação ignorando segundos ou milissegundos discrepantes
+    const existingSignatures = new Set(
+        (existingEvents || []).map((e: any) => e.date_time.slice(0, 16))
+    );
+
+    // 3. Buscar Templates Ativos da Organização
+    const { data: templates } = await sb.from('organization_event_templates')
+        .select('*')
+        .eq('organization_id', validOrgId)
+        .eq('active', true);
+
+    if (!templates || templates.length === 0) return;
+
+    // 4. Gerar Eventos em Memória e Comparar (Gap Analysis)
+    const inserts: any[] = [];
+    const dateIterator = new Date(year, mIndex, 1);
+
+    while (dateIterator.getMonth() === mIndex) {
+        const weekDay = dateIterator.getDay(); // 0=Dom, 1=Seg...
+        const dateStr = dateIterator.toISOString().split('T')[0]; // YYYY-MM-DD
+
+        // Filtra templates que ocorrem neste dia da semana
+        const dayTemplates = templates.filter((t: any) => t.weekday === weekDay);
+
+        dayTemplates.forEach((t: any) => {
+            // Formata horário para HH:MM:SS
+            const timeStr = t.time.length === 5 ? `${t.time}:00` : t.time;
+            // Assinatura para comparação: YYYY-MM-DDTHH:MM
+            const checkSignature = `${dateStr}T${timeStr.slice(0, 5)}`;
+            // Valor completo para inserção
+            const insertDateTime = `${dateStr}T${timeStr}`;
+
+            // SE NÃO EXISTE -> Adiciona à lista de inserção
+            if (!existingSignatures.has(checkSignature)) {
+                inserts.push({
+                    ministry_id: ministryId,
+                    organization_id: validOrgId,
+                    title: t.title,
+                    date_time: insertDateTime
+                });
+            }
+        });
+
+        // Avança para o próximo dia
+        dateIterator.setDate(dateIterator.getDate() + 1);
     }
-    if (inserts.length > 0) { await sb.from('events').insert(inserts); }
+
+    // 5. Inserção Segura (Apenas os novos)
+    if (inserts.length > 0) {
+        await sb.from('events').insert(inserts);
+    }
 };
 
 export const updateProfileMinistry = async (userId: string, ministryId: string) => {

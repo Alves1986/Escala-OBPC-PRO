@@ -235,7 +235,8 @@ export interface RankingEntry {
 }
 
 export const DEFAULT_ROLES: Record<string, string[]> = {
-  'midia': ["Projeção", "Transmissão", "Fotografia", "Storys"],
-  'louvor': ['Ministro', 'Vocal', 'Guitarra', 'Baixo', 'Teclado', 'Bateria', 'Mesa de Som'],
+  'midia': ['Projeção', 'Transmissão', 'Fotografia', 'Stories', 'Câmera Móvel', 'Apresentador(a)'],
+  'louvor': ['Ministro', 'Vocal', 'Violão', 'Guitarra', 'Bateria', 'Baixo', 'Teclado', 'Mesa de Som'],
+  'infantil': ['Lanche', 'Professor 03–06', 'Professor 07–11'],
   'default': ["Membro"]
 };

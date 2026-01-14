@@ -64,7 +64,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   const [cifraResults, setCifraResults] = useState<any[]>([]);
   const [cifraLoading, setCifraLoading] = useState(false);
 
-  const orgId = currentUser?.organizationId || '00000000-0000-0000-0000-000000000000';
+  const orgId = currentUser?.organizationId || '8d01a052-0b2e-46e4-8e34-683ff4db5c3b';
 
   // Init
   useEffect(() => {

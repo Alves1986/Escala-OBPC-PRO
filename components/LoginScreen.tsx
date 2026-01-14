@@ -28,7 +28,7 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
   useEffect(() => {
     async function loadMinistries() {
         // Safe default org ID for registration flow
-        const list = await fetchOrganizationMinistries('00000000-0000-0000-0000-000000000000');
+        const list = await fetchOrganizationMinistries('8d01a052-0b2e-46e4-8e34-683ff4db5c3b');
         setMinistriesList(list);
     }
     if (view === 'register') loadMinistries();
@@ -41,12 +41,14 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
             return;
         }
         const mainMinistry = regSelectedMinistries[0];
+        const ministry = ministriesList.find(m => m.id === mainMinistry);
+        const orgId = ministry?.organizationId || '8d01a052-0b2e-46e4-8e34-683ff4db5c3b';
+
         setLoadingRoles(true);
-        const defaults = DEFAULT_ROLES[mainMinistry] || [];
+        // Correctly use ministry code for defaults
+        const defaults = (ministry && DEFAULT_ROLES[ministry.code]) ? DEFAULT_ROLES[ministry.code] : (DEFAULT_ROLES['default'] || []);
         setAvailableRoles(defaults);
         try {
-            const ministry = ministriesList.find(m => m.id === mainMinistry);
-            const orgId = ministry?.organizationId || '00000000-0000-0000-0000-000000000000';
             const settings = await fetchMinistrySettings(mainMinistry, orgId);
             if (settings && settings.roles && settings.roles.length > 0) setAvailableRoles(settings.roles);
         } catch (e) { console.warn("Defaults used"); } 
@@ -86,7 +88,7 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
       setLoadingAction('email');
       
       const ministry = ministriesList.find(m => m.id === regSelectedMinistries[0]);
-      const orgId = ministry?.organizationId || '00000000-0000-0000-0000-000000000000';
+      const orgId = ministry?.organizationId || '8d01a052-0b2e-46e4-8e34-683ff4db5c3b';
 
       const result = await registerWithEmail(regEmail.trim(), regPassword.trim(), regName.trim(), regSelectedMinistries, orgId, regSelectedRoles);
       if (result.success) {
