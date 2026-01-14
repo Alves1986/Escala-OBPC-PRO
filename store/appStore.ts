@@ -1,4 +1,3 @@
-
 import { create } from 'zustand';
 import { User, ThemeMode, MinistryDef } from '../types';
 
@@ -9,7 +8,7 @@ interface AppState {
   availableMinistries: MinistryDef[]; 
   themeMode: ThemeMode;
   sidebarOpen: boolean;
-  isAppReady: boolean; // NEW: Global readiness flag
+  isAppReady: boolean;
   
   setCurrentUser: (user: User | null) => void;
   setMinistryId: (id: string) => void;
@@ -18,7 +17,7 @@ interface AppState {
   setThemeMode: (mode: ThemeMode) => void;
   setSidebarOpen: (open: boolean) => void;
   toggleSidebar: () => void;
-  setAppReady: (ready: boolean) => void; // NEW
+  setAppReady: (ready: boolean) => void;
 }
 
 const storedMinistryId = typeof window !== 'undefined' ? localStorage.getItem('ministry_id') : null;
@@ -30,24 +29,22 @@ export const useAppStore = create<AppState>((set) => ({
   availableMinistries: [],
   themeMode: (localStorage.getItem('themeMode') as ThemeMode) || 'system',
   sidebarOpen: false,
-  isAppReady: false, // Default to false
+  isAppReady: false,
 
   setCurrentUser: (user) => set((state) => {
+      // Se deslogar, limpa tudo
       if (!user) {
           return { currentUser: null, organizationId: null, isAppReady: false };
       }
 
-      // FIX: ERRO 2 - Store Global não aceita usuário sem organizationId válido
-      if (!user.organizationId) {
-          console.error("[STORE] Attempted to set user without organizationId. Action blocked.");
-          return state; // Retorna estado anterior, rejeita atualização inválida
-      }
-
+      // CORREÇÃO: Removemos o bloqueio de organizationId.
+      // Aceitamos o usuário como ele vier para permitir o Bootstrap/Onboarding.
+      
       const currentId = state.ministryId || user.ministryId;
       return { 
           currentUser: user, 
           ministryId: currentId,
-          organizationId: user.organizationId // Garante sync
+          organizationId: user.organizationId || state.organizationId // Mantém o que tiver ou usa o do estado
       };
   }),
   setMinistryId: (id) => {
