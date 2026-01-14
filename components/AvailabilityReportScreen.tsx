@@ -39,14 +39,20 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
 
   const reportData = useMemo(() => {
     const data = registeredMembers.map((profile) => {
-      // STRICT FIX: Usa apenas as funções reais vindas de organization_memberships.
-      // Sem fallback para inferência ou mapeamento externo.
+      // FIX CRÍTICO: Usa as funções reais do membro (vindas de organization_memberships.functions).
+      // Não filtra mais contra 'availableRoles' para evitar "Sem função" se a config estiver desatualizada.
       let roles: string[] = [];
       
-      if (profile.functions && profile.functions.length > 0) {
-        roles = profile.functions; 
+      if (profile.roles && profile.roles.length > 0) {
+        roles = profile.roles; 
+      } else {
+        // Fallback apenas se o array functions vier vazio do banco
+        Object.entries(membersMap).forEach(([role, members]) => {
+          if ((members as string[]).some(m => normalizeString(m) === normalizeString(profile.name))) {
+              roles.push(role);
+          }
+        });
       }
-      // ELSE: Se vazio, o membro não tem função neste ministério. Não tentamos adivinhar.
 
       const dates = availability[profile.name] || [];
       const isBlocked = dates.some(d => d.startsWith(currentMonth) && (d.includes('BLK') || d.includes('BLOCKED')));
@@ -80,7 +86,7 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
       })
       .sort((a, b) => a.name.localeCompare(b.name));
 
-  }, [registeredMembers, availability, currentMonth, searchTerm, selectedRole]);
+  }, [registeredMembers, availability, currentMonth, membersMap, searchTerm, selectedRole]);
 
   return (
     <div className="space-y-6 animate-fade-in max-w-6xl mx-auto">

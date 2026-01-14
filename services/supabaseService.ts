@@ -1,183 +1,182 @@
+
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { MinistryDef, Organization, RepertoireItem, User, RankingEntry } from '../types';
+import { 
+  MinistrySettings, 
+  RepertoireItem, 
+  SwapRequest, 
+  AppNotification, 
+  Announcement, 
+  CustomEvent, 
+  User, 
+  MinistryDef,
+  TeamMemberProfile
+} from '../types';
 
-declare const __SUPABASE_URL__: string;
-declare const __SUPABASE_KEY__: string;
+// --- INITIALIZATION ---
 
-// Cache em memória (Runtime Config) para persistência durante a sessão
-const runtimeConfig = {
-    url: '',
-    key: ''
-};
+// Tenta pegar do .env (Vite) - Safe Access
+let envUrl = "";
+let envKey = "";
+
+try {
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+        envUrl = import.meta.env.VITE_SUPABASE_URL || "";
+        envKey = import.meta.env.VITE_SUPABASE_KEY || "";
+    }
+} catch (e) {
+    console.warn("Vite environment variables not accessible.");
+}
+
+// Tenta pegar do localStorage (Setup Manual)
+const manualUrl = typeof window !== 'undefined' ? localStorage.getItem('sb_manual_url') : null;
+const manualKey = typeof window !== 'undefined' ? localStorage.getItem('sb_manual_key') : null;
+
+export const SUPABASE_URL = manualUrl || envUrl || "";
+export const SUPABASE_KEY = manualKey || envKey || "";
 
 let supabase: SupabaseClient | null = null;
 
-// Helper to access instance
+if (SUPABASE_URL && SUPABASE_KEY) {
+    try {
+        supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+            auth: {
+                persistSession: true,
+                autoRefreshToken: true,
+                detectSessionInUrl: true
+            }
+        });
+    } catch(e) {
+        console.error("Supabase Client Init Error", e);
+    }
+}
+
 export const getSupabase = () => supabase;
 
-// Lógica de Inicialização Centralizada
-const initializeClient = () => {
-    const envUrl = typeof __SUPABASE_URL__ !== 'undefined' ? __SUPABASE_URL__ : '';
-    const envKey = typeof __SUPABASE_KEY__ !== 'undefined' ? __SUPABASE_KEY__ : '';
+// --- HELPERS (STRICT GUARDS) ---
 
-    // Ordem de Resolução: 1. Build (Env) -> 2. Runtime Config -> 3. LocalStorage
-    const url = envUrl || runtimeConfig.url || localStorage.getItem('sb_url');
-    const key = envKey || runtimeConfig.key || localStorage.getItem('sb_key');
-
-    if (url && key) {
-        try {
-            supabase = createClient(url, key, {
-                auth: {
-                    persistSession: true,
-                    autoRefreshToken: true,
-                    detectSessionInUrl: true
-                }
-            });
-        } catch (e) {
-            console.error("Erro ao inicializar Supabase:", e);
-            supabase = null;
-        }
-    } else {
-        supabase = null;
+const requireSupabase = (): SupabaseClient => {
+    if (!supabase) {
+        throw new Error('SUPABASE_NOT_INITIALIZED');
     }
-};
-
-// Executa inicialização na carga do módulo
-initializeClient();
-
-// Manual config for SetupScreen
-export const configureSupabaseManual = (url: string, key: string) => {
-    // 1. Salva no Runtime Config
-    runtimeConfig.url = url;
-    runtimeConfig.key = key;
-    
-    // 2. Salva no LocalStorage
-    localStorage.setItem('sb_url', url);
-    localStorage.setItem('sb_key', key);
-
-    // 3. Reinicializa o cliente com as novas credenciais
-    initializeClient();
-};
-
-export const validateConnection = async (url: string, key: string): Promise<boolean> => {
-    try {
-        const tempClient = createClient(url, key);
-        const { error } = await tempClient.from('profiles').select('count', { count: 'exact', head: true });
-        // Error code PGRST116 means 0 rows but successful connection, or no error means success
-        return !error || error.code === 'PGRST116';
-    } catch (e) {
-        return false;
-    }
-};
-
-// Internal Helpers
-const requireSupabase = () => {
-    if (!supabase) throw new Error("Supabase não configurado.");
     return supabase;
 };
 
-const requireOrgId = (orgId: string) => {
-    if (!orgId) throw new Error("Organization ID missing.");
+const requireOrgId = (orgId: string | null | undefined): string => {
+    if (!orgId) {
+        console.error("[SupabaseService] Critical: ORG_ID_REQUIRED was not provided.");
+        throw new Error('ORG_ID_REQUIRED');
+    }
     return orgId;
 };
 
-// --- Auth ---
-
-export const loginWithEmail = async (email: string, password: string) => {
+// Helper interno para garantir integridade na escrita
+const filterRolesBySettings = async (roles: string[], ministryId: string, orgId: string): Promise<string[]> => {
     const sb = requireSupabase();
-    const { data, error } = await sb.auth.signInWithPassword({ email, password });
-    return { success: !error, message: error?.message || "Login realizado." };
-};
+    if (!roles || roles.length === 0) return [];
 
-export const loginWithGoogle = async () => {
-    const sb = requireSupabase();
-    const { data, error } = await sb.auth.signInWithOAuth({ provider: 'google' });
-    return { success: !error, message: error?.message || "Redirecionando..." };
-};
+    const { data: settings } = await sb.from('ministry_settings')
+        .select('roles')
+        .eq('ministry_id', ministryId)
+        .eq('organization_id', orgId)
+        .maybeSingle();
 
-export const registerWithEmail = async (email: string, password: string, name: string, ministries: string[], orgId: string, roles: string[]) => {
-    const sb = requireSupabase();
-    const { data, error } = await sb.auth.signUp({ 
-        email, 
-        password,
-        options: {
-            data: {
-                full_name: name,
-                ministry_id: ministries[0], // Primary ministry
-                allowed_ministries: ministries,
-                organization_id: orgId,
-                functions: roles // Initial functions
-            }
-        }
-    });
-    return { success: !error, message: error?.message || "Cadastro realizado! Verifique seu e-mail." };
-};
-
-export const disconnectManual = async () => {
-    if (supabase) {
-        await supabase.auth.signOut();
-    }
-    localStorage.removeItem('sb_url');
-    localStorage.removeItem('sb_key');
-    runtimeConfig.url = '';
-    runtimeConfig.key = '';
-    supabase = null;
-    window.location.reload();
-};
-
-// --- Data Fetching ---
-
-export const fetchMinistrySettings = async (ministryId: string, orgId: string) => {
-    const sb = requireSupabase();
-    const validOrgId = requireOrgId(orgId);
+    const allowedRoles = (settings?.roles || []) as string[];
     
-    // Tenta buscar configurações específicas
-    const { data, error } = await sb.from('ministry_settings')
-        .select('*')
-        .eq('organization_ministry_id', ministryId) // Assuming mapping ID
-        .eq('organization_id', validOrgId)
-        .single();
-    
-    if (error && error.code !== 'PGRST116') console.error(error);
-    
-    // Se não achar, busca da definição da organização para ter o label básico
-    if (!data) {
-        const { data: orgMin } = await sb.from('organization_ministries')
-            .select('*')
-            .eq('id', ministryId)
-            .eq('organization_id', validOrgId)
-            .single();
-            
-        return orgMin ? { 
-            displayName: orgMin.label, 
-            roles: [], 
-            organizationMinistryId: ministryId 
-        } : null;
-    }
-
-    return data;
+    // Interseção Estrita: Salva apenas o que é permitido.
+    return roles.filter(r => allowedRoles.includes(r));
 };
+
+// --- CORE SAAS FUNCTIONS ---
 
 export const fetchOrganizationMinistries = async (orgId: string): Promise<MinistryDef[]> => {
     const sb = requireSupabase();
-    const { data, error } = await sb.from('organization_ministries')
-        .select('*')
-        .eq('organization_id', orgId);
-        
-    if (error) return [];
-    return data.map((m: any) => ({
+    const validOrgId = requireOrgId(orgId);
+
+    const { data, error } = await sb
+        .from('organization_ministries')
+        .select('id, code, label') 
+        .eq('organization_id', validOrgId);
+
+    if (error) throw error;
+
+    return (data || []).map((m: any) => ({
         id: m.id,
-        code: m.code,
-        label: m.label,
-        organizationId: m.organization_id
+        code: m.code || m.id,
+        label: m.label || 'Sem nome', 
+        organizationId: validOrgId
     }));
 };
+
+export const fetchUserAllowedMinistries = async (userId: string, orgId: string): Promise<string[]> => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+    
+    const { data: members, error } = await sb.from('organization_memberships')
+        .select('ministry_id')
+        .eq('profile_id', userId)
+        .eq('organization_id', validOrgId);
+        
+    if (error) throw error;
+    if (!members || members.length === 0) return [];
+
+    const ministryIds = members.map((m: any) => m.ministry_id);
+
+    const { data: validMinistries, error: verifyError } = await sb.from('organization_ministries')
+        .select('id')
+        .eq('organization_id', validOrgId)
+        .in('id', ministryIds);
+
+    if (verifyError) throw verifyError;
+
+    return validMinistries?.map((m: any) => m.id) || [];
+};
+
+export const fetchMinistrySettings = async (ministryId: string, orgId: string): Promise<MinistrySettings | null> => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+    if (!ministryId) return null;
+
+    const { data: ministryDef, error: defError } = await sb.from('organization_ministries')
+        .select('label')
+        .eq('id', ministryId)
+        .eq('organization_id', validOrgId)
+        .maybeSingle();
+
+    if (defError) throw defError;
+
+    const { data: settings, error: setError } = await sb.from('ministry_settings')
+        .select('*')
+        .eq('ministry_id', ministryId)
+        .eq('organization_id', validOrgId)
+        .maybeSingle();
+    
+    if (setError && setError.code !== 'PGRST116') throw setError; 
+
+    return {
+        id: settings?.id,
+        organizationMinistryId: ministryId, 
+        displayName: ministryDef?.label || settings?.display_name || 'Ministério',
+        roles: settings?.roles || [],
+        availabilityStart: settings?.availability_start,
+        availabilityEnd: settings?.availability_end,
+        organizationId: validOrgId,
+        spotifyClientId: settings?.spotify_client_id,
+        spotifyClientSecret: settings?.spotify_client_secret
+    };
+};
+
+// --- DATA FETCHING (Scoped by Org) ---
 
 export const fetchMinistrySchedule = async (ministryId: string, month: string, orgId: string) => {
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId);
     
+    // CORREÇÃO CRÍTICA DE DATA:
+    // Garante range exato do primeiro ao último segundo do mês no UTC
     const start = `${month}-01T00:00:00`;
+    
+    // Calcula o último momento do mês com precisão
     const end = new Date(
       new Date(`${month}-01`).getFullYear(),
       new Date(`${month}-01`).getMonth() + 1,
@@ -186,7 +185,7 @@ export const fetchMinistrySchedule = async (ministryId: string, month: string, o
     ).toISOString();
     
     const { data: events, error: evtError } = await sb.from('events')
-        .select('id, title, date_time, is_default, origin_template_id')
+        .select('*')
         .eq('ministry_id', ministryId) 
         .eq('organization_id', validOrgId)
         .gte('date_time', start)
@@ -221,11 +220,8 @@ export const fetchMinistrySchedule = async (ministryId: string, month: string, o
     const formattedEvents = events.map((e: any) => {
         const iso = e.date_time.slice(0, 16);
         return {
-            id: e.id, 
             iso,
             title: e.title,
-            isDefault: e.is_default,
-            originTemplateId: e.origin_template_id,
             dateDisplay: iso.split('T')[0].split('-').reverse().slice(0,2).join('/')
         };
     });
@@ -233,49 +229,253 @@ export const fetchMinistrySchedule = async (ministryId: string, month: string, o
     return { events: formattedEvents, schedule, attendance };
 };
 
-export const fetchMinistryMembers = async (ministryId: string, orgId: string) => {
+export const fetchMinistryMembers = async (
+  ministryId: string,
+  orgId: string
+): Promise<{
+  memberMap: Record<string, string[]>;
+  publicList: TeamMemberProfile[];
+}> => {
+  const sb = requireSupabase();
+  const validOrgId = requireOrgId(orgId);
+
+  // Busca direta: organization_memberships + profiles
+  // NENHUM FILTRO DE FUNÇÃO APLICADO
+  const { data: memberships, error } = await sb
+    .from('organization_memberships')
+    .select(`
+      profile_id,
+      functions,
+      role,
+      profiles (
+        id,
+        name,
+        email,
+        avatar_url,
+        whatsapp,
+        birth_date,
+        is_admin
+      )
+    `)
+    .eq('ministry_id', ministryId)
+    .eq('organization_id', validOrgId);
+
+  if (error) throw error;
+  if (!memberships) return { memberMap: {}, publicList: [] };
+
+  const memberMap: Record<string, string[]> = {};
+  const publicList: TeamMemberProfile[] = [];
+
+  memberships.forEach((m: any) => {
+    const p = m.profiles;
+    if (!p) return;
+
+    // FONTE DA VERDADE: O que está salvo no banco
+    const rawFunctions = Array.isArray(m.functions) ? m.functions : [];
+    
+    publicList.push({
+      id: p.id,
+      name: p.name,
+      email: p.email,
+      avatar_url: p.avatar_url,
+      whatsapp: p.whatsapp,
+      birthDate: p.birth_date,
+      isAdmin: p.is_admin || m.role === 'admin',
+      roles: rawFunctions, // Sem filtro!
+      organizationId: validOrgId
+    });
+
+    rawFunctions.forEach((fn: string) => {
+      if (!memberMap[fn]) memberMap[fn] = [];
+      memberMap[fn].push(p.name);
+    });
+  });
+
+  return { memberMap, publicList };
+};
+
+export const fetchRankingData = async (ministryId: string, orgId: string) => {
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId);
+    
+    const { data: memberships, error: memError } = await sb.from('organization_memberships')
+        .select('profile_id')
+        .eq('ministry_id', ministryId)
+        .eq('organization_id', validOrgId);
 
-    // Fetch profiles linked to this ministry via organization_memberships or array column
-    // For SaaS, we use organization_memberships ideally, but adapting to existing schema:
-    const { data: profiles, error } = await sb.from('profiles')
-        .select('*')
-        .eq('organization_id', validOrgId)
-        .or(`ministry_id.eq.${ministryId},allowed_ministries.cs.{${ministryId}}`);
+    if (memError) throw memError;
+    if (!memberships || memberships.length === 0) return [];
+    
+    const userIds = memberships.map((m: any) => m.profile_id);
+
+    const { data: members, error: profError } = await sb.from('profiles')
+        .select('id, name, avatar_url')
+        .in('id', userIds)
+        .eq('organization_id', validOrgId);
+        
+    if (profError) throw profError;
+
+    return (members || []).map((m: any) => ({
+        memberId: m.id,
+        name: m.name,
+        avatar_url: m.avatar_url,
+        points: 0, 
+        stats: { confirmedEvents: 0, missedEvents: 0, swapsRequested: 0, announcementsRead: 0, announcementsLiked: 0 },
+        history: []
+    }));
+};
+
+// --- AUTH & USER ---
+
+export const fetchUserFunctions = async (
+  userId: string,
+  ministryId: string,
+  orgId: string
+): Promise<string[]> => {
+  const sb = requireSupabase();
+  const validOrgId = requireOrgId(orgId);
+
+  // Busca direta no banco, sem filtros e sem "whitelisting"
+  const { data, error } = await sb
+    .from('organization_memberships')
+    .select('functions')
+    .eq('profile_id', userId)
+    .eq('ministry_id', ministryId)
+    .eq('organization_id', validOrgId)
+    .maybeSingle();
+
+  if (error) {
+      console.error("[fetchUserFunctions] Error:", error);
+      return [];
+  }
+
+  // Retorna exatamente o que está salvo ou array vazio
+  return (data && Array.isArray(data.functions)) ? data.functions : [];
+};
+
+// --- SUPER ADMIN ---
+
+export const fetchOrganizationsWithStats = async () => {
+    const sb = requireSupabase();
+    
+    const { data, error } = await sb.from('organizations')
+        .select(`
+            *,
+            organization_ministries (id, code, label),
+            profiles (count)
+        `);
 
     if (error) throw error;
 
-    const memberMap: any = {};
-    const publicList: any[] = [];
+    return (data || []).map((o: any) => ({
+        id: o.id,
+        name: o.name,
+        slug: o.slug,
+        active: o.active,
+        createdAt: o.created_at,
+        userCount: o.profiles?.[0]?.count || 0,
+        ministryCount: o.organization_ministries?.length || 0,
+        ministries: o.organization_ministries?.map((m:any) => ({ 
+            id: m.id, code: m.code, label: m.label 
+        })) || []
+    }));
+};
 
-    profiles?.forEach((p: any) => {
-        // Fetch roles from membership or use empty
-        // Here we assume roles are stored in 'functions' column or similar for now
-        // Or we might need to fetch from a separate table.
-        // Using existing pattern:
-        // Assume 'functions' column exists on profiles or we construct it.
-        // NOTE: In the `useAuth` hook, we see `fetchUserFunctions`.
-        
-        publicList.push({
-            id: p.id,
-            name: p.name,
-            email: p.email,
-            whatsapp: p.whatsapp,
-            avatar_url: p.avatar_url,
-            birthDate: p.birth_date,
-            isAdmin: p.is_admin,
-            functions: p.functions || [] // Assume functions column exists
-        });
-        
-        // Populate roles map
-        (p.functions || []).forEach((role: string) => {
-            if (!memberMap[role]) memberMap[role] = [];
-            memberMap[role].push(p.name);
-        });
+// --- ACTIONS (Writes & Updates) ---
+
+export const saveOrganizationMinistry = async (orgId: string, code: string, label: string) => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+
+    const { error } = await sb.from('organization_ministries').upsert({
+        organization_id: validOrgId,
+        code: code,
+        label: label 
+    }, { onConflict: 'organization_id, code' });
+    
+    return error ? { success: false, message: error.message } : { success: true, message: "Salvo" };
+};
+
+export const configureSupabaseManual = (url: string, key: string) => {
+    try {
+        supabase = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true } });
+        localStorage.setItem('sb_manual_url', url);
+        localStorage.setItem('sb_manual_key', key);
+        window.location.reload();
+    } catch (e) { console.error(e); }
+};
+
+export const validateConnection = async (url: string, key: string) => {
+    try {
+        const client = createClient(url, key);
+        const { error } = await client.from('profiles').select('count', { count: 'exact', head: true });
+        return !error || error.code === 'PGRST116'; 
+    } catch { return false; }
+};
+
+export const disconnectManual = () => {
+    localStorage.removeItem('sb_manual_url');
+    localStorage.removeItem('sb_manual_key');
+    supabase = null;
+    window.location.reload();
+};
+
+export const loginWithEmail = async (email: string, pass: string) => {
+    const sb = requireSupabase();
+    const { data, error } = await (sb.auth as any).signInWithPassword({ email, password: pass });
+    if (error) return { success: false, message: error.message };
+    return { success: true, data };
+};
+
+export const loginWithGoogle = async () => {
+    const sb = requireSupabase();
+    const { data, error } = await (sb.auth as any).signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } });
+    if (error) return { success: false, message: error.message };
+    return { success: true, data };
+};
+
+export const logout = async () => {
+    if (!supabase) return;
+    await (supabase.auth as any).signOut();
+};
+
+export const registerWithEmail = async (email: string, pass: string, name: string, ministries: string[], orgId: string, roles: string[]) => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+
+    const { data, error } = await (sb.auth as any).signUp({ 
+        email, 
+        password: pass,
+        options: { data: { full_name: name, ministry_id: ministries[0], organization_id: validOrgId } }
     });
+    if (error) return { success: false, message: error.message };
+    
+    if (data.user) {
+        // Validação Estrita na Criação
+        let sanitizedRoles = roles;
+        if (ministries[0]) {
+            sanitizedRoles = await filterRolesBySettings(roles, ministries[0], validOrgId);
+        }
 
-    return { memberMap, publicList };
+        await sb.from('profiles').update({
+            name: name,
+            ministry_id: ministries[0],
+            allowed_ministries: ministries,
+            organization_id: validOrgId,
+            roles: sanitizedRoles 
+        }).eq('id', data.user.id).eq('organization_id', validOrgId);
+        
+        if (ministries[0]) {
+            await sb.from('organization_memberships').insert({
+                profile_id: data.user.id,
+                organization_id: validOrgId,
+                ministry_id: ministries[0],
+                role: 'member',
+                functions: sanitizedRoles // Salva apenas funções válidas
+            });
+        }
+    }
+    return { success: true, message: "Verifique seu e-mail para confirmar o cadastro." };
 };
 
 export const fetchMinistryAvailability = async (ministryId: string, orgId: string) => {
@@ -284,272 +484,150 @@ export const fetchMinistryAvailability = async (ministryId: string, orgId: strin
 
     const { data, error } = await sb.from('availability')
         .select('*')
+        .eq('ministry_id', ministryId)
         .eq('organization_id', validOrgId);
-        // We might want to filter by date/month, but usually we fetch all or current month.
-        // For simplicity, fetching all or recent.
-
+        
     if (error) throw error;
 
     const availability: any = {};
     const notes: any = {};
-
     data?.forEach((row: any) => {
-        if (row.dates) availability[row.member_name] = row.dates;
-        if (row.notes) {
-            Object.entries(row.notes).forEach(([k, v]) => {
-                notes[`${row.member_name}_${k}`] = v;
-            });
-        }
+        if (!availability[row.member_name]) availability[row.member_name] = [];
+        if (Array.isArray(row.dates)) availability[row.member_name] = row.dates;
+        if (row.notes) Object.entries(row.notes).forEach(([k, v]) => { notes[`${row.member_name}_${k}`] = v; });
     });
-
     return { availability, notes };
 };
 
 export const fetchNotificationsSQL = async (ministryIds: string[], userId: string, orgId: string) => {
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId);
-    
-    // Fetch generic notifications for ministry AND user specific ones
+
     const { data, error } = await sb.from('notifications')
         .select('*')
-        .eq('organization_id', validOrgId)
         .in('ministry_id', ministryIds)
+        .eq('organization_id', validOrgId)
         .order('created_at', { ascending: false })
         .limit(50);
-
+        
     if (error) throw error;
 
-    // Check read status
-    const { data: reads } = await sb.from('notifications_read')
+    const { data: reads } = await sb.from('notification_reads')
         .select('notification_id')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .eq('organization_id', validOrgId);
         
-    const readSet = new Set(reads?.map((r: any) => r.notification_id));
-
-    return data.map((n: any) => ({
-        id: n.id,
-        title: n.title,
-        message: n.message,
-        type: n.type,
-        timestamp: n.created_at,
-        ministryId: n.ministry_id,
-        actionLink: n.action_link,
-        read: readSet.has(n.id)
+    const readIds = new Set(reads?.map((r: any) => r.notification_id));
+    return (data || []).map((n: any) => ({
+        id: n.id, type: n.type, title: n.title, message: n.message, timestamp: n.created_at, read: readIds.has(n.id), actionLink: n.action_link, ministryId: n.ministry_id
     }));
-};
-
-export const markNotificationsReadSQL = async (notificationIds: string[], userId: string, orgId: string) => {
-    const sb = requireSupabase();
-    const inserts = notificationIds.map(nid => ({
-        notification_id: nid,
-        user_id: userId,
-        organization_id: orgId
-    }));
-    await sb.from('notifications_read').upsert(inserts);
-};
-
-export const clearAllNotificationsSQL = async (ministryId: string, orgId: string) => {
-    const sb = requireSupabase();
-    await sb.from('notifications')
-        .delete()
-        .eq('ministry_id', ministryId)
-        .eq('organization_id', orgId);
 };
 
 export const fetchAnnouncementsSQL = async (ministryId: string, orgId: string) => {
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId);
-    
-    const now = new Date().toISOString();
-    
-    const { data, error } = await sb.from('announcements')
-        .select(`
-            *,
-            announcements_read(user_id, timestamp, profiles(name)),
-            announcements_likes(user_id, timestamp, profiles(name))
-        `)
-        .eq('organization_id', validOrgId)
-        .eq('ministry_id', ministryId)
-        .gte('expiration_date', now)
-        .order('created_at', { ascending: false });
 
+    const { data, error } = await sb.from('announcements')
+        .select(`*, announcement_reads (user_id, profiles(name), created_at), announcement_likes (user_id, profiles(name), created_at)`)
+        .eq('ministry_id', ministryId)
+        .eq('organization_id', validOrgId)
+        .gte('expiration_date', new Date().toISOString())
+        .order('created_at', { ascending: false });
+        
     if (error) throw error;
 
-    return data.map((a: any) => ({
-        id: a.id,
-        title: a.title,
-        message: a.message,
-        type: a.type,
-        timestamp: a.created_at,
-        expirationDate: a.expiration_date,
-        author: a.author,
-        readBy: a.announcements_read.map((r: any) => ({ userId: r.user_id, name: r.profiles?.name, timestamp: r.timestamp })),
-        likedBy: a.announcements_likes.map((l: any) => ({ userId: l.user_id, name: l.profiles?.name, timestamp: l.timestamp }))
+    return (data || []).map((a: any) => ({
+        id: a.id, title: a.title, message: a.message, type: a.type, timestamp: a.created_at, expirationDate: a.expiration_date, author: a.author_name || 'Admin',
+        readBy: a.announcement_reads.map((r: any) => ({ userId: r.user_id, name: r.profiles?.name, timestamp: r.created_at })),
+        likedBy: a.announcement_likes.map((l: any) => ({ userId: l.user_id, name: l.profiles?.name, timestamp: l.created_at }))
     }));
-};
-
-export const sendNotificationSQL = async (ministryId: string, orgId: string, notification: any) => {
-    const sb = requireSupabase();
-    await sb.from('notifications').insert({
-        ministry_id: ministryId,
-        organization_id: orgId,
-        title: notification.title,
-        message: notification.message,
-        type: notification.type,
-        action_link: notification.actionLink
-    });
-    
-    // Trigger Edge Function for Push (Optional/fire-and-forget)
-    // fetch(...)
 };
 
 export const fetchSwapRequests = async (ministryId: string, orgId: string) => {
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId);
-    
+
     const { data, error } = await sb.from('swap_requests')
         .select('*')
         .eq('ministry_id', ministryId)
         .eq('organization_id', validOrgId)
         .order('created_at', { ascending: false });
-
+        
     if (error) throw error;
 
-    return data.map((r: any) => ({
-        id: r.id,
-        ministryId: r.ministry_id,
-        requesterName: r.requester_name,
-        requesterId: r.requester_id,
-        role: r.role,
-        eventIso: r.event_iso,
-        eventTitle: r.event_title,
-        status: r.status,
-        createdAt: r.created_at,
-        takenByName: r.taken_by_name
+    return (data || []).map((s: any) => ({
+        id: s.id, ministryId: s.ministry_id, requesterName: s.requester_name, requesterId: s.requester_id, role: s.role, eventIso: s.event_iso, eventTitle: s.event_title, status: s.status, createdAt: s.created_at, takenByName: s.taken_by_name
     }));
-};
-
-export const createSwapRequestSQL = async (ministryId: string, orgId: string, request: any) => {
-    const sb = requireSupabase();
-    await sb.from('swap_requests').insert({
-        ministry_id: ministryId,
-        organization_id: orgId,
-        requester_name: request.requesterName,
-        requester_id: request.requesterId,
-        role: request.role,
-        event_iso: request.eventIso,
-        event_title: request.eventTitle,
-        status: 'pending'
-    });
 };
 
 export const fetchRepertoire = async (ministryId: string, orgId: string) => {
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId);
-    
+
     const { data, error } = await sb.from('repertoire')
         .select('*')
         .eq('ministry_id', ministryId)
         .eq('organization_id', validOrgId)
         .order('created_at', { ascending: false });
-
+        
     if (error) throw error;
 
-    return data.map((r: any) => ({
-        id: r.id,
-        title: r.title,
-        link: r.link,
-        date: r.date,
-        observation: r.observation,
-        addedBy: r.added_by,
-        createdAt: r.created_at,
-        content: r.content,
-        key: r.key
+    return (data || []).map((r: any) => ({
+        id: r.id, title: r.title, link: r.link, date: r.date_used, observation: r.observation, addedBy: r.added_by, createdAt: r.created_at, content: r.content, key: r.music_key
     }));
 };
 
-export const addToRepertoire = async (ministryId: string, orgId: string, item: any) => {
-    const sb = requireSupabase();
-    const { error } = await sb.from('repertoire').insert({
-        ministry_id: ministryId,
-        organization_id: orgId,
-        title: item.title,
-        link: item.link,
-        date: item.date,
-        added_by: item.addedBy,
-        content: item.content
-    });
-    return !error;
-};
-
-export const deleteFromRepertoire = async (id: string, orgId: string) => {
-    const sb = requireSupabase();
-    await sb.from('repertoire').delete().eq('id', id).eq('organization_id', orgId);
-};
-
-export const updateRepertoireItem = async (id: string, orgId: string, updates: any) => {
-    const sb = requireSupabase();
-    await sb.from('repertoire').update(updates).eq('id', id).eq('organization_id', orgId);
-};
-
 export const fetchGlobalSchedules = async (month: string, currentMinistryId: string, orgId: string) => {
-    // Implement complex join or separate query to find conflicts
-    // Stub:
-    return {};
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+
+    const start = `${month}-01T00:00:00`;
+    const end = `${month}-31T23:59:59`;
+    
+    const { data, error } = await sb.from('schedule_assignments')
+        .select('event_id, role, member_name, events!inner(date_time, ministry_id)')
+        .eq('organization_id', validOrgId)
+        .neq('ministry_id', currentMinistryId)
+        .gte('events.date_time', start)
+        .lte('events.date_time', end);
+        
+    if (error) throw error;
+
+    const map: any = {};
+    data?.forEach((row: any) => {
+        const name = row.member_name.toLowerCase().trim();
+        if (!map[name]) map[name] = [];
+        map[name].push({ ministryId: row.events.ministry_id, eventIso: row.events.date_time.slice(0, 16), role: row.role });
+    });
+    return map;
 };
 
 export const fetchAuditLogs = async (ministryId: string, orgId: string) => {
     const sb = requireSupabase();
-    const { data } = await sb.from('audit_logs')
+    const validOrgId = requireOrgId(orgId);
+
+    const { data, error } = await sb.from('audit_logs')
         .select('*')
         .eq('ministry_id', ministryId)
-        .eq('organization_id', orgId)
+        .eq('organization_id', validOrgId)
         .order('created_at', { ascending: false })
         .limit(100);
-    
-    return data?.map((l: any) => ({
-        id: l.id,
-        date: l.created_at,
-        action: l.action,
-        details: l.details,
-        author: l.author
-    })) || [];
+        
+    if (error) throw error;
+
+    return (data || []).map((l: any) => ({ id: l.id, date: l.created_at, action: l.action, details: l.details, author: l.author_name }));
 };
 
-export const saveScheduleAssignment = async (ministryId: string, orgId: string, key: string, value: string) => {
-    // Logic to update/insert assignment
-    // key is like "2023-10-25T19:30_Vocal"
-    // We need to find event_id from ISO and role
-    return true; // Stub
-};
-
-export const toggleAssignmentConfirmation = async (ministryId: string, orgId: string, key: string) => {
-    // Logic to toggle confirmed
-    return true; // Stub
-};
-
-export const fetchOrganizationsWithStats = async () => {
-    const sb = requireSupabase();
-    const { data } = await sb.from('organizations').select('*');
-    return data?.map((o: any) => ({
-        id: o.id,
-        name: o.name,
-        slug: o.slug,
-        active: o.active,
-        createdAt: o.created_at,
-        userCount: 0, // Need join/count
-        ministryCount: 0 // Need join/count
-    })) || [];
-};
+// --- ACTIONS (Write) ---
 
 export const saveOrganization = async (id: string | null, name: string, slug: string) => {
     const sb = requireSupabase();
     if (id) {
         const { error } = await sb.from('organizations').update({ name, slug }).eq('id', id);
-        return { success: !error, message: error ? error.message : "Atualizado." };
+        return error ? { success: false, message: error.message } : { success: true, message: "Atualizado" };
     } else {
         const { error } = await sb.from('organizations').insert({ name, slug });
-        return { success: !error, message: error ? error.message : "Criado." };
+        return error ? { success: false, message: error.message } : { success: true, message: "Criado" };
     }
 };
 
@@ -559,165 +637,273 @@ export const toggleOrganizationStatus = async (id: string, active: boolean) => {
     return !error;
 };
 
-export const saveOrganizationMinistry = async (orgId: string, code: string, label: string) => {
-    const sb = requireSupabase();
-    const { error } = await sb.from('organization_ministries').insert({ organization_id: orgId, code, label });
-    return { success: !error, message: error ? error.message : "Ministério criado." };
-};
-
 export const deleteOrganizationMinistry = async (orgId: string, code: string) => {
     const sb = requireSupabase();
-    const { error } = await sb.from('organization_ministries').delete().eq('organization_id', orgId).eq('code', code);
-    return { success: !error, message: error ? error.message : "Removido." };
+    const validOrgId = requireOrgId(orgId);
+    const { error } = await sb.from('organization_ministries').delete().eq('organization_id', validOrgId).eq('code', code);
+    return error ? { success: false, message: error.message } : { success: true, message: "Removido" };
 };
 
-export const fetchRankingData = async (ministryId: string, orgId: string): Promise<RankingEntry[]> => {
+export const saveScheduleAssignment = async (ministryId: string, orgId: string, key: string, value: string) => {
     const sb = requireSupabase();
-    // Stub implementation
-    return [];
+    const validOrgId = requireOrgId(orgId);
+
+    const iso = key.split('_')[0];
+    const role = key.split('_').slice(1).join('_');
+    const { data: event } = await sb.from('events').select('id').eq('ministry_id', ministryId).eq('organization_id', validOrgId).eq('date_time', iso).single();
+    if (!event) return false;
+    let memberId = null;
+    if (value) {
+        const { data: profile } = await sb.from('profiles').select('id').eq('name', value).eq('organization_id', validOrgId).maybeSingle();
+        memberId = profile?.id;
+    }
+    const { error } = await sb.from('schedule_assignments').upsert({ event_id: event.id, role: role, member_name: value, member_id: memberId, ministry_id: ministryId, organization_id: validOrgId, confirmed: false }, { onConflict: 'event_id, role' });
+    return !error;
 };
 
-export const fetchUserAllowedMinistries = async (userId: string, orgId: string): Promise<string[]> => {
+export const toggleAssignmentConfirmation = async (ministryId: string, orgId: string, key: string) => {
     const sb = requireSupabase();
-    // In real app, check organization_memberships or profiles
-    const { data } = await sb.from('profiles').select('allowed_ministries').eq('id', userId).single();
-    return data?.allowed_ministries || [];
+    const validOrgId = requireOrgId(orgId);
+
+    const iso = key.split('_')[0];
+    const role = key.split('_').slice(1).join('_');
+    const { data: event } = await sb.from('events').select('id').eq('ministry_id', ministryId).eq('organization_id', validOrgId).eq('date_time', iso).single();
+    if (!event) return;
+    const { data: assignment } = await sb.from('schedule_assignments').select('confirmed').eq('event_id', event.id).eq('role', role).eq('organization_id', validOrgId).single();
+    if (assignment) { await sb.from('schedule_assignments').update({ confirmed: !assignment.confirmed }).eq('event_id', event.id).eq('role', role).eq('organization_id', validOrgId); }
 };
 
-export const fetchUserFunctions = async (userId: string, ministryId: string, orgId: string): Promise<string[]> => {
+export const saveMemberAvailability = async (ministryId: string, orgId: string, member: string, dates: string[], notes?: any, targetMonth?: string) => {
     const sb = requireSupabase();
-    const { data } = await sb.from('profiles').select('functions').eq('id', userId).single();
-    return data?.functions || [];
+    const validOrgId = requireOrgId(orgId);
+
+    const { data: profile } = await sb.from('profiles').select('id').eq('name', member).eq('organization_id', validOrgId).maybeSingle();
+    await sb.from('availability').upsert({ ministry_id: ministryId, organization_id: validOrgId, member_name: member, member_id: profile?.id, dates: dates, notes: notes }, { onConflict: 'ministry_id, member_name' });
 };
 
-// --- Event Actions (Refined Logic) ---
+export const createSwapRequestSQL = async (ministryId: string, orgId: string, request: any) => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+    await sb.from('swap_requests').insert({ ministry_id: ministryId, organization_id: validOrgId, requester_name: request.requesterName, requester_id: request.requesterId, role: request.role, event_iso: request.eventIso, event_title: request.eventTitle, status: 'pending' });
+};
+
+export const performSwapSQL = async (ministryId: string, orgId: string, requestId: string, takenByName: string, takenById: string) => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+
+    const { data: req } = await sb.from('swap_requests').select('*').eq('id', requestId).eq('organization_id', validOrgId).single();
+    if (!req) return;
+    const { data: event } = await sb.from('events').select('id').eq('ministry_id', ministryId).eq('organization_id', validOrgId).eq('date_time', req.event_iso).single();
+    if (event) {
+        await sb.from('schedule_assignments').update({ member_name: takenByName, member_id: takenById, confirmed: false }).eq('event_id', event.id).eq('role', req.role).eq('organization_id', validOrgId);
+        await sb.from('swap_requests').update({ status: 'completed', taken_by_name: takenByName, taken_by_id: takenById }).eq('id', requestId).eq('organization_id', validOrgId);
+    }
+};
+
+export const cancelSwapRequestSQL = async (requestId: string, orgId: string) => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+    await sb.from('swap_requests').delete().eq('id', requestId).eq('organization_id', validOrgId);
+};
+
+export const interactAnnouncementSQL = async (id: string, userId: string, userName: string, action: 'read'|'like', orgId: string) => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+
+    const table = action === 'read' ? 'announcement_reads' : 'announcement_likes';
+    if (action === 'like') {
+        const { data } = await sb.from(table).select('id').eq('announcement_id', id).eq('user_id', userId).eq('organization_id', validOrgId).maybeSingle();
+        if (data) { await sb.from(table).delete().eq('id', data.id).eq('organization_id', validOrgId); } 
+        else { await sb.from(table).insert({ announcement_id: id, user_id: userId, organization_id: validOrgId }); }
+    } else {
+        await sb.from(table).upsert({ announcement_id: id, user_id: userId, organization_id: validOrgId }, { onConflict: 'announcement_id, user_id' });
+    }
+};
+
+export const updateUserProfile = async (name: string, whatsapp: string, avatar: string | undefined, functions: string[] | undefined, birthDate: string | undefined, ministryId?: string, orgId?: string) => {
+    const sb = requireSupabase();
+    const { data: { user } } = await (sb.auth as any).getUser();
+    if (!user) return;
+    const updates: any = { name, whatsapp, birth_date: birthDate };
+    if (avatar) updates.avatar_url = avatar;
+    
+    let query = sb.from('profiles').update(updates).eq('id', user.id);
+    if (orgId) query = query.eq('organization_id', orgId);
+    await query;
+    
+    if (ministryId && functions && orgId) {
+        // Validação Estrita na Atualização
+        const sanitizedRoles = await filterRolesBySettings(functions, ministryId, orgId);
+        
+        await sb.from('organization_memberships')
+            .update({ functions: sanitizedRoles })
+            .eq('profile_id', user.id)
+            .eq('ministry_id', ministryId)
+            .eq('organization_id', orgId);
+    }
+};
+
+export const saveMinistrySettings = async (ministryId: string, orgId: string, displayName?: string, roles?: string[], start?: string, end?: string) => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+
+    const updates: any = {};
+    if (displayName) updates.display_name = displayName;
+    if (roles) updates.roles = roles;
+    if (start) updates.availability_start = start;
+    if (end) updates.availability_end = end;
+    await sb.from('ministry_settings').update(updates).eq('ministry_id', ministryId).eq('organization_id', validOrgId);
+};
+
+export const toggleAdminSQL = async (email: string, status: boolean, ministryId: string, orgId: string) => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+    await sb.from('profiles').update({ is_admin: status }).eq('email', email).eq('organization_id', validOrgId);
+};
+
+export const deleteMember = async (ministryId: string, orgId: string, memberId: string, name: string) => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+    await sb.from('organization_memberships').delete().eq('profile_id', memberId).eq('ministry_id', ministryId).eq('organization_id', validOrgId);
+};
+
+export const updateMemberData = async (id: string, orgId: string, data: any) => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+    await sb.from('profiles').update({ name: data.name, whatsapp: data.whatsapp }).eq('id', id).eq('organization_id', validOrgId);
+    if (data.ministryId) {
+        // Validação Estrita na Atualização Administrativa
+        const sanitizedRoles = await filterRolesBySettings(data.roles, data.ministryId, validOrgId);
+
+        await sb.from('organization_memberships').update({ functions: sanitizedRoles }).eq('profile_id', id).eq('ministry_id', data.ministryId).eq('organization_id', validOrgId);
+    }
+};
 
 export const createMinistryEvent = async (ministryId: string, orgId: string, event: any) => {
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId);
-    
-    // Eventos manuais sempre nascem com is_default = false e sem template
+    // FIX: Garante que ministry_id é inserido
     await sb.from('events').insert({ 
         ministry_id: ministryId, 
         organization_id: validOrgId, 
         title: event.title, 
-        date_time: event.iso || `${event.date}T${event.time}`,
-        is_default: false,
-        origin_template_id: null
+        date_time: event.iso || `${event.date}T${event.time}` 
     });
 };
 
-export const deleteMinistryEvent = async (ministryId: string, orgId: string, eventIdentifier: string) => {
+export const deleteMinistryEvent = async (ministryId: string, orgId: string, eventIso: string) => {
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId);
-    
-    // Validação estrita de UUID para garantir integridade
-    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(eventIdentifier);
+    await sb.from('events').delete().eq('ministry_id', ministryId).eq('organization_id', validOrgId).eq('date_time', eventIso);
+};
 
-    if (isUUID) {
-        // Exclusão segura por ID
-        await sb.from('events').delete()
-            .eq('id', eventIdentifier)
-            .eq('organization_id', validOrgId);
-    } else {
-        console.error("Tentativa de exclusão com identificador inválido (não-UUID):", eventIdentifier);
-        // Fallback legado removido intencionalmente para forçar consistência
-        throw new Error("Identificador de evento inválido.");
+export const updateMinistryEvent = async (ministryId: string, orgId: string, oldIso: string, newTitle: string, newIso: string, applyToAll: boolean) => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+    await sb.from('events').update({ title: newTitle, date_time: newIso }).eq('ministry_id', ministryId).eq('organization_id', validOrgId).eq('date_time', oldIso);
+};
+
+export const sendNotificationSQL = async (ministryId: string, orgId: string, notification: any) => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+    await sb.from('notifications').insert({ ministry_id: ministryId, organization_id: validOrgId, title: notification.title, message: notification.message, type: notification.type, action_link: notification.actionLink });
+};
+
+export const createAnnouncementSQL = async (ministryId: string, orgId: string, announcement: any, authorName: string) => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+    await sb.from('announcements').insert({ ministry_id: ministryId, organization_id: validOrgId, title: announcement.title, message: announcement.message, type: announcement.type, expiration_date: announcement.expirationDate, author_name: authorName });
+};
+
+export const joinMinistry = async (ministryId: string, orgId: string, roles: string[]) => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+    const { data: { user } } = await (sb.auth as any).getUser();
+    if (!user) return;
+    
+    // Validação Estrita na Entrada
+    const sanitizedRoles = await filterRolesBySettings(roles, ministryId, validOrgId);
+
+    await sb.from('organization_memberships').insert({ 
+        profile_id: user.id, 
+        organization_id: validOrgId, 
+        ministry_id: ministryId, 
+        role: 'member', 
+        functions: sanitizedRoles 
+    });
+    
+    const { data: profile } = await sb.from('profiles').select('allowed_ministries').eq('id', user.id).eq('organization_id', validOrgId).single();
+    const current = profile?.allowed_ministries || [];
+    if (!current.includes(ministryId)) {
+        await sb.from('profiles').update({ allowed_ministries: [...current, ministryId] }).eq('id', user.id).eq('organization_id', validOrgId);
     }
 };
 
-export const updateMinistryEvent = async (ministryId: string, orgId: string, eventId: string, newTitle: string, newIso: string, applyToAll: boolean) => {
+export const markNotificationsReadSQL = async (ids: string[], userId: string, orgId: string) => {
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId);
+    const inserts = ids.map(id => ({ notification_id: id, user_id: userId, organization_id: validOrgId }));
+    await sb.from('notification_reads').upsert(inserts, { onConflict: 'notification_id, user_id' });
+};
 
-    // Regra 2: Ao editar, o evento deixa de ser padrão (vira override)
-    // Isso preserva o histórico de que ele "veio" de um template, mas agora é customizado
-    const updates = { 
-        title: newTitle, 
-        date_time: newIso,
-        is_default: false 
-    };
+export const clearAllNotificationsSQL = async (ministryId: string, orgId: string) => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+    await sb.from('notifications').delete().eq('ministry_id', ministryId).eq('organization_id', validOrgId);
+};
 
-    if (applyToAll) {
-        // Busca o evento original para pegar o template_id
-        const { data: currentEvent } = await sb.from('events').select('origin_template_id, date_time').eq('id', eventId).single();
-        
-        if (currentEvent && currentEvent.origin_template_id) {
-            // Aplica a mudança para todos os eventos futuros que compartilham o mesmo template
-            // Nota: Isso converte todos os futuros em overrides (is_default = false)
-            await sb.from('events')
-                .update(updates)
-                .eq('origin_template_id', currentEvent.origin_template_id)
-                .eq('organization_id', validOrgId)
-                .gte('date_time', currentEvent.date_time); // Apenas futuros a partir deste
-        } else {
-            // Se não tem template, edita só ele mesmo
-            await sb.from('events').update(updates).eq('id', eventId).eq('organization_id', validOrgId);
-        }
-    } else {
-        await sb.from('events').update(updates).eq('id', eventId).eq('organization_id', validOrgId);
+export const addToRepertoire = async (ministryId: string, orgId: string, item: any) => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+    const { error } = await sb.from('repertoire').insert({ ministry_id: ministryId, organization_id: validOrgId, title: item.title, link: item.link, date_used: item.date, added_by: item.addedBy, content: item.content });
+    return !error;
+};
+
+export const deleteFromRepertoire = async (id: string, orgId: string) => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+    await sb.from('repertoire').delete().eq('id', id).eq('organization_id', validOrgId);
+};
+
+export const updateRepertoireItem = async (id: string, orgId: string, updates: any) => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+    await sb.from('repertoire').update({ content: updates.content, music_key: updates.key }).eq('id', id).eq('organization_id', validOrgId);
+};
+
+export const clearScheduleForMonth = async (ministryId: string, orgId: string, month: string) => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+    const start = `${month}-01`;
+    const end = `${month}-31`;
+    const { data: events } = await sb.from('events').select('id').eq('ministry_id', ministryId).eq('organization_id', validOrgId).gte('date_time', start).lte('date_time', end + 'T23:59:59');
+    const ids = events?.map((e: any) => e.id) || [];
+    if (ids.length > 0) {
+        await sb.from('schedule_assignments').delete().in('event_id', ids).eq('organization_id', validOrgId);
     }
 };
 
 export const resetToDefaultEvents = async (ministryId: string, orgId: string, month: string) => {
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId);
-    
-    const start = `${month}-01T00:00:00`;
-    const end = new Date(
-      new Date(`${month}-01`).getFullYear(),
-      new Date(`${month}-01`).getMonth() + 1,
-      0,
-      23, 59, 59
-    ).toISOString();
-
-    // 1. Apagar SOMENTE eventos padrão (is_default = true) dentro do mês
-    // Preserva eventos manuais e overrides
-    await sb.from('events')
-        .delete()
-        .eq('ministry_id', ministryId)
-        .eq('organization_id', validOrgId)
-        .eq('is_default', true) 
-        .gte('date_time', start)
-        .lte('date_time', end);
-
-    // 2. Buscar Templates configurados para este ministério
-    const { data: templates } = await sb.from('organization_event_templates')
-        .select('*')
-        .eq('ministry_id', ministryId)
-        .eq('organization_id', validOrgId);
-
-    if (!templates || templates.length === 0) {
-        // Fallback Silencioso
-        return;
-    }
-
-    // 3. Gerar eventos baseados nos templates para cada dia do mês
+    const start = `${month}-01`;
+    const end = `${month}-31`;
+    await sb.from('events').delete().eq('ministry_id', ministryId).eq('organization_id', validOrgId).gte('date_time', start).lte('date_time', end + 'T23:59:59');
     const [y, m] = month.split('-').map(Number);
-    const daysInMonth = new Date(y, m, 0).getDate();
-    const inserts: any[] = [];
-
-    for (let day = 1; day <= daysInMonth; day++) {
-        const dateObj = new Date(y, m - 1, day);
-        const dayOfWeek = dateObj.getDay(); 
-
-        // Encontra templates que batem com o dia da semana
-        const dayTemplates = templates.filter((t: any) => t.day_of_week === dayOfWeek);
-
-        dayTemplates.forEach((t: any) => {
-            const dateStr = dateObj.toISOString().split('T')[0];
-            inserts.push({
-                ministry_id: ministryId,
-                organization_id: validOrgId,
-                title: t.default_title || 'Evento',
-                date_time: `${dateStr}T${t.default_time}`,
-                is_default: true,
-                origin_template_id: t.id
-            });
-        });
+    const date = new Date(y, m - 1, 1);
+    const inserts = [];
+    while (date.getMonth() === m - 1) {
+        if (date.getDay() === 0) { 
+            const dayStr = date.toISOString().split('T')[0];
+            inserts.push({ ministry_id: ministryId, organization_id: validOrgId, title: 'Culto da Família', date_time: `${dayStr}T18:00:00` });
+            inserts.push({ ministry_id: ministryId, organization_id: validOrgId, title: 'Escola Bíblica', date_time: `${dayStr}T09:00:00` });
+        }
+        date.setDate(date.getDate() + 1);
     }
+    if (inserts.length > 0) { await sb.from('events').insert(inserts); }
+};
 
-    if (inserts.length > 0) {
-        await sb.from('events').insert(inserts);
-    }
+export const updateProfileMinistry = async (userId: string, ministryId: string) => {
+    const sb = requireSupabase();
+    await sb.from('profiles').update({ ministry_id: ministryId }).eq('id', userId);
 };

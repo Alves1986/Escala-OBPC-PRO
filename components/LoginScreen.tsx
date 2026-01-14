@@ -1,11 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, ArrowLeft, ShieldCheck, Sparkles, Layout, Database } from 'lucide-react';
 import { loginWithEmail, loginWithGoogle, registerWithEmail, fetchMinistrySettings, fetchOrganizationMinistries, disconnectManual } from '../services/supabaseService';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { DEFAULT_ROLES, MinistryDef } from '../types';
-
-// ID da Nova Organização
-const CURRENT_ORG_ID = '8d01a052-0b2e-46e4-8e34-683ff4db5c3b';
 
 export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = false }) => {
   const [view, setView] = useState<'login' | 'register' | 'forgot'>('login');
@@ -29,7 +27,8 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
 
   useEffect(() => {
     async function loadMinistries() {
-        const list = await fetchOrganizationMinistries(CURRENT_ORG_ID);
+        // Safe default org ID for registration flow
+        const list = await fetchOrganizationMinistries('00000000-0000-0000-0000-000000000000');
         setMinistriesList(list);
     }
     if (view === 'register') loadMinistries();
@@ -47,7 +46,7 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
         setAvailableRoles(defaults);
         try {
             const ministry = ministriesList.find(m => m.id === mainMinistry);
-            const orgId = ministry?.organizationId || CURRENT_ORG_ID;
+            const orgId = ministry?.organizationId || '00000000-0000-0000-0000-000000000000';
             const settings = await fetchMinistrySettings(mainMinistry, orgId);
             if (settings && settings.roles && settings.roles.length > 0) setAvailableRoles(settings.roles);
         } catch (e) { console.warn("Defaults used"); } 
@@ -87,7 +86,7 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
       setLoadingAction('email');
       
       const ministry = ministriesList.find(m => m.id === regSelectedMinistries[0]);
-      const orgId = ministry?.organizationId || CURRENT_ORG_ID;
+      const orgId = ministry?.organizationId || '00000000-0000-0000-0000-000000000000';
 
       const result = await registerWithEmail(regEmail.trim(), regPassword.trim(), regName.trim(), regSelectedMinistries, orgId, regSelectedRoles);
       if (result.success) {
@@ -103,6 +102,8 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col lg:flex-row relative overflow-hidden font-sans">
+      
+      {/* Dynamic Background */}
       <div className="absolute inset-0 pointer-events-none z-0">
           <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-emerald-600/10 blur-[150px] animate-pulse"></div>
           <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-violet-600/10 blur-[120px] animate-pulse"></div>
@@ -110,6 +111,7 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
 
       <LegalModal isOpen={!!legalDoc} type={legalDoc} onClose={() => setLegalDoc(null)} />
 
+      {/* Hero Section (Left on Desktop) */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-16 relative z-10">
           <div>
               <div className="flex items-center gap-3 mb-12">
@@ -144,6 +146,7 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
           </div>
       </div>
 
+      {/* Form Section (Right on Desktop) */}
       <div className="flex-1 flex flex-col justify-center items-center p-6 sm:p-12 relative z-10 bg-slate-950/40 backdrop-blur-md">
           <div className="w-full max-w-[420px]">
               <div className="text-center lg:text-left mb-10">
@@ -158,6 +161,7 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
                   </h1>
               </div>
 
+              {/* Form Card */}
               <div className="bg-slate-900/80 border border-white/5 rounded-[2.5rem] p-8 sm:p-10 shadow-2xl relative overflow-hidden group">
                   
                   {view === 'login' && (

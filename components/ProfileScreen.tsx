@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { User } from '../types';
 import { User as UserIcon, Mail, Hash, Briefcase, Save, Key, Camera, Shield, Sparkles } from 'lucide-react';
@@ -15,7 +14,6 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
   const [whatsapp, setWhatsapp] = useState(user.whatsapp || '');
   const [avatar, setAvatar] = useState(user.avatar_url || '');
   const [birthDate, setBirthDate] = useState(user.birthDate || '');
-  // Agora usa user.functions, que vem de organization_memberships
   const [selectedFunctions, setSelectedFunctions] = useState<string[]>(user.functions || []);
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -26,7 +24,7 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
     setWhatsapp(user.whatsapp || '');
     setAvatar(user.avatar_url || '');
     setBirthDate(user.birthDate || '');
-    // Sincroniza com as funções do usuário logado (SaaS)
+    // Funções vêm estritamente do user object (populado via membership no useAuth)
     setSelectedFunctions(user.functions || []);
   }, [user]);
 
@@ -102,7 +100,6 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
     setLoading(true);
     try {
       const avatarToSend = avatar !== (user.avatar_url || '') ? avatar : undefined;
-      // Envia as funções para serem salvas na organization_memberships
       await onUpdateProfile(name, whatsapp, avatarToSend, selectedFunctions, birthDate);
     } catch (e) {
       addToast("Erro ao atualizar perfil", "error");

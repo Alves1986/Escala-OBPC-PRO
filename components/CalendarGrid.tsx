@@ -5,10 +5,10 @@ import { getLocalDateISOString } from '../utils/dateUtils';
 
 interface Props {
   currentMonth: string;
-  events: { id: string; iso: string; dateDisplay: string; title: string }[]; // Atualizado para incluir id
+  events: { iso: string; dateDisplay: string; title: string }[];
   schedule: ScheduleMap;
   roles: Role[];
-  onEventClick?: (event: { id: string; iso: string; title: string; dateDisplay: string }) => void;
+  onEventClick?: (event: { iso: string; title: string; dateDisplay: string }) => void;
 }
 
 export const CalendarGrid: React.FC<Props> = ({ currentMonth, events, schedule, roles, onEventClick }) => {
@@ -88,8 +88,8 @@ export const CalendarGrid: React.FC<Props> = ({ currentMonth, events, schedule, 
 
                     return (
                         <button 
-                            key={evt.id} // ID como chave
-                            onClick={() => onEventClick && onEventClick(evt)}
+                            key={evt.iso} 
+                            onClick={() => onEventClick && onEventClick({ iso: evt.iso, title: evt.title, dateDisplay: evt.dateDisplay })}
                             className={`w-full text-left rounded md:rounded-lg p-1 md:px-2 md:py-1.5 border transition-all active:scale-95 group overflow-hidden ${statusColor}`}
                         >
                            {/* Mobile View: Tiny Dot */}

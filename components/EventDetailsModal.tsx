@@ -7,11 +7,11 @@ import { generateGoogleCalendarUrl } from '../utils/dateUtils';
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  event: { id: string; iso: string; title: string; dateDisplay: string } | null; // Tipagem atualizada para exigir ID
+  event: { iso: string; title: string; dateDisplay: string } | null;
   schedule: ScheduleMap;
   roles: Role[];
-  allMembers?: TeamMemberProfile[];
-  onSave: (id: string, newTitle: string, newTime: string, applyToAll: boolean) => void; // Assinatura atualizada
+  allMembers?: TeamMemberProfile[]; // Added to lookup avatars
+  onSave: (oldIso: string, newTitle: string, newTime: string, applyToAll: boolean) => void; 
   onSwapRequest?: (role: string, eventIso: string, eventTitle: string) => void;
   currentUser?: UserType | null;
   ministryId: string | null;
@@ -48,6 +48,7 @@ export const EventDetailsModal: React.FC<Props> = ({
 
   if (!isOpen || !event) return null;
 
+  // Determine if user is scheduled for this event
   const userAssignment = currentUser ? expandedRoles.find(r => schedule[`${event.iso}_${r.keySuffix}`] === currentUser.name) : null;
 
   const googleCalUrl = generateGoogleCalendarUrl(
@@ -58,14 +59,10 @@ export const EventDetailsModal: React.FC<Props> = ({
         : `Evento do ministério ${ministryId?.toUpperCase()}`
   );
 
-  const handleSave = () => {
-      // Passa o ID real para o callback
-      onSave(event.id, title, time, applyToAll);
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
         <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-2xl w-full max-w-md border border-zinc-200 dark:border-zinc-700 flex flex-col overflow-hidden transform transition-all scale-100 max-h-[90vh]">
+            {/* Header */}
             <div className="bg-zinc-50 dark:bg-zinc-900 p-5 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-start">
                 <div>
                     <h2 className="font-bold text-lg text-zinc-800 dark:text-white leading-tight">Detalhes do Evento</h2>
@@ -79,6 +76,7 @@ export const EventDetailsModal: React.FC<Props> = ({
             </div>
             
             <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar">
+                {/* Form Section */}
                 <div className="space-y-4">
                     <div className="space-y-1.5">
                         <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Nome do Evento</label>
@@ -124,6 +122,7 @@ export const EventDetailsModal: React.FC<Props> = ({
                         </div>
                     </div>
 
+                    {/* Google Calendar Link */}
                     <a 
                         href={googleCalUrl}
                         target="_blank"
@@ -133,6 +132,7 @@ export const EventDetailsModal: React.FC<Props> = ({
                         <CalendarPlus size={16}/> Adicionar ao Google Agenda
                     </a>
 
+                    {/* Apply to All Checkbox */}
                     {canEdit && (
                         <div 
                             onClick={() => setApplyToAll(!applyToAll)}
@@ -144,13 +144,14 @@ export const EventDetailsModal: React.FC<Props> = ({
                             <div>
                                 <p className="text-sm font-bold text-zinc-800 dark:text-zinc-200">Aplicar em todos os futuros</p>
                                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                                    Atualiza nome e horário deste evento e futuros gerados pelo mesmo padrão (template).
+                                    Atualiza nome e horário de <strong>"{event.title}"</strong> deste dia em diante (incluindo meses seguintes).
                                 </p>
                             </div>
                         </div>
                     )}
                 </div>
 
+                {/* Team List Section */}
                 <div>
                     <h3 className="text-xs font-bold text-zinc-500 uppercase mb-3 pb-2 border-b border-zinc-100 dark:border-zinc-700 flex items-center gap-2">
                         <User size={14}/> Equipe Escalada
@@ -163,6 +164,7 @@ export const EventDetailsModal: React.FC<Props> = ({
                             return (
                                 <div key={roleObj.keySuffix} className="flex items-center justify-between group p-2 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors border border-transparent hover:border-zinc-100 dark:hover:border-zinc-700/50">
                                     <div className="flex items-center gap-3">
+                                        {/* Avatar / Placeholder */}
                                         <div className={`w-10 h-10 rounded-full flex items-center justify-center overflow-hidden border shrink-0 ${memberName ? 'border-zinc-200 dark:border-zinc-700' : 'border-dashed border-zinc-300 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-800'}`}>
                                             {memberProfile?.avatar_url ? (
                                                 <img src={memberProfile.avatar_url} alt={memberName} className="w-full h-full object-cover" />
@@ -188,10 +190,11 @@ export const EventDetailsModal: React.FC<Props> = ({
                     </div>
                 </div>
 
+                {/* Actions */}
                 <div className="flex flex-col gap-3">
                     {canEdit && (
                         <button 
-                            onClick={handleSave}
+                            onClick={() => onSave(event.iso, title, time, applyToAll)} 
                             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 active:scale-95 transition-all"
                         >
                             <Save size={18} /> Salvar Alterações
