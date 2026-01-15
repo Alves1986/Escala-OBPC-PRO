@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#020617" />
+    <meta name="theme-color" content="#09090b" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="OBPC Pro" />
@@ -42,30 +42,29 @@
             },
             colors: {
               brand: {
-                50: '#ecfdf5',
-                100: '#d1fae5',
-                500: '#10b981',
-                600: '#059669',
-                700: '#047857',
-                900: '#064e3b',
+                50: '#F0FDFA',
+                100: '#CCFBF1',
+                500: '#14B8A6', // Teal 500
+                600: '#0D9488', // Teal 600
+                900: '#134E4A', // Teal 900
+                950: '#042F2E',
               },
               midnight: {
-                50: '#f8fafc',
-                100: '#f1f5f9',
-                800: '#1e293b',
-                900: '#0f172a',
-                950: '#020617',
+                50: '#FAFAFA',
+                100: '#F4F4F5',
+                800: '#27272A',
+                900: '#18181B',
+                950: '#09090B', // Zinc 950
               }
             },
             animation: {
-              'slide-up': 'slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
-              'fade-in': 'fadeIn 0.4s ease-out',
-              'shimmer': 'shimmer 2s infinite linear',
-              'float': 'float 6s ease-in-out infinite',
+              'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+              'fade-in': 'fadeIn 0.3s ease-out',
+              'shimmer': 'shimmer 2.5s infinite linear',
             },
             keyframes: {
               slideUp: {
-                '0%': { transform: 'translateY(15px)', opacity: '0' },
+                '0%': { transform: 'translateY(10px)', opacity: '0' },
                 '100%': { transform: 'translateY(0)', opacity: '1' },
               },
               fadeIn: {
@@ -75,10 +74,6 @@
               shimmer: {
                 '0%': { backgroundPosition: '-200% 0' },
                 '100%': { backgroundPosition: '200% 0' },
-              },
-              float: {
-                '0%, 100%': { transform: 'translateY(0)' },
-                '50%': { transform: 'translateY(-10px)' },
               }
             }
           }
@@ -86,24 +81,18 @@
       }
     </script>
     <style>
+      /* Noise texture for texture, but subtle */
       :root {
-        --bg-noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.04'/%3E%3C/svg%3E");
+        --bg-noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
       }
 
       body { 
-        @apply text-slate-900 dark:text-slate-100 transition-colors duration-300 antialiased selection:bg-emerald-500/30 selection:text-emerald-900 dark:selection:text-emerald-100;
-        background-color: #f8fafc;
-        background-image: 
-          radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.05) 0px, transparent 50%),
-          radial-gradient(at 100% 100%, rgba(99, 102, 241, 0.05) 0px, transparent 50%);
-        background-attachment: fixed;
+        @apply text-zinc-900 dark:text-zinc-100 antialiased selection:bg-brand-500/30 selection:text-brand-900 dark:selection:text-brand-100;
+        background-color: #fafafa; /* Zinc 50 */
       }
 
       .dark body {
-        background-color: #020617;
-        background-image: 
-          radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.08) 0px, transparent 50%),
-          radial-gradient(at 100% 100%, rgba(99, 102, 241, 0.08) 0px, transparent 50%);
+        background-color: #09090b; /* Zinc 950 */
       }
 
       body::before {
@@ -113,21 +102,24 @@
         background-image: var(--bg-noise);
         pointer-events: none;
         z-index: 50;
-        opacity: 0.5;
+        opacity: 0.6;
       }
 
-      .glass-card {
-        @apply bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl border border-white/20 dark:border-white/5 shadow-xl shadow-slate-200/50 dark:shadow-black/20;
-      }
-
-      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      /* Professional Scrollbar */
+      ::-webkit-scrollbar { width: 5px; height: 5px; }
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { 
-        @apply bg-slate-300 dark:bg-slate-800 rounded-full hover:bg-slate-400 dark:hover:bg-slate-700 transition-colors; 
+        @apply bg-zinc-300 dark:bg-zinc-800 rounded-full hover:bg-zinc-400 dark:hover:bg-zinc-700 transition-colors; 
       }
       
+      .custom-scrollbar::-webkit-scrollbar { width: 4px; }
       .no-scrollbar::-webkit-scrollbar { display: none; }
       .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      
+      /* Utilities */
+      .glass-panel {
+        @apply bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border border-zinc-200 dark:border-zinc-800;
+      }
     </style>
   <script type="importmap">
 {

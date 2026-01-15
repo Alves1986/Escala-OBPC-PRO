@@ -72,7 +72,6 @@ const InnerApp = () => {
   const [bootError, setBootError] = useState<string | null>(null);
 
   useEffect(() => {
-      // Re-verifica configuração se mudar
       setIsConfigured(!!(SUPABASE_URL && SUPABASE_KEY));
   }, [SUPABASE_URL, SUPABASE_KEY]);
 
@@ -82,59 +81,46 @@ const InnerApp = () => {
       }
   }, [currentUser]);
 
-  // --- BOOT SEQUENCE ORCHESTRATION ---
   useEffect(() => {
       const boot = async () => {
-          // 1. Wait for Auth & OrgId
           if (!currentUser?.organizationId) {
               setAppReady(false);
               return;
           }
 
-          // Lock App
           setAppReady(false); 
           setBootError(null);
           console.log('[BOOT] Starting Sequence for Org:', currentUser.organizationId);
 
           try {
-              // 2. Fetch Ministries (Source of Truth)
               const fetchedMinistries = await Supabase.fetchOrganizationMinistries(currentUser.organizationId);
               setAvailableMinistries(fetchedMinistries);
 
-              // 3. Resolve Active Ministry
               let targetMinistryId = '';
 
-              // Priority A: Local Storage (if valid and allowed)
               const localStored = localStorage.getItem('ministry_id');
               const isLocalValid = localStored && UUID_REGEX.test(localStored) && fetchedMinistries.some(m => m.id === localStored) && currentUser.allowedMinistries?.includes(localStored);
               
               if (isLocalValid) {
                   targetMinistryId = localStored!;
               } 
-              // Priority B: Profile Default (if valid and allowed)
               else if (currentUser.ministryId && UUID_REGEX.test(currentUser.ministryId) && fetchedMinistries.some(m => m.id === currentUser.ministryId) && currentUser.allowedMinistries?.includes(currentUser.ministryId)) {
                   targetMinistryId = currentUser.ministryId;
               }
-              // Priority C: First Allowed Ministry (Fallback)
               else if (currentUser.allowedMinistries && currentUser.allowedMinistries.length > 0) {
-                  // Only pick from fetched to ensure it actually exists in this org
                   const firstAllowed = fetchedMinistries.find(m => currentUser.allowedMinistries?.includes(m.id));
                   if (firstAllowed) targetMinistryId = firstAllowed.id;
               }
 
-              // Apply Ministry
               if (targetMinistryId) {
                   console.log('[BOOT] Resolved Ministry:', targetMinistryId);
                   setMinistryId(targetMinistryId);
                   
-                  // Save fallback to local storage to persist the "fix"
                   localStorage.setItem('ministry_id', targetMinistryId);
                   
-                  // 4. Update Functions for resolved ministry
                   const funcs = await Supabase.fetchUserFunctions(currentUser.id!, targetMinistryId, currentUser.organizationId);
                   setCurrentUser({ ...currentUser, ministryId: targetMinistryId, functions: funcs });
 
-                  // 5. Unlock App
                   setAppReady(true);
                   console.log('[BOOT] App Ready');
               } else {
@@ -195,7 +181,7 @@ const InnerApp = () => {
     membersMap, publicMembers, availability,
     availabilityNotes, notifications, announcements, 
     repertoire, swapRequests, globalConflicts, auditLogs, roles, 
-    ministryTitle, availabilityWindow, eventTemplates,
+    ministryTitle, availabilityWindow, eventRules,
     refreshData, isLoading: loadingData,
     setAvailability, setNotifications 
   } = useMinistryData(ministryId, currentMonth, currentUser);
@@ -233,18 +219,30 @@ const InnerApp = () => {
     confirmAction("Sair", "Deseja realmente sair do sistema?", async () => {
         await Supabase.logout();
         setCurrentUser(null);
-        setAppReady(false); // Reset ready state on logout
+        setAppReady(false); 
         try { window.history.replaceState(null, '', '/'); } catch(e) {}
     });
   };
 
-  // Se não estiver configurado E não estiver em modo demo, mostra a tela de setup
   if ((!isConfigured && !isDemoMode)) {
+      if (import.meta.env.DEV) {
+        return (
+            <SetupScreen 
+                onEnterDemo={() => setIsDemoMode(true)} 
+                onConfigured={() => setIsConfigured(true)}
+            />
+        );
+      }
       return (
-        <SetupScreen 
-            onEnterDemo={() => setIsDemoMode(true)} 
-            onConfigured={() => setIsConfigured(true)}
-        />
+          <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-950 p-6 text-center animate-fade-in">
+              <div className="w-20 h-20 bg-zinc-900 rounded-full flex items-center justify-center mb-6 border border-zinc-800 shadow-xl">
+                  <AlertTriangle className="text-red-500" size={40} />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">Erro de Configuração</h2>
+              <p className="text-zinc-500 max-w-md leading-relaxed text-sm">
+                  O sistema não detectou as variáveis de ambiente necessárias. Entre em contato com o administrador do sistema.
+              </p>
+          </div>
       );
   }
 
@@ -290,13 +288,11 @@ const InnerApp = () => {
       );
   }
 
-  // FIX: Block UI until App is fully ready
   if (!isAppReady) return <LoadingScreen />;
 
   const isAdmin = currentUser.role === 'admin';
   const orgId = currentUser.organizationId;
   
-  // This should theoretically be caught by isAppReady, but typescript safety:
   if (!orgId) return <LoadingScreen />;
 
   const RAW_MAIN_NAV = [
@@ -316,7 +312,7 @@ const InnerApp = () => {
     { id: 'monthly-report', label: 'Relatório Mensal', icon: <FileText size={20}/> },
     { id: 'repertoire-manager', label: 'Ger. Repertório', icon: <ListMusic size={20}/> },
     { id: 'report', label: 'Relat. Disp.', icon: <FileBarChart size={20}/> },
-    { id: 'events', label: 'Eventos Padrão', icon: <CalendarDays size={20}/> },
+    { id: 'event-rules', label: 'Regras de Agenda', icon: <CalendarDays size={20}/> },
     { id: 'send-announcements', label: 'Enviar Avisos', icon: <Send size={20}/> },
     { id: 'members', label: 'Membros', icon: <Users size={20}/> },
   ];
@@ -350,7 +346,7 @@ const InnerApp = () => {
             }}
             isStandalone={window.matchMedia('(display-mode: standalone)').matches}
             onSwitchMinistry={async (id) => {
-                setAppReady(false); // Lock
+                setAppReady(false); 
                 setMinistryId(id);
                 if (currentUser && currentUser.id) {
                     await Supabase.updateProfileMinistry(currentUser.id, id);
@@ -361,7 +357,7 @@ const InnerApp = () => {
                 const label = availableMinistries.find(m => m.id === id)?.label || 'Ministério';
                 addToast(`Alternado para ${label}`, 'info');
                 await refreshData();
-                setAppReady(true); // Unlock
+                setAppReady(true);
                 
                 const newConfig = availableMinistries.find(m => m.id === id);
                 if (newConfig && newConfig.enabledTabs && !newConfig.enabledTabs.includes(currentTab)) {
@@ -471,7 +467,6 @@ const InnerApp = () => {
                                         onExportIndividual={(member) => generateIndividualPDF(ministryTitle, currentMonth, member, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), schedule)} 
                                         onExportFull={() => generateFullSchedulePDF(ministryTitle, currentMonth, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), roles, schedule)} 
                                         onClearMonth={() => confirmAction("Limpar?", "Limpar escala?", () => Supabase.clearScheduleForMonth(ministryId, orgId, currentMonth).then(refreshData))} 
-                                        onResetEvents={() => confirmAction("Restaurar?", "Restaurar eventos?", () => Supabase.resetToDefaultEvents(ministryId, orgId, currentMonth).then(refreshData))}
                                         allMembers={publicMembers.map(m => m.name)} 
                                     />
                                 </div>
@@ -530,7 +525,7 @@ const InnerApp = () => {
                 {currentTab === 'profile' && <ProfileScreen user={currentUser} onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId, orgId); refreshData(); }} availableRoles={roles} />}
                 {currentTab === 'settings' && safeEnabledTabs.includes('settings') && <SettingsScreen initialTitle={ministryTitle} ministryId={ministryId} themeMode={themeMode} onSetThemeMode={(m) => useAppStore.getState().setThemeMode(m)} onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, orgId, newTitle); refreshData(); }} onSaveAvailabilityWindow={async (start, end) => { await Supabase.saveMinistrySettings(ministryId, orgId, undefined, undefined, start, end); refreshData(); }} availabilityWindow={availabilityWindow} isAdmin={isAdmin} orgId={orgId} />}
                 {currentTab === 'members' && isAdmin && safeEnabledTabs.includes('members') && <MembersScreen members={publicMembers} onlineUsers={onlineUsers} currentUser={currentUser} availableRoles={roles} onToggleAdmin={async (email, currentStatus, name) => { await Supabase.toggleAdminSQL(email, !currentStatus, ministryId, orgId); refreshData(); }} onRemoveMember={async (id, name) => { await Supabase.deleteMember(ministryId, orgId, id, name); refreshData(); }} onUpdateMember={async (id, data) => { await Supabase.updateMemberData(id, orgId, data); refreshData(); }} />}
-                {currentTab === 'events' && isAdmin && safeEnabledTabs.includes('events') && <EventsScreen templates={eventTemplates} onCreateTemplate={async (t) => { await Supabase.createEventTemplate(orgId, t); refreshData(); }} onDeleteTemplate={async (id) => { await Supabase.deleteEventTemplate(orgId, id); refreshData(); }} />}
+                {currentTab === 'event-rules' && isAdmin && safeEnabledTabs.includes('event-rules') && <EventsScreen rules={eventRules} />}
                 {currentTab === 'report' && isAdmin && safeEnabledTabs.includes('report') && <AvailabilityReportScreen availability={availability} registeredMembers={publicMembers} membersMap={membersMap} currentMonth={currentMonth} onMonthChange={setCurrentMonth} availableRoles={roles} onRefresh={async () => { await refreshData(); }} />}
                 {currentTab === 'monthly-report' && isAdmin && safeEnabledTabs.includes('monthly-report') && <MonthlyReportScreen currentMonth={currentMonth} onMonthChange={setCurrentMonth} schedule={schedule} attendance={attendance} swapRequests={swapRequests} members={publicMembers} events={events} />}
                 {currentTab === 'social' && safeEnabledTabs.includes('social') && <SocialMediaScreen />}
@@ -540,7 +535,7 @@ const InnerApp = () => {
             <InstallBanner isVisible={showInstallBanner} onInstall={() => (window as any).deferredPrompt.prompt()} onDismiss={() => setShowInstallBanner(false)} appName={ministryTitle} />
             <InstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />
             <JoinMinistryModal isOpen={showJoinModal} onClose={() => setShowJoinModal(false)} onJoin={async (id, r) => { await Supabase.joinMinistry(id, orgId, r); window.location.reload(); }} alreadyJoined={currentUser.allowedMinistries || []} />
-            <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ id: e.iso, title: e.title, iso: e.iso, date: e.iso.split('T')[0], time: e.iso.split('T')[1] }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, orgId, e); refreshData(); }} onRemove={async (id) => { await Supabase.deleteMinistryEvent(ministryId, orgId, id); refreshData(); }} />
+            <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ id: e.id, title: e.title, iso: e.iso, date: e.iso.split('T')[0], time: e.iso.split('T')[1] }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, orgId, e); refreshData(); }} onRemove={async (id) => { await Supabase.deleteMinistryEvent(ministryId, orgId, id); refreshData(); }} />
             <AvailabilityModal isOpen={isAvailModalOpen} onClose={() => setAvailModalOpen(false)} members={publicMembers.map(m => m.name)} availability={availability} onUpdate={async (m, d) => { await Supabase.saveMemberAvailability(ministryId, orgId, m, d, {}, currentMonth); refreshData(); }} currentMonth={currentMonth} />
             <RolesModal isOpen={isRolesModalOpen} onClose={() => setRolesModalOpen(false)} roles={roles} onUpdate={async (r) => { await Supabase.saveMinistrySettings(ministryId, orgId, undefined, r); refreshData(); }} />
             <AuditModal isOpen={isAuditModalOpen} onClose={() => setAuditModalOpen(false)} logs={auditLogs} />
