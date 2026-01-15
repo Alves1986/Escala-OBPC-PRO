@@ -1,12 +1,14 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Supabase from '../services/supabaseService';
+import { fetchEventRules } from '../infra/supabase/fetchEventRules'; // Importação da Camada Infra
 import { useAppStore } from '../store/appStore';
 
 // Keys for caching
 export const keys = {
   settings: (mid: string, oid: string) => ['settings', mid, oid],
-  schedule: (mid: string, month: string, oid: string) => ['schedule', mid, month, oid],
+  assignments: (mid: string, month: string, oid: string) => ['assignments', mid, month, oid],
+  rules: (mid: string, oid: string) => ['rules', mid, oid],
   members: (mid: string, oid: string) => ['members', mid, oid],
   availability: (mid: string, oid: string) => ['availability', mid, oid],
   notifications: (mids: string[], uid: string, oid: string) => ['notifications', { mids, uid, oid }],
@@ -22,8 +24,6 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
   const queryClient = useQueryClient();
   const orgId = user?.organizationId || '';
   
-  // FIX CRÍTICO: Queries só rodam se houver IDs válidos.
-  // Isso impede que o React Query cacheie arrays vazios ([]) prematuramente.
   const isQueryEnabled = Boolean(ministryId && orgId);
   const isScheduleEnabled = Boolean(ministryId && orgId && currentMonth);
 
@@ -34,10 +34,10 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     enabled: isQueryEnabled
   });
 
-  // 2. Schedule (Events & Assignments)
-  const scheduleQuery = useQuery({
-    queryKey: keys.schedule(ministryId, currentMonth, orgId),
-    queryFn: () => Supabase.fetchMinistrySchedule(ministryId, currentMonth, orgId),
+  // 2. Assignments (Schedule Map)
+  const assignmentsQuery = useQuery({
+    queryKey: keys.assignments(ministryId, currentMonth, orgId),
+    queryFn: () => Supabase.fetchScheduleAssignments(ministryId, currentMonth, orgId),
     enabled: isScheduleEnabled
   });
 
@@ -59,7 +59,7 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
   const notificationsQuery = useQuery({
     queryKey: keys.notifications(user?.allowedMinistries || (ministryId ? [ministryId] : []), user?.id || '', orgId),
     queryFn: () => Supabase.fetchNotificationsSQL(user?.allowedMinistries || [ministryId], user?.id || '', orgId),
-    enabled: Boolean(user?.id && orgId) // Notifications depend on User ID + Org
+    enabled: Boolean(user?.id && orgId)
   });
 
   // 6. Announcements
@@ -97,9 +97,16 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     enabled: isQueryEnabled && user?.role === 'admin'
   });
 
+  // 11. Rules (New) - Agora usa a camada de infra correta
+  const rulesQuery = useQuery({
+    queryKey: keys.rules(ministryId, orgId),
+    queryFn: () => fetchEventRules(ministryId, orgId),
+    enabled: isQueryEnabled
+  });
+
   return {
     settingsQuery,
-    scheduleQuery,
+    assignmentsQuery,
     membersQuery,
     availabilityQuery,
     notificationsQuery,
@@ -108,7 +115,8 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     repertoireQuery,
     conflictsQuery,
     auditLogsQuery,
-    isLoading: isQueryEnabled && (settingsQuery.isLoading || scheduleQuery.isLoading || membersQuery.isLoading)
+    rulesQuery,
+    isLoading: isQueryEnabled && (settingsQuery.isLoading || assignmentsQuery.isLoading || membersQuery.isLoading)
   };
 }
 
@@ -117,23 +125,21 @@ export function useScheduleMutations(ministryId: string, currentMonth: string, o
 
   const updateAssignment = useMutation({
     mutationFn: async ({ key, value }: { key: string; value: string }) => {
-      if (!orgId || !ministryId) throw new Error("Missing IDs");
-      return Supabase.saveScheduleAssignment(ministryId, orgId, key, value);
+      // Disabled for now
+      return false; 
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: keys.schedule(ministryId, currentMonth, orgId) });
-      queryClient.invalidateQueries({ queryKey: keys.auditLogs(ministryId, orgId) }); 
+      // No-op
     }
   });
 
   const toggleAttendance = useMutation({
     mutationFn: (key: string) => {
-        if (!orgId || !ministryId) throw new Error("Missing IDs");
-        return Supabase.toggleAssignmentConfirmation(ministryId, orgId, key);
+        // Disabled for now
+        return Promise.resolve();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: keys.schedule(ministryId, currentMonth, orgId) });
-      queryClient.invalidateQueries({ queryKey: keys.auditLogs(ministryId, orgId) }); 
+      // No-op
     }
   });
 

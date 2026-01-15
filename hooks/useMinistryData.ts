@@ -1,21 +1,19 @@
 
 import { useState, useEffect, useMemo } from 'react';
-import { User, ScheduleMap, AttendanceMap, AvailabilityMap, AppNotification, Announcement, SwapRequest, RepertoireItem, TeamMemberProfile, MemberMap, Role, GlobalConflictMap, AvailabilityNotesMap, DEFAULT_ROLES } from '../types';
+import { User, Role, DEFAULT_ROLES } from '../types';
 import { useMinistryQueries, keys } from './useMinistryQueries';
 import { useQueryClient } from '@tanstack/react-query';
-import { getSupabase, fetchEventTemplates } from '../services/supabaseService';
+import { getSupabase } from '../services/supabaseService';
 import { useAppStore } from '../store/appStore';
-import { useQuery } from '@tanstack/react-query';
+import { useEvents } from '../application/useEvents';
 
 export function useMinistryData(ministryId: string | null, currentMonth: string, currentUser: User | null) {
-  // STRICT: No fallback to 'midia' or slugs.
-  // If ministryId is null or not a UUID, the queries will be disabled in useMinistryQueries
   const mid = ministryId || ''; 
   const orgId = currentUser?.organizationId || '';
   
   const {
     settingsQuery,
-    scheduleQuery,
+    assignmentsQuery,
     membersQuery,
     availabilityQuery,
     notificationsQuery,
@@ -24,21 +22,29 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     repertoireQuery,
     conflictsQuery,
     auditLogsQuery,
-    isLoading
+    rulesQuery,
+    isLoading: isLoadingQueries
   } = useMinistryQueries(mid, currentMonth, currentUser);
 
-  // New query for templates
-  const templatesQuery = useQuery({
-      queryKey: ['templates', orgId],
-      queryFn: () => fetchEventTemplates(orgId),
-      enabled: !!orgId
+  // CÁLCULO DE DATAS PARA O USEEVENTS
+  const [yearStr, monthStr] = currentMonth.split('-');
+  const year = parseInt(yearStr);
+  const monthIndex = parseInt(monthStr) - 1;
+  const startDate = `${currentMonth}-01`;
+  const endDate = new Date(year, monthIndex + 1, 0).toISOString().split('T')[0]; // Último dia do mês
+
+  // NOVA FONTE DE VERDADE: useEvents (Baseado em Regras)
+  const { events: generatedEvents, isLoading: isLoadingEvents } = useEvents({
+      ministryId: mid,
+      organizationId: orgId,
+      startDate,
+      endDate
   });
 
   const queryClient = useQueryClient();
   const { setMinistryId, availableMinistries } = useAppStore();
 
   useEffect(() => {
-      // Security Check: If user has lost access to this ministry, redirect
       if (currentUser && currentUser.allowedMinistries && !currentUser.isSuperAdmin && mid) {
           const hasAccess = currentUser.allowedMinistries.includes(mid);
           if (!hasAccess && currentUser.allowedMinistries.length > 0) {
@@ -49,13 +55,11 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       }
   }, [mid, currentUser, setMinistryId]);
 
-  // Derived Title
   const foundMinistry = availableMinistries.find(m => m.id === mid);
   const ministryTitle = settingsQuery.data?.displayName || foundMinistry?.label || (mid.length === 36 ? 'Carregando...' : (mid ? 'Ministério' : 'Selecione um Ministério'));
   
   const roles: Role[] = useMemo(() => {
       let r = settingsQuery.data?.roles || [];
-      // Default roles only if we have a valid ministry ID but no specific settings
       if (r.length === 0 && mid) {
           const ministryDef = availableMinistries.find(m => m.id === mid);
           const code = ministryDef?.code || '';
@@ -71,20 +75,19 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
 
   const refreshData = async () => {
       await queryClient.invalidateQueries({ predicate: (query) => 
-          query.queryKey[0] === 'schedule' || 
+          query.queryKey[0] === 'event_rules' || 
           query.queryKey[0] === 'settings' || 
           query.queryKey[0] === 'members' ||
           query.queryKey[0] === 'audit' ||
           query.queryKey[0] === 'conflicts' ||
-          query.queryKey[0] === 'templates'
+          query.queryKey[0] === 'assignments' ||
+          query.queryKey[0] === 'rules'
       });
   };
 
   useEffect(() => {
     const sb = getSupabase();
     if (!sb || !mid) return;
-
-    // Only subscribe if mid is valid
     if (mid.length !== 36) return;
 
     const channel = sb.channel(`ministry-live-${mid}`);
@@ -92,18 +95,17 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     channel
         .on(
             'postgres_changes', 
-            { event: '*', schema: 'public', table: 'events', filter: `ministry_id=eq.${mid}` }, 
+            { event: '*', schema: 'public', table: 'event_rules', filter: `ministry_id=eq.${mid}` }, 
             () => {
-                queryClient.invalidateQueries({ queryKey: keys.schedule(mid, currentMonth, orgId) });
+                queryClient.invalidateQueries({ queryKey: ['event_rules', mid, orgId] });
+                queryClient.invalidateQueries({ queryKey: keys.rules(mid, orgId) });
             }
         )
         .on(
             'postgres_changes', 
             { event: '*', schema: 'public', table: 'schedule_assignments', filter: `ministry_id=eq.${mid}` }, 
             () => {
-                queryClient.invalidateQueries({ queryKey: keys.schedule(mid, currentMonth, orgId) });
-                queryClient.invalidateQueries({ queryKey: keys.auditLogs(mid, orgId) });
-                queryClient.invalidateQueries({ queryKey: keys.ranking(mid, orgId) });
+                queryClient.invalidateQueries({ queryKey: keys.assignments(mid, currentMonth, orgId) });
             }
         )
         .on(
@@ -134,10 +136,25 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     };
   }, [mid, currentMonth, queryClient, orgId]);
 
+  // ADAPTADOR CORRIGIDO: Separa ID lógico de ISO visual
+  const events = useMemo(() => {
+      return generatedEvents.map(e => ({
+          id: e.id,       // Chave Determinística (RuleID_Data)
+          iso: e.iso,     // Representação ISO (YYYY-MM-DDTHH:mm) para UI
+          title: e.title,
+          dateDisplay: e.date.split('-').reverse().slice(0, 2).join('/')
+      }));
+  }, [generatedEvents]);
+
+  // Filtra regras semanais para a UI de "Eventos Padrão"
+  const eventRules = useMemo(() => {
+      return (rulesQuery.data || []).filter(r => r.type === 'weekly');
+  }, [rulesQuery.data]);
+
   return {
-    events: scheduleQuery.data?.events || [],
-    schedule: scheduleQuery.data?.schedule || {},
-    attendance: scheduleQuery.data?.attendance || {},
+    events,
+    schedule: assignmentsQuery.data?.schedule || {}, 
+    attendance: assignmentsQuery.data?.attendance || {}, 
     membersMap: membersQuery.data?.memberMap || {},
     publicMembers: membersQuery.data?.publicList || [],
     availability: availabilityQuery.data?.availability || {},
@@ -148,11 +165,11 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     swapRequests: swapsQuery.data || [],
     globalConflicts: conflictsQuery.data || {}, 
     auditLogs: auditLogsQuery.data || [], 
-    eventTemplates: templatesQuery.data || [],
+    eventRules, 
     roles,
     ministryTitle,
     availabilityWindow,
-    isLoading,
+    isLoading: isLoadingQueries || isLoadingEvents,
     refreshData,
     setEvents: () => refreshData(), 
     setSchedule: () => refreshData(),

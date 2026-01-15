@@ -121,7 +121,7 @@ export const ALL_TABS = [
   'monthly-report',
   'repertoire-manager',
   'report',
-  'events',
+  'event-rules',
   'send-announcements',
   'members',
   'super-admin'
