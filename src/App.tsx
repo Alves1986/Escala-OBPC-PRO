@@ -224,25 +224,14 @@ const InnerApp = () => {
     });
   };
 
-  if ((!isConfigured && !isDemoMode)) {
-      if (import.meta.env.DEV) {
-        return (
-            <SetupScreen 
-                onEnterDemo={() => setIsDemoMode(true)} 
-                onConfigured={() => setIsConfigured(true)}
-            />
-        );
-      }
+  // Se não estiver configurado E não estiver em modo demo E estiver em DEV, mostra setup.
+  // Em produção, pula isso e vai direto para LoginScreen (onde falhará o login se sem config).
+  if (!isConfigured && !isDemoMode && import.meta.env.DEV) {
       return (
-          <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-950 p-6 text-center animate-fade-in">
-              <div className="w-20 h-20 bg-zinc-900 rounded-full flex items-center justify-center mb-6 border border-zinc-800 shadow-xl">
-                  <AlertTriangle className="text-red-500" size={40} />
-              </div>
-              <h2 className="text-2xl font-bold text-white mb-2">Erro de Configuração</h2>
-              <p className="text-zinc-500 max-w-md leading-relaxed text-sm">
-                  O sistema não detectou as variáveis de ambiente necessárias. Entre em contato com o administrador do sistema.
-              </p>
-          </div>
+        <SetupScreen 
+            onEnterDemo={() => setIsDemoMode(true)} 
+            onConfigured={() => setIsConfigured(true)}
+        />
       );
   }
 
