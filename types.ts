@@ -183,6 +183,12 @@ export interface User {
   createdAt?: string;
 }
 
+export interface AuthenticatedUser extends User {
+  id: string;
+  organizationId: string;
+  ministryId: string;
+}
+
 export interface TeamMemberProfile {
     id: string;
     name: string;

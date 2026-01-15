@@ -48,6 +48,25 @@ if (SUPABASE_URL && SUPABASE_KEY) {
 
 export const getSupabase = () => supabase;
 
+// --- CONTEXT MANAGEMENT (SINGLETON) ---
+
+let _globalOrgId: string | null = null;
+
+export const setServiceOrgContext = (orgId: string) => {
+    _globalOrgId = orgId;
+};
+
+export const getServiceOrgContext = (): string => {
+    if (!_globalOrgId) {
+        throw new Error("SUPABASE_SERVICE_CONTEXT_MISSING: Organization ID not set in global context.");
+    }
+    return _globalOrgId;
+};
+
+export const clearServiceOrgContext = () => {
+    _globalOrgId = null;
+};
+
 // --- HELPERS (STRICT GUARDS) ---
 
 const requireSupabase = (): SupabaseClient => {
@@ -81,9 +100,9 @@ const filterRolesBySettings = async (roles: string[], ministryId: string, orgId:
 
 // --- CORE SAAS FUNCTIONS ---
 
-export const fetchOrganizationMinistries = async (orgId: string): Promise<MinistryDef[]> => {
+export const fetchOrganizationMinistries = async (orgId?: string): Promise<MinistryDef[]> => {
     const sb = requireSupabase();
-    const validOrgId = requireOrgId(orgId);
+    const validOrgId = requireOrgId(orgId || getServiceOrgContext());
 
     const { data, error } = await sb
         .from('organization_ministries')
@@ -100,9 +119,9 @@ export const fetchOrganizationMinistries = async (orgId: string): Promise<Minist
     }));
 };
 
-export const fetchUserAllowedMinistries = async (userId: string, orgId: string): Promise<string[]> => {
+export const fetchUserAllowedMinistries = async (userId: string, orgId?: string): Promise<string[]> => {
     const sb = requireSupabase();
-    const validOrgId = requireOrgId(orgId);
+    const validOrgId = requireOrgId(orgId || getServiceOrgContext());
     
     const { data: members, error } = await sb.from('organization_memberships')
         .select('ministry_id')
@@ -124,9 +143,9 @@ export const fetchUserAllowedMinistries = async (userId: string, orgId: string):
     return validMinistries?.map((m: any) => m.id) || [];
 };
 
-export const fetchMinistrySettings = async (ministryId: string, orgId: string): Promise<MinistrySettings | null> => {
+export const fetchMinistrySettings = async (ministryId: string, orgId?: string): Promise<MinistrySettings | null> => {
     const sb = requireSupabase();
-    const validOrgId = requireOrgId(orgId);
+    const validOrgId = requireOrgId(orgId || getServiceOrgContext());
     if (!ministryId) return null;
 
     const { data: ministryDef, error: defError } = await sb.from('organization_ministries')
@@ -160,15 +179,15 @@ export const fetchMinistrySettings = async (ministryId: string, orgId: string): 
 
 // --- DATA FETCHING (Scoped by Org) ---
 
-export const fetchMinistrySchedule = async (ministryId: string, month: string, orgId: string) => {
+export const fetchMinistrySchedule = async (ministryId: string, month: string, orgId?: string) => {
     // Retorna vazio pois events não existe mais. 
     // O useMinistryData agora usa useEvents (Memory Projection).
     return { events: [], schedule: {}, attendance: {} };
 };
 
-export const fetchScheduleAssignments = async (ministryId: string, month: string, orgId: string) => {
+export const fetchScheduleAssignments = async (ministryId: string, month: string, orgId?: string) => {
     const sb = requireSupabase();
-    const validOrgId = requireOrgId(orgId);
+    const validOrgId = requireOrgId(orgId || getServiceOrgContext());
 
     // FIX: Pattern abrangente para suportar chaves ISO (sem prefixo) e chaves RuleID (com prefixo)
     const pattern = `%${month}%`;
@@ -294,13 +313,13 @@ export const updateMinistryEvent = async (ministryId: string, orgId: string, old
 
 export const fetchMinistryMembers = async (
   ministryId: string,
-  orgId: string
+  orgId?: string
 ): Promise<{
   memberMap: Record<string, string[]>;
   publicList: TeamMemberProfile[];
 }> => {
   const sb = requireSupabase();
-  const validOrgId = requireOrgId(orgId);
+  const validOrgId = requireOrgId(orgId || getServiceOrgContext());
 
   const { data: memberships, error } = await sb
     .from('organization_memberships')
@@ -354,9 +373,9 @@ export const fetchMinistryMembers = async (
   return { memberMap, publicList };
 };
 
-export const fetchRankingData = async (ministryId: string, orgId: string) => {
+export const fetchRankingData = async (ministryId: string, orgId?: string) => {
     const sb = requireSupabase();
-    const validOrgId = requireOrgId(orgId);
+    const validOrgId = requireOrgId(orgId || getServiceOrgContext());
     
     const { data: memberships, error: memError } = await sb.from('organization_memberships')
         .select('profile_id')
@@ -388,10 +407,10 @@ export const fetchRankingData = async (ministryId: string, orgId: string) => {
 export const fetchUserFunctions = async (
   userId: string,
   ministryId: string,
-  orgId: string
+  orgId?: string
 ): Promise<string[]> => {
   const sb = requireSupabase();
-  const validOrgId = requireOrgId(orgId);
+  const validOrgId = requireOrgId(orgId || getServiceOrgContext());
 
   const { data, error } = await sb
     .from('organization_memberships')
@@ -526,9 +545,9 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
     return { success: true, message: "Verifique seu e-mail para confirmar o cadastro." };
 };
 
-export const fetchMinistryAvailability = async (ministryId: string, orgId: string) => {
+export const fetchMinistryAvailability = async (ministryId: string, orgId?: string) => {
     const sb = requireSupabase();
-    const validOrgId = requireOrgId(orgId);
+    const validOrgId = requireOrgId(orgId || getServiceOrgContext());
 
     const { data, error } = await sb.from('availability')
         .select('*, profiles(name)')
@@ -555,9 +574,9 @@ export const fetchMinistryAvailability = async (ministryId: string, orgId: strin
     return { availability, notes };
 };
 
-export const fetchNotificationsSQL = async (ministryIds: string[], userId: string, orgId: string) => {
+export const fetchNotificationsSQL = async (ministryIds: string[], userId: string, orgId?: string) => {
     const sb = requireSupabase();
-    const validOrgId = requireOrgId(orgId);
+    const validOrgId = requireOrgId(orgId || getServiceOrgContext());
 
     const { data, error } = await sb.from('notifications')
         .select('*')
@@ -579,9 +598,9 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
     }));
 };
 
-export const fetchAnnouncementsSQL = async (ministryId: string, orgId: string) => {
+export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) => {
     const sb = requireSupabase();
-    const validOrgId = requireOrgId(orgId);
+    const validOrgId = requireOrgId(orgId || getServiceOrgContext());
 
     const { data, error } = await sb.from('announcements')
         .select(`*, announcement_reads (user_id, profiles(name), created_at), announcement_likes (user_id, profiles(name), created_at)`)
@@ -599,9 +618,9 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId: string) =
     }));
 };
 
-export const fetchSwapRequests = async (ministryId: string, orgId: string) => {
+export const fetchSwapRequests = async (ministryId: string, orgId?: string) => {
     const sb = requireSupabase();
-    const validOrgId = requireOrgId(orgId);
+    const validOrgId = requireOrgId(orgId || getServiceOrgContext());
 
     const { data, error } = await sb.from('swap_requests')
         .select('*')
@@ -616,9 +635,9 @@ export const fetchSwapRequests = async (ministryId: string, orgId: string) => {
     }));
 };
 
-export const fetchRepertoire = async (ministryId: string, orgId: string) => {
+export const fetchRepertoire = async (ministryId: string, orgId?: string) => {
     const sb = requireSupabase();
-    const validOrgId = requireOrgId(orgId);
+    const validOrgId = requireOrgId(orgId || getServiceOrgContext());
 
     const { data, error } = await sb.from('repertoire')
         .select('*')
@@ -633,9 +652,9 @@ export const fetchRepertoire = async (ministryId: string, orgId: string) => {
     }));
 };
 
-export const fetchGlobalSchedules = async (month: string, currentMinistryId: string, orgId: string) => {
+export const fetchGlobalSchedules = async (month: string, currentMinistryId: string, orgId?: string) => {
     const sb = requireSupabase();
-    const validOrgId = requireOrgId(orgId);
+    const validOrgId = requireOrgId(orgId || getServiceOrgContext());
 
     const pattern = `%${month}%`;
 
@@ -668,9 +687,9 @@ export const fetchGlobalSchedules = async (month: string, currentMinistryId: str
     return map;
 };
 
-export const fetchAuditLogs = async (ministryId: string, orgId: string) => {
+export const fetchAuditLogs = async (ministryId: string, orgId?: string) => {
     const sb = requireSupabase();
-    const validOrgId = requireOrgId(orgId);
+    const validOrgId = requireOrgId(orgId || getServiceOrgContext());
 
     const { data, error } = await sb.from('audit_logs')
         .select('*')

@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, ArrowLeft, ShieldCheck, Sparkles, Layout, Database } from 'lucide-react';
+import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, ArrowLeft, ShieldCheck, Sparkles, Layout, Database, AlertCircle } from 'lucide-react';
 import { loginWithEmail, loginWithGoogle, registerWithEmail, fetchMinistrySettings, fetchOrganizationMinistries, disconnectManual } from '../services/supabaseService';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { DEFAULT_ROLES, MinistryDef } from '../types';
@@ -24,38 +23,49 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [legalDoc, setLegalDoc] = useState<LegalDocType>(null);
+  
+  const [orgContext, setOrgContext] = useState<string | null>(null);
+
+  useEffect(() => {
+      const params = new URLSearchParams(window.location.search);
+      const urlOrg = params.get('org') || params.get('orgId');
+      if (urlOrg) setOrgContext(urlOrg);
+  }, []);
 
   useEffect(() => {
     async function loadMinistries() {
-        // Safe default org ID for registration flow
-        const list = await fetchOrganizationMinistries('8d01a052-0b2e-46e4-8e34-683ff4db5c3b');
-        setMinistriesList(list);
+        if (!orgContext) return;
+        try {
+            const list = await fetchOrganizationMinistries(orgContext);
+            setMinistriesList(list);
+        } catch (e) {
+            console.error("Failed to load ministries", e);
+        }
     }
     if (view === 'register') loadMinistries();
-  }, [view]);
+  }, [view, orgContext]);
 
   useEffect(() => {
     async function fetchDynamicRoles() {
-        if (regSelectedMinistries.length === 0) {
+        if (regSelectedMinistries.length === 0 || !orgContext) {
             setAvailableRoles([]);
             return;
         }
         const mainMinistry = regSelectedMinistries[0];
         const ministry = ministriesList.find(m => m.id === mainMinistry);
-        const orgId = ministry?.organizationId || '8d01a052-0b2e-46e4-8e34-683ff4db5c3b';
 
         setLoadingRoles(true);
         // Correctly use ministry code for defaults
         const defaults = (ministry && DEFAULT_ROLES[ministry.code]) ? DEFAULT_ROLES[ministry.code] : (DEFAULT_ROLES['default'] || []);
         setAvailableRoles(defaults);
         try {
-            const settings = await fetchMinistrySettings(mainMinistry, orgId);
+            const settings = await fetchMinistrySettings(mainMinistry, orgContext);
             if (settings && settings.roles && settings.roles.length > 0) setAvailableRoles(settings.roles);
         } catch (e) { console.warn("Defaults used"); } 
         finally { setLoadingRoles(false); }
     }
     if (view === 'register') fetchDynamicRoles();
-  }, [regSelectedMinistries, view, ministriesList]);
+  }, [regSelectedMinistries, view, ministriesList, orgContext]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,16 +91,17 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
+      if (!orgContext) {
+          setErrorMsg("Erro crítico: Organização não identificada.");
+          return;
+      }
       if (!regName || !regEmail || !regPassword || regSelectedMinistries.length === 0) {
           setErrorMsg("Preencha todos os campos obrigatórios.");
           return;
       }
       setLoadingAction('email');
       
-      const ministry = ministriesList.find(m => m.id === regSelectedMinistries[0]);
-      const orgId = ministry?.organizationId || '8d01a052-0b2e-46e4-8e34-683ff4db5c3b';
-
-      const result = await registerWithEmail(regEmail.trim(), regPassword.trim(), regName.trim(), regSelectedMinistries, orgId, regSelectedRoles);
+      const result = await registerWithEmail(regEmail.trim(), regPassword.trim(), regName.trim(), regSelectedMinistries, orgContext, regSelectedRoles);
       if (result.success) {
           setSuccessMsg(result.message);
           setTimeout(() => setView('login'), 2000);
@@ -233,6 +244,20 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
                   )}
 
                   {view === 'register' && (
+                      !orgContext ? (
+                          <div className="text-center py-8 space-y-4 animate-fade-in">
+                              <div className="bg-red-500/10 p-4 rounded-full inline-block border border-red-500/20">
+                                  <AlertCircle size={32} className="text-red-500"/>
+                              </div>
+                              <div>
+                                  <h3 className="text-white font-bold text-lg">Cadastro Restrito</h3>
+                                  <p className="text-slate-400 text-xs mt-2 max-w-[260px] mx-auto leading-relaxed">
+                                      O cadastro público está desabilitado. Você precisa de um <strong>link de convite</strong> da sua organização para se registrar.
+                                  </p>
+                              </div>
+                              <button type="button" onClick={() => setView('login')} className="text-emerald-400 hover:text-emerald-300 font-black text-xs uppercase tracking-widest underline decoration-emerald-500/50 underline-offset-4">Voltar ao Login</button>
+                          </div>
+                      ) : (
                       <form onSubmit={handleRegisterSubmit} className="space-y-4">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                               <div className="space-y-2">
@@ -249,7 +274,7 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
                               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Ministério</label>
                               <div className="grid grid-cols-1 gap-2 max-h-32 overflow-y-auto custom-scrollbar p-1">
                                   {ministriesList.length === 0 ? (
-                                      <p className="text-xs text-slate-500 italic">Nenhum ministério encontrado nesta organização.</p>
+                                      <p className="text-xs text-slate-500 italic">Nenhum ministério encontrado.</p>
                                   ) : (
                                       ministriesList.map(m => (
                                           <button key={m.id} type="button" onClick={() => setRegSelectedMinistries([m.id])} className={`text-left px-4 py-3 rounded-xl border text-xs font-bold transition-all ${regSelectedMinistries.includes(m.id) ? 'bg-emerald-500 border-emerald-400 text-emerald-950 shadow-lg' : 'bg-slate-950 border-white/5 text-slate-400 hover:border-white/20'}`}>
@@ -273,6 +298,7 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
                               <button type="submit" disabled={isGlobalLoading} className="flex-1 bg-emerald-500 text-emerald-950 font-black py-4 rounded-2xl shadow-xl uppercase tracking-widest text-xs">Criar Conta</button>
                           </div>
                       </form>
+                      )
                   )}
               </div>
 
