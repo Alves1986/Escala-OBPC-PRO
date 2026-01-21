@@ -1,4 +1,3 @@
-
 import { getSupabase } from '../../services/supabaseService';
 import { EventRule } from '../../domain/events/types';
 
@@ -9,17 +8,22 @@ export async function fetchEventRules(
   const supabase = getSupabase();
   if (!supabase) throw new Error('Supabase client not initialized');
 
-  const { data, error } = await supabase
-    .from('event_rules')
-    .select('*')
-    .eq('ministry_id', ministryId)
-    .eq('organization_id', orgId)
-    .eq('active', true);
+  try {
+    const { data, error } = await supabase
+      .from('event_rules')
+      .select('*')
+      .eq('organization_id', orgId)
+      .eq('ministry_id', ministryId) // RESTAURADO PARA RLS e CONSISTÊNCIA
+      .eq('active', true);
 
-  if (error) {
-    console.error('Error fetching event rules:', error);
-    throw error;
+    if (error) {
+      console.warn('Warning fetching event rules:', error.message || error);
+      return [];
+    }
+
+    return (data || []) as EventRule[];
+  } catch (e) {
+    console.warn('Exception fetching event rules:', e);
+    return [];
   }
-
-  return (data || []) as EventRule[];
 }

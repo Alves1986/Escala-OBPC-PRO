@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { AvailabilityMap, AvailabilityNotesMap, User } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
-import { ChevronLeft, ChevronRight, Save, CheckCircle2, Moon, Sun, Lock, FileText, Info, Ban, Unlock, RefreshCw, Check, ShieldAlert } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Save, CheckCircle2, Moon, Sun, Lock, FileText, Ban, RefreshCw, Check, ShieldAlert } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface Props {
@@ -17,6 +16,8 @@ interface Props {
   availabilityWindow?: { start?: string, end?: string };
   ministryId: string;
 }
+
+type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
 
 export const AvailabilityScreen: React.FC<Props> = ({
   availability,
@@ -35,9 +36,12 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const [selectedMember, setSelectedMember] = useState<string>("");
   const [tempDates, setTempDates] = useState<string[]>([]); 
   const [generalNote, setGeneralNote] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  
+  // --- MÁQUINA DE ESTADOS DO SALVAMENTO (State Machine) ---
+  const [saveState, setSaveState] = useState<SaveState>('idle');
+
+  // Bloqueio visual: Impede alterações enquanto salva ou mostra sucesso
+  const isSaveLocked = saveState === 'saving' || saveState === 'saved';
   
   const isAdmin = currentUser?.role === 'admin';
   const isBlockedMonth = tempDates.includes(`${currentMonth}-BLK`);
@@ -49,12 +53,9 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const blanks = Array.from({ length: firstDayOfWeek });
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
-  // Check Window Status (Pure Logic - Is it open for REGULAR members?)
+  // Check Window Status
   const isWindowOpenForMembers = React.useMemo(() => {
-      // Se não houver configuração, assume aberto
       if (!availabilityWindow?.start && !availabilityWindow?.end) return true;
-      
-      // Verifica bloqueio manual (1970)
       if (availabilityWindow.start?.includes('1970')) return false;
 
       const now = new Date();
@@ -67,7 +68,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
       return now >= start && now <= end;
   }, [availabilityWindow]);
 
-  // Can the current user edit? (Admins bypass the lock)
   const canEdit = isAdmin || isWindowOpenForMembers;
 
   // Init Member Selection
@@ -81,32 +81,43 @@ export const AvailabilityScreen: React.FC<Props> = ({
     }
   }, [currentUser, allMembersList]);
 
-  // Load Data on Mount or Change
+  // Load Data on Mount or Change (Sync with Backend Truth)
   useEffect(() => {
     if (!selectedMember) return;
 
     const storedDates = availability[selectedMember] || [];
-    // Filtra apenas datas deste mês para o estado local
     const monthDates = storedDates.filter(d => d.startsWith(currentMonth));
     setTempDates(monthDates);
     
-    // Key: Nome_YYYY-MM-00
     const noteKey = `${selectedMember}_${currentMonth}-00`;
     setGeneralNote(availabilityNotes?.[noteKey] || "");
     
-    setHasUnsavedChanges(false);
-    setSaveSuccess(false);
+    // IMPORTANTE: Se o estado for 'saved' ou 'saving', NÃO resetamos para 'idle'.
+    // Isso garante que o refresh dos dados (que acontece após salvar) não "apague" o card de sucesso.
+    setSaveState(prev => (prev === 'saved' || prev === 'saving' ? prev : 'idle'));
   }, [selectedMember, currentMonth, availability, availabilityNotes]);
+
+  // Auto-dismiss do estado 'saved'
+  useEffect(() => {
+    if (saveState !== 'saved') return;
+    
+    const timeout = setTimeout(() => {
+      setSaveState('idle');
+    }, 3000);
+    
+    return () => clearTimeout(timeout);
+  }, [saveState]);
 
   const handleToggleBlockMonth = () => {
       if (!canEdit) return;
-      setHasUnsavedChanges(true);
-      setSaveSuccess(false);
+      if (isSaveLocked) return; // Bloqueio visual
+
+      setSaveState('dirty');
 
       if (isBlockedMonth) {
-          setTempDates([]); // Clear block
+          setTempDates([]); 
       } else {
-          setTempDates([`${currentMonth}-BLK`]); // Set block
+          setTempDates([`${currentMonth}-BLK`]);
       }
   };
 
@@ -115,9 +126,11 @@ export const AvailabilityScreen: React.FC<Props> = ({
           addToast("O período de envio está fechado.", "warning");
           return;
       }
+      
+      if (isSaveLocked) return; // Bloqueio visual
 
-      setHasUnsavedChanges(true);
-      setSaveSuccess(false);
+      setSaveState('dirty');
+      
       const dateBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
       const dateObj = new Date(year, month - 1, day);
       const isSunday = dateObj.getDay() === 0;
@@ -128,7 +141,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
       let newDates = isBlockedMonth ? [] : [...tempDates];
       
-      // Remove any existing entry for this day
       const hadFull = newDates.includes(full);
       const hadMorning = newDates.includes(morning);
       const hadNight = newDates.includes(night);
@@ -136,42 +148,72 @@ export const AvailabilityScreen: React.FC<Props> = ({
       newDates = newDates.filter(d => !d.startsWith(dateBase));
 
       if (isSunday) {
-          // Cycle: Empty -> Full -> Morning -> Night -> Empty
           if (!hadFull && !hadMorning && !hadNight) newDates.push(full);
           else if (hadFull) newDates.push(morning);
           else if (hadMorning) newDates.push(night);
-          // else if (hadNight) -> Empty (already filtered)
       } else {
-          // Cycle: Empty -> Full -> Empty
           if (!hadFull) newDates.push(full);
       }
       
       setTempDates(newDates);
   };
 
+  const handleNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      if (isSaveLocked) return;
+      setGeneralNote(e.target.value);
+      setSaveState('dirty');
+  };
+
   const handleSave = async () => {
       if (!selectedMember) return;
-      setIsSaving(true);
+      // Previne duplo clique ou salvamento durante sucesso
+      if (isSaveLocked) return; 
+
+      setSaveState('saving');
+
       try {
-          const notesPayload: Record<string, string> = {};
-          
+          // --- 1. MERGE DE DATAS ---
+          const existingDates = availability[selectedMember] || [];
+          const otherMonthDates = existingDates.filter(
+              date => !date.startsWith(currentMonth)
+          );
+          const consolidatedDates = [...otherMonthDates, ...tempDates];
+
+          // --- 2. MERGE DE NOTAS ---
+          const consolidatedNotes: Record<string, string> = {};
+          const prefix = `${selectedMember}_`;
+          const currentNoteKey = `${currentMonth}-00`;
+
+          Object.entries(availabilityNotes).forEach(([key, value]) => {
+              if (key.startsWith(prefix)) {
+                  const originalKey = key.substring(prefix.length);
+                  if (originalKey !== currentNoteKey) {
+                      consolidatedNotes[originalKey] = value;
+                  }
+              }
+          });
+
           if (generalNote.trim()) {
-              notesPayload[`${currentMonth}-00`] = generalNote.trim();
+              consolidatedNotes[currentNoteKey] = generalNote.trim();
           }
 
-          // FIX: Pass ministryId explicitly as the first argument
-          await onSaveAvailability(ministryId, selectedMember, tempDates, notesPayload, currentMonth);
+          // 4. Envia payload consolidado
+          await onSaveAvailability(
+              ministryId, 
+              selectedMember, 
+              consolidatedDates, 
+              consolidatedNotes, 
+              currentMonth
+          );
           
-          setHasUnsavedChanges(false);
-          setSaveSuccess(true);
-          setTimeout(() => setSaveSuccess(false), 3000);
+          // ESTADO TERMINAL DE SUCESSO
+          setSaveState('saved');
           
       } catch (e: any) {
           console.error(e);
+          setSaveState('dirty'); // Permite tentar novamente
           const msg = e.message || "Erro desconhecido";
           addToast(`Erro: ${msg}`, "error");
-      } finally {
-          setIsSaving(false);
       }
   };
 
@@ -185,9 +227,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
   };
 
   const handleMonthNav = (dir: number) => {
-      if (hasUnsavedChanges) {
+      if (saveState === 'dirty') {
           if (!window.confirm("Há alterações não salvas. Descartar?")) return;
       }
+      // Se estiver salvo, permite navegar (o useEffect de load vai resetar para idle na próxima renderização de dados)
       onMonthChange(adjustMonth(currentMonth, dir));
   };
 
@@ -209,7 +252,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                     <select 
                         value={selectedMember} 
                         onChange={(e) => {
-                            if(hasUnsavedChanges && !confirm("Descartar alterações?")) return;
+                            if(saveState === 'dirty' && !confirm("Descartar alterações?")) return;
                             setSelectedMember(e.target.value);
                         }}
                         className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg py-1.5 px-3 text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none max-w-[140px]"
@@ -227,8 +270,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
         </div>
 
         {/* --- STATUS WARNINGS --- */}
-        
-        {/* Caso 1: Fechado para membros, mas Admin vendo */}
         {!isWindowOpenForMembers && isAdmin && (
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/30 p-3 rounded-xl flex items-center gap-3 text-blue-800 dark:text-blue-200 animate-slide-up">
                 <ShieldAlert size={20} className="shrink-0" />
@@ -239,7 +280,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
             </div>
         )}
 
-        {/* Caso 2: Fechado para membro comum */}
         {!isWindowOpenForMembers && !isAdmin && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 p-3 rounded-xl flex items-center gap-3 text-red-800 dark:text-red-200 animate-slide-up">
                 <Lock size={20} className="shrink-0" />
@@ -270,7 +310,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
             <div className={`bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 p-3 md:p-6 relative overflow-hidden transition-all duration-300 ${isBlockedMonth ? 'ring-2 ring-red-500/20 opacity-50' : ''}`}>
                 
-                {/* Blocked Overlay */}
                 {isBlockedMonth && (
                     <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
                         <div className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm p-4 rounded-2xl border border-red-200 dark:border-red-900 shadow-xl">
@@ -279,14 +318,12 @@ export const AvailabilityScreen: React.FC<Props> = ({
                     </div>
                 )}
 
-                {/* Grid */}
                 <div className="grid grid-cols-7 gap-1 mb-2">
                     {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(d => (
                         <div key={d} className="text-center text-[10px] md:text-xs font-bold text-zinc-400 py-1">{d}</div>
                     ))}
                 </div>
                 
-                {/* Mobile Optimized Grid: Gap-1 for tightness, larger buttons on desktop */}
                 <div className="grid grid-cols-7 gap-1 md:gap-3">
                     {blanks.map((_, i) => <div key={`blank-${i}`} />)}
                     {days.map(day => {
@@ -353,7 +390,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                 </div>
                 <textarea 
                     value={generalNote}
-                    onChange={e => { setGeneralNote(e.target.value); setHasUnsavedChanges(true); setSaveSuccess(false); }}
+                    onChange={handleNoteChange}
                     placeholder="Ex: Chego atrasado no dia 15..."
                     className="w-full h-16 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none placeholder:text-zinc-400 text-zinc-800 dark:text-zinc-200"
                     disabled={!canEdit}
@@ -361,38 +398,38 @@ export const AvailabilityScreen: React.FC<Props> = ({
             </div>
         </div>
 
-        {/* Floating Action Bar - Adjusted bottom position for mobile nav */}
-        <div className={`fixed bottom-24 lg:bottom-6 left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-500 ease-out transform ${hasUnsavedChanges || saveSuccess ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}`}>
+        {/* Floating Action Bar */}
+        <div className={`fixed bottom-24 lg:bottom-6 left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-500 ease-out transform ${saveState !== 'idle' ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}`}>
             <div className={`
                 backdrop-blur-xl rounded-2xl shadow-2xl p-2 pl-5 pr-2 w-[90%] max-w-sm flex items-center justify-between pointer-events-auto border ring-1 ring-black/5 transition-colors duration-300
-                ${saveSuccess 
+                ${saveState === 'saved'
                     ? 'bg-emerald-500 border-emerald-400 text-white' 
                     : 'bg-zinc-900/90 dark:bg-white/95 text-white dark:text-zinc-900 border-zinc-700/50 dark:border-zinc-200/50'
                 }
             `}>
                 <div className="flex items-center gap-3">
-                    {saveSuccess ? (
+                    {saveState === 'saved' ? (
                         <CheckCircle2 size={20} className="text-white animate-bounce" />
                     ) : (
                         <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse shadow-[0_0_8px_2px_rgba(250,204,21,0.5)]"></div>
                     )}
                     <span className="text-xs font-bold uppercase tracking-wider">
-                        {saveSuccess ? 'Salvo com sucesso!' : 'Alterações pendentes'}
+                        {saveState === 'saved' ? 'Salvo com sucesso!' : saveState === 'saving' ? 'Salvando...' : 'Alterações pendentes'}
                     </span>
                 </div>
                 
-                {!saveSuccess && (
+                {saveState !== 'saved' && (
                     <button 
                         onClick={handleSave}
-                        disabled={isSaving}
+                        disabled={saveState === 'saving'}
                         className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-emerald-600/30 active:scale-95 transition-all flex items-center gap-2 text-sm disabled:opacity-70 disabled:cursor-not-allowed group"
                     >
-                        {isSaving ? <RefreshCw className="animate-spin" size={16}/> : <Save size={16} className="group-hover:scale-110 transition-transform"/>}
+                        {saveState === 'saving' ? <RefreshCw className="animate-spin" size={16}/> : <Save size={16} className="group-hover:scale-110 transition-transform"/>}
                         Salvar
                     </button>
                 )}
                 
-                {saveSuccess && (
+                {saveState === 'saved' && (
                     <div className="px-4 py-2">
                         <Check size={20} className="text-white/80" />
                     </div>

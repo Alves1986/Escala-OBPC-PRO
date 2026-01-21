@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ScheduleMap, Role, AttendanceMap, AvailabilityMap, ScheduleAnalysis, GlobalConflictMap, TeamMemberProfile, AvailabilityNotesMap } from '../types';
@@ -6,7 +5,7 @@ import { CheckCircle2, AlertTriangle, Trash2, Edit, Clock, User, ChevronDown, Ch
 import { useClickOutside } from '../hooks/useClickOutside';
 
 interface Props {
-  events: { iso: string; dateDisplay: string; title: string }[];
+  events: { id: string; iso: string; dateDisplay: string; title: string }[];
   roles: Role[];
   schedule: ScheduleMap;
   attendance: AttendanceMap;
@@ -17,7 +16,7 @@ interface Props {
   memberProfiles?: TeamMemberProfile[];
   scheduleIssues: ScheduleAnalysis;
   globalConflicts: GlobalConflictMap; 
-  onCellChange: (key: string, value: string) => void;
+  onCellChange: (eventId: string, role: string, memberId: string | null, memberName?: string) => void;
   onAttendanceToggle: (key: string) => void;
   onDeleteEvent: (iso: string, title: string) => void;
   onEditEvent: (event: { iso: string; title: string; dateDisplay: string }) => void; 
@@ -80,7 +79,12 @@ const SelectorDropdown = ({
     };
 
     const handleSelect = (opt: string) => {
-        onChange(opt);
+        if (!opt) {
+            onChange(null, "");
+        } else {
+            const profile = memberProfiles?.find((p: any) => p.name === opt);
+            onChange(profile?.id || null, opt);
+        }
         onClose();
     };
 
@@ -186,7 +190,7 @@ const SelectorDropdown = ({
 const MemberSelector = ({ 
     value, onChange, options, memberProfiles = [], memberStats, hasError, hasWarning, eventIso, availabilityLookup, availabilityNotes, warningMsg, label, onlineUsers = []
 }: { 
-    value: string; onChange: (val: string) => void; options: string[]; memberProfiles?: TeamMemberProfile[]; memberStats: Record<string, number>; hasError: boolean; hasWarning: boolean; eventIso: string; availabilityLookup: Set<string>; availabilityNotes?: AvailabilityNotesMap; warningMsg?: string; label?: string; onlineUsers?: string[];
+    value: string; onChange: (id: string | null, name?: string) => void; options: string[]; memberProfiles?: TeamMemberProfile[]; memberStats: Record<string, number>; hasError: boolean; hasWarning: boolean; eventIso: string; availabilityLookup: Set<string>; availabilityNotes?: AvailabilityNotesMap; warningMsg?: string; label?: string; onlineUsers?: string[];
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const triggerRef = useRef<HTMLDivElement>(null);
@@ -276,9 +280,11 @@ const MemberSelector = ({
     );
 };
 
-// Simplified Row Component without strict memoization to ensure updates flow correctly
 const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup, availabilityNotes, members, memberProfiles, scheduleIssues, globalConflicts, onCellChange, onAttendanceToggle, onDeleteEvent, onEditEvent, memberStats, readOnly, onlineUsers }: any) => {
     const time = event.iso.split('T')[1];
+
+    // Debug temporário
+    console.debug(`Rendering Row: ${event.title}`, { id: event.id, iso: event.iso });
 
     return (
         <tr className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors group">
@@ -301,10 +307,23 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                 </div>
             </td>
             {columns.map((col: any) => {
-                const key = `${event.iso}_${col.keySuffix}`;
-                const currentValue = schedule[key] || "";
+                // ESTABILIDADE: Uso do UUID do evento para chave da célula
+                const uniqueKey = `${event.id}_${col.keySuffix}`;
+                
+                // Fallback para Rule ID: Se a assignment foi salva apenas com o Rule ID (global), 
+                // tentamos ler dessa chave se a específica de data estiver vazia.
+                // Formato event.id é "RuleUUID_Date" ou "RuleUUID" (se single legacy).
+                const ruleId = event.id.split('_')[0];
+                const ruleKey = `${ruleId}_${col.realRole}`;
+
+                // Ordem de precedência:
+                // 1. Chave exata (RuleUUID_Date_Role) - Futuro/Ideal
+                // 2. Chave de regra (RuleUUID_Role) - Atual/Compatibilidade com DB UUID strict
+                // 3. Chave ISO Legacy (YYYY-MM-DD_Role) - Apenas leitura legada
+                const currentValue = schedule[uniqueKey] || schedule[ruleKey] || schedule[`${event.iso}_${col.keySuffix}`] || "";
+                
                 const roleMembers = members[col.realRole] || [];
-                const isConfirmed = attendance[key];
+                const isConfirmed = attendance[uniqueKey] || attendance[ruleKey] || attendance[`${event.iso}_${col.keySuffix}`];
                 
                 const hasLocalConflict = currentValue && !checkIsAvailable(availabilityLookup, currentValue, event.iso);
                 
@@ -323,7 +342,7 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                 }
 
                 return (
-                    <td key={key} className="px-3 py-3 min-w-[180px]">
+                    <td key={uniqueKey} className="px-3 py-3 min-w-[180px]">
                         <div className="flex items-center gap-2">
                             {readOnly ? (
                                 <div className="flex-1 flex items-center gap-2">
@@ -333,7 +352,7 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                                 <div className="flex-1">
                                     <MemberSelector 
                                         value={currentValue} 
-                                        onChange={(val) => onCellChange(key, val)} 
+                                        onChange={(memberId, memberName) => onCellChange(event.id, col.realRole, memberId, memberName)} 
                                         options={roleMembers} 
                                         memberProfiles={memberProfiles} 
                                         memberStats={memberStats} 
@@ -350,7 +369,7 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                                 </div>
                             )}
                             {currentValue && (
-                                <button type="button" onClick={() => onAttendanceToggle(key)} className={`p-1 rounded-md transition-colors flex-shrink-0 ${isConfirmed ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' : 'text-zinc-300 hover:text-zinc-400 bg-transparent'}`} title={isConfirmed ? "Confirmado" : "Pendente"}>
+                                <button type="button" onClick={() => onAttendanceToggle(uniqueKey)} className={`p-1 rounded-md transition-colors flex-shrink-0 ${isConfirmed ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' : 'text-zinc-300 hover:text-zinc-400 bg-transparent'}`} title={isConfirmed ? "Confirmado" : "Pendente"}>
                                     <CheckCircle2 size={16} />
                                 </button>
                             )}
@@ -449,7 +468,7 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
               <tbody>
                 {events.length === 0 ? <tr><td colSpan={columns.length + 1} className="p-12 text-center text-zinc-400">Nenhum evento para este mês.</td></tr> : events.map((event) => (
                     <ScheduleRow 
-                        key={event.iso} 
+                        key={event.id} // UUID Stable Key
                         event={event} 
                         columns={columns} 
                         schedule={schedule} 
@@ -479,7 +498,7 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
           {events.length === 0 ? (
               <div className="bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-8 text-center text-zinc-500">Nenhum evento para este mês.</div>
           ) : events.map((event) => (
-              <div key={event.iso} className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden animate-slide-up">
+              <div key={event.id} className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden animate-slide-up">
                   <div className="bg-zinc-50 dark:bg-zinc-900/50 p-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-start">
                       <div className="flex-1 min-w-0">
                           <h3 className="font-bold text-zinc-800 dark:text-zinc-100 text-lg truncate">{event.title}</h3>
@@ -503,10 +522,17 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                   ) : (
                       <div className="p-4 space-y-4">
                           {columns.map(col => {
-                              const key = `${event.iso}_${col.keySuffix}`;
-                              const currentValue = schedule[key] || "";
+                              // Chave estável baseada em UUID
+                              const uniqueKey = `${event.id}_${col.keySuffix}`;
+                              
+                              // Fallback rule key
+                              const ruleId = event.id.split('_')[0];
+                              const ruleKey = `${ruleId}_${col.realRole}`;
+
+                              const currentValue = schedule[uniqueKey] || schedule[ruleKey] || schedule[`${event.iso}_${col.keySuffix}`] || "";
+                              
                               const roleMembers = members[col.realRole] || [];
-                              const isConfirmed = attendance[key];
+                              const isConfirmed = attendance[uniqueKey] || attendance[ruleKey] || attendance[`${event.iso}_${col.keySuffix}`];
                               
                               const hasLocalConflict = currentValue && !checkIsAvailable(availabilityLookup, currentValue, event.iso);
                               
@@ -521,14 +547,14 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                                   }
                               }
                               return (
-                                  <div key={key} className="flex items-start gap-3">
+                                  <div key={uniqueKey} className="flex items-start gap-3">
                                       <div className="flex-1">
                                           <span className="text-[10px] uppercase font-bold text-zinc-400 mb-1 block tracking-wider">{col.displayRole}</span>
                                           <div className="flex items-center gap-2">
                                               <div className="flex-1">
                                                   <MemberSelector 
                                                     value={currentValue} 
-                                                    onChange={(val) => onCellChange(key, val)} 
+                                                    onChange={(memberId, memberName) => onCellChange(event.id, col.realRole, memberId, memberName)} 
                                                     options={roleMembers} 
                                                     memberProfiles={memberProfiles} 
                                                     memberStats={memberStats} 
@@ -542,7 +568,7 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                                                     onlineUsers={onlineUsers} 
                                                   />
                                               </div>
-                                              {currentValue && <button type="button" onClick={() => onAttendanceToggle(key)} className={`p-2.5 rounded-lg transition-colors border ${isConfirmed ? 'text-emerald-600 bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800' : 'text-zinc-300 bg-zinc-50 border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700'}`}><CheckCircle2 size={18} /></button>}
+                                              {currentValue && <button type="button" onClick={() => onAttendanceToggle(uniqueKey)} className={`p-2.5 rounded-lg transition-colors border ${isConfirmed ? 'text-emerald-600 bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800' : 'text-zinc-300 bg-zinc-50 border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700'}`}><CheckCircle2 size={18} /></button>}
                                           </div>
                                           {hasLocalConflict && <p className="text-[10px] text-red-500 mt-1 flex items-center gap-1 font-medium"><AlertOctagon size={10}/> Indisponível</p>}
                                           {hasGlobalConflict && <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1 font-bold animate-pulse"><AlertTriangle size={10}/> {globalConflictMsg}</div>}

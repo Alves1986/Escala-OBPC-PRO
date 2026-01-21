@@ -189,14 +189,10 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId || getServiceOrgContext());
 
-    // FIX: Pattern abrangente para suportar chaves ISO (sem prefixo) e chaves RuleID (com prefixo)
-    const pattern = `%${month}%`;
-
     const { data: assignments, error } = await sb.from('schedule_assignments')
-        .select('*')
+        .select('*, profiles(name)')
         .eq('ministry_id', ministryId)
-        .eq('organization_id', validOrgId)
-        .like('event_key', pattern);
+        .eq('organization_id', validOrgId);
 
     if (error) throw error;
 
@@ -204,8 +200,17 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
     const attendance: any = {};
 
     assignments?.forEach((a: any) => {
-        const key = `${a.event_key}_${a.role}`;
-        schedule[key] = a.member_name;
+        // Key format: RuleUUID_Role
+        const key = `${a.event_id}_${a.role}`;
+        
+        // FIX: Handle both array and object responses for joined profile
+        const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
+        const name = profile?.name;
+
+        if (name) {
+            schedule[key] = name;
+        }
+        
         if (a.confirmed) attendance[key] = true;
     });
 
@@ -214,22 +219,46 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
 
 // --- EVENT RULES (CRUD) ---
 
-export const createEventRule = async (orgId: string, ruleData: { title: string, weekday: number, time: string, ministryId: string }) => {
+export const createEventRule = async (
+    orgId: string, 
+    ruleData: { 
+        title: string;
+        time: string;
+        ministryId: string;
+        type: 'weekly' | 'single';
+        weekday?: number;
+        date?: string;
+    }
+) => {
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId);
     
     const time = ruleData.time.length === 5 ? `${ruleData.time}` : ruleData.time;
 
-    await sb.from('event_rules').insert({
+    const payload = {
         organization_id: validOrgId,
-        ministry_id: ruleData.ministryId,
+        ministry_id: ruleData.ministryId, // CAMPO RESTAURADO PARA RLS
         title: ruleData.title,
         weekday: ruleData.weekday,
+        date: ruleData.date,
         time: time,
-        type: 'weekly',
-        duration_minutes: 120,
+        type: ruleData.type,
         active: true
-    });
+    };
+
+    console.log("Creating Event Rule Payload:", payload);
+
+    const { data, error } = await sb.from('event_rules')
+        .insert([payload])
+        .select()
+        .single();
+
+    if (error) {
+        console.error("Error creating event rule:", error);
+        throw error;
+    }
+
+    return data;
 };
 
 export const deleteEventRule = async (orgId: string, id: string) => {
@@ -242,16 +271,15 @@ export const createMinistryEvent = async (ministryId: string, orgId: string, eve
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId);
     
-    // Create as a single rule
+    // Legacy support wrapper
     await sb.from('event_rules').insert({
-        ministry_id: ministryId,
         organization_id: validOrgId,
+        ministry_id: ministryId, // CAMPO RESTAURADO PARA RLS
         title: event.title,
         type: 'single',
         date: event.date,
         time: event.time,
-        active: true,
-        duration_minutes: 120
+        active: true
     });
 };
 
@@ -276,8 +304,8 @@ export const deleteMinistryEvent = async (ministryId: string, orgId: string, ide
         const time = timePart.substring(0, 5);
         
         await sb.from('event_rules').delete()
-            .eq('ministry_id', ministryId)
             .eq('organization_id', validOrgId)
+            .eq('ministry_id', ministryId)
             .eq('type', 'single')
             .eq('date', date)
             .eq('time', time);
@@ -304,8 +332,8 @@ export const updateMinistryEvent = async (ministryId: string, orgId: string, old
         date: newDate,
         time: newTime
     })
-    .eq('ministry_id', ministryId)
     .eq('organization_id', validOrgId)
+    .eq('ministry_id', ministryId)
     .eq('type', 'single')
     .eq('date', oldDate)
     .eq('time', oldTime);
@@ -347,7 +375,8 @@ export const fetchMinistryMembers = async (
   const publicList: TeamMemberProfile[] = [];
 
   memberships.forEach((m: any) => {
-    const p = m.profiles;
+    // FIX: Handle potential array return from join (though unlikely here, consistency matters)
+    const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
     if (!p) return;
 
     const rawFunctions = Array.isArray(m.functions) ? m.functions : [];
@@ -560,7 +589,10 @@ export const fetchMinistryAvailability = async (ministryId: string, orgId?: stri
     const notes: any = {};
     
     data?.forEach((row: any) => {
-        const name = row.profiles?.name || row.member_name;
+        // FIX: Robust profile name extraction
+        const p = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+        const name = p?.name;
+        
         if (name) {
             if (!availability[name]) availability[name] = [];
             if (Array.isArray(row.dates)) availability[name] = row.dates;
@@ -656,31 +688,28 @@ export const fetchGlobalSchedules = async (month: string, currentMinistryId: str
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId || getServiceOrgContext());
 
-    const pattern = `%${month}%`;
-
     const { data, error } = await sb.from('schedule_assignments')
-        .select('event_key, role, member_name, ministry_id')
+        .select('event_id, role, ministry_id, profiles(name)')
         .eq('organization_id', validOrgId)
-        .neq('ministry_id', currentMinistryId)
-        .like('event_key', pattern);
+        .neq('ministry_id', currentMinistryId);
         
     if (error) throw error;
 
     const map: any = {};
     data?.forEach((row: any) => {
-        const name = row.member_name.toLowerCase().trim();
+        // FIX: Robust profile name extraction
+        const p = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+        const memberName = p?.name;
+        if (!memberName) return;
+
+        const name = memberName.toLowerCase().trim();
         if (!map[name]) map[name] = [];
         
-        let eventIso = row.event_key;
-        if (eventIso.includes('_')) {
-             const parts = row.event_key.split('_');
-             const datePart = parts.find((p: string) => p.match(/^\d{4}-\d{2}-\d{2}$/));
-             if (datePart) eventIso = datePart; 
-        }
-
+        let eventIso = row.event_id; 
+        
         map[name].push({ 
             ministryId: row.ministry_id, 
-            eventIso: eventIso, 
+            eventIso: eventIso, // Using UUID as ISO key placeholder 
             role: row.role 
         });
     });
@@ -727,31 +756,61 @@ export const deleteOrganizationMinistry = async (orgId: string, code: string) =>
     return error ? { success: false, message: error.message } : { success: true, message: "Removido" };
 };
 
-export const saveScheduleAssignment = async (ministryId: string, orgId: string, key: string, value: string) => {
+export const removeScheduleAssignment = async (ministryId: string, orgId: string, key: string) => {
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId);
 
     const lastUnderscore = key.lastIndexOf('_');
-    const eventKeyReal = key.substring(0, lastUnderscore);
+    const eventIdReal = key.substring(0, lastUnderscore); 
     const roleReal = key.substring(lastUnderscore + 1);
 
-    let memberId = null;
-    if (value) {
-        const { data: profile } = await sb.from('profiles').select('id').eq('name', value).eq('organization_id', validOrgId).maybeSingle();
-        memberId = profile?.id;
+    const { error } = await sb.from('schedule_assignments').delete()
+        .eq('event_id', eventIdReal) 
+        .eq('role', roleReal)
+        .eq('ministry_id', ministryId)
+        .eq('organization_id', validOrgId);
+
+    if (error) throw error;
+    return true;
+};
+
+export const saveScheduleAssignment = async (ministryId: string, orgId: string, eventKey: string, role: string, memberId: string | null, memberName?: string) => {
+    const sb = requireSupabase();
+    const validOrgId = requireOrgId(orgId);
+
+    let resolvedMemberId = memberId;
+    if (!resolvedMemberId && memberName) {
+        const { data: profile } = await sb.from('profiles')
+            .select('id')
+            .eq('name', memberName)
+            .eq('organization_id', validOrgId)
+            .maybeSingle();
+        resolvedMemberId = profile?.id;
     }
     
+    // DEBUG CRÍTICO: Se o eventKey não tiver data (for apenas UUID), isso alertará no console
+    if (eventKey.length === 36 && !eventKey.includes('_')) {
+        console.warn("[CRITICAL] Salvando escala sem componente de data na chave!", eventKey);
+    }
+
     const { error } = await sb.from('schedule_assignments').upsert({ 
-        event_key: eventKeyReal, 
-        role: roleReal, 
-        member_name: value, 
-        member_id: memberId, 
+        event_key: eventKey, 
+        role: role, 
+        member_name: memberName, 
+        member_id: resolvedMemberId, 
         ministry_id: ministryId, 
         organization_id: validOrgId, 
         confirmed: false 
-    }, { onConflict: 'event_key, role' }); 
+    }, { 
+        onConflict: 'event_key, role' 
+    }); 
     
-    return !error;
+    if (error) {
+        console.error("Erro ao salvar escala:", error);
+        return false;
+    }
+    
+    return true;
 };
 
 export const toggleAssignmentConfirmation = async (ministryId: string, orgId: string, key: string) => {
@@ -759,12 +818,12 @@ export const toggleAssignmentConfirmation = async (ministryId: string, orgId: st
     const validOrgId = requireOrgId(orgId);
 
     const lastUnderscore = key.lastIndexOf('_');
-    const eventKeyReal = key.substring(0, lastUnderscore);
+    const eventIdReal = key.substring(0, lastUnderscore);
     const roleReal = key.substring(lastUnderscore + 1);
 
     const { data: assignment } = await sb.from('schedule_assignments')
         .select('confirmed')
-        .eq('event_key', eventKeyReal)
+        .eq('event_id', eventIdReal) 
         .eq('role', roleReal)
         .eq('organization_id', validOrgId)
         .single();
@@ -772,7 +831,7 @@ export const toggleAssignmentConfirmation = async (ministryId: string, orgId: st
     if (assignment) { 
         await sb.from('schedule_assignments')
             .update({ confirmed: !assignment.confirmed })
-            .eq('event_key', eventKeyReal)
+            .eq('event_id', eventIdReal)
             .eq('role', roleReal)
             .eq('organization_id', validOrgId); 
     }
@@ -780,10 +839,38 @@ export const toggleAssignmentConfirmation = async (ministryId: string, orgId: st
 
 export const saveMemberAvailability = async (ministryId: string, orgId: string, member: string, dates: string[], notes?: any, targetMonth?: string) => {
     const sb = requireSupabase();
-    const validOrgId = requireOrgId(orgId);
+    
+    // Strict Validation
+    if (!ministryId) throw new Error("Ministry ID is required for availability.");
+    if (!orgId) throw new Error("Organization ID is required for availability.");
 
-    const { data: profile } = await sb.from('profiles').select('id').eq('name', member).eq('organization_id', validOrgId).maybeSingle();
-    await sb.from('availability').upsert({ ministry_id: ministryId, organization_id: validOrgId, member_name: member, member_id: profile?.id, dates: dates, notes: notes }, { onConflict: 'ministry_id, member_name' });
+    // 1. Resolve ID strictly
+    const { data: profile } = await sb.from('profiles')
+        .select('id')
+        .eq('name', member)
+        .eq('organization_id', orgId)
+        .maybeSingle();
+
+    if (!profile?.id) {
+        throw new Error(`MEMBER_ID_NOT_FOUND: Não foi possível identificar o membro "${member}".`);
+    }
+
+    // 2. Upsert
+    const { error } = await sb.from('availability').upsert({ 
+        ministry_id: ministryId, 
+        organization_id: orgId, 
+        member_id: profile.id, 
+        dates: dates, 
+        notes: notes 
+    }, { 
+        onConflict: 'organization_id,ministry_id,member_id',
+        ignoreDuplicates: false
+    });
+
+    if (error) {
+        console.error('[saveMemberAvailability] Upsert failed:', error);
+        throw error; // Explicit throw
+    }
 };
 
 export const createSwapRequestSQL = async (ministryId: string, orgId: string, request: any) => {
@@ -960,5 +1047,5 @@ export const clearScheduleForMonth = async (ministryId: string, orgId: string, m
         .delete()
         .eq('ministry_id', ministryId)
         .eq('organization_id', validOrgId)
-        .like('event_key', pattern);
+        .like('event_id', pattern); 
 };

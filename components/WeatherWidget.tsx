@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Cloud, Sun, CloudRain, CloudLightning, CloudSnow, MapPin, Loader2, RefreshCw } from 'lucide-react';
 
@@ -9,7 +8,7 @@ interface WeatherData {
   timestamp: number;
 }
 
-const CACHE_KEY = 'widget_weather_data_v2';
+const CACHE_KEY = 'widget_weather_data_v3';
 const CACHE_EXPIRATION = 1000 * 60 * 30; // 30 Minutos
 
 export const WeatherWidget: React.FC = () => {
@@ -46,7 +45,7 @@ export const WeatherWidget: React.FC = () => {
               // Executa em paralelo para ser mais rápido
               const [weatherRes, cityRes] = await Promise.all([
                  fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`),
-                 fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=12&accept-language=pt`)
+                 fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10&accept-language=pt-BR`)
               ]);
 
               if (!weatherRes.ok) throw new Error("Weather API Error");
@@ -56,7 +55,8 @@ export const WeatherWidget: React.FC = () => {
               if (cityRes.ok) {
                   const cityJson = await cityRes.json();
                   const addr = cityJson.address;
-                  city = addr?.city || addr?.town || addr?.municipality || addr?.village || addr?.suburb || "Local";
+                  // Prioriza a cidade/município sobre vila/subúrbio para evitar nomes de bairro
+                  city = addr?.city || addr?.municipality || addr?.town || addr?.village || addr?.suburb || "Local";
                   city = city.replace("Município de ", "").replace("Distrito de ", "").trim();
               }
 
@@ -103,7 +103,7 @@ export const WeatherWidget: React.FC = () => {
                       setError(true);
                   }
               },
-              { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+              { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
           );
       };
 
