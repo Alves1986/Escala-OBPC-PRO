@@ -472,7 +472,8 @@ const InnerApp = () => {
                                 if (memberId) {
                                     // UPSERT: Usa cellKey (com data)
                                     // Alterado de realEventId para cellKey para garantir que a data seja salva
-                                    await Supabase.saveScheduleAssignment(ministryId, orgId!, cellKey, role, memberId, memberName);
+                                    // FIX: Signature updated to match service definition (6 args)
+                                    await Supabase.saveScheduleAssignment(ministryId, orgId!, cellKey, role, memberId, memberName || "");
                                 } else {
                                     // DELETE: Usa cellKey na chave lógica para garantir exclusão do evento específico (data)
                                     const logicalKey = `${cellKey}_${role}`;
@@ -551,3 +552,17 @@ const InnerApp = () => {
     </DashboardLayout>
   );
 };
+
+export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+            <SessionProvider>
+                <ErrorBoundary>
+                    <InnerApp />
+                </ErrorBoundary>
+            </SessionProvider>
+        </ToastProvider>
+    </QueryClientProvider>
+  );
+}
