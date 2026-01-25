@@ -572,7 +572,14 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
         password: pass,
         options: { data: { full_name: name, ministry_id: ministries[0], organization_id: validOrgId } }
     });
-    if (error) return { success: false, message: error.message };
+    
+    if (error) {
+        // Helpful error mapping
+        if (error.message.includes('already registered')) {
+            return { success: false, message: "Este e-mail já está cadastrado. Tente entrar." };
+        }
+        return { success: false, message: error.message };
+    }
     
     if (data.user) {
         let sanitizedRoles = roles;
@@ -580,6 +587,8 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
             sanitizedRoles = await filterRolesBySettings(roles, ministries[0], validOrgId);
         }
 
+        // Tenta atualizar o perfil. Se o usuário já existe no Auth mas não no Profiles (inconsistência), isso arruma.
+        // Se é um usuário novo, a trigger do DB deve criar o profile, e este update preenche os dados.
         await sb.from('profiles').update({
             name: name,
             ministry_id: ministries[0],
@@ -598,7 +607,7 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
             });
         }
     }
-    return { success: true, message: "Verifique seu e-mail para confirmar o cadastro." };
+    return { success: true, message: "Conta criada com sucesso!" };
 };
 
 export const fetchMinistryAvailability = async (ministryId: string, orgId?: string) => {
