@@ -278,7 +278,7 @@ const InnerApp = () => {
 
   // Ensure user is populated before rendering app
   // Using effectiveUser here to ensure we have data, even if just from session context initially
-  if (!effectiveUser || !isAppReady) {
+  if (!effectiveUser) {
       return <LoadingScreen />;
   }
 
