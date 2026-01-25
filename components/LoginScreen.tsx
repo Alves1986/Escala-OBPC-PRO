@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, ArrowLeft, ShieldCheck, Sparkles, Layout, Database, AlertCircle } from 'lucide-react';
-import { loginWithEmail, loginWithGoogle, registerWithEmail, fetchMinistrySettings, fetchOrganizationMinistries, disconnectManual } from '../services/supabaseService';
+import { loginWithEmail, registerWithEmail, fetchMinistrySettings, fetchOrganizationMinistries } from '../services/supabaseService';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { DEFAULT_ROLES, MinistryDef } from '../types';
 
@@ -29,7 +29,10 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
   useEffect(() => {
       const params = new URLSearchParams(window.location.search);
       const urlOrg = params.get('org') || params.get('orgId');
-      if (urlOrg) setOrgContext(urlOrg);
+      if (urlOrg) {
+          setOrgContext(urlOrg);
+          setView('register');
+      }
   }, []);
 
   useEffect(() => {
@@ -76,16 +79,6 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
     if (!result.success) {
       setErrorMsg(result.message);
       setLoadingAction(null);
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    setLoadingAction('google');
-    setErrorMsg("");
-    const result = await loginWithGoogle();
-    if (!result.success) {
-        setErrorMsg(result.message);
-        setLoadingAction(null);
     }
   };
 
@@ -224,22 +217,6 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
                           >
                               {loadingAction === 'email' ? <Loader2 size={20} className="animate-spin" /> : <>Entrar agora <ArrowRight size={18}/></>}
                           </button>
-
-                          <div className="relative flex items-center py-2">
-                              <div className="flex-grow border-t border-white/5"></div>
-                              <span className="flex-shrink-0 mx-4 text-slate-700 text-[10px] font-black uppercase">Ou acesse com</span>
-                              <div className="flex-grow border-t border-white/5"></div>
-                          </div>
-
-                          <button 
-                              type="button" 
-                              onClick={handleGoogleLogin} 
-                              disabled={isGlobalLoading}
-                              className="w-full bg-white hover:bg-slate-100 text-slate-900 font-black py-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl disabled:opacity-50 uppercase tracking-widest text-[10px]"
-                          >
-                              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/smartlock/google.svg" className="w-5 h-5" alt="Google" />
-                              Google Account
-                          </button>
                       </form>
                   )}
 
@@ -303,26 +280,14 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
               </div>
 
               <div className="mt-8 text-center">
-                  <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">
-                      {view === 'login' ? 'Não possui acesso?' : 'Já possui conta?'}
-                      <button onClick={() => setView(view === 'login' ? 'register' : 'login')} className="ml-2 text-white hover:text-emerald-400 transition-colors underline decoration-emerald-500 underline-offset-4">
-                          {view === 'login' ? 'Registre-se' : 'Entrar'}
-                      </button>
-                  </p>
-                  
-                  {/* Reset Connection Button */}
-                  <div className="mt-4">
-                      <button 
-                        onClick={() => {
-                            if (confirm("Deseja desconectar do servidor atual e reconfigurar a conexão?")) {
-                                disconnectManual();
-                            }
-                        }}
-                        className="text-[10px] text-slate-600 hover:text-red-400 font-bold uppercase tracking-widest flex items-center justify-center gap-2 mx-auto transition-colors"
-                      >
-                          <Database size={12} /> Alterar Conexão
-                      </button>
-                  </div>
+                  {view === 'register' && (
+                      <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">
+                          Já possui conta?
+                          <button onClick={() => setView('login')} className="ml-2 text-white hover:text-emerald-400 transition-colors underline decoration-emerald-500 underline-offset-4">
+                              Entrar
+                          </button>
+                      </p>
+                  )}
 
                   <div className="flex justify-center gap-6 mt-6">
                       <button onClick={() => setLegalDoc('terms')} className="text-[10px] font-black uppercase tracking-widest text-slate-700 hover:text-slate-400 transition-colors">Termos</button>

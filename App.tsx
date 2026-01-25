@@ -19,7 +19,6 @@ import {
   AlertTriangle, Database, RefreshCw
 } from 'lucide-react';
 
-import { SetupScreen } from './components/SetupScreen';
 import { LoadingScreen } from './components/LoadingScreen';
 import { LoginScreen } from './components/LoginScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -59,7 +58,6 @@ const LoadingFallback = () => (
 );
 
 const InnerApp = () => {
-  const [isDemoMode, setIsDemoMode] = useState(false);
   const { user, status, error: sessionError } = useSession();
   const { 
       setCurrentUser, 
@@ -242,15 +240,6 @@ const InnerApp = () => {
 
   // Handle Generic Session Errors
   if (status === 'error') {
-      if (sessionError?.message === "Supabase client missing" && !isDemoMode) {
-          return (
-            <SetupScreen 
-                onEnterDemo={() => setIsDemoMode(true)} 
-                onConfigured={() => window.location.reload()}
-            />
-          );
-      }
-
       return (
           <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950 p-6 text-center animate-fade-in">
               <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-6 shadow-xl border border-red-200 dark:border-red-900/50">
@@ -472,8 +461,8 @@ const InnerApp = () => {
                                 if (memberId) {
                                     // UPSERT: Usa cellKey (com data)
                                     // Alterado de realEventId para cellKey para garantir que a data seja salva
-                                    // FIX: Signature updated to match service definition (6 args)
-                                    await Supabase.saveScheduleAssignment(ministryId, orgId!, cellKey, role, memberId, memberName || "");
+                                    // FIX: Signature updated to match service definition (4 args)
+                                    await Supabase.saveScheduleAssignment(ministryId, orgId!, cellKey, memberName || "");
                                 } else {
                                     // DELETE: Usa cellKey na chave lógica para garantir exclusão do evento específico (data)
                                     const logicalKey = `${cellKey}_${role}`;

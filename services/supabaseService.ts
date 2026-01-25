@@ -24,11 +24,8 @@ try {
     console.warn("Vite environment variables not accessible.");
 }
 
-const manualUrl = typeof window !== 'undefined' ? localStorage.getItem('sb_manual_url') : null;
-const manualKey = typeof window !== 'undefined' ? localStorage.getItem('sb_manual_key') : null;
-
-export const SUPABASE_URL = manualUrl || envUrl || "";
-export const SUPABASE_KEY = manualKey || envKey || "";
+export const SUPABASE_URL = envUrl;
+export const SUPABASE_KEY = envKey;
 
 let supabase: SupabaseClient | null = null;
 
@@ -47,6 +44,33 @@ if (SUPABASE_URL && SUPABASE_KEY) {
 }
 
 export const getSupabase = () => supabase;
+
+export const configureSupabaseManual = (url: string, key: string) => {
+    try {
+        supabase = createClient(url, key, {
+            auth: {
+                persistSession: true,
+                autoRefreshToken: true,
+                detectSessionInUrl: true
+            }
+        });
+    } catch (e) {
+        console.error("Manual Supabase Init Error", e);
+    }
+};
+
+export const validateConnection = async (url: string, key: string) => {
+    try {
+        const tempClient = createClient(url, key);
+        const { error } = await tempClient.from('organizations').select('count', { count: 'exact', head: true });
+        if (error && error.message && (error.message.toLowerCase().includes('fetch') || error.message.toLowerCase().includes('network'))) {
+            return false;
+        }
+        return true;
+    } catch (e) {
+        return false;
+    }
+};
 
 // --- CONTEXT MANAGEMENT (SINGLETON) ---
 
@@ -493,30 +517,6 @@ export const saveOrganizationMinistry = async (orgId: string, code: string, labe
     return error ? { success: false, message: error.message } : { success: true, message: "Salvo" };
 };
 
-export const configureSupabaseManual = (url: string, key: string) => {
-    try {
-        supabase = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true } });
-        localStorage.setItem('sb_manual_url', url);
-        localStorage.setItem('sb_manual_key', key);
-        window.location.reload();
-    } catch (e) { console.error(e); }
-};
-
-export const validateConnection = async (url: string, key: string) => {
-    try {
-        const client = createClient(url, key);
-        const { error } = await client.from('profiles').select('count', { count: 'exact', head: true });
-        return !error || error.code === 'PGRST116'; 
-    } catch { return false; }
-};
-
-export const disconnectManual = () => {
-    localStorage.removeItem('sb_manual_url');
-    localStorage.removeItem('sb_manual_key');
-    supabase = null;
-    window.location.reload();
-};
-
 export const loginWithEmail = async (email: string, pass: string) => {
     const sb = requireSupabase();
     const { data, error } = await (sb.auth as any).signInWithPassword({ email, password: pass });
@@ -774,29 +774,33 @@ export const removeScheduleAssignment = async (ministryId: string, orgId: string
     return true;
 };
 
-export const saveScheduleAssignment = async (ministryId: string, orgId: string, eventKey: string, role: string, memberId: string | null, memberName?: string) => {
+export const saveScheduleAssignment = async (ministryId: string, orgId: string, key: string, value: string) => {
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId);
 
-    let resolvedMemberId = memberId;
-    if (!resolvedMemberId && memberName) {
+    const lastUnderscore = key.lastIndexOf('_');
+    const eventKeyReal = key.substring(0, lastUnderscore);
+    const roleReal = key.substring(lastUnderscore + 1);
+
+    let resolvedMemberId = null;
+    if (value) {
         const { data: profile } = await sb.from('profiles')
             .select('id')
-            .eq('name', memberName)
+            .eq('name', value)
             .eq('organization_id', validOrgId)
             .maybeSingle();
         resolvedMemberId = profile?.id;
     }
     
     // DEBUG CRÍTICO: Se o eventKey não tiver data (for apenas UUID), isso alertará no console
-    if (eventKey.length === 36 && !eventKey.includes('_')) {
-        console.warn("[CRITICAL] Salvando escala sem componente de data na chave!", eventKey);
+    if (eventKeyReal.length === 36 && !eventKeyReal.includes('_')) {
+        console.warn("[CRITICAL] Salvando escala sem componente de data na chave!", eventKeyReal);
     }
 
     const { error } = await sb.from('schedule_assignments').upsert({ 
-        event_key: eventKey, 
-        role: role, 
-        member_name: memberName, 
+        event_key: eventKeyReal, 
+        role: roleReal, 
+        member_name: value, 
         member_id: resolvedMemberId, 
         ministry_id: ministryId, 
         organization_id: validOrgId, 

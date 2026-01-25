@@ -49,10 +49,11 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
         const sb = getSupabase();
 
         if (!sb) {
-            console.error("[SessionProvider] Supabase client missing");
+            // If Supabase client is missing, we treat it as unauthenticated to show the login screen
+            // instead of blocking with an error. The login screen will naturally handle the lack of client/keys.
             if (mounted) {
-                setError(new Error("Supabase client missing"));
-                setStatus('error');
+                console.warn("[SessionProvider] Supabase client missing. Showing Login.");
+                setStatus('unauthenticated');
             }
             return;
         }
@@ -209,26 +210,21 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
         // Renderiza LoginScreen quando não autenticado
         content = <LoginScreen isLoading={false} />;
     } else if (status === 'error') {
-        // CORREÇÃO CRÍTICA: Se o erro for cliente ausente, renderiza children para que o App.tsx exiba o SetupScreen
-        if (error?.message === "Supabase client missing") {
-            content = children;
-        } else {
-            // Tela de Erro Simples para outros erros
-            content = (
-                <div className="fixed inset-0 flex items-center justify-center bg-zinc-950 text-white z-[9999] p-6">
-                    <div className="text-center max-w-md bg-zinc-900 p-8 rounded-2xl border border-zinc-800">
-                        <h2 className="text-xl font-bold text-red-500 mb-2">Erro de Inicialização</h2>
-                        <p className="text-zinc-400 mb-6 text-sm leading-relaxed">{error?.message || "Não foi possível conectar ao servidor."}</p>
-                        <button 
-                            onClick={() => window.location.reload()} 
-                            className="px-6 py-3 bg-white text-black rounded-xl font-bold text-sm hover:bg-zinc-200 transition-colors"
-                        >
-                            Tentar Novamente
-                        </button>
-                    </div>
+        // Tela de Erro Simples para erros de inicialização
+        content = (
+            <div className="fixed inset-0 flex items-center justify-center bg-zinc-950 text-white z-[9999] p-6">
+                <div className="text-center max-w-md bg-zinc-900 p-8 rounded-2xl border border-zinc-800">
+                    <h2 className="text-xl font-bold text-red-500 mb-2">Erro de Inicialização</h2>
+                    <p className="text-zinc-400 mb-6 text-sm leading-relaxed">{error?.message || "Não foi possível conectar ao servidor."}</p>
+                    <button 
+                        onClick={() => window.location.reload()} 
+                        className="px-6 py-3 bg-white text-black rounded-xl font-bold text-sm hover:bg-zinc-200 transition-colors"
+                    >
+                        Tentar Novamente
+                    </button>
                 </div>
-            );
-        }
+            </div>
+        );
     } else if (status === 'ready') {
         // Aplicação Pronta
         content = children;
