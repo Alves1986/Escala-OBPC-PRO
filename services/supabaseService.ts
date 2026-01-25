@@ -298,6 +298,7 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
 
     assignments?.forEach((a: any) => {
         // Key format: RuleUUID_Role
+        // NOTE: Uses event_id as standard key identifier
         const key = `${a.event_id}_${a.role}`;
         
         // FIX: Handle both array and object responses for joined profile
@@ -651,6 +652,15 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
                 role: 'member',
                 functions: sanitizedRoles 
             });
+
+            // NOTIFICAÇÃO PARA ADMINS: Novo Membro Cadastrado
+            // A filtragem de visualização será feita no fetch para garantir que apenas admins vejam.
+            await sendNotificationSQL(ministries[0], validOrgId, {
+                title: `Novo Cadastro: ${name}`,
+                message: `${name} acabou de criar uma conta e entrou na equipe. Verifique as permissões.`,
+                type: 'info',
+                actionLink: 'members'
+            });
         }
     }
     return { success: true, message: "Conta criada com sucesso!" };
@@ -688,7 +698,7 @@ export const fetchMinistryAvailability = async (ministryId: string, orgId?: stri
     return { availability, notes };
 };
 
-export const fetchNotificationsSQL = async (ministryIds: string[], userId: string, orgId?: string) => {
+export const fetchNotificationsSQL = async (ministryIds: string[], userId: string, orgId?: string, isAdmin?: boolean) => {
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId || getServiceOrgContext());
 
@@ -707,7 +717,14 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
         .eq('organization_id', validOrgId);
         
     const readIds = new Set(reads?.map((r: any) => r.notification_id));
-    return (data || []).map((n: any) => ({
+    
+    // Filtragem de Segurança: Se não for admin, remove notificações de "Novo Cadastro"
+    let notifications = data || [];
+    if (!isAdmin) {
+        notifications = notifications.filter((n: any) => !n.title?.startsWith("Novo Cadastro:"));
+    }
+
+    return notifications.map((n: any) => ({
         id: n.id, type: n.type, title: n.title, message: n.message, timestamp: n.created_at, read: readIds.has(n.id), actionLink: n.action_link, ministryId: n.ministry_id
     }));
 };
@@ -787,6 +804,7 @@ export const fetchGlobalSchedules = async (month: string, currentMinistryId: str
         const name = memberName.toLowerCase().trim();
         if (!map[name]) map[name] = [];
         
+        // NOTE: event_id here is the ID column from DB
         let eventIso = row.event_id; 
         
         map[name].push({ 
@@ -880,7 +898,7 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
     }
 
     const { error } = await sb.from('schedule_assignments').upsert({ 
-        event_key: eventKeyReal, 
+        event_id: eventKeyReal, // FIX: Use event_id instead of event_key
         role: roleReal, 
         member_name: value, 
         member_id: resolvedMemberId, 
@@ -888,7 +906,7 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
         organization_id: validOrgId, 
         confirmed: false 
     }, { 
-        onConflict: 'event_key, role' 
+        onConflict: 'event_id, role' // FIX: Conflict on event_id + role
     }); 
     
     if (error) {
@@ -1148,5 +1166,5 @@ export const clearScheduleForMonth = async (ministryId: string, orgId: string, m
         .delete()
         .eq('ministry_id', ministryId)
         .eq('organization_id', validOrgId)
-        .like('event_id', pattern); 
+        .like('event_id', pattern); // Using event_id here is consistent with fetch
 };

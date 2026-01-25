@@ -470,10 +470,9 @@ const InnerApp = () => {
 
                             try {
                                 if (memberId) {
-                                    // UPSERT: Usa cellKey (com data)
-                                    // Alterado de realEventId para cellKey para garantir que a data seja salva
-                                    // FIX: Signature updated to match service definition (4 args)
-                                    await Supabase.saveScheduleAssignment(ministryId, orgId!, cellKey, memberName || "");
+                                    // FIX: Construct proper composite key (eventId_role) to ensure selection persists
+                                    const fullKey = `${cellKey}_${role}`;
+                                    await Supabase.saveScheduleAssignment(ministryId, orgId!, fullKey, memberName || "");
                                 } else {
                                     // DELETE: Usa cellKey na chave lógica para garantir exclusão do evento específico (data)
                                     const logicalKey = `${cellKey}_${role}`;
