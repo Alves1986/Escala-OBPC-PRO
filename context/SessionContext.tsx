@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import { 
     getSupabase, 
     setServiceOrgContext, 
@@ -43,6 +43,13 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
     const [status, setStatus] = useState<SessionStatus>('idle');
     const [user, setUser] = useState<User | null>(null);
     const [error, setError] = useState<Error | null>(null);
+    
+    // Ref para rastrear usuário atual dentro do closure do useEffect (Correção flicker/loading)
+    const userRef = useRef<User | null>(null);
+
+    useEffect(() => {
+        userRef.current = user;
+    }, [user]);
 
     useEffect(() => {
         let mounted = true;
@@ -64,14 +71,29 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
             // Se já estiver em erro, não tentamos processar novamente automaticamente sem reload
             if (status === 'error') return;
 
-            setStatus('contextualizing');
+            // 1. Verificação Otimista: Se é o mesmo usuário, não mostre loading (Evita "2 telas")
+            const isSameUser = userRef.current?.id === sessionUser.id;
+            
+            if (!isSameUser) {
+                setStatus('contextualizing');
+            }
 
             try {
-                const { data: profile, error: profileError } = await sb
+                // 2. Timeout de Segurança: Evita loop infinito se a rede travar no resume
+                const fetchProfile = sb
                     .from('profiles')
                     .select('*')
                     .eq('id', sessionUser.id)
                     .maybeSingle();
+                
+                const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('TIMEOUT_PROFILE_FETCH')), 7000)
+                );
+
+                const { data: profile, error: profileError } = await Promise.race([
+                    fetchProfile, 
+                    timeoutPromise
+                ]) as any;
 
                 if (profileError) throw profileError;
 
@@ -139,15 +161,24 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
             } catch (err: any) {
                 console.error("[SessionProvider] Critical Error:", err);
                 if (mounted) {
-                    setError(err);
-                    setStatus('error');
+                    // Fallback Gracioso: Se já tínhamos usuário e deu timeout/erro de rede, mantemos a sessão ativa
+                    if (isSameUser) {
+                        console.warn("[SessionProvider] Recovering from error using cached session state.");
+                        setStatus('ready');
+                    } else {
+                        setError(err);
+                        setStatus('error');
+                    }
                 }
             }
         };
 
         const init = async () => {
             if (!mounted) return;
-            setStatus('authenticating');
+            // Apenas define authenticating se não tivermos usuário carregado (evita flicker no refresh)
+            if (!userRef.current) {
+                setStatus('authenticating');
+            }
             
             const { data: { session }, error: sessionError } = await sb.auth.getSession();
             
@@ -172,6 +203,9 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                 if (!mounted) return;
 
                 if (event === 'SIGNED_IN' && currentSession?.user) {
+                    await processSession(currentSession.user);
+                } else if (event === 'TOKEN_REFRESHED' && currentSession?.user) {
+                    // No refresh de token, também validamos, mas o optimistic check vai evitar loading screen
                     await processSession(currentSession.user);
                 } else if (event === 'SIGNED_OUT') {
                     setUser(null);

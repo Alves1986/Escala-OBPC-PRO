@@ -962,11 +962,26 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar: 
     
     if (ministryId && functions && orgId) {
         const sanitizedRoles = await filterRolesBySettings(functions, ministryId, orgId);
-        await sb.from('organization_memberships')
-            .update({ functions: sanitizedRoles })
+        
+        // FIX: Retrieve existing role to avoid overwriting admin status during upsert
+        const { data: existingMember } = await sb.from('organization_memberships')
+            .select('role')
             .eq('profile_id', user.id)
             .eq('ministry_id', ministryId)
-            .eq('organization_id', orgId);
+            .eq('organization_id', orgId)
+            .maybeSingle();
+
+        const currentRole = existingMember?.role || 'member';
+
+        await sb.from('organization_memberships').upsert({
+            profile_id: user.id,
+            ministry_id: ministryId,
+            organization_id: orgId,
+            functions: sanitizedRoles,
+            role: currentRole
+        }, {
+            onConflict: 'profile_id, ministry_id, organization_id'
+        });
     }
 };
 
