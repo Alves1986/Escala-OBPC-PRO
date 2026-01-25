@@ -50,6 +50,7 @@ import { EventsModal, AvailabilityModal, RolesModal, AuditModal } from './compon
 import { EventDetailsModal } from './components/EventDetailsModal';
 import { StatsModal } from './components/StatsModal';
 import { ConfirmationModal } from './components/ConfirmationModal';
+import { SetupScreen } from './components/SetupScreen';
 
 const LoadingFallback = () => (
   <div className="flex items-center justify-center h-full min-h-[50vh]">
@@ -235,6 +236,10 @@ const InnerApp = () => {
 
   // Handle Unauthenticated
   if (status === 'unauthenticated') {
+      // Check if actually uninitialized (missing env vars)
+      if (!Supabase.getSupabase()) {
+          return <SetupScreen onEnterDemo={() => {}} onConfigured={() => window.location.reload()} />;
+      }
       return <LoginScreen />;
   }
 

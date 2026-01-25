@@ -188,7 +188,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
               if (key.startsWith(prefix)) {
                   const originalKey = key.substring(prefix.length);
                   if (originalKey !== currentNoteKey) {
-                      consolidatedNotes[originalKey] = value;
+                      consolidatedNotes[originalKey] = value as string;
                   }
               }
           });
@@ -209,7 +209,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
           // ESTADO TERMINAL DE SUCESSO
           setSaveState('saved');
           
-      } catch (e) {
+      } catch (e: any) {
           console.error(e);
           setSaveState('dirty'); // Permite tentar novamente
           let msg = "Erro desconhecido";

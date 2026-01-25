@@ -52,6 +52,12 @@ if ((!envUrl || !envKey) && typeof process !== 'undefined' && process.env) {
     } catch(e) {}
 }
 
+// 4. Try LocalStorage (Manual Config Persistence)
+if ((!envUrl || !envKey) && typeof window !== 'undefined') {
+    envUrl = localStorage.getItem('sb_url') || "";
+    envKey = localStorage.getItem('sb_key') || "";
+}
+
 export const SUPABASE_URL = envUrl;
 export const SUPABASE_KEY = envKey;
 
@@ -75,6 +81,11 @@ export const getSupabase = () => supabase;
 
 export const configureSupabaseManual = (url: string, key: string) => {
     try {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('sb_url', url);
+            localStorage.setItem('sb_key', key);
+        }
+        
         supabase = createClient(url, key, {
             auth: {
                 persistSession: true,
@@ -140,30 +151,48 @@ const filterRolesBySettings = async (roles: string[], ministryId: string, orgId:
     const sb = requireSupabase();
     if (!roles || roles.length === 0) return [];
 
-    // 1. Fetch DB settings
-    const { data: settings } = await sb.from('ministry_settings')
-        .select('roles')
-        .eq('ministry_id', ministryId)
-        .eq('organization_id', orgId)
-        .maybeSingle();
+    try {
+        // 1. Tentativa de buscar configurações específicas do DB
+        // (Pode falhar ou retornar vazio se o usuário não tiver permissão de leitura - RLS)
+        const { data: settings } = await sb.from('ministry_settings')
+            .select('roles')
+            .eq('ministry_id', ministryId)
+            .eq('organization_id', orgId)
+            .maybeSingle();
 
-    let allowedRoles = (settings?.roles || []) as string[];
+        // Se encontrou configurações explícitas, obedece estritamente
+        if (settings?.roles && Array.isArray(settings.roles) && settings.roles.length > 0) {
+            return roles.filter(r => settings.roles.includes(r));
+        }
 
-    // 2. FALLBACK: If DB settings are missing/empty, use Code Defaults
-    if (allowedRoles.length === 0) {
+        // 2. Fallback: Tenta buscar o código do ministério para usar Padrões de Código
         const { data: ministryDef } = await sb.from('organization_ministries')
             .select('code')
             .eq('id', ministryId)
             .maybeSingle();
         
-        const code = ministryDef?.code || 'default';
-        allowedRoles = DEFAULT_ROLES[code] || DEFAULT_ROLES['default'] || [];
+        if (ministryDef?.code) {
+            // Se encontrou o código, verifica se temos defaults para ele
+            const codeDefaults = DEFAULT_ROLES[ministryDef.code];
+            if (codeDefaults && codeDefaults.length > 0) {
+                return roles.filter(r => codeDefaults.includes(r));
+            }
+        }
+
+        // 3. SAFETY NET (CORREÇÃO DO PROBLEMA):
+        // Se chegamos aqui, significa que:
+        // a) Não há config no DB.
+        // b) O usuário não tem permissão para ler a config (RLS).
+        // c) O código do ministério não tem defaults conhecidos.
+        //
+        // Anteriormente, isso retornava [], apagando os dados do usuário.
+        // Agora, assumimos que se a validação não pôde ser feita, confiamos na entrada (preservação de dados).
+        return roles;
+
+    } catch (e) {
+        console.error("[filterRolesBySettings] Error verifying roles, preserving input:", e);
+        return roles; // Em caso de erro, não apaga os dados
     }
-
-    // 3. If still empty, we can't allow anything (safety), but usually defaults cover it.
-    if (allowedRoles.length === 0) return [];
-
-    return roles.filter(r => allowedRoles.includes(r));
 };
 
 // --- CORE SAAS FUNCTIONS ---
