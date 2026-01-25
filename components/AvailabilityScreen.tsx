@@ -213,11 +213,13 @@ export const AvailabilityScreen: React.FC<Props> = ({
           console.error(e);
           setSaveState('dirty'); // Permite tentar novamente
           let msg = "Erro desconhecido";
+          
           if (e instanceof Error) {
               msg = e.message;
           } else if (typeof e === 'string') {
               msg = e;
           }
+          
           addToast(`Erro: ${msg}`, "error");
       }
   };

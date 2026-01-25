@@ -6,7 +6,8 @@ import {
   AppNotification, 
   Announcement, 
   MinistryDef,
-  TeamMemberProfile
+  TeamMemberProfile,
+  DEFAULT_ROLES
 } from '../types';
 
 // --- INITIALIZATION ---
@@ -139,13 +140,29 @@ const filterRolesBySettings = async (roles: string[], ministryId: string, orgId:
     const sb = requireSupabase();
     if (!roles || roles.length === 0) return [];
 
+    // 1. Fetch DB settings
     const { data: settings } = await sb.from('ministry_settings')
         .select('roles')
         .eq('ministry_id', ministryId)
         .eq('organization_id', orgId)
         .maybeSingle();
 
-    const allowedRoles = (settings?.roles || []) as string[];
+    let allowedRoles = (settings?.roles || []) as string[];
+
+    // 2. FALLBACK: If DB settings are missing/empty, use Code Defaults
+    if (allowedRoles.length === 0) {
+        const { data: ministryDef } = await sb.from('organization_ministries')
+            .select('code')
+            .eq('id', ministryId)
+            .maybeSingle();
+        
+        const code = ministryDef?.code || 'default';
+        allowedRoles = DEFAULT_ROLES[code] || DEFAULT_ROLES['default'] || [];
+    }
+
+    // 3. If still empty, we can't allow anything (safety), but usually defaults cover it.
+    if (allowedRoles.length === 0) return [];
+
     return roles.filter(r => allowedRoles.includes(r));
 };
 
