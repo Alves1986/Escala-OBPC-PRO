@@ -75,10 +75,21 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
     if (!email || !password) return;
     setLoadingAction('email');
     setErrorMsg("");
-    const result = await loginWithEmail(email.trim(), password.trim());
-    if (!result.success) {
-      setErrorMsg(result.message);
-      setLoadingAction(null);
+    
+    try {
+        const result = await loginWithEmail(email.trim(), password.trim());
+        if (!result.success) {
+          setErrorMsg(result.message);
+          setLoadingAction(null);
+        }
+    } catch (error: any) {
+        console.error("Login Error:", error);
+        if (error.message === 'SUPABASE_NOT_INITIALIZED') {
+            setErrorMsg("Erro de Configuração: Conexão com banco de dados não estabelecida. Verifique as variáveis de ambiente.");
+        } else {
+            setErrorMsg("Ocorreu um erro inesperado ao tentar entrar. Tente novamente.");
+        }
+        setLoadingAction(null);
     }
   };
 
@@ -94,14 +105,24 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
       }
       setLoadingAction('email');
       
-      const result = await registerWithEmail(regEmail.trim(), regPassword.trim(), regName.trim(), regSelectedMinistries, orgContext, regSelectedRoles);
-      if (result.success) {
-          setSuccessMsg(result.message);
-          setTimeout(() => setView('login'), 2000);
-      } else {
-          setErrorMsg(result.message);
+      try {
+          const result = await registerWithEmail(regEmail.trim(), regPassword.trim(), regName.trim(), regSelectedMinistries, orgContext, regSelectedRoles);
+          if (result.success) {
+              setSuccessMsg(result.message);
+              setTimeout(() => setView('login'), 2000);
+          } else {
+              setErrorMsg(result.message);
+          }
+      } catch (error: any) {
+          console.error("Register Error:", error);
+          if (error.message === 'SUPABASE_NOT_INITIALIZED') {
+              setErrorMsg("Erro de Configuração: Conexão com banco de dados não estabelecida.");
+          } else {
+              setErrorMsg("Erro ao criar conta. Tente novamente.");
+          }
+      } finally {
+          setLoadingAction(null);
       }
-      setLoadingAction(null);
   };
 
   const isGlobalLoading = !!loadingAction || isLoading;
