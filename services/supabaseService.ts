@@ -11,17 +11,44 @@ import {
 
 // --- INITIALIZATION ---
 
+// Declare globals injected by Vite config
+declare const __SUPABASE_URL__: string | undefined;
+declare const __SUPABASE_KEY__: string | undefined;
+
 let envUrl = "";
 let envKey = "";
 
+// 1. Try import.meta.env (Standard Vite)
 try {
     // @ts-ignore
     if (typeof import.meta !== 'undefined' && import.meta.env) {
-        envUrl = import.meta.env.VITE_SUPABASE_URL || "";
-        envKey = import.meta.env.VITE_SUPABASE_KEY || "";
+        envUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.NEXT_PUBLIC_SUPABASE_URL || "";
+        envKey = import.meta.env.VITE_SUPABASE_KEY || import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
     }
 } catch (e) {
-    console.warn("Vite environment variables not accessible.");
+    console.warn("Vite environment variables not accessible via import.meta.");
+}
+
+// 2. Try Global Defines (from vite.config.ts define block)
+if (!envUrl || !envKey) {
+    try {
+        if (typeof __SUPABASE_URL__ !== 'undefined' && __SUPABASE_URL__) {
+            envUrl = __SUPABASE_URL__;
+        }
+        if (typeof __SUPABASE_KEY__ !== 'undefined' && __SUPABASE_KEY__) {
+            envKey = __SUPABASE_KEY__;
+        }
+    } catch (e) {
+        // Ignore reference errors
+    }
+}
+
+// 3. Try process.env (Legacy/Webpack compat)
+if ((!envUrl || !envKey) && typeof process !== 'undefined' && process.env) {
+    try {
+        envUrl = envUrl || process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+        envKey = envKey || process.env.VITE_SUPABASE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+    } catch(e) {}
 }
 
 export const SUPABASE_URL = envUrl;

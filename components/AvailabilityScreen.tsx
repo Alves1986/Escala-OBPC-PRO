@@ -216,7 +216,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
           if (e instanceof Error) {
               msg = e.message;
           } else if (typeof e === 'string') {
-              msg = e;
+              msg = e as string;
           }
           addToast(`Erro: ${msg}`, "error");
       }
