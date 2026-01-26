@@ -283,9 +283,6 @@ const MemberSelector = ({
 const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup, availabilityNotes, members, memberProfiles, scheduleIssues, globalConflicts, onCellChange, onAttendanceToggle, onDeleteEvent, onEditEvent, memberStats, readOnly, onlineUsers }: any) => {
     const time = event.iso.split('T')[1];
 
-    // Debug temporário
-    console.debug(`Rendering Row: ${event.title}`, { id: event.id, iso: event.iso });
-
     return (
         <tr className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors group">
             <td className="px-6 py-4 sticky left-0 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-sm z-10 border-r border-zinc-200 dark:border-zinc-700 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
@@ -307,19 +304,11 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                 </div>
             </td>
             {columns.map((col: any) => {
-                // ESTABILIDADE: Uso do UUID do evento para chave da célula
                 const uniqueKey = `${event.id}_${col.keySuffix}`;
-                
-                // Fallback para Rule ID: Se a assignment foi salva apenas com o Rule ID (global), 
-                // tentamos ler dessa chave se a específica de data estiver vazia.
-                // Formato event.id é "RuleUUID_Date" ou "RuleUUID" (se single legacy).
+                // Fallback keys for legacy data
                 const ruleId = event.id.split('_')[0];
                 const ruleKey = `${ruleId}_${col.realRole}`;
 
-                // Ordem de precedência:
-                // 1. Chave exata (RuleUUID_Date_Role) - Futuro/Ideal
-                // 2. Chave de regra (RuleUUID_Role) - Atual/Compatibilidade com DB UUID strict
-                // 3. Chave ISO Legacy (YYYY-MM-DD_Role) - Apenas leitura legada
                 const currentValue = schedule[uniqueKey] || schedule[ruleKey] || schedule[`${event.iso}_${col.keySuffix}`] || "";
                 
                 const roleMembers = members[col.realRole] || [];
@@ -352,7 +341,7 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                                 <div className="flex-1">
                                     <MemberSelector 
                                         value={currentValue} 
-                                        onChange={(memberId, memberName) => onCellChange(event.id, col.realRole, memberId, memberName)} 
+                                        onChange={(memberId, memberName) => onCellChange(event.id, col.keySuffix, memberId, memberName)} 
                                         options={roleMembers} 
                                         memberProfiles={memberProfiles} 
                                         memberStats={memberStats} 
@@ -522,18 +511,13 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                   ) : (
                       <div className="p-4 space-y-4">
                           {columns.map(col => {
-                              // Chave estável baseada em UUID
                               const uniqueKey = `${event.id}_${col.keySuffix}`;
-                              
-                              // Fallback rule key
                               const ruleId = event.id.split('_')[0];
                               const ruleKey = `${ruleId}_${col.realRole}`;
 
                               const currentValue = schedule[uniqueKey] || schedule[ruleKey] || schedule[`${event.iso}_${col.keySuffix}`] || "";
-                              
                               const roleMembers = members[col.realRole] || [];
                               const isConfirmed = attendance[uniqueKey] || attendance[ruleKey] || attendance[`${event.iso}_${col.keySuffix}`];
-                              
                               const hasLocalConflict = currentValue && !checkIsAvailable(availabilityLookup, currentValue, event.iso);
                               
                               let globalConflictMsg = "";
@@ -554,7 +538,7 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                                               <div className="flex-1">
                                                   <MemberSelector 
                                                     value={currentValue} 
-                                                    onChange={(memberId, memberName) => onCellChange(event.id, col.realRole, memberId, memberName)} 
+                                                    onChange={(memberId, memberName) => onCellChange(event.id, col.keySuffix, memberId, memberName)} 
                                                     options={roleMembers} 
                                                     memberProfiles={memberProfiles} 
                                                     memberStats={memberStats} 
