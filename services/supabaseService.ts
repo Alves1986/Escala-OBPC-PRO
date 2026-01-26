@@ -277,7 +277,16 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
     const validOrgId = requireOrgId(orgId || getServiceOrgContext());
 
     const { data: assignments, error } = await sb.from('schedule_assignments')
-        .select('event_key, event_date, role, member_name, confirmed')
+        .select(`
+            event_key,
+            event_date,
+            role,
+            confirmed,
+            member_id,
+            profiles (
+                name
+            )
+        `)
         .eq('ministry_id', ministryId)
         .eq('organization_id', validOrgId)
         .gte('event_date', `${month}-01`)
@@ -293,8 +302,11 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
         // This bridges the database schema (separated columns) with the UI logic (composite string key)
         const key = `${a.event_key}_${a.event_date}_${a.role}`;
         
-        if (a.member_name) {
-            schedule[key] = a.member_name;
+        // FIX: Extract name from joined profiles relation
+        const memberName = Array.isArray(a.profiles) ? a.profiles[0]?.name : a.profiles?.name;
+        
+        if (memberName) {
+            schedule[key] = memberName;
         }
         
         if (a.confirmed) attendance[key] = true;
