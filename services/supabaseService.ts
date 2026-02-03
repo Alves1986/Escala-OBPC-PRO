@@ -16,22 +16,42 @@ import {
 let supabase: SupabaseClient | null = null;
 let serviceOrgId: string | null = null;
 
-// Safe Access Environment Variables
+// --- ESTRATÉGIA DE RECUPERAÇÃO DE CHAVES ---
 let envUrl = "";
 let envKey = "";
 
+// 1. Tenta Globais do Vite (Defines do vite.config.ts)
 try {
-  // @ts-ignore
-  const meta = import.meta;
-  if (meta && meta.env) {
-    envUrl = meta.env.VITE_SUPABASE_URL;
-    // Suporte para VITE_SUPABASE_KEY ou VITE_SUPABASE_ANON_KEY
-    envKey = meta.env.VITE_SUPABASE_KEY || meta.env.VITE_SUPABASE_ANON_KEY;
-  }
-} catch (e) {
-  console.warn("Falha ao ler variáveis de ambiente via import.meta.env");
+    // @ts-ignore
+    if (typeof __SUPABASE_URL__ !== 'undefined' && __SUPABASE_URL__) envUrl = __SUPABASE_URL__;
+    // @ts-ignore
+    if (typeof __SUPABASE_KEY__ !== 'undefined' && __SUPABASE_KEY__) envKey = __SUPABASE_KEY__;
+} catch (e) {}
+
+// 2. Tenta import.meta.env (Padrão Vite) se ainda não encontrou
+if (!envUrl || !envKey) {
+    try {
+        // @ts-ignore
+        if (typeof import.meta !== 'undefined' && import.meta.env) {
+            envUrl = envUrl || import.meta.env.VITE_SUPABASE_URL;
+            envKey = envKey || import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_KEY;
+        }
+    } catch (e) {
+        console.warn("import.meta.env não disponível");
+    }
 }
 
+// 3. Tenta process.env (Fallback para alguns ambientes) se ainda não encontrou
+if (!envUrl || !envKey) {
+    try {
+        if (typeof process !== 'undefined' && process.env) {
+            envUrl = envUrl || process.env.VITE_SUPABASE_URL || "";
+            envKey = envKey || process.env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_KEY || "";
+        }
+    } catch (e) {}
+}
+
+// Inicialização segura
 if (envUrl && envKey) {
   try {
     supabase = createClient(envUrl, envKey, {
@@ -42,10 +62,10 @@ if (envUrl && envKey) {
         }
     });
   } catch (e) {
-    console.error("Erro ao inicializar Supabase Client:", e);
+    console.error("Erro fatal ao inicializar Supabase Client:", e);
   }
 } else {
-  console.error("Supabase ENV ausente (URL ou ANON_KEY) — rodando sem conexão");
+  console.error("Supabase ENV ausente (VITE_SUPABASE_URL ou VITE_SUPABASE_ANON_KEY) — rodando desconectado.");
 }
 
 export const getSupabase = () => supabase;
