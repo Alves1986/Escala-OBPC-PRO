@@ -19,7 +19,6 @@ import {
   AlertTriangle, Database, RefreshCw
 } from 'lucide-react';
 
-import { SetupScreen } from './components/SetupScreen';
 import { LoadingScreen } from './components/LoadingScreen';
 import { LoginScreen } from './components/LoginScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -59,7 +58,6 @@ const LoadingFallback = () => (
 );
 
 const InnerApp = () => {
-  const [isDemoMode, setIsDemoMode] = useState(false);
   const { user, status, error: sessionError } = useSession();
   const { 
       setCurrentUser, 
@@ -242,15 +240,6 @@ const InnerApp = () => {
 
   // Handle Generic Session Errors
   if (status === 'error') {
-      if (sessionError?.message === "Supabase client missing" && !isDemoMode) {
-          return (
-            <SetupScreen 
-                onEnterDemo={() => setIsDemoMode(true)} 
-                onConfigured={() => window.location.reload()}
-            />
-          );
-      }
-
       return (
           <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950 p-6 text-center animate-fade-in">
               <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-6 shadow-xl border border-red-200 dark:border-red-900/50">
@@ -271,7 +260,7 @@ const InnerApp = () => {
                       onClick={() => Supabase.logout().then(() => window.location.reload())} 
                       className="flex-1 py-3.5 px-6 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 rounded-xl font-bold shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2"
                   >
-                      <Database size={18}/> Sair / Reconfigurar
+                      <Database size={18}/> Sair
                   </button>
               </div>
           </div>

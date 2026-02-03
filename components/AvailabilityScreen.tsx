@@ -255,7 +255,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                             if(saveState === 'dirty' && !confirm("Descartar alterações?")) return;
                             setSelectedMember(e.target.value);
                         }}
-                        className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg py-1.5 px-3 text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none max-w-[140px]"
+                        className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg py-1.5 px-3 text-xs md:text-sm text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-blue-500 outline-none max-w-[140px]"
                     >
                         {allMembersList.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
@@ -263,7 +263,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
                 
                 <div className="flex items-center gap-2">
                     <button onClick={() => handleMonthNav(-1)} className="p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-300"><ChevronLeft size={16}/></button>
-                    <span className="text-xs md:text-sm font-bold min-w-[70px] text-center capitalize">{getMonthName(currentMonth)}</span>
+                    <span className="text-xs md:text-sm font-bold min-w-[70px] text-center capitalize text-zinc-900 dark:text-zinc-100">{getMonthName(currentMonth)}</span>
                     <button onClick={() => handleMonthNav(1)} className="p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg text-zinc-600 dark:text-zinc-300"><ChevronRight size={16}/></button>
                 </div>
             </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, ArrowLeft, ShieldCheck, Sparkles, Layout, Database, AlertCircle } from 'lucide-react';
-import { loginWithEmail, loginWithGoogle, registerWithEmail, fetchMinistrySettings, fetchOrganizationMinistries, disconnectManual } from '../services/supabaseService';
+import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, ArrowLeft, ShieldCheck, Sparkles, Layout, AlertCircle } from 'lucide-react';
+import { loginWithEmail, loginWithGoogle, registerWithEmail, fetchMinistrySettings, fetchOrganizationMinistries } from '../services/supabaseService';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 import { DEFAULT_ROLES, MinistryDef } from '../types';
 
@@ -309,20 +309,6 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
                           {view === 'login' ? 'Registre-se' : 'Entrar'}
                       </button>
                   </p>
-                  
-                  {/* Reset Connection Button */}
-                  <div className="mt-4">
-                      <button 
-                        onClick={() => {
-                            if (confirm("Deseja desconectar do servidor atual e reconfigurar a conexão?")) {
-                                disconnectManual();
-                            }
-                        }}
-                        className="text-[10px] text-slate-600 hover:text-red-400 font-bold uppercase tracking-widest flex items-center justify-center gap-2 mx-auto transition-colors"
-                      >
-                          <Database size={12} /> Alterar Conexão
-                      </button>
-                  </div>
 
                   <div className="flex justify-center gap-6 mt-6">
                       <button onClick={() => setLegalDoc('terms')} className="text-[10px] font-black uppercase tracking-widest text-slate-700 hover:text-slate-400 transition-colors">Termos</button>

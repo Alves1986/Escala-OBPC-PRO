@@ -13,42 +13,63 @@ import {
 
 // --- INITIALIZATION ---
 
-let envUrl = "";
-let envKey = "";
+const env = typeof import.meta !== 'undefined' ? import.meta.env : undefined;
 
-try {
-    // @ts-ignore
-    if (typeof import.meta !== 'undefined' && import.meta.env) {
-        envUrl = import.meta.env.VITE_SUPABASE_URL || "";
-        envKey = import.meta.env.VITE_SUPABASE_KEY || "";
-    }
-} catch (e) {
-    console.warn("Vite environment variables not accessible.");
+let supabaseUrl = env?.VITE_SUPABASE_URL;
+let supabaseKey = env?.VITE_SUPABASE_KEY;
+
+// Fallback: Check LocalStorage if env vars are missing (Manual Setup Mode)
+if ((!supabaseUrl || !supabaseKey) && typeof window !== 'undefined') {
+    supabaseUrl = localStorage.getItem('supabase_url') || undefined;
+    supabaseKey = localStorage.getItem('supabase_key') || undefined;
 }
 
-const manualUrl = typeof window !== 'undefined' ? localStorage.getItem('sb_manual_url') : null;
-const manualKey = typeof window !== 'undefined' ? localStorage.getItem('sb_manual_key') : null;
-
-export const SUPABASE_URL = manualUrl || envUrl || "";
-export const SUPABASE_KEY = manualKey || envKey || "";
-
-let supabase: SupabaseClient | null = null;
-
-if (SUPABASE_URL && SUPABASE_KEY) {
-    try {
-        supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-            auth: {
-                persistSession: true,
-                autoRefreshToken: true,
-                detectSessionInUrl: true
-            }
-        });
-    } catch(e) {
-        console.error("Supabase Client Init Error", e);
-    }
+if (!supabaseUrl || !supabaseKey) {
+  console.warn("Supabase env config missing. App entering Setup Mode.");
 }
+
+// Safely initialize Supabase to prevent runtime crash if keys are missing
+// Changed to 'let' to allow reconfiguration
+export let supabase = (supabaseUrl && supabaseKey) 
+    ? createClient(supabaseUrl, supabaseKey, {
+        auth: {
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: true
+        }
+    })
+    : null as unknown as SupabaseClient;
 
 export const getSupabase = () => supabase;
+
+// --- MANUAL CONFIGURATION UTILS ---
+
+export const configureSupabaseManual = (url: string, key: string) => {
+    if (typeof window !== 'undefined') {
+        localStorage.setItem('supabase_url', url);
+        localStorage.setItem('supabase_key', key);
+    }
+    
+    supabase = createClient(url, key, {
+        auth: {
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: true
+        }
+    });
+};
+
+export const validateConnection = async (url: string, key: string): Promise<boolean> => {
+    if (!url || !key) return false;
+    try {
+        // Check Auth Health Endpoint
+        const res = await fetch(`${url}/auth/v1/health`);
+        return res.ok; 
+    } catch (e) {
+        console.warn("Connection validation failed:", e);
+        return false;
+    }
+};
 
 // --- CONTEXT MANAGEMENT (SINGLETON) ---
 
@@ -72,9 +93,7 @@ export const clearServiceOrgContext = () => {
 // --- HELPERS (STRICT GUARDS) ---
 
 const requireSupabase = (): SupabaseClient => {
-    if (!supabase) {
-        throw new Error('SUPABASE_NOT_INITIALIZED');
-    }
+    if (!supabase) throw new Error("Supabase client not initialized");
     return supabase;
 };
 
@@ -89,17 +108,13 @@ const requireOrgId = (orgId: string | null | undefined): string => {
 const parseCompositeKey = (key: string) => {
     if (!key) return null;
     const parts = key.split('_');
-    // Expected format: UUID_DATE or UUID_DATE_ROLE
-    // UUID is 36 chars. Date is 10 chars (YYYY-MM-DD).
     
     const uuid = parts[0];
     const date = parts[1];
     
-    // Strict UUID validation
     if (!uuid || uuid.length !== 36) return null;
-    if (!date || date.length !== 10) return null; // Simple length check for date
+    if (!date || date.length !== 10) return null;
     
-    // Role is optional (for toggle/remove keys)
     const role = parts.length > 2 ? parts.slice(2).join('_') : undefined;
     
     return { uuid, date, role };
@@ -107,7 +122,6 @@ const parseCompositeKey = (key: string) => {
 
 const filterRolesBySettings = async (roles: string[], ministryId: string, orgId: string): Promise<string[]> => {
     const sb = requireSupabase();
-    // Se não há roles para salvar, retorna vazio imediatamente
     if (!roles || roles.length === 0) return [];
 
     const { data: settings } = await sb.from('ministry_settings')
@@ -118,7 +132,6 @@ const filterRolesBySettings = async (roles: string[], ministryId: string, orgId:
 
     const dbRoles = settings?.roles;
 
-    // Fallback permissivo: Se config vazia/nula, aceita tudo (evita perda de dados)
     if (!dbRoles || !Array.isArray(dbRoles) || dbRoles.length === 0) {
         return roles;
     }
@@ -208,8 +221,6 @@ export const fetchMinistrySettings = async (ministryId: string, orgId?: string):
 // --- DATA FETCHING (Scoped by Org) ---
 
 export const fetchMinistrySchedule = async (ministryId: string, month: string, orgId?: string) => {
-    // Retorna vazio pois events não existe mais. 
-    // O useMinistryData agora usa useEvents (Memory Projection).
     return { events: [], schedule: {}, attendance: {} };
 };
 
@@ -228,8 +239,6 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
     const attendance: any = {};
 
     assignments?.forEach((a: any) => {
-        // Construct composite key for UI: RuleUUID_Date_Role
-        // We rely on event_key being the RuleUUID and event_date being the date
         const ruleId = a.event_key;
         const dateStr = a.event_date;
         
@@ -421,7 +430,6 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
         
     if (profError) throw profError;
 
-    // Fetch data in parallel
     const today = new Date().toISOString().slice(0, 10);
 
     const [assignmentsRes, swapsRes, readsRes, likesRes] = await Promise.all([
@@ -449,8 +457,6 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
     ]) as any;
 
     const assignments = assignmentsRes.data || [];
-    console.log("RANKING CONFIRMED ASSIGNMENTS", assignments);
-
     const swaps = swapsRes.data || [];
     const reads = readsRes.data || [];
     const likes = likesRes.data || [];
@@ -568,39 +574,17 @@ export const saveOrganizationMinistry = async (orgId: string, code: string, labe
     return error ? { success: false, message: error.message } : { success: true, message: "Salvo" };
 };
 
-export const configureSupabaseManual = (url: string, key: string) => {
-    try {
-        supabase = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true } });
-        localStorage.setItem('sb_manual_url', url);
-        localStorage.setItem('sb_manual_key', key);
-        window.location.reload();
-    } catch (e) { console.error(e); }
-};
-
-export const validateConnection = async (url: string, key: string) => {
-    try {
-        const client = createClient(url, key);
-        const { error } = await client.from('profiles').select('count', { count: 'exact', head: true });
-        return !error || error.code === 'PGRST116'; 
-    } catch { return false; }
-};
-
-export const disconnectManual = () => {
-    localStorage.removeItem('sb_manual_url');
-    localStorage.removeItem('sb_manual_key');
-    supabase = null;
-    window.location.reload();
-};
-
 export const loginWithEmail = async (email: string, pass: string) => {
-    const sb = requireSupabase();
+    if (!supabase) return { success: false, message: "Erro de configuração: Base de dados ausente." };
+    const sb = supabase;
     const { data, error } = await (sb.auth as any).signInWithPassword({ email, password: pass });
     if (error) return { success: false, message: error.message };
     return { success: true, data };
 };
 
 export const loginWithGoogle = async () => {
-    const sb = requireSupabase();
+    if (!supabase) return { success: false, message: "Erro de configuração: Base de dados ausente." };
+    const sb = supabase;
     const { data, error } = await (sb.auth as any).signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } });
     if (error) return { success: false, message: error.message };
     return { success: true, data };
@@ -612,7 +596,8 @@ export const logout = async () => {
 };
 
 export const registerWithEmail = async (email: string, pass: string, name: string, ministries: string[], orgId: string, roles: string[]) => {
-    const sb = requireSupabase();
+    if (!supabase) return { success: false, message: "Erro de configuração: Base de dados ausente." };
+    const sb = supabase;
     const validOrgId = requireOrgId(orgId);
 
     const { data, error } = await (sb.auth as any).signUp({ 
@@ -778,8 +763,6 @@ export const fetchGlobalSchedules = async (month: string, currentMinistryId: str
         const name = memberName.toLowerCase().trim();
         if (!map[name]) map[name] = [];
         
-        // Use proper composite eventKey if possible, otherwise construct it
-        // We only need an ISO-like string for comparison in global conflicts
         const eventIso = row.event_date ? `${row.event_date}T00:00` : row.event_key; 
         
         map[name].push({ 
@@ -835,7 +818,6 @@ export const removeScheduleAssignment = async (ministryId: string, orgId: string
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId);
 
-    // key format: RuleUUID_YYYY-MM-DD_Role
     const parsed = parseCompositeKey(key);
     if (!parsed || !parsed.role) {
          console.error("Invalid key for removal:", key);
@@ -859,7 +841,6 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId);
 
-    // eventKey vem como "RuleUUID_Date"
     const parsed = parseCompositeKey(eventKey);
     
     if (!parsed) {
@@ -870,15 +851,14 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
     const { uuid, date } = parsed;
 
     const { error } = await sb.from('schedule_assignments').upsert({ 
-        event_key: uuid,        // UUID
-        event_date: date,       // DATE
+        event_key: uuid,        
+        event_date: date,       
         role: role, 
         member_id: memberId, 
         ministry_id: ministryId, 
         organization_id: validOrgId, 
         confirmed: false 
     }, { 
-        // Updating conflict target to match logical uniqueness
         onConflict: 'event_key, event_date, role' 
     }); 
     
@@ -902,7 +882,7 @@ export const toggleAssignmentConfirmation = async (ministryId: string, orgId: st
     const { data: assignment } = await sb.from('schedule_assignments')
         .select('confirmed')
         .eq('organization_id', validOrgId)
-        .eq('ministry_id', ministryId) // Added
+        .eq('ministry_id', ministryId) 
         .eq('event_key', uuid)
         .eq('event_date', date)
         .eq('role', role)
@@ -912,7 +892,7 @@ export const toggleAssignmentConfirmation = async (ministryId: string, orgId: st
         await sb.from('schedule_assignments')
             .update({ confirmed: !assignment.confirmed })
             .eq('organization_id', validOrgId)
-            .eq('ministry_id', ministryId) // Added
+            .eq('ministry_id', ministryId)
             .eq('event_key', uuid)
             .eq('event_date', date)
             .eq('role', role); 
@@ -922,11 +902,9 @@ export const toggleAssignmentConfirmation = async (ministryId: string, orgId: st
 export const saveMemberAvailability = async (ministryId: string, orgId: string, member: string, dates: string[], notes?: any, targetMonth?: string) => {
     const sb = requireSupabase();
     
-    // Strict Validation
     if (!ministryId) throw new Error("Ministry ID is required for availability.");
     if (!orgId) throw new Error("Organization ID is required for availability.");
 
-    // 1. Resolve ID strictly
     const { data: profile } = await sb.from('profiles')
         .select('id')
         .eq('name', member)
@@ -937,7 +915,6 @@ export const saveMemberAvailability = async (ministryId: string, orgId: string, 
         throw new Error(`MEMBER_ID_NOT_FOUND: Não foi possível identificar o membro "${member}".`);
     }
 
-    // 2. Upsert
     const { error } = await sb.from('availability').upsert({ 
         ministry_id: ministryId, 
         organization_id: orgId, 
@@ -951,7 +928,7 @@ export const saveMemberAvailability = async (ministryId: string, orgId: string, 
 
     if (error) {
         console.error('[saveMemberAvailability] Upsert failed:', error);
-        throw error; // Explicit throw
+        throw error;
     }
 };
 
@@ -1122,11 +1099,7 @@ export const clearScheduleForMonth = async (ministryId: string, orgId: string, m
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId);
     
-    // Pattern matches ISO-like dates (YYYY-MM) in event_date if storing dates, 
-    // BUT our new contract stores event_date as DATE column.
-    // So we can filter by range directly.
     const startDate = `${month}-01`;
-    // Approximate end of month
     const [y, m] = month.split('-');
     const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate();
     const endDate = `${month}-${lastDay}`;

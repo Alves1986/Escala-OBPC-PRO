@@ -61,12 +61,12 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
         let mounted = true;
         const sb = getSupabase();
 
+        // Alteração: Se não houver cliente, não bloqueia com erro. 
+        // Permite que o App.tsx renderize a LoginScreen (estado 'unauthenticated').
         if (!sb) {
             if (mounted) {
-                console.warn("[SessionProvider] Supabase client missing. Showing Setup.");
-                // Definir erro específico para que o App.tsx exiba a SetupScreen
-                setError(new Error("Supabase client missing"));
-                setStatus('error');
+                console.warn("[SessionProvider] Supabase client missing. Defaulting to unauthenticated to show Login.");
+                setStatus('unauthenticated');
             }
             return;
         }
@@ -229,8 +229,6 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
 
     const contextValue: SessionContextValue = { status, user, error };
 
-    // Alteração: Renderiza children sempre para evitar duplo loading visual.
-    // O controle de estado de carregamento visual fica a cargo do App.tsx.
     return (
         <SessionContext.Provider value={contextValue}>
             {children}
