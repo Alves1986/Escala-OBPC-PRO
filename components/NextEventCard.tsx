@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
-import { CalendarClock, User, CheckCircle2, Clock, MapPin, AlertCircle, ShieldCheck, CalendarPlus, ChevronRight, Sparkles } from 'lucide-react';
+import { CalendarClock, CheckCircle2, Clock, MapPin, AlertCircle, ShieldCheck, CalendarPlus, Sparkles } from 'lucide-react';
 import { Role, AttendanceMap, User as UserType, TeamMemberProfile } from '../types';
 import { getLocalDateISOString, generateGoogleCalendarUrl } from '../utils/dateUtils';
+import { fetchNextEventTeam } from '../services/scheduleServiceV2';
 
 interface Props {
   event: { iso: string; dateDisplay: string; title: string } | undefined;
@@ -20,6 +20,27 @@ type TimeStatus = 'early' | 'open' | 'closed';
 export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, roles, members, onConfirm, ministryId, currentUser }) => {
   const [timeStatus, setTimeStatus] = useState<TimeStatus>('early');
   const [minutesToOpen, setMinutesToOpen] = useState(0);
+  
+  // Estado para armazenar a equipe real vinda do banco
+  const [dbTeam, setDbTeam] = useState<{role: string, memberId: string, memberName: string}[]>([]);
+  const [loadingTeam, setLoadingTeam] = useState(true);
+
+  // Busca dados reais do banco
+  useEffect(() => {
+    if (ministryId && currentUser?.organizationId) {
+        setLoadingTeam(true);
+        fetchNextEventTeam(ministryId, currentUser.organizationId)
+            .then(data => {
+                if (data && data.team) {
+                    setDbTeam(data.team);
+                }
+            })
+            .catch(err => console.error("Erro ao buscar equipe do próximo evento", err))
+            .finally(() => setLoadingTeam(false));
+    } else {
+        setLoadingTeam(false);
+    }
+  }, [ministryId, currentUser]);
 
   const checkTimeWindow = () => {
     if (!event) return;
@@ -45,7 +66,18 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
 
   if (!event) return null;
 
+  // Usa dados do banco se disponíveis, senão fallback (que provavelmente estará vazio se o mês virou)
   const getAssignedMembers = () => {
+    // Se temos dados do DB, usamos (Prioridade)
+    if (dbTeam.length > 0) {
+        return dbTeam.map(t => ({
+            role: t.role,
+            name: t.memberName,
+            key: `db_${t.role}_${t.memberId}` // Chave fictícia pois não temos confirmed/key real na query simplificada
+        }));
+    }
+
+    // Fallback original (prop schedule)
     const assigned: { role: string; name: string; key: string }[] = [];
     roles.forEach(role => {
       if (ministryId === 'louvor' && role === 'Vocal') {
@@ -170,10 +202,18 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
               
               <div className="mt-12 relative z-10">
                   {(() => {
+                      // Usa props para verificação de presença pois o fetch simplificado não traz 'confirmed'
+                      // Tenta achar match pelo nome
                       const myRole = team.find(t => currentUser && t.name === currentUser.name);
+                      
+                      // Check fallback na prop schedule original se dbTeam não tiver a info completa
+                      let isConfirmed = false;
+                      if (myRole && !myRole.key.startsWith('db_')) {
+                          isConfirmed = !!attendance[myRole.key];
+                      }
+
                       if (myRole) {
-                          const isConfirmed = attendance[myRole.key];
-                          return renderActionButton(myRole.key, !!isConfirmed, myRole.role);
+                          return renderActionButton(myRole.key, isConfirmed, myRole.role);
                       }
                       return (
                           <div className="p-5 rounded-[1.5rem] bg-white/5 border border-white/10 backdrop-blur-md text-center">
@@ -188,7 +228,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
           {/* Team Detail List */}
           <div className="lg:col-span-8 p-8 lg:p-12 bg-white dark:bg-slate-900">
               <div className="flex items-center justify-between mb-8">
-                  <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.3em]">Equipe Escalonada</h3>
+                  <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.3em]">Equipe Escalada</h3>
                   <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-full">{team.length} Integrantes</span>
               </div>
 
@@ -200,9 +240,11 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
               ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       {team.map((t, idx) => {
-                          const isConfirmed = attendance[t.key];
                           const isMe = currentUser && t.name === currentUser.name;
                           const memberProfile = members.find(m => m.name === t.name);
+                          
+                          // Confirmação visual só funciona se vier da prop original por enquanto
+                          const isConfirmed = !t.key.startsWith('db_') && attendance[t.key];
                           
                           return (
                               <div key={idx} className={`group flex items-center p-4 rounded-[2rem] border transition-all duration-500 ${

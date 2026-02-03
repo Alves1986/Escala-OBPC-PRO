@@ -253,3 +253,45 @@ export const generateOccurrencesV2 = (
 
   return occurrences.sort((a, b) => a.iso.localeCompare(b.iso));
 };
+
+export const fetchNextEventTeam = async (ministryId: string, orgId: string) => {
+  const sb = getSupabase();
+  if (!sb) return { date: null, team: [] };
+
+  const today = new Date().toISOString().split('T')[0];
+
+  // 1. Buscar o próximo evento
+  const { data: nextEvents } = await sb
+      .from('schedule_assignments')
+      .select('event_date')
+      .eq('organization_id', orgId)
+      .eq('ministry_id', ministryId)
+      .gte('event_date', today)
+      .order('event_date', { ascending: true })
+      .limit(1);
+
+  if (!nextEvents || nextEvents.length === 0) return { date: null, team: [] };
+
+  const nextDate = nextEvents[0].event_date;
+
+  // 2. Buscar TODOS assignments desse dia
+  const { data: assignments } = await sb
+      .from('schedule_assignments')
+      .select(`
+          role,
+          member_id,
+          profiles(name)
+      `)
+      .eq('organization_id', orgId)
+      .eq('ministry_id', ministryId)
+      .eq('event_date', nextDate);
+
+  // 3. Mapear para estrutura
+  const team = (assignments || []).map((a: any) => ({
+      role: a.role,
+      memberId: a.member_id,
+      memberName: a.profiles?.name || 'Membro'
+  }));
+
+  return { date: nextDate, team };
+};
