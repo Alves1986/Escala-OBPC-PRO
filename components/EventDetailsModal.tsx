@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, Clock, Calendar, Save, User, RefreshCcw, Lock, CheckSquare, Square, UserPlus, CalendarPlus } from 'lucide-react';
 import { Role, ScheduleMap, User as UserType, TeamMemberProfile } from '../types';
 import { generateGoogleCalendarUrl } from '../utils/dateUtils';
+import { getSupabase } from '../services/supabaseService';
 
 interface Props {
   isOpen: boolean;
@@ -25,6 +25,9 @@ export const EventDetailsModal: React.FC<Props> = ({
   const [time, setTime] = useState("");
   const [title, setTitle] = useState("");
   const [applyToAll, setApplyToAll] = useState(false);
+  
+  // Estado para armazenar assignments reais do banco
+  const [assignmentMap, setAssignmentMap] = useState<Record<string, any[]>>({});
 
   useEffect(() => {
     if (event) {
@@ -34,21 +37,59 @@ export const EventDetailsModal: React.FC<Props> = ({
     }
   }, [event]);
 
+  // Busca assignments frescos do banco ao abrir
+  useEffect(() => {
+    if (isOpen && event && ministryId && currentUser?.organizationId) {
+        const fetchAssignments = async () => {
+            const datePart = event.iso.split('T')[0];
+            const sb = getSupabase();
+            if(!sb) return;
+
+            const { data } = await sb
+                .from('schedule_assignments')
+                .select(`
+                    role,
+                    member_id,
+                    profiles ( id, name, avatar_url )
+                `)
+                .eq('organization_id', currentUser.organizationId)
+                .eq('ministry_id', ministryId)
+                .eq('event_date', datePart);
+            
+            const grouped: Record<string, any[]> = {};
+            if (data) {
+                data.forEach((item: any) => {
+                    const r = item.role;
+                    if (!grouped[r]) grouped[r] = [];
+                    grouped[r].push(item);
+                });
+            }
+            setAssignmentMap(grouped);
+        };
+        fetchAssignments();
+    } else {
+        setAssignmentMap({});
+    }
+  }, [isOpen, event, ministryId, currentUser]);
+
   const expandedRoles = useMemo(() => {
       return roles.flatMap(role => {
           if (ministryId === 'louvor' && role === 'Vocal') {
               return [1, 2, 3, 4, 5].map(i => ({
                   display: `Vocal ${i}`,
-                  keySuffix: `Vocal_${i}`
+                  keySuffix: `Vocal_${i}`,
+                  baseRole: 'Vocal',
+                  index: i - 1
               }));
           }
-          return [{ display: role, keySuffix: role }];
+          return [{ display: role, keySuffix: role, baseRole: role, index: 0 }];
       });
   }, [roles, ministryId]);
 
   if (!isOpen || !event) return null;
 
-  // Determine if user is scheduled for this event
+  // Determine if user is scheduled for this event (Legacy check + New DB Check)
+  // Fallback to schedule map if DB fetch not ready or for legacy compat, but UI prefers DB
   const userAssignment = currentUser ? expandedRoles.find(r => schedule[`${event.iso}_${r.keySuffix}`] === currentUser.name) : null;
 
   const googleCalUrl = generateGoogleCalendarUrl(
@@ -58,6 +99,15 @@ export const EventDetailsModal: React.FC<Props> = ({
         ? `Você está escalado como: ${userAssignment.display}.\nMinistério: ${ministryId?.toUpperCase()}`
         : `Evento do ministério ${ministryId?.toUpperCase()}`
   );
+
+  const getMemberForRole = (roleObj: any) => {
+      const list = assignmentMap[roleObj.baseRole];
+      if (!list) return null;
+      // Tenta pegar pelo índice (caso do Vocal) ou o primeiro (outros)
+      // Se houver mais de um para o mesmo cargo não-vocal, pega o primeiro
+      // A ordem depende de como veio do banco, ideal seria ter slot index no banco, mas aqui assumimos ordem de inserção/retorno
+      return list[roleObj.index] || (roleObj.baseRole !== 'Vocal' ? list[0] : null);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -158,19 +208,30 @@ export const EventDetailsModal: React.FC<Props> = ({
                     </h3>
                     <div className="space-y-3">
                         {expandedRoles.map(roleObj => {
-                            const memberName = schedule[`${event.iso}_${roleObj.keySuffix}`];
-                            const memberProfile = allMembers.find(m => m.name === memberName);
+                            // Prioridade: Dados do Banco (assignmentMap) > Props Schedule (Legacy)
+                            const dbAssignment = getMemberForRole(roleObj);
+                            
+                            // Dados finais
+                            const memberName = dbAssignment?.profiles?.name;
+                            const memberAvatar = dbAssignment?.profiles?.avatar_url;
+                            
+                            // Fallback para Schedule prop se não houver dados no banco (caso de delay ou cache antigo)
+                            const legacyName = schedule[`${event.iso}_${roleObj.keySuffix}`];
+                            const legacyProfile = allMembers.find(m => m.name === legacyName);
+
+                            const finalName = memberName || legacyName;
+                            const finalAvatar = memberAvatar || legacyProfile?.avatar_url;
 
                             return (
                                 <div key={roleObj.keySuffix} className="flex items-center justify-between group p-2 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors border border-transparent hover:border-zinc-100 dark:hover:border-zinc-700/50">
                                     <div className="flex items-center gap-3">
                                         {/* Avatar / Placeholder */}
-                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center overflow-hidden border shrink-0 ${memberName ? 'border-zinc-200 dark:border-zinc-700' : 'border-dashed border-zinc-300 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-800'}`}>
-                                            {memberProfile?.avatar_url ? (
-                                                <img src={memberProfile.avatar_url} alt={memberName} className="w-full h-full object-cover" />
-                                            ) : memberName ? (
+                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center overflow-hidden border shrink-0 ${finalName ? 'border-zinc-200 dark:border-zinc-700' : 'border-dashed border-zinc-300 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-800'}`}>
+                                            {finalAvatar ? (
+                                                <img src={finalAvatar} alt={finalName} className="w-full h-full object-cover" />
+                                            ) : finalName ? (
                                                 <div className="w-full h-full bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold">
-                                                    {memberName.charAt(0).toUpperCase()}
+                                                    {finalName.charAt(0).toUpperCase()}
                                                 </div>
                                             ) : (
                                                 <UserPlus size={16} className="text-zinc-300 dark:text-zinc-600" />
@@ -179,8 +240,8 @@ export const EventDetailsModal: React.FC<Props> = ({
 
                                         <div className="flex flex-col">
                                             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide">{roleObj.display}</span>
-                                            <span className={`text-sm font-medium ${memberName ? 'text-zinc-800 dark:text-zinc-200' : 'text-zinc-400 italic'}`}>
-                                                {memberName || 'Vago'}
+                                            <span className={`text-sm font-medium ${finalName ? 'text-zinc-800 dark:text-zinc-200' : 'text-zinc-400 italic'}`}>
+                                                {finalName || 'Vago'}
                                             </span>
                                         </div>
                                     </div>
