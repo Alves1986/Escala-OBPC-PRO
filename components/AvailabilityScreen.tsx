@@ -209,17 +209,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
           // ESTADO TERMINAL DE SUCESSO
           setSaveState('saved');
           
-      } catch (e: any) {
-          console.error(e);
+      } catch (error: unknown) {
+          console.error(error);
           setSaveState('dirty'); // Permite tentar novamente
-          let msg = "Erro desconhecido";
-          
-          if (e instanceof Error) {
-              msg = e.message;
-          } else if (typeof e === 'string') {
-              msg = e;
-          }
-          
+          const msg = error instanceof Error ? error.message : "Erro desconhecido";
           addToast(`Erro: ${msg}`, "error");
       }
   };

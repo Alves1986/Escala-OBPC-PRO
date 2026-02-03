@@ -19,6 +19,7 @@ import {
   AlertTriangle, Database, RefreshCw
 } from 'lucide-react';
 
+import { SetupScreen } from './components/SetupScreen';
 import { LoadingScreen } from './components/LoadingScreen';
 import { LoginScreen } from './components/LoginScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -50,7 +51,6 @@ import { EventsModal, AvailabilityModal, RolesModal, AuditModal } from './compon
 import { EventDetailsModal } from './components/EventDetailsModal';
 import { StatsModal } from './components/StatsModal';
 import { ConfirmationModal } from './components/ConfirmationModal';
-import { SetupScreen } from './components/SetupScreen';
 
 const LoadingFallback = () => (
   <div className="flex items-center justify-center h-full min-h-[50vh]">
@@ -59,10 +59,10 @@ const LoadingFallback = () => (
 );
 
 const InnerApp = () => {
+  const [isDemoMode, setIsDemoMode] = useState(false);
   const { user, status, error: sessionError } = useSession();
   const { 
       setCurrentUser, 
-      currentUser: storeUser, // Get mutable user from store
       setMinistryId, 
       setAvailableMinistries, 
       availableMinistries, 
@@ -129,13 +129,10 @@ const InnerApp = () => {
       }
   }, [currentTab]);
 
-  // Use Store User if available (for instant updates), fallback to Session User
-  const effectiveUser = storeUser || user;
-
   // --- 4. Main App Logic Hooks (Always called) ---
-  const ministryId = storeMinistryId || effectiveUser?.ministryId || '';
-  const isAdmin = effectiveUser?.role === 'admin';
-  const orgId = effectiveUser?.organizationId; 
+  const ministryId = storeMinistryId || user?.ministryId || '';
+  const isAdmin = user?.role === 'admin';
+  const orgId = user?.organizationId; 
 
   // Resolve Ministry Config (Memoized to prevent render loop)
   const ministryConfig = useMemo(() => {
@@ -156,9 +153,9 @@ const InnerApp = () => {
     ministryTitle, availabilityWindow, eventRules,
     refreshData, isLoading: loadingData,
     setAvailability, setNotifications 
-  } = useMinistryData(ministryId, currentMonth, effectiveUser);
+  } = useMinistryData(ministryId, currentMonth, user);
 
-  const onlineUsers = useOnlinePresence(effectiveUser?.id, effectiveUser?.name);
+  const onlineUsers = useOnlinePresence(user?.id, user?.name);
 
   // Modals & UI State
   const [showInstallBanner, setShowInstallBanner] = useState(false);
@@ -240,15 +237,20 @@ const InnerApp = () => {
 
   // Handle Unauthenticated
   if (status === 'unauthenticated') {
-      // Check if actually uninitialized (missing env vars)
-      if (!Supabase.getSupabase()) {
-          return <SetupScreen onEnterDemo={() => {}} onConfigured={() => window.location.reload()} />;
-      }
       return <LoginScreen />;
   }
 
   // Handle Generic Session Errors
   if (status === 'error') {
+      if (sessionError?.message === "Supabase client missing" && !isDemoMode) {
+          return (
+            <SetupScreen 
+                onEnterDemo={() => setIsDemoMode(true)} 
+                onConfigured={() => window.location.reload()}
+            />
+          );
+      }
+
       return (
           <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950 p-6 text-center animate-fade-in">
               <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-6 shadow-xl border border-red-200 dark:border-red-900/50">
@@ -277,8 +279,7 @@ const InnerApp = () => {
   }
 
   // Ensure user is populated before rendering app
-  // Using effectiveUser here to ensure we have data, even if just from session context initially
-  if (!effectiveUser) {
+  if (!user || !isAppReady) {
       return <LoadingScreen />;
   }
 
@@ -301,11 +302,10 @@ const InnerApp = () => {
         isStandalone={window.matchMedia('(display-mode: standalone)').matches}
         onSwitchMinistry={async (id) => {
             setMinistryId(id);
-            if (effectiveUser.id) {
-                Supabase.updateProfileMinistry(effectiveUser.id, id);
-                const newFunctions = await Supabase.fetchUserFunctions(effectiveUser.id, id, orgId!);
-                // Also update local store immediately on switch
-                setCurrentUser({ ...effectiveUser, ministryId: id, functions: newFunctions });
+            if (user.id) {
+                Supabase.updateProfileMinistry(user.id, id);
+                const newFunctions = await Supabase.fetchUserFunctions(user.id, id, orgId!);
+                setCurrentUser({ ...user, ministryId: id, functions: newFunctions });
             }
             
             const label = availableMinistries.find(m => m.id === id)?.label || 'Ministério';
@@ -325,7 +325,7 @@ const InnerApp = () => {
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div className="animate-slide-up">
                             <h1 className="text-2xl md:text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight leading-tight">
-                                Olá, <span className="text-teal-600 dark:text-teal-400">{effectiveUser.name.split(' ')[0]}</span>
+                                Olá, <span className="text-teal-600 dark:text-teal-400">{user.name.split(' ')[0]}</span>
                             </h1>
                             <p className="text-zinc-500 dark:text-zinc-400 text-sm md:text-base mt-1 font-medium">Bem-vindo ao painel do seu ministério.</p>
                         </div>
@@ -343,7 +343,7 @@ const InnerApp = () => {
                                 return expirationDate > now;
                             }).sort((a, b) => a.iso.localeCompare(b.iso))[0];
 
-                            return <NextEventCard event={upcoming} schedule={schedule} attendance={attendance} roles={roles} members={publicMembers} onConfirm={(key) => { const assignment = Object.entries(schedule).find(([k, v]) => k === key); if (assignment) setConfirmModalData({ key, memberName: assignment[1], eventName: upcoming.title, date: upcoming.dateDisplay, role: key.split('_').pop() || '' }); }} ministryId={ministryId} currentUser={effectiveUser} />;
+                            return <NextEventCard event={upcoming} schedule={schedule} attendance={attendance} roles={roles} members={publicMembers} onConfirm={(key) => { const assignment = Object.entries(schedule).find(([k, v]) => k === key); if (assignment) setConfirmModalData({ key, memberName: assignment[1], eventName: upcoming.title, date: upcoming.dateDisplay, role: key.split('_').pop() || '' }); }} ministryId={ministryId} currentUser={user} />;
                         })()}
                     </div>
 
@@ -445,40 +445,24 @@ const InnerApp = () => {
                         scheduleIssues={{}} 
                         globalConflicts={globalConflicts} 
                         onCellChange={async (cellKey, role, memberId, memberName) => { 
-                            // 1. Lookup reverso para garantir integridade
+                            // cellKey IS 'ruleUUID_date' (e.g., '123e4567-e89b..._2023-10-25')
+                            // Check reverse lookup
                             const eventObj = events.find(e => e.id === cellKey);
-                            
                             if (!eventObj) {
-                                console.error("[onCellChange] Critical: Event not found for key", cellKey);
-                                return;
-                            }
-
-                            // 2. Extração do UUID Real (Removendo sufixo de data se existir)
-                            // Formato esperado: UUID_YYYY-MM-DD
-                            let realEventId = cellKey;
-                            if (cellKey.length > 36 && cellKey[36] === '_') {
-                                realEventId = cellKey.substring(0, 36);
-                            }
-
-                            // 3. Validação de formato UUID
-                            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-                            if (!uuidRegex.test(realEventId)) {
-                                console.error("[onCellChange] Invalid UUID format:", realEventId);
-                                addToast("Erro interno: ID de evento inválido.", "error");
+                                console.error("[onCellChange] Event not found:", cellKey);
                                 return;
                             }
 
                             try {
                                 if (memberId) {
-                                    // FIX: Construct proper composite key (eventId_role) to ensure selection persists
-                                    const fullKey = `${cellKey}_${role}`;
-                                    await Supabase.saveScheduleAssignment(ministryId, orgId!, fullKey, memberName || "");
+                                    // Save: Pass full key (RuleUUID_Date)
+                                    await Supabase.saveScheduleAssignment(ministryId, orgId!, cellKey, role, memberId, memberName || "");
                                 } else {
-                                    // DELETE: Usa cellKey na chave lógica para garantir exclusão do evento específico (data)
+                                    // Remove: construct composite key for removal logic
                                     const logicalKey = `${cellKey}_${role}`;
                                     await Supabase.removeScheduleAssignment(ministryId, orgId!, logicalKey);
                                 }
-                                refreshData();
+                                await refreshData();
                             } catch (error: any) {
                                 const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
                                 console.error("Erro ao persistir escala:", errorMsg);
@@ -496,7 +480,7 @@ const InnerApp = () => {
                 </div>
             )}
 
-            {currentTab === 'super-admin' && effectiveUser?.isSuperAdmin && (
+            {currentTab === 'super-admin' && user?.isSuperAdmin && (
                 <SuperAdminDashboard />
             )}
 
@@ -508,7 +492,7 @@ const InnerApp = () => {
                     allMembersList={publicMembers.map(m => m.name)} 
                     currentMonth={currentMonth} 
                     onMonthChange={setCurrentMonth} 
-                    currentUser={effectiveUser} 
+                    currentUser={user} 
                     onSaveAvailability={async (mid, m, d, n, t) => { 
                         // WRITE
                         await Supabase.saveMemberAvailability(mid, orgId!, m, d, n, t); 
@@ -520,68 +504,32 @@ const InnerApp = () => {
                 />
             )}
             
-            {currentTab === 'swaps' && safeEnabledTabs.includes('swaps') && <SwapRequestsScreen schedule={schedule} currentUser={effectiveUser} requests={swapRequests} visibleEvents={events} onCreateRequest={async (role, iso, title) => { await Supabase.createSwapRequestSQL(ministryId, orgId!, { id: '', ministryId, requesterName: effectiveUser.name, requesterId: effectiveUser.id, role: role, eventIso: iso, eventTitle: title, status: 'pending', createdAt: new Date().toISOString() }); refreshData(); }} onAcceptRequest={async (reqId) => { await Supabase.performSwapSQL(ministryId, orgId!, reqId, effectiveUser.name, effectiveUser.id!); refreshData(); }} onCancelRequest={async (reqId) => { await Supabase.cancelSwapRequestSQL(reqId, orgId!); addToast("Pedido removido com sucesso.", "info"); refreshData(); }} />}
-            {currentTab === 'ranking' && safeEnabledTabs.includes('ranking') && <RankingScreen ministryId={ministryId} currentUser={effectiveUser} />}
+            {currentTab === 'swaps' && safeEnabledTabs.includes('swaps') && <SwapRequestsScreen schedule={schedule} currentUser={user} requests={swapRequests} visibleEvents={events} onCreateRequest={async (role, iso, title) => { await Supabase.createSwapRequestSQL(ministryId, orgId!, { id: '', ministryId, requesterName: user.name, requesterId: user.id, role: role, eventIso: iso, eventTitle: title, status: 'pending', createdAt: new Date().toISOString() }); refreshData(); }} onAcceptRequest={async (reqId) => { await Supabase.performSwapSQL(ministryId, orgId!, reqId, user.name, user.id!); refreshData(); }} onCancelRequest={async (reqId) => { await Supabase.cancelSwapRequestSQL(reqId, orgId!); addToast("Pedido removido com sucesso.", "info"); refreshData(); }} />}
+            {currentTab === 'ranking' && safeEnabledTabs.includes('ranking') && <RankingScreen ministryId={ministryId} currentUser={user} />}
             
-            {(currentTab === 'repertoire' && safeEnabledTabs.includes('repertoire')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={effectiveUser} mode="view" ministryId={ministryId} />}
-            {(currentTab === 'repertoire-manager' && isAdmin && safeEnabledTabs.includes('repertoire-manager')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={effectiveUser} mode="manage" ministryId={ministryId} />}
+            {(currentTab === 'repertoire' && safeEnabledTabs.includes('repertoire')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={user} mode="view" ministryId={ministryId} />}
+            {(currentTab === 'repertoire-manager' && isAdmin && safeEnabledTabs.includes('repertoire-manager')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={user} mode="manage" ministryId={ministryId} />}
             
-            {currentTab === 'announcements' && safeEnabledTabs.includes('announcements') && <AnnouncementsScreen announcements={announcements} currentUser={effectiveUser} onMarkRead={(id) => Supabase.interactAnnouncementSQL(id, effectiveUser.id!, effectiveUser.name, 'read', orgId!).then(refreshData)} onToggleLike={(id) => Supabase.interactAnnouncementSQL(id, effectiveUser.id!, effectiveUser.name, 'like', orgId!).then(refreshData)} />}
-            
-            {currentTab === 'profile' && (
-                <ProfileScreen 
-                    user={effectiveUser} 
-                    onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { 
-                        // 1. Update Database
-                        await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId, orgId!); 
-                        
-                        // 2. Update Local Store Immediately (Optimistic Update for "Tabs Issue")
-                        if (storeUser) {
-                            setCurrentUser({
-                                ...storeUser,
-                                name,
-                                whatsapp,
-                                avatar_url: avatar || storeUser.avatar_url,
-                                functions: funcs || storeUser.functions,
-                                birthDate: bdate
-                            });
-                        } else if (user) {
-                             // Fallback if store was somehow empty but session wasn't
-                             setCurrentUser({
-                                ...user,
-                                name,
-                                whatsapp,
-                                avatar_url: avatar || user.avatar_url,
-                                functions: funcs || user.functions,
-                                birthDate: bdate
-                            });
-                        }
-
-                        // 3. Refresh External Data
-                        refreshData(); 
-                    }} 
-                    availableRoles={roles} 
-                />
-            )}
-
+            {currentTab === 'announcements' && safeEnabledTabs.includes('announcements') && <AnnouncementsScreen announcements={announcements} currentUser={user} onMarkRead={(id) => Supabase.interactAnnouncementSQL(id, user.id!, user.name, 'read', orgId!).then(refreshData)} onToggleLike={(id) => Supabase.interactAnnouncementSQL(id, user.id!, user.name, 'like', orgId!).then(refreshData)} />}
+            {currentTab === 'profile' && <ProfileScreen user={user} onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId, orgId!); refreshData(); }} availableRoles={roles} />}
             {currentTab === 'settings' && safeEnabledTabs.includes('settings') && <SettingsScreen initialTitle={ministryTitle} ministryId={ministryId} themeMode={themeMode} onSetThemeMode={(m) => useAppStore.getState().setThemeMode(m)} onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, orgId!, newTitle); refreshData(); }} onSaveAvailabilityWindow={async (start, end) => { await Supabase.saveMinistrySettings(ministryId, orgId!, undefined, undefined, start, end); refreshData(); }} availabilityWindow={availabilityWindow} isAdmin={isAdmin} orgId={orgId!} />}
-            {currentTab === 'members' && isAdmin && safeEnabledTabs.includes('members') && <MembersScreen members={publicMembers} onlineUsers={onlineUsers} currentUser={effectiveUser} availableRoles={roles} onToggleAdmin={async (email, currentStatus, name) => { await Supabase.toggleAdminSQL(email, !currentStatus, ministryId, orgId!); refreshData(); }} onRemoveMember={async (id, name) => { await Supabase.deleteMember(ministryId, orgId!, id, name); refreshData(); }} onUpdateMember={async (id, data) => { await Supabase.updateMemberData(id, orgId!, data); refreshData(); }} />}
+            {currentTab === 'members' && isAdmin && safeEnabledTabs.includes('members') && <MembersScreen members={publicMembers} onlineUsers={onlineUsers} currentUser={user} availableRoles={roles} onToggleAdmin={async (email, currentStatus, name) => { await Supabase.toggleAdminSQL(email, !currentStatus, ministryId, orgId!); refreshData(); }} onRemoveMember={async (id, name) => { await Supabase.deleteMember(ministryId, orgId!, id, name); refreshData(); }} onUpdateMember={async (id, data) => { await Supabase.updateMemberData(id, orgId!, data); refreshData(); }} />}
             {currentTab === 'event-rules' && isAdmin && safeEnabledTabs.includes('event-rules') && <EventsScreen />}
             {currentTab === 'report' && isAdmin && safeEnabledTabs.includes('report') && <AvailabilityReportScreen availability={availability} registeredMembers={publicMembers} membersMap={membersMap} currentMonth={currentMonth} onMonthChange={setCurrentMonth} availableRoles={roles} onRefresh={async () => { await refreshData(); }} />}
             {currentTab === 'monthly-report' && isAdmin && safeEnabledTabs.includes('monthly-report') && <MonthlyReportScreen currentMonth={currentMonth} onMonthChange={setCurrentMonth} schedule={schedule} attendance={attendance} swapRequests={swapRequests} members={publicMembers} events={events} />}
             {currentTab === 'social' && safeEnabledTabs.includes('social') && <SocialMediaScreen />}
-            {currentTab === 'send-announcements' && isAdmin && safeEnabledTabs.includes('send-announcements') && <AlertsManager onSend={async (t, m, type, exp) => { await Supabase.sendNotificationSQL(ministryId, orgId!, { title: t, message: m, type, actionLink: 'announcements' }); await Supabase.createAnnouncementSQL(ministryId, orgId!, { title: t, message: m, type, expirationDate: exp }, effectiveUser.name); refreshData(); }} />}
+            {currentTab === 'send-announcements' && isAdmin && safeEnabledTabs.includes('send-announcements') && <AlertsManager onSend={async (t, m, type, exp) => { await Supabase.sendNotificationSQL(ministryId, orgId!, { title: t, message: m, type, actionLink: 'announcements' }); await Supabase.createAnnouncementSQL(ministryId, orgId!, { title: t, message: m, type, expirationDate: exp }, user.name); refreshData(); }} />}
         </Suspense>
 
         <InstallBanner isVisible={showInstallBanner} onInstall={() => (window as any).deferredPrompt.prompt()} onDismiss={() => setShowInstallBanner(false)} appName={ministryTitle} />
         <InstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />
-        <JoinMinistryModal isOpen={showJoinModal} onClose={() => setShowJoinModal(false)} onJoin={async (id, r) => { await Supabase.joinMinistry(id, orgId!, r); window.location.reload(); }} alreadyJoined={effectiveUser.allowedMinistries || []} />
+        <JoinMinistryModal isOpen={showJoinModal} onClose={() => setShowJoinModal(false)} onJoin={async (id, r) => { await Supabase.joinMinistry(id, orgId!, r); window.location.reload(); }} alreadyJoined={user.allowedMinistries || []} />
         <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ id: e.iso, title: e.title, iso: e.iso, date: e.iso.split('T')[0], time: e.iso.split('T')[1] }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, orgId!, e); refreshData(); }} onRemove={async (id) => { await Supabase.deleteMinistryEvent(ministryId, orgId!, id); refreshData(); }} />
         <AvailabilityModal isOpen={isAvailModalOpen} onClose={() => setAvailModalOpen(false)} members={publicMembers.map(m => m.name)} availability={availability} onUpdate={async (m, d) => { await Supabase.saveMemberAvailability(ministryId, orgId!, m, d, {}, currentMonth); refreshData(); }} currentMonth={currentMonth} />
         <RolesModal isOpen={isRolesModalOpen} onClose={() => setRolesModalOpen(false)} roles={roles} onUpdate={async (r) => { await Supabase.saveMinistrySettings(ministryId, orgId!, undefined, r); refreshData(); }} />
         <AuditModal isOpen={isAuditModalOpen} onClose={() => setAuditModalOpen(false)} logs={auditLogs} />
         
-        {eventDetailsModal.isOpen && <EventDetailsModal isOpen={eventDetailsModal.isOpen} onClose={() => setEventDetailsModal({ isOpen: false, event: null })} event={eventDetailsModal.event} schedule={schedule} roles={roles} allMembers={publicMembers} onSave={async (oldIso, newTitle, newTime, apply) => { const newIso = oldIso.split('T')[0] + 'T' + newTime; await Supabase.updateMinistryEvent(ministryId, orgId!, oldIso, newTitle, newIso, apply); refreshData(); setEventDetailsModal({ isOpen: false, event: null }); }} onSwapRequest={async (r, i, t) => { await Supabase.createSwapRequestSQL(ministryId, orgId!, { id: '', ministryId, requesterName: effectiveUser.name, requesterId: effectiveUser.id, role: r, eventIso: i, eventTitle: t, status: 'pending', createdAt: new Date().toISOString() }); refreshData(); setEventDetailsModal({ isOpen: false, event: null }); }} currentUser={effectiveUser} ministryId={ministryId} canEdit={isAdmin} />}
+        {eventDetailsModal.isOpen && <EventDetailsModal isOpen={eventDetailsModal.isOpen} onClose={() => setEventDetailsModal({ isOpen: false, event: null })} event={eventDetailsModal.event} schedule={schedule} roles={roles} allMembers={publicMembers} onSave={async (oldIso, newTitle, newTime, apply) => { const newIso = oldIso.split('T')[0] + 'T' + newTime; await Supabase.updateMinistryEvent(ministryId, orgId!, oldIso, newTitle, newIso, apply); refreshData(); setEventDetailsModal({ isOpen: false, event: null }); }} onSwapRequest={async (r, i, t) => { await Supabase.createSwapRequestSQL(ministryId, orgId!, { id: '', ministryId, requesterName: user.name, requesterId: user.id, role: r, eventIso: i, eventTitle: t, status: 'pending', createdAt: new Date().toISOString() }); refreshData(); setEventDetailsModal({ isOpen: false, event: null }); }} currentUser={user} ministryId={ministryId} canEdit={isAdmin} />}
         <StatsModal isOpen={statsModalOpen} onClose={() => setStatsModalOpen(false)} stats={Object.values(schedule).reduce<Record<string, number>>((acc, val) => { const v = val as string; if(v) acc[v] = (acc[v] || 0) + 1; return acc; }, {})} monthName={getMonthName(currentMonth)} />
         <ConfirmationModal isOpen={!!confirmModalData} onClose={() => setConfirmModalData(null)} data={confirmModalData} onConfirm={async () => { if (confirmModalData) { await Supabase.toggleAssignmentConfirmation(ministryId, orgId!, confirmModalData.key); refreshData(); setConfirmModalData(null); addToast("Presença confirmada!", "success"); }}} />
     </DashboardLayout>

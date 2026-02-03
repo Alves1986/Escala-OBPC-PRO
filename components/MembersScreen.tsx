@@ -1,8 +1,8 @@
+
 import React, { useState, useMemo } from 'react';
-import { Users, Mail, Phone, Gift, ShieldCheck, Trash2, Search, Filter, Shield, Zap, Edit2, Link } from 'lucide-react';
+import { Users, Mail, Phone, Gift, ShieldCheck, Trash2, Search, Filter, Shield, Zap, Edit2 } from 'lucide-react';
 import { TeamMemberProfile, User } from '../types';
 import { EditMemberModal } from './ManagementModals';
-import { useToast } from './Toast';
 
 interface Props {
   members: TeamMemberProfile[];
@@ -27,13 +27,6 @@ export const MembersScreen: React.FC<Props> = ({
   const [selectedRole, setSelectedRole] = useState("Todos");
   const [showOnlineOnly, setShowOnlineOnly] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMemberProfile | null>(null);
-  const { addToast } = useToast();
-
-  const handleInvite = () => {
-      const link = `${window.location.origin}?org=${currentUser.organizationId}`;
-      navigator.clipboard.writeText(link);
-      addToast("Link de convite copiado!", "success");
-  };
 
   const filteredMembers = useMemo(() => {
       return members
@@ -61,12 +54,6 @@ export const MembersScreen: React.FC<Props> = ({
                    <p className="text-zinc-500 text-sm mt-1">Gerencie os integrantes, funções e permissões de acesso.</p>
                </div>
                <div className="flex items-center gap-2">
-                   <button 
-                       onClick={handleInvite}
-                       className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all border bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800"
-                   >
-                       <Link size={14} /> Convidar Membro
-                   </button>
                    <button 
                        onClick={() => setShowOnlineOnly(!showOnlineOnly)}
                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${showOnlineOnly ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800' : 'bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700'}`}

@@ -1,4 +1,3 @@
-
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { fetchEventRules } from '../infra/supabase/fetchEventRules';
@@ -13,17 +12,25 @@ interface UseEventsProps {
 }
 
 export function useEvents({ ministryId, organizationId, startDate, endDate }: UseEventsProps) {
-  // 1. Busca Regras (Cacheado pelo React Query)
+  // Query Key Stability
+  const queryKey = useMemo(() => ['event_rules', ministryId, organizationId], [ministryId, organizationId]);
+
+  // 1. Busca Regras (Cacheado pelo React Query mas sempre fresco)
   const { data: rules, isLoading, error } = useQuery({
-    queryKey: ['event_rules', ministryId, organizationId],
+    queryKey,
     queryFn: () => fetchEventRules(ministryId, organizationId),
-    enabled: !!ministryId && !!organizationId
+    enabled: !!ministryId && !!organizationId,
+    staleTime: 0, // GARANTIA: Dados sempre frescos ao invalidar
+    refetchOnWindowFocus: true
   });
 
   // 2. Projeção em Memória (Memoizado)
-  // Só recalcula se as regras ou o intervalo de datas mudarem
+  // Recalcula SEMPRE que rules muda (nova referência do RQ) ou datas mudam
   const events: CalendarEvent[] = useMemo(() => {
-    if (!rules || rules.length === 0) return [];
+    // Guard de segurança
+    if (!rules || !Array.isArray(rules)) return [];
+    
+    // Geração determinística pura
     return generateEvents(rules, startDate, endDate);
   }, [rules, startDate, endDate]);
 

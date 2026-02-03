@@ -80,9 +80,11 @@ const SelectorDropdown = ({
 
     const handleSelect = (opt: string) => {
         if (!opt) {
+            // Remoção explícita
             onChange(null, "");
         } else {
             const profile = memberProfiles?.find((p: any) => p.name === opt);
+            // IMPORTANTE: Passar ID correto se encontrado, senão null
             onChange(profile?.id || null, opt);
         }
         onClose();
@@ -305,7 +307,8 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
             </td>
             {columns.map((col: any) => {
                 const uniqueKey = `${event.id}_${col.keySuffix}`;
-                // Fallback keys for legacy data
+                
+                // Fallback para Rule ID: Se a assignment foi salva apenas com o Rule ID (global)
                 const ruleId = event.id.split('_')[0];
                 const ruleKey = `${ruleId}_${col.realRole}`;
 
@@ -341,7 +344,14 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                                 <div className="flex-1">
                                     <MemberSelector 
                                         value={currentValue} 
-                                        onChange={(memberId, memberName) => onCellChange(event.id, col.keySuffix, memberId, memberName)} 
+                                        onChange={(memberId, memberName) => {
+                                            // garante chave composta ruleUUID_date
+                                            const safeEventId = event.id.includes("_")
+                                                ? event.id
+                                                : `${event.id}_${event.iso.slice(0,10)}`;
+
+                                            onCellChange(safeEventId, col.keySuffix, memberId, memberName);
+                                        }}
                                         options={roleMembers} 
                                         memberProfiles={memberProfiles} 
                                         memberStats={memberStats} 
@@ -512,12 +522,15 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                       <div className="p-4 space-y-4">
                           {columns.map(col => {
                               const uniqueKey = `${event.id}_${col.keySuffix}`;
+                              
                               const ruleId = event.id.split('_')[0];
                               const ruleKey = `${ruleId}_${col.realRole}`;
 
                               const currentValue = schedule[uniqueKey] || schedule[ruleKey] || schedule[`${event.iso}_${col.keySuffix}`] || "";
+                              
                               const roleMembers = members[col.realRole] || [];
                               const isConfirmed = attendance[uniqueKey] || attendance[ruleKey] || attendance[`${event.iso}_${col.keySuffix}`];
+                              
                               const hasLocalConflict = currentValue && !checkIsAvailable(availabilityLookup, currentValue, event.iso);
                               
                               let globalConflictMsg = "";
@@ -537,8 +550,16 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                                           <div className="flex items-center gap-2">
                                               <div className="flex-1">
                                                   <MemberSelector 
-                                                    value={currentValue} 
-                                                    onChange={(memberId, memberName) => onCellChange(event.id, col.keySuffix, memberId, memberName)} 
+                                                        value={currentValue} 
+                                                        onChange={(memberId, memberName) => {
+                                                            // garante chave composta ruleUUID_date
+                                                            const safeEventId = event.id.includes("_")
+                                                                ? event.id
+                                                                : `${event.id}_${event.iso.slice(0,10)}`;
+
+                                                        onCellChange(safeEventId, col.keySuffix, memberId, memberName);
+                                                        }}
+
                                                     options={roleMembers} 
                                                     memberProfiles={memberProfiles} 
                                                     memberStats={memberStats} 

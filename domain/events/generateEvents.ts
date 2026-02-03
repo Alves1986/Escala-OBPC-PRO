@@ -1,4 +1,3 @@
-
 import { EventRule, CalendarEvent } from './types';
 
 export function generateEvents(
@@ -8,61 +7,59 @@ export function generateEvents(
 ): CalendarEvent[] {
   const events: CalendarEvent[] = [];
   
-  // Normalização de datas para evitar problemas de fuso horário
-  // Usamos meio-dia para garantir segurança em operações de dia
-  const [ startY, startM, startD ] = startStr.split('-').map(Number);
-  const [ endY, endM, endD ] = endStr.split('-').map(Number);
-  
-  const current = new Date(startY, startM - 1, startD, 12, 0, 0);
-  const end = new Date(endY, endM - 1, endD, 12, 0, 0);
+  if (!rules || !Array.isArray(rules)) return [];
 
-  // Iteração diária
-  while (current <= end) {
+  // Parse dates to Local Time (12:00 PM to avoid DST/Timezone edge cases)
+  const [sy, sm, sd] = startStr.split('-').map(Number);
+  const [ey, em, ed] = endStr.split('-').map(Number);
+  
+  const current = new Date(sy, sm - 1, sd, 12, 0, 0);
+  const end = new Date(ey, em - 1, ed, 12, 0, 0);
+
+  // Safety limit to prevent infinite loops (approx 13 months)
+  let daysProcessed = 0;
+  const MAX_DAYS = 400;
+
+  while (current <= end && daysProcessed < MAX_DAYS) {
     const year = current.getFullYear();
     const month = String(current.getMonth() + 1).padStart(2, '0');
     const day = String(current.getDate()).padStart(2, '0');
     const dateString = `${year}-${month}-${day}`;
-    const weekday = current.getDay();
+    const weekday = current.getDay(); // 0 (Sun) - 6 (Sat) Local Time
 
-    // Filtra regras ativas
-    const activeRules = rules.filter(r => r.active);
+    // Filter and map rules
+    for (const rule of rules) {
+        if (!rule.active) continue;
 
-    for (const rule of activeRules) {
-      let match = false;
+        let isMatch = false;
 
-      if (rule.type === 'weekly') {
-        // Regra semanal: bate o dia da semana?
-        if (rule.weekday === weekday) {
-          match = true;
+        if (rule.type === 'weekly') {
+            // Strict comparison with Number coercion to handle DB returns
+            if (rule.weekday !== undefined && rule.weekday !== null) {
+                isMatch = Number(rule.weekday) === weekday;
+            }
+        } else if (rule.type === 'single') {
+            isMatch = rule.date === dateString;
         }
-      } else if (rule.type === 'single') {
-        // Regra pontual: bate a data exata?
-        if (rule.date === dateString) {
-          match = true;
-        }
-      }
 
-      if (match) {
-        // Geração do Evento
-        // ID Determinístico garante estabilidade para o React
-        const deterministicId = `${rule.id}_${dateString}`;
-        
-        events.push({
-          id: deterministicId,
-          ruleId: rule.id,
-          title: rule.title,
-          date: dateString,
-          time: rule.time, // HH:mm
-          iso: `${dateString}T${rule.time}`, // Local ISO format
-          weekday: weekday
-        });
-      }
+        if (isMatch) {
+            events.push({
+                id: `${rule.id}_${dateString}`, // Deterministic ID for React Keys
+                ruleId: rule.id,
+                title: rule.title,
+                date: dateString,
+                time: rule.time,
+                iso: `${dateString}T${rule.time}`,
+                weekday: weekday
+            });
+        }
     }
 
-    // Próximo dia
+    // Advance 1 day safely
     current.setDate(current.getDate() + 1);
+    daysProcessed++;
   }
 
-  // Ordenação cronológica
+  // Always return a new, sorted array
   return events.sort((a, b) => a.iso.localeCompare(b.iso));
 }

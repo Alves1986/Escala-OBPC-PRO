@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Music, Plus, Trash2, ExternalLink, Calendar, Settings, ListMusic, Loader2, Search, Youtube, Link, ArrowLeft, X, PlayCircle, Save, FileText, AlignLeft } from 'lucide-react';
 import { RepertoireItem, User } from '../types';
@@ -64,7 +63,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   const [cifraResults, setCifraResults] = useState<any[]>([]);
   const [cifraLoading, setCifraLoading] = useState(false);
 
-  const orgId = currentUser?.organizationId || '8d01a052-0b2e-46e4-8e34-683ff4db5c3b';
+  const orgId = currentUser?.organizationId;
 
   // Init
   useEffect(() => {
@@ -175,8 +174,8 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
         return;
     }
 
-    if (!currentUser?.ministryId) {
-        addToast("Erro: Ministério não identificado.", "error");
+    if (!currentUser?.ministryId || !orgId) {
+        addToast("Erro: Ministério ou Organização não identificados.", "error");
         return;
     }
 
@@ -216,6 +215,10 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   };
 
   const handleDelete = (id: string) => {
+      if (!orgId) {
+          console.error("Organization ID missing");
+          return;
+      }
       confirmAction("Excluir Item", "Tem certeza que deseja remover este item do repertório?", async () => {
           await deleteFromRepertoire(id, orgId);
           await setRepertoire([]); 
@@ -224,7 +227,7 @@ export const RepertoireScreen: React.FC<Props> = ({ repertoire, setRepertoire, c
   };
 
   const handleSaveChordPreference = async (newKey: string, newContent: string) => {
-      if (selectedChordItem) {
+      if (selectedChordItem && orgId) {
           await updateRepertoireItem(selectedChordItem.id, orgId, { content: newContent, key: newKey });
           // No need to refresh full list instantly, keeps UI smooth
           addToast("Cifra atualizada!", "success");

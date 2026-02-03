@@ -7,7 +7,6 @@ import {
     fetchUserFunctions 
 } from '../services/supabaseService';
 import { User } from '../types';
-import { LoginScreen } from '../components/LoginScreen';
 
 type SessionStatus = 
     | 'idle' 
@@ -44,7 +43,10 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
     const [user, setUser] = useState<User | null>(null);
     const [error, setError] = useState<Error | null>(null);
     
-    // Ref para rastrear usuário atual dentro do closure do useEffect (Correção flicker/loading)
+    // Guard de execução única para evitar múltiplos bootstraps
+    const bootstrappedRef = useRef(false);
+    
+    // Ref para rastrear usuário atual dentro do closure do useEffect
     const userRef = useRef<User | null>(null);
 
     useEffect(() => {
@@ -52,15 +54,19 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
     }, [user]);
 
     useEffect(() => {
+        // 2. Guard: Impede execução duplicada (React 18 Strict Mode)
+        if (bootstrappedRef.current) return;
+        bootstrappedRef.current = true;
+
         let mounted = true;
         const sb = getSupabase();
 
         if (!sb) {
-            // If Supabase client is missing, we treat it as unauthenticated to show the login screen
-            // instead of blocking with an error. The login screen will naturally handle the lack of client/keys.
             if (mounted) {
-                console.warn("[SessionProvider] Supabase client missing. Showing Login.");
-                setStatus('unauthenticated');
+                console.warn("[SessionProvider] Supabase client missing. Showing Setup.");
+                // Definir erro específico para que o App.tsx exiba a SetupScreen
+                setError(new Error("Supabase client missing"));
+                setStatus('error');
             }
             return;
         }
@@ -68,18 +74,18 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
         const processSession = async (sessionUser: any) => {
             if (!mounted) return;
             
-            // Se já estiver em erro, não tentamos processar novamente automaticamente sem reload
+            // Se já estiver em erro, não tentamos processar novamente automaticamente
             if (status === 'error') return;
 
-            // 1. Verificação Otimista: Se é o mesmo usuário, não mostre loading (Evita "2 telas")
+            // 4. Não permitir múltiplos fetchProfile concorrentes (Checagem de estado)
+            if (status === 'contextualizing') return;
+
             const isSameUser = userRef.current?.id === sessionUser.id;
-            
             if (!isSameUser) {
                 setStatus('contextualizing');
             }
 
             try {
-                // 2. Timeout de Segurança: Evita loop infinito se a rede travar no resume
                 const fetchProfile = sb
                     .from('profiles')
                     .select('*')
@@ -109,8 +115,6 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                 const orgId = profile.organization_id || '';
                 if (orgId) {
                     setServiceOrgContext(orgId);
-                } else {
-                    console.warn("[SessionProvider] User has no organization_id.");
                 }
 
                 let allowedMinistries: string[] = [];
@@ -161,9 +165,7 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
             } catch (err: any) {
                 console.error("[SessionProvider] Critical Error:", err);
                 if (mounted) {
-                    // Fallback Gracioso: Se já tínhamos usuário e deu timeout/erro de rede, mantemos a sessão ativa
                     if (isSameUser) {
-                        console.warn("[SessionProvider] Recovering from error using cached session state.");
                         setStatus('ready');
                     } else {
                         setError(err);
@@ -175,7 +177,7 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
 
         const init = async () => {
             if (!mounted) return;
-            // Apenas define authenticating se não tivermos usuário carregado (evita flicker no refresh)
+            
             if (!userRef.current) {
                 setStatus('authenticating');
             }
@@ -185,7 +187,7 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
             if (sessionError) {
                 if (mounted) {
                     setError(sessionError);
-                    setStatus('error');
+                    setStatus('error'); // 3. Garantir fluxo de erro
                 }
                 return;
             }
@@ -205,12 +207,11 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                 if (event === 'SIGNED_IN' && currentSession?.user) {
                     await processSession(currentSession.user);
                 } else if (event === 'TOKEN_REFRESHED' && currentSession?.user) {
-                    // No refresh de token, também validamos, mas o optimistic check vai evitar loading screen
                     await processSession(currentSession.user);
                 } else if (event === 'SIGNED_OUT') {
                     setUser(null);
                     setStatus('unauthenticated');
-                    clearServiceOrgContext(); // Correção: Usa função dedicada
+                    clearServiceOrgContext();
                 }
             });
 
@@ -226,48 +227,13 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
         };
     }, []);
 
-    // Preparação do valor do contexto
     const contextValue: SessionContextValue = { status, user, error };
 
-    // Lógica de Renderização Estrita
-    let content: ReactNode = null;
-
-    if (status === 'idle' || status === 'authenticating' || status === 'contextualizing') {
-        // Loading Simples Inline
-        content = (
-            <div className="fixed inset-0 flex flex-col items-center justify-center bg-zinc-950 text-white z-[9999]">
-                <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                <p className="text-sm font-bold text-zinc-400 animate-pulse uppercase tracking-widest">Carregando...</p>
-            </div>
-        );
-    } else if (status === 'unauthenticated') {
-        // Renderiza LoginScreen quando não autenticado
-        content = <LoginScreen isLoading={false} />;
-    } else if (status === 'error') {
-        // Tela de Erro Simples para erros de inicialização
-        content = (
-            <div className="fixed inset-0 flex items-center justify-center bg-zinc-950 text-white z-[9999] p-6">
-                <div className="text-center max-w-md bg-zinc-900 p-8 rounded-2xl border border-zinc-800">
-                    <h2 className="text-xl font-bold text-red-500 mb-2">Erro de Inicialização</h2>
-                    <p className="text-zinc-400 mb-6 text-sm leading-relaxed">{error?.message || "Não foi possível conectar ao servidor."}</p>
-                    <button 
-                        onClick={() => window.location.reload()} 
-                        className="px-6 py-3 bg-white text-black rounded-xl font-bold text-sm hover:bg-zinc-200 transition-colors"
-                    >
-                        Tentar Novamente
-                    </button>
-                </div>
-            </div>
-        );
-    } else if (status === 'ready') {
-        // Aplicação Pronta
-        content = children;
-    }
-
-    // ÚNICO PONTO DE RETORNO - OBRIGATÓRIO
+    // Alteração: Renderiza children sempre para evitar duplo loading visual.
+    // O controle de estado de carregamento visual fica a cargo do App.tsx.
     return (
         <SessionContext.Provider value={contextValue}>
-            {content}
+            {children}
         </SessionContext.Provider>
     );
 };

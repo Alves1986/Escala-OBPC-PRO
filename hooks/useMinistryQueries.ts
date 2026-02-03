@@ -1,3 +1,4 @@
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Supabase from '../services/supabaseService';
 import { fetchEventRules } from '../infra/supabase/fetchEventRules'; // Importação da Camada Infra
@@ -10,7 +11,7 @@ export const keys = {
   rules: (mid: string, oid: string) => ['rules', mid, oid],
   members: (mid: string, oid: string) => ['members', mid, oid],
   availability: (mid: string, oid: string) => ['availability', mid, oid],
-  notifications: (mids: string[], uid: string, oid: string, role?: string) => ['notifications', { mids, uid, oid, role }],
+  notifications: (mids: string[], uid: string, oid: string) => ['notifications', { mids, uid, oid }],
   announcements: (mid: string, oid: string) => ['announcements', mid, oid],
   swapRequests: (mid: string, oid: string) => ['swaps', mid, oid],
   repertoire: (mid: string, oid: string) => ['repertoire', mid, oid],
@@ -56,13 +57,8 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
 
   // 5. Notifications
   const notificationsQuery = useQuery({
-    queryKey: keys.notifications(user?.allowedMinistries || (ministryId ? [ministryId] : []), user?.id || '', orgId, user?.role),
-    queryFn: () => Supabase.fetchNotificationsSQL(
-        user?.allowedMinistries || [ministryId], 
-        user?.id || '', 
-        orgId,
-        user?.role === 'admin' // Passa flag de admin para filtrar
-    ),
+    queryKey: keys.notifications(user?.allowedMinistries || (ministryId ? [ministryId] : []), user?.id || '', orgId),
+    queryFn: () => Supabase.fetchNotificationsSQL(user?.allowedMinistries || [ministryId], user?.id || '', orgId),
     enabled: Boolean(user?.id && orgId)
   });
 
