@@ -25,7 +25,8 @@ try {
   const meta = import.meta;
   if (meta && meta.env) {
     envUrl = meta.env.VITE_SUPABASE_URL;
-    envKey = meta.env.VITE_SUPABASE_KEY;
+    // Suporte para VITE_SUPABASE_KEY ou VITE_SUPABASE_ANON_KEY
+    envKey = meta.env.VITE_SUPABASE_KEY || meta.env.VITE_SUPABASE_ANON_KEY;
   }
 } catch (e) {
   console.warn("Falha ao ler variáveis de ambiente via import.meta.env");
@@ -44,7 +45,7 @@ if (envUrl && envKey) {
     console.error("Erro ao inicializar Supabase Client:", e);
   }
 } else {
-  console.error("Supabase ENV ausente — rodando sem conexão");
+  console.error("Supabase ENV ausente (URL ou ANON_KEY) — rodando sem conexão");
 }
 
 export const getSupabase = () => supabase;
