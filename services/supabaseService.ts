@@ -6,7 +6,9 @@ import {
   AppNotification, 
   Announcement, 
   MinistryDef,
-  TeamMemberProfile
+  TeamMemberProfile,
+  RankingEntry,
+  RankingHistoryItem
 } from '../types';
 
 // --- INITIALIZATION ---
@@ -398,7 +400,7 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
   return { memberMap, publicList };
 };
 
-export const fetchRankingData = async (ministryId: string, orgId?: string) => {
+export const fetchRankingData = async (ministryId: string, orgId?: string): Promise<RankingEntry[]> => {
     const sb = requireSupabase();
     const validOrgId = requireOrgId(orgId || getServiceOrgContext());
     
@@ -419,14 +421,95 @@ export const fetchRankingData = async (ministryId: string, orgId?: string) => {
         
     if (profError) throw profError;
 
-    return (members || []).map((m: any) => ({
-        memberId: m.id,
-        name: m.name,
-        avatar_url: m.avatar_url,
-        points: 0, 
-        stats: { confirmedEvents: 0, missedEvents: 0, swapsRequested: 0, announcementsRead: 0, announcementsLiked: 0 },
-        history: []
-    }));
+    // Fetch data in parallel
+    const today = new Date().toISOString().slice(0, 10);
+
+    const [assignmentsRes, swapsRes, readsRes, likesRes] = await Promise.all([
+        sb.from('schedule_assignments')
+            .select('member_id, event_date, role')
+            .eq('organization_id', validOrgId)
+            .eq('ministry_id', ministryId)
+            .eq('confirmed', true)
+            .lte('event_date', today),
+        
+        sb.from('swap_requests')
+            .select('requester_id, created_at')
+            .eq('organization_id', validOrgId)
+            .eq('ministry_id', ministryId),
+
+        sb.from('announcement_reads')
+            .select('user_id, created_at, announcements!inner(ministry_id)')
+            .eq('organization_id', validOrgId)
+            .eq('announcements.ministry_id', ministryId),
+
+        sb.from('announcement_likes')
+            .select('user_id, created_at, announcements!inner(ministry_id)')
+            .eq('organization_id', validOrgId)
+            .eq('announcements.ministry_id', ministryId)
+    ]) as any;
+
+    const assignments = assignmentsRes.data || [];
+    console.log("RANKING CONFIRMED ASSIGNMENTS", assignments);
+
+    const swaps = swapsRes.data || [];
+    const reads = readsRes.data || [];
+    const likes = likesRes.data || [];
+
+    return (members || []).map((m: any) => {
+        let points = 0;
+        const history: RankingHistoryItem[] = [];
+
+        const memberAssignments = assignments.filter((a: any) => a.member_id === m.id);
+        const confirmedCount = memberAssignments.length;
+        points += confirmedCount * 100;
+        
+        memberAssignments.forEach((a: any) => history.push({
+            id: `assign-${a.member_id}-${a.event_date}`,
+            date: a.event_date,
+            description: `Escala Confirmada: ${a.role}`,
+            points: 100,
+            type: 'assignment'
+        }));
+
+        const memberSwaps = swaps.filter((s: any) => s.requester_id === m.id);
+        const swapsCount = memberSwaps.length;
+        points -= swapsCount * 50;
+
+        memberSwaps.forEach((s: any) => history.push({
+            id: `swap-${s.requester_id}-${s.created_at}`,
+            date: s.created_at,
+            description: `Solicitou Troca`,
+            points: -50,
+            type: 'swap_penalty'
+        }));
+
+        const memberReads = reads.filter((r: any) => r.user_id === m.id);
+        const readsCount = memberReads.length;
+        points += readsCount * 5;
+
+        const memberLikes = likes.filter((l: any) => l.user_id === m.id);
+        const likesCount = memberLikes.length;
+        points += likesCount * 10;
+
+        if (points < 0) points = 0;
+
+        history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        return {
+            memberId: m.id,
+            name: m.name,
+            avatar_url: m.avatar_url,
+            points: points, 
+            stats: { 
+                confirmedEvents: confirmedCount, 
+                missedEvents: 0, 
+                swapsRequested: swapsCount, 
+                announcementsRead: readsCount, 
+                announcementsLiked: likesCount 
+            },
+            history: history
+        };
+    });
 };
 
 export const fetchUserFunctions = async (userId: string, ministryId: string, orgId?: string): Promise<string[]> => {
@@ -818,19 +901,21 @@ export const toggleAssignmentConfirmation = async (ministryId: string, orgId: st
 
     const { data: assignment } = await sb.from('schedule_assignments')
         .select('confirmed')
+        .eq('organization_id', validOrgId)
+        .eq('ministry_id', ministryId) // Added
         .eq('event_key', uuid)
         .eq('event_date', date)
         .eq('role', role)
-        .eq('organization_id', validOrgId)
         .single();
         
     if (assignment) { 
         await sb.from('schedule_assignments')
             .update({ confirmed: !assignment.confirmed })
+            .eq('organization_id', validOrgId)
+            .eq('ministry_id', ministryId) // Added
             .eq('event_key', uuid)
             .eq('event_date', date)
-            .eq('role', role)
-            .eq('organization_id', validOrgId); 
+            .eq('role', role); 
     }
 };
 
