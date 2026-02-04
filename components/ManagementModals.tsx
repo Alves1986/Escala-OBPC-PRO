@@ -31,8 +31,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
 };
 
 // --- Invite Modal ---
-export const InviteModal = ({ isOpen, onClose, ministryId, orgId, availableRoles = [] }: { isOpen: boolean; onClose: () => void; ministryId: string; orgId: string; availableRoles?: string[] }) => {
-    const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+export const InviteModal = ({ isOpen, onClose, ministryId, orgId }: { isOpen: boolean; onClose: () => void; ministryId: string; orgId: string }) => {
     const [generatedLink, setGeneratedLink] = useState("");
     const [loading, setLoading] = useState(false);
     const { addToast } = useToast();
@@ -42,7 +41,7 @@ export const InviteModal = ({ isOpen, onClose, ministryId, orgId, availableRoles
 
     const handleGenerate = async () => {
         setLoading(true);
-        const res = await createInviteToken(ministryId, selectedRoles, orgId);
+        const res = await createInviteToken(ministryId, orgId);
         setLoading(false);
 
         if (res.success && res.url) {
@@ -58,16 +57,7 @@ export const InviteModal = ({ isOpen, onClose, ministryId, orgId, availableRoles
         addToast("Link copiado para a área de transferência!", "success");
     };
 
-    const toggleRole = (role: string) => {
-        if (selectedRoles.includes(role)) {
-            setSelectedRoles(selectedRoles.filter(r => r !== role));
-        } else {
-            setSelectedRoles([...selectedRoles, role]);
-        }
-    };
-
     const reset = () => {
-        setSelectedRoles([]);
         setGeneratedLink("");
     };
 
@@ -82,38 +72,9 @@ export const InviteModal = ({ isOpen, onClose, ministryId, orgId, availableRoles
                     <>
                         <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800/30 text-xs text-blue-700 dark:text-blue-300 flex gap-2">
                             <ShieldAlert size={16} className="shrink-0"/>
-                            <p>O cadastro é feito via link. O novo membro será adicionado ao ministério <strong>{currentMinistry?.label || 'Selecionado'}</strong> com as funções abaixo.</p>
+                            <p>O cadastro é feito via link. O novo membro será adicionado ao ministério <strong>{currentMinistry?.label || 'Selecionado'}</strong> e poderá escolher suas funções durante o cadastro.</p>
                         </div>
                         
-                        <div>
-                            <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block flex items-center gap-1">
-                                <Briefcase size={12}/> Funções / Cargos (Opcional)
-                            </label>
-                            {availableRoles.length > 0 ? (
-                                <div className="flex flex-wrap gap-2">
-                                    {availableRoles.map(role => {
-                                        const isSelected = selectedRoles.includes(role);
-                                        return (
-                                            <button
-                                                key={role}
-                                                onClick={() => toggleRole(role)}
-                                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1 ${
-                                                    isSelected 
-                                                    ? 'bg-blue-600 text-white border-blue-500 shadow-md' 
-                                                    : 'bg-zinc-50 dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-zinc-300'
-                                                }`}
-                                            >
-                                                {role}
-                                                {isSelected && <Check size={12} />}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            ) : (
-                                <p className="text-sm text-zinc-400 italic">Nenhuma função cadastrada neste ministério.</p>
-                            )}
-                        </div>
-
                         <button 
                             onClick={handleGenerate}
                             disabled={loading}
@@ -130,7 +91,7 @@ export const InviteModal = ({ isOpen, onClose, ministryId, orgId, availableRoles
                                 <Check size={24}/>
                             </div>
                             <h3 className="font-bold text-zinc-800 dark:text-white">Convite Gerado!</h3>
-                            <p className="text-xs text-zinc-500 mt-1">Qualquer pessoa com este link poderá se cadastrar.</p>
+                            <p className="text-xs text-zinc-500 mt-1">Qualquer pessoa com este link poderá se cadastrar neste ministério.</p>
                         </div>
                         
                         <div className="bg-zinc-50 dark:bg-zinc-900 p-3 rounded-xl border border-zinc-200 dark:border-zinc-700 flex items-center gap-2">

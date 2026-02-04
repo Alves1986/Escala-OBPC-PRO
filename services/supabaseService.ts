@@ -104,7 +104,7 @@ const filterRolesBySettings = async (roles: string[], ministryId: string, orgId:
 
 // --- INVITE SYSTEM (LINK-BASED) ---
 
-export const createInviteToken = async (ministryId: string, roles: string[], orgId: string) => {
+export const createInviteToken = async (ministryId: string, orgId: string) => {
     const sb = getSupabase();
     if (!sb) return { success: false, message: "Sem conexão" };
 
@@ -116,7 +116,8 @@ export const createInviteToken = async (ministryId: string, roles: string[], org
             token,
             organization_id: orgId,
             ministry_id: ministryId,
-            roles: roles,
+            roles: [], // Funções agora são escolhidas pelo usuário no cadastro
+            email: null, // Email não é mais pré-definido
             used: false,
             expires_at: expiresAt
         });
@@ -151,7 +152,6 @@ export const validateInviteToken = async (token: string) => {
         valid: true, 
         data: {
             ministryId: data.ministry_id,
-            roles: data.roles,
             orgId: data.organization_id,
             ministryLabel: data.organization_ministries?.label || data.ministry_id
         } 
@@ -165,7 +165,8 @@ export const registerWithInvite = async (
         email: string,
         password: string,
         whatsapp: string,
-        birthDate: string
+        birthDate: string,
+        roles: string[] // Funções escolhidas pelo usuário
     }
 ) => {
     const sb = getSupabase();
@@ -207,13 +208,13 @@ export const registerWithInvite = async (
 
         if (profileError) throw new Error("Erro ao criar perfil: " + profileError.message);
 
-        // 4. Criar Membership
+        // 4. Criar Membership com as funções escolhidas
         await sb.from('organization_memberships').insert({
             profile_id: userId,
             organization_id: invite.orgId,
             ministry_id: invite.ministryId,
             role: 'member',
-            functions: invite.roles || []
+            functions: formData.roles || [] 
         });
 
         // 5. Marcar convite como usado

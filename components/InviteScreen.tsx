@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowRight, CheckCircle2, UserPlus, AlertOctagon, Loader2, Mail, Lock, Phone, User, Calendar, Briefcase, Building2 } from 'lucide-react';
-import { validateInviteToken, registerWithInvite } from '../services/supabaseService';
+import { ArrowRight, CheckCircle2, UserPlus, AlertOctagon, Loader2, Mail, Lock, Phone, User, Calendar, Briefcase, Building2, Check } from 'lucide-react';
+import { validateInviteToken, registerWithInvite, fetchMinistrySettings } from '../services/supabaseService';
 
 interface Props {
     token: string;
@@ -12,6 +12,10 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
     const [inviteData, setInviteData] = useState<any>(null);
     const [errorMsg, setErrorMsg] = useState("");
     
+    // Roles Data
+    const [availableRoles, setAvailableRoles] = useState<string[]>([]);
+    const [loadingRoles, setLoadingRoles] = useState(false);
+
     // Form Data
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
@@ -19,6 +23,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
     const [confirmPass, setConfirmPass] = useState("");
     const [whatsapp, setWhatsapp] = useState("");
     const [birthDate, setBirthDate] = useState("");
+    const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
     
     const [registering, setRegistering] = useState(false);
 
@@ -28,6 +33,21 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
             if (res.valid) {
                 setInviteData(res.data);
                 setStatus('valid');
+                
+                // Fetch available roles for this ministry
+                if (res.data?.ministryId && res.data?.orgId) {
+                    setLoadingRoles(true);
+                    try {
+                        const settings = await fetchMinistrySettings(res.data.ministryId, res.data.orgId);
+                        if (settings && settings.roles) {
+                            setAvailableRoles(settings.roles);
+                        }
+                    } catch (e) {
+                        console.error("Failed to load roles", e);
+                    } finally {
+                        setLoadingRoles(false);
+                    }
+                }
             } else {
                 setErrorMsg(res.message || "Convite inválido");
                 setStatus('invalid');
@@ -36,11 +56,24 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
         check();
     }, [token]);
 
+    const toggleRole = (role: string) => {
+        if (selectedRoles.includes(role)) {
+            setSelectedRoles(selectedRoles.filter(r => r !== role));
+        } else {
+            setSelectedRoles([...selectedRoles, role]);
+        }
+    };
+
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
         
         if (!name.trim() || !email.trim() || !password || !confirmPass || !whatsapp.trim() || !birthDate) {
             setErrorMsg("Todos os campos são obrigatórios.");
+            return;
+        }
+
+        if (selectedRoles.length === 0) {
+            setErrorMsg("Selecione pelo menos uma função/cargo.");
             return;
         }
         
@@ -63,7 +96,8 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                 email,
                 password,
                 whatsapp,
-                birthDate
+                birthDate,
+                roles: selectedRoles
             });
 
             if (res.success) {
@@ -137,15 +171,8 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                     <div className="bg-zinc-800/50 p-4 rounded-xl border border-zinc-700/50 mb-6 flex flex-col gap-2">
                         <div className="flex items-center gap-2">
                             <Building2 size={16} className="text-teal-500"/>
-                            <span className="text-white text-sm font-bold">{inviteData.ministryLabel}</span>
+                            <span className="text-white text-sm font-bold">Você está entrando em: {inviteData.ministryLabel}</span>
                         </div>
-                        {inviteData.roles && inviteData.roles.length > 0 && (
-                            <div className="flex flex-wrap gap-2 mt-1">
-                                {inviteData.roles.map((r: string) => (
-                                    <span key={r} className="text-[10px] bg-zinc-700 text-zinc-300 px-2 py-0.5 rounded font-bold border border-zinc-600">{r}</span>
-                                ))}
-                            </div>
-                        )}
                     </div>
                 )}
 
@@ -204,6 +231,40 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-4 py-3 text-white outline-none focus:ring-1 focus:ring-teal-500 text-sm" 
                                 />
                             </div>
+                        </div>
+
+                        {/* ROLES SELECTION */}
+                        <div className="md:col-span-2">
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1 mb-2 block flex items-center gap-2">
+                                <Briefcase size={12}/> Selecione suas Funções / Cargos
+                            </label>
+                            
+                            {loadingRoles ? (
+                                <div className="text-center py-4"><Loader2 className="animate-spin text-zinc-500 mx-auto" size={20}/></div>
+                            ) : availableRoles.length > 0 ? (
+                                <div className="flex flex-wrap gap-2">
+                                    {availableRoles.map(role => {
+                                        const isSelected = selectedRoles.includes(role);
+                                        return (
+                                            <button
+                                                key={role}
+                                                type="button"
+                                                onClick={() => toggleRole(role)}
+                                                className={`px-3 py-2 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5 ${
+                                                    isSelected 
+                                                    ? 'bg-teal-600 text-white border-teal-500 shadow-md ring-1 ring-teal-500/50' 
+                                                    : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:border-zinc-600'
+                                                }`}
+                                            >
+                                                {role}
+                                                {isSelected && <Check size={12} />}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <p className="text-xs text-zinc-500 italic">Nenhuma função específica disponível. Você entrará como membro padrão.</p>
+                            )}
                         </div>
 
                         <div>

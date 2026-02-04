@@ -235,7 +235,6 @@ export const MembersScreen: React.FC<Props> = ({
                 onClose={() => setIsInviteOpen(false)}
                 ministryId={currentUser.ministryId}
                 orgId={currentUser.organizationId}
-                availableRoles={availableRoles}
             />
         )}
     </div>
