@@ -13,68 +13,53 @@ import {
 
 // --- INITIALIZATION ---
 
-let supabase: SupabaseClient | null = null;
 let serviceOrgId: string | null = null;
 
-// Safe Access Environment Variables
+// Acesso seguro às variáveis de ambiente para evitar crash (Tela Preta)
 let envUrl = "";
 let envKey = "";
 
 try {
   // @ts-ignore
-  const meta = import.meta;
-  if (meta && meta.env) {
-    envUrl = meta.env.VITE_SUPABASE_URL;
-    // Suporte para VITE_SUPABASE_KEY ou VITE_SUPABASE_ANON_KEY
-    envKey = meta.env.VITE_SUPABASE_KEY || meta.env.VITE_SUPABASE_ANON_KEY;
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    envUrl = import.meta.env.VITE_SUPABASE_URL || "";
+    envKey = import.meta.env.VITE_SUPABASE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "";
   }
 } catch (e) {
-  console.warn("Falha ao ler variáveis de ambiente via import.meta.env");
+  console.warn("[SupabaseService] Falha ao ler import.meta.env. Usando fallback se disponível.");
 }
 
-if (envUrl && envKey) {
-  try {
-    supabase = createClient(envUrl, envKey, {
-        auth: {
-            persistSession: true,
-            autoRefreshToken: true,
-            detectSessionInUrl: true
-        }
-    });
-  } catch (e) {
-    console.error("Erro ao inicializar Supabase Client:", e);
-  }
-} else {
-  console.error("Supabase ENV ausente (URL ou ANON_KEY) — rodando sem conexão");
+// Fallback para process.env (compatibilidade com alguns ambientes de teste/build)
+if (!envUrl && typeof process !== 'undefined' && process.env) {
+    envUrl = process.env.VITE_SUPABASE_URL || "";
+    envKey = process.env.VITE_SUPABASE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+}
+
+// Inicializa o cliente APENAS se as chaves existirem
+const supabase = (envUrl && envKey) 
+  ? createClient(envUrl, envKey, {
+      auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true
+      }
+  }) 
+  : null;
+
+if (!supabase) {
+    console.error("[SupabaseService] CRITICAL: Client não inicializado. Verifique VITE_SUPABASE_URL e VITE_SUPABASE_KEY.");
 }
 
 export const getSupabase = () => supabase;
 
-// --- CONFIGURATION EXPORTS ---
+// --- DUMMY CONFIG EXPORTS (Para manter compatibilidade com UI existente) ---
 
 export const configureSupabaseManual = (url: string, key: string) => {
-    try {
-        supabase = createClient(url, key, {
-            auth: {
-                persistSession: true,
-                autoRefreshToken: true,
-                detectSessionInUrl: true
-            }
-        });
-    } catch (e) {
-        console.error("Erro ao configurar Supabase manualmente:", e);
-    }
+    console.warn("Configuração manual desativada. Use variáveis de ambiente.");
 };
 
 export const validateConnection = async (url: string, key: string) => {
-    try {
-        const client = createClient(url, key);
-        // Tenta um handshake simples
-        await client.auth.getSession();
-        return true;
-    } catch (e) {
-        return false;
-    }
+    return false;
 };
 
 export const setServiceOrgContext = (id: string) => {
@@ -117,7 +102,7 @@ const filterRolesBySettings = async (roles: string[], ministryId: string, orgId:
     return roles.filter(r => dbRoles.includes(r));
 };
 
-// --- INVITE SYSTEM (NEW) ---
+// --- INVITE SYSTEM ---
 
 export const createInviteToken = async (email: string, ministryId: string, orgId: string) => {
     const sb = getSupabase();
