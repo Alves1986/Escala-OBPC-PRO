@@ -167,25 +167,48 @@ export const validateInviteToken = async (inviteCode: string) => {
     const sb = getSupabase();
     if (!sb) return { valid: false, message: "Erro de conexão" };
 
+    console.log("🔍 [DEBUG] Validando convite (Service):", inviteCode);
+
     let query = sb.from('invite_tokens').select('*, organization_ministries(label)');
 
-    // LÓGICA CORRIGIDA: Valida public_code por padrão, fallback para ID se UUID
+    // Lógica Híbrida: UUID = Legacy/ID, Curto = public_code
     if (isUUID(inviteCode)) {
+        console.log("🔍 [DEBUG] Formato UUID detectado. Buscando por ID...");
         query = query.eq('id', inviteCode);
     } else {
+        console.log("🔍 [DEBUG] Formato Curto detectado. Buscando por public_code...");
         query = query.eq('public_code', inviteCode);
     }
 
-    const { data, error } = await query.maybeSingle();
+    // PASSO 6: Alteração para .limit(1) e remoção de filtros extras na query
+    const { data: resultData, error } = await query.limit(1);
 
-    if (error || !data) return { valid: false, message: "Convite inválido ou não encontrado." };
-    
-    // Verifica uso (suporta flag bool 'used' ou timestamp 'used_at' se existir)
-    if (data.used || data.used_at) return { valid: false, message: "Este convite já foi utilizado." };
+    console.log("🔍 [DEBUG] Retorno do Banco:", { data: resultData, error });
+
+    if (error) {
+        console.error("❌ [DEBUG] Erro SQL:", error.message);
+        return { valid: false, message: "Erro interno ao validar convite." };
+    }
+
+    if (!resultData || resultData.length === 0) {
+        console.warn("⚠️ [DEBUG] Nenhum convite encontrado para:", inviteCode);
+        return { valid: false, message: "Convite inválido ou não encontrado." };
+    }
+
+    const data = resultData[0];
+
+    // Validações pós-query (Passo 5)
+    if (data.used === true) { 
+        console.warn("⚠️ [DEBUG] Convite já utilizado.");
+        return { valid: false, message: "Este convite já foi utilizado." };
+    }
     
     const now = new Date();
     const expires = new Date(data.expires_at);
-    if (expires < now) return { valid: false, message: "Este convite expirou." };
+    if (expires < now) {
+        console.warn("⚠️ [DEBUG] Convite expirado.");
+        return { valid: false, message: "Este convite expirou." };
+    }
 
     return { 
         valid: true, 
@@ -258,7 +281,6 @@ export const registerWithInvite = async (
         });
 
         // 5. Marcar convite como usado (usando ID interno)
-        // Tenta marcar 'used' e 'used_at' para compatibilidade total
         const usedUpdate: any = { used: true };
         
         // Tentativa segura de update
