@@ -111,6 +111,16 @@ const slugify = (text: string) => {
     .replace(/[^a-z0-9-]/g, '');
 };
 
+const generatePublicCode = () => {
+  // Gera código de 8 caracteres maiúsculos alfanuméricos
+  return Math.random().toString(36).substring(2, 10).toUpperCase();
+};
+
+const isUUID = (str: string) => {
+    const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return regex.test(str);
+};
+
 // --- INVITE SYSTEM (LINK-BASED) ---
 
 export const createInviteToken = async (ministryId: string, orgId: string, ministryName?: string) => {
@@ -118,11 +128,13 @@ export const createInviteToken = async (ministryId: string, orgId: string, minis
     if (!sb) return { success: false, message: "Sem conexão" };
 
     try {
-        const token = crypto.randomUUID();
+        const token = crypto.randomUUID(); // PK interna
+        const publicCode = generatePublicCode(); // Código curto público
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 dias
 
         const { error } = await sb.from('invite_tokens').insert({
             token,
+            public_code: publicCode,
             organization_id: orgId,
             ministry_id: ministryId,
             used: false,
@@ -141,8 +153,8 @@ export const createInviteToken = async (ministryId: string, orgId: string, minis
             if (data?.label) slug = slugify(data.label);
         }
 
-        // Gera link enriquecido
-        let url = `${window.location.origin}/?invite=${token}`;
+        // Gera link enriquecido usando o Código Curto
+        let url = `${window.location.origin}/?invite=${publicCode}`;
         if (slug) {
             url += `&ministry=${slug}`;
         }
@@ -153,14 +165,20 @@ export const createInviteToken = async (ministryId: string, orgId: string, minis
     }
 };
 
-export const validateInviteToken = async (token: string) => {
+export const validateInviteToken = async (inviteCode: string) => {
     const sb = getSupabase();
     if (!sb) return { valid: false, message: "Erro de conexão" };
 
-    const { data, error } = await sb.from('invite_tokens')
-        .select('*, organization_ministries(label)')
-        .eq('token', token)
-        .maybeSingle();
+    let query = sb.from('invite_tokens').select('*, organization_ministries(label)');
+
+    // Compatibilidade: Se for UUID, busca pelo campo token (PK), senão busca pelo public_code
+    if (isUUID(inviteCode)) {
+        query = query.eq('token', inviteCode);
+    } else {
+        query = query.eq('public_code', inviteCode);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error || !data) return { valid: false, message: "Convite inválido ou não encontrado." };
     if (data.used) return { valid: false, message: "Este convite já foi utilizado." };
@@ -172,6 +190,7 @@ export const validateInviteToken = async (token: string) => {
     return { 
         valid: true, 
         data: {
+            token: data.token, // UUID Interno para uso no update
             ministryId: data.ministry_id,
             orgId: data.organization_id,
             ministryLabel: data.organization_ministries?.label || data.ministry_id
@@ -180,14 +199,14 @@ export const validateInviteToken = async (token: string) => {
 };
 
 export const registerWithInvite = async (
-    token: string, 
+    inviteCodeFromUrl: string, 
     formData: {
         name: string,
         email: string,
         password: string,
         whatsapp: string,
         birthDate: string,
-        roles: string[] // Funções escolhidas pelo usuário
+        roles: string[] 
     }
 ) => {
     const sb = getSupabase();
@@ -195,7 +214,8 @@ export const registerWithInvite = async (
 
     try {
         // 1. Revalidar
-        const { valid, data: invite } = await validateInviteToken(token);
+        // Recupera os dados, incluindo o UUID interno (token)
+        const { valid, data: invite } = await validateInviteToken(inviteCodeFromUrl);
         if (!valid || !invite) throw new Error("Convite inválido ou expirado.");
 
         // 2. Criar Auth User
@@ -238,8 +258,9 @@ export const registerWithInvite = async (
             functions: formData.roles || [] 
         });
 
-        // 5. Marcar convite como usado
-        await sb.from('invite_tokens').update({ used: true }).eq('token', token);
+        // 5. Marcar convite como usado usando o UUID interno (PK)
+        // invite.token vem do validateInviteToken, garantindo que usamos a chave primária correta
+        await sb.from('invite_tokens').update({ used: true }).eq('token', invite.token);
 
         return { success: true };
 
