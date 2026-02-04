@@ -116,8 +116,6 @@ export const createInviteToken = async (ministryId: string, orgId: string) => {
             token,
             organization_id: orgId,
             ministry_id: ministryId,
-            roles: [], // Funções agora são escolhidas pelo usuário no cadastro
-            email: null, // Email não é mais pré-definido
             used: false,
             expires_at: expiresAt
         });
