@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { CustomEvent, AvailabilityMap, AuditLogEntry, Role, TeamMemberProfile } from '../types';
-import { X, Plus, Trash2, Calendar, ShieldAlert, Undo2, ArrowUp, ArrowDown, GripVertical, User, Check, Briefcase, Hash, History } from 'lucide-react';
+import { X, Plus, Trash2, Calendar, ShieldAlert, Undo2, ArrowUp, ArrowDown, GripVertical, User, Check, Briefcase, Hash, History, Link, Copy, Loader2, Mail } from 'lucide-react';
 import { useToast } from './Toast';
+import { createInviteToken } from '../services/supabaseService';
 
 interface ModalProps {
   isOpen: boolean;
@@ -26,6 +27,110 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
       </div>
     </div>
   );
+};
+
+// --- Invite Modal ---
+export const InviteModal = ({ isOpen, onClose, ministryId, orgId }: { isOpen: boolean; onClose: () => void; ministryId: string; orgId: string }) => {
+    const [email, setEmail] = useState("");
+    const [generatedLink, setGeneratedLink] = useState("");
+    const [loading, setLoading] = useState(false);
+    const { addToast } = useToast();
+
+    const handleGenerate = async () => {
+        if (!email.trim() || !email.includes('@')) {
+            addToast("Digite um e-mail válido.", "warning");
+            return;
+        }
+        
+        setLoading(true);
+        const res = await createInviteToken(email.trim().toLowerCase(), ministryId, orgId);
+        setLoading(false);
+
+        if (res.success && res.url) {
+            setGeneratedLink(res.url);
+            addToast("Link gerado com sucesso!", "success");
+        } else {
+            addToast(res.message || "Erro ao gerar convite.", "error");
+        }
+    };
+
+    const handleCopy = () => {
+        navigator.clipboard.writeText(generatedLink);
+        addToast("Link copiado para a área de transferência!", "success");
+    };
+
+    const reset = () => {
+        setEmail("");
+        setGeneratedLink("");
+    };
+
+    useEffect(() => {
+        if (isOpen) reset();
+    }, [isOpen]);
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Convidar Novo Membro">
+            <div className="space-y-6">
+                {!generatedLink ? (
+                    <>
+                        <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800/30 text-xs text-blue-700 dark:text-blue-300 flex gap-2">
+                            <ShieldAlert size={16} className="shrink-0"/>
+                            <p>O cadastro é restrito via link. O novo membro será adicionado automaticamente a este ministério após o registro.</p>
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">E-mail do Membro</label>
+                            <div className="relative">
+                                <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"/>
+                                <input 
+                                    type="email" 
+                                    value={email} 
+                                    onChange={e => setEmail(e.target.value)} 
+                                    placeholder="exemplo@email.com"
+                                    className="w-full pl-9 pr-4 py-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none text-zinc-800 dark:text-white"
+                                />
+                            </div>
+                        </div>
+                        <button 
+                            onClick={handleGenerate}
+                            disabled={loading}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+                        >
+                            {loading ? <Loader2 className="animate-spin" size={18}/> : <Link size={18}/>}
+                            Gerar Link de Convite
+                        </button>
+                    </>
+                ) : (
+                    <div className="animate-fade-in space-y-4">
+                        <div className="text-center">
+                            <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <Check size={24}/>
+                            </div>
+                            <h3 className="font-bold text-zinc-800 dark:text-white">Convite Gerado!</h3>
+                            <p className="text-xs text-zinc-500 mt-1">Envie este link para <strong>{email}</strong></p>
+                        </div>
+                        
+                        <div className="bg-zinc-50 dark:bg-zinc-900 p-3 rounded-xl border border-zinc-200 dark:border-zinc-700 flex items-center gap-2">
+                            <input 
+                                readOnly 
+                                value={generatedLink} 
+                                className="flex-1 bg-transparent text-xs text-zinc-600 dark:text-zinc-300 font-mono outline-none"
+                            />
+                            <button onClick={handleCopy} className="p-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-500 hover:text-blue-500 transition-colors">
+                                <Copy size={16}/>
+                            </button>
+                        </div>
+
+                        <button 
+                            onClick={reset}
+                            className="w-full text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-white py-2"
+                        >
+                            Gerar Outro
+                        </button>
+                    </div>
+                )}
+            </div>
+        </Modal>
+    );
 };
 
 // --- Custom Events Modal ---

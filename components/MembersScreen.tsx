@@ -1,8 +1,7 @@
-
 import React, { useState, useMemo } from 'react';
-import { Users, Mail, Phone, Gift, ShieldCheck, Trash2, Search, Filter, Shield, Zap, Edit2 } from 'lucide-react';
+import { Users, Mail, Phone, Gift, ShieldCheck, Trash2, Search, Filter, Shield, Edit2, UserPlus } from 'lucide-react';
 import { TeamMemberProfile, User } from '../types';
-import { EditMemberModal } from './ManagementModals';
+import { EditMemberModal, InviteModal } from './ManagementModals';
 
 interface Props {
   members: TeamMemberProfile[];
@@ -27,6 +26,7 @@ export const MembersScreen: React.FC<Props> = ({
   const [selectedRole, setSelectedRole] = useState("Todos");
   const [showOnlineOnly, setShowOnlineOnly] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMemberProfile | null>(null);
+  const [isInviteOpen, setIsInviteOpen] = useState(false);
 
   const filteredMembers = useMemo(() => {
       return members
@@ -53,14 +53,15 @@ export const MembersScreen: React.FC<Props> = ({
                    </h2>
                    <p className="text-zinc-500 text-sm mt-1">Gerencie os integrantes, funções e permissões de acesso.</p>
                </div>
+               
                <div className="flex items-center gap-2">
                    <button 
-                       onClick={() => setShowOnlineOnly(!showOnlineOnly)}
-                       className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${showOnlineOnly ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800' : 'bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700'}`}
+                       onClick={() => setIsInviteOpen(true)}
+                       className="hidden md:flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-lg shadow-blue-600/20 active:scale-95"
                    >
-                       <span className={`w-2 h-2 rounded-full ${showOnlineOnly ? 'bg-green-500 animate-pulse' : 'bg-zinc-300 dark:bg-zinc-600'}`}></span>
-                       {showOnlineOnly ? 'Apenas Online' : 'Mostrar Online'}
+                       <UserPlus size={16}/> Convidar Membro
                    </button>
+
                    <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-4 py-1.5 rounded-full text-xs font-bold text-zinc-600 dark:text-zinc-300 shadow-sm">
                        Total: {filteredMembers.length} <span className="text-zinc-400 font-normal">/ {members.length}</span>
                    </div>
@@ -68,6 +69,13 @@ export const MembersScreen: React.FC<Props> = ({
            </div>
 
            <div className="flex flex-col md:flex-row gap-3">
+               <button 
+                   onClick={() => setIsInviteOpen(true)}
+                   className="md:hidden w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-600/20 active:scale-95 mb-2"
+               >
+                   <UserPlus size={18}/> Convidar Novo Membro
+               </button>
+
                <div className="relative flex-1">
                    <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"/>
                    <input 
@@ -207,6 +215,7 @@ export const MembersScreen: React.FC<Props> = ({
             </div>
         )}
 
+        {/* Edit Modal */}
         {editingMember && (
             <EditMemberModal 
                 isOpen={!!editingMember}
@@ -216,6 +225,16 @@ export const MembersScreen: React.FC<Props> = ({
                 onSave={(id, data) => { 
                     if(onUpdateMember) onUpdateMember(id, { ...data, ministryId: currentUser.ministryId }); 
                 }}
+            />
+        )}
+
+        {/* Invite Modal (New) */}
+        {isInviteOpen && currentUser.ministryId && currentUser.organizationId && (
+            <InviteModal
+                isOpen={isInviteOpen}
+                onClose={() => setIsInviteOpen(false)}
+                ministryId={currentUser.ministryId}
+                orgId={currentUser.organizationId}
             />
         )}
     </div>

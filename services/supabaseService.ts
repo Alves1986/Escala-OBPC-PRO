@@ -16,42 +16,22 @@ import {
 let supabase: SupabaseClient | null = null;
 let serviceOrgId: string | null = null;
 
-// --- ESTRATÉGIA DE RECUPERAÇÃO DE CHAVES ---
+// Safe Access Environment Variables
 let envUrl = "";
 let envKey = "";
 
-// 1. Tenta Globais do Vite (Defines do vite.config.ts)
 try {
-    // @ts-ignore
-    if (typeof __SUPABASE_URL__ !== 'undefined' && __SUPABASE_URL__) envUrl = __SUPABASE_URL__;
-    // @ts-ignore
-    if (typeof __SUPABASE_KEY__ !== 'undefined' && __SUPABASE_KEY__) envKey = __SUPABASE_KEY__;
-} catch (e) {}
-
-// 2. Tenta import.meta.env (Padrão Vite) se ainda não encontrou
-if (!envUrl || !envKey) {
-    try {
-        // @ts-ignore
-        if (typeof import.meta !== 'undefined' && import.meta.env) {
-            envUrl = envUrl || import.meta.env.VITE_SUPABASE_URL;
-            envKey = envKey || import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_KEY;
-        }
-    } catch (e) {
-        console.warn("import.meta.env não disponível");
-    }
+  // @ts-ignore
+  const meta = import.meta;
+  if (meta && meta.env) {
+    envUrl = meta.env.VITE_SUPABASE_URL;
+    // Suporte para VITE_SUPABASE_KEY ou VITE_SUPABASE_ANON_KEY
+    envKey = meta.env.VITE_SUPABASE_KEY || meta.env.VITE_SUPABASE_ANON_KEY;
+  }
+} catch (e) {
+  console.warn("Falha ao ler variáveis de ambiente via import.meta.env");
 }
 
-// 3. Tenta process.env (Fallback para alguns ambientes) se ainda não encontrou
-if (!envUrl || !envKey) {
-    try {
-        if (typeof process !== 'undefined' && process.env) {
-            envUrl = envUrl || process.env.VITE_SUPABASE_URL || "";
-            envKey = envKey || process.env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_KEY || "";
-        }
-    } catch (e) {}
-}
-
-// Inicialização segura
 if (envUrl && envKey) {
   try {
     supabase = createClient(envUrl, envKey, {
@@ -62,10 +42,10 @@ if (envUrl && envKey) {
         }
     });
   } catch (e) {
-    console.error("Erro fatal ao inicializar Supabase Client:", e);
+    console.error("Erro ao inicializar Supabase Client:", e);
   }
 } else {
-  console.error("Supabase ENV ausente (VITE_SUPABASE_URL ou VITE_SUPABASE_ANON_KEY) — rodando desconectado.");
+  console.error("Supabase ENV ausente (URL ou ANON_KEY) — rodando sem conexão");
 }
 
 export const getSupabase = () => supabase;
@@ -135,6 +115,105 @@ const filterRolesBySettings = async (roles: string[], ministryId: string, orgId:
     }
 
     return roles.filter(r => dbRoles.includes(r));
+};
+
+// --- INVITE SYSTEM (NEW) ---
+
+export const createInviteToken = async (email: string, ministryId: string, orgId: string) => {
+    const sb = getSupabase();
+    if (!sb) return { success: false, message: "Sem conexão" };
+
+    try {
+        const token = crypto.randomUUID();
+        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(); // 48h
+
+        const { error } = await sb.from('invite_tokens').insert({
+            token,
+            email,
+            ministry_id: ministryId,
+            organization_id: orgId,
+            used: false,
+            expires_at: expiresAt
+        });
+
+        if (error) throw error;
+
+        const url = `${window.location.origin}/?invite=${token}`;
+        return { success: true, url };
+    } catch (e: any) {
+        return { success: false, message: e.message || "Erro ao gerar convite" };
+    }
+};
+
+export const validateInviteToken = async (token: string) => {
+    const sb = getSupabase();
+    if (!sb) return { valid: false, message: "Erro de conexão" };
+
+    const { data, error } = await sb.from('invite_tokens')
+        .select('*')
+        .eq('token', token)
+        .maybeSingle();
+
+    if (error || !data) return { valid: false, message: "Convite inválido ou não encontrado." };
+    if (data.used) return { valid: false, message: "Este convite já foi utilizado." };
+    
+    const now = new Date();
+    const expires = new Date(data.expires_at);
+    if (expires < now) return { valid: false, message: "Este convite expirou." };
+
+    return { valid: true, data };
+};
+
+export const registerWithInvite = async (token: string, name: string, password: string) => {
+    const sb = getSupabase();
+    if (!sb) return { success: false, message: "Sem conexão" };
+
+    // 1. Revalidar
+    const { valid, data: invite } = await validateInviteToken(token);
+    if (!valid || !invite) return { success: false, message: "Convite inválido." };
+
+    // 2. Criar Auth User
+    const { data: authData, error: authError } = await sb.auth.signUp({
+        email: invite.email,
+        password: password,
+        options: {
+            data: {
+                full_name: name,
+                organization_id: invite.organization_id
+            }
+        }
+    });
+
+    if (authError) return { success: false, message: authError.message };
+    if (!authData.user) return { success: false, message: "Erro ao criar usuário." };
+
+    const userId = authData.user.id;
+
+    // 3. Atualizar/Criar Profile
+    const { error: profileError } = await sb.from('profiles').upsert({
+        id: userId,
+        name: name,
+        email: invite.email,
+        organization_id: invite.organization_id,
+        allowed_ministries: [invite.ministry_id], // Inicia com o ministério do convite
+        ministry_id: invite.ministry_id // Define como ativo inicial
+    });
+
+    if (profileError) return { success: false, message: "Erro ao criar perfil: " + profileError.message };
+
+    // 4. Criar Membership
+    await sb.from('organization_memberships').insert({
+        profile_id: userId,
+        organization_id: invite.organization_id,
+        ministry_id: invite.ministry_id,
+        role: 'member',
+        functions: []
+    });
+
+    // 5. Marcar convite como usado
+    await sb.from('invite_tokens').update({ used: true }).eq('token', token);
+
+    return { success: true };
 };
 
 // --- CORE SAAS FUNCTIONS ---

@@ -21,6 +21,7 @@ import {
 
 import { LoadingScreen } from './components/LoadingScreen';
 import { LoginScreen } from './components/LoginScreen';
+import { InviteScreen } from './components/InviteScreen'; // Importado
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { DashboardLayout } from './components/DashboardLayout';
 import { WeatherWidget } from './components/WeatherWidget';
@@ -72,6 +73,15 @@ const InnerApp = () => {
   const { addToast, confirmAction } = useToast();
   
   const [currentMonth, setCurrentMonth] = useState(() => getLocalDateISOString().slice(0, 7));
+
+  // --- NEW: Invite Flow Interception ---
+  const [inviteToken, setInviteToken] = useState<string | null>(null);
+  
+  useEffect(() => {
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('invite');
+      if (token) setInviteToken(token);
+  }, []);
 
   // --- 1. Session & Global Sync ---
   useEffect(() => {
@@ -227,6 +237,22 @@ const InnerApp = () => {
   const QUICK_ACTIONS = RAW_QUICK_ACTIONS.filter(item => safeEnabledTabs.includes(item.id));
 
   // --- 5. Conditional Rendering ---
+
+  // Handle Invite Flow
+  if (inviteToken) {
+      return (
+          <InviteScreen 
+              token={inviteToken} 
+              onClear={() => {
+                  setInviteToken(null);
+                  // Clean URL
+                  const url = new URL(window.location.href);
+                  url.searchParams.delete('invite');
+                  window.history.replaceState({}, '', url.toString());
+              }}
+          />
+      );
+  }
 
   // Handle Loading
   if (status === 'authenticating' || status === 'contextualizing' || status === 'idle') {
@@ -451,7 +477,7 @@ const InnerApp = () => {
                                     const logicalKey = `${cellKey}_${role}`;
                                     await Supabase.removeScheduleAssignment(ministryId, orgId!, logicalKey);
                                 }
-                                await refreshData();
+                                await refreshData(); 
                             } catch (error: any) {
                                 const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
                                 console.error("Erro ao persistir escala:", errorMsg);
