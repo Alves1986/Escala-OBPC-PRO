@@ -112,7 +112,8 @@ const slugify = (text: string) => {
 };
 
 const generatePublicCode = () => {
-  // Gera código de 8 caracteres maiúsculos alfanuméricos
+  // Mantido para compatibilidade de schema caso a coluna seja obrigatória, 
+  // mas o fluxo principal usará o token UUID.
   return Math.random().toString(36).substring(2, 10).toUpperCase();
 };
 
@@ -128,101 +129,79 @@ export const createInviteToken = async (ministryId: string, orgId: string, minis
     if (!sb) return { success: false, message: "Sem conexão" };
 
     try {
-        const publicCode = generatePublicCode(); // Código curto público
+        const token = crypto.randomUUID(); // Token seguro
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 dias
+        const publicCode = generatePublicCode(); // Fallback para coluna se existir
 
-        // Insere com public_code. Deixa o DB gerar o ID.
+        // Inserção Limpa - Apenas campos obrigatórios e existentes
+        // Não enviamos email nem ministryName para o banco
         const { error } = await sb.from('invite_tokens').insert({
-            public_code: publicCode,
+            token: token,
             organization_id: orgId,
             ministry_id: ministryId,
             used: false,
-            expires_at: expiresAt
+            expires_at: expiresAt,
+            public_code: publicCode // Mantido caso o banco exija
         });
 
         if (error) throw error;
 
-        // Gerar slug para a URL (apenas visual)
-        let slug = "";
-        if (ministryName) {
-            slug = slugify(ministryName);
-        } else {
-            const { data } = await sb.from('organization_ministries').select('label').eq('id', ministryId).single();
-            if (data?.label) slug = slugify(data.label);
-        }
-
-        // Gera link enriquecido usando o Código Curto
-        let url = `${window.location.origin}/?invite=${publicCode}`;
-        if (slug) {
-            url += `&ministry=${slug}`;
-        }
+        // Gera link limpo apenas com o token
+        const url = `${window.location.origin}/?invite=${token}`;
 
         return { success: true, url };
     } catch (e: any) {
+        console.error("Erro ao criar convite:", e);
         return { success: false, message: e.message || "Erro ao gerar convite" };
     }
 };
 
-export const validateInviteToken = async (inviteCode: string) => {
+export const validateInviteToken = async (inviteTokenParam: string) => {
     const sb = getSupabase();
     if (!sb) return { valid: false, message: "Erro de conexão" };
 
-    console.log("🔍 [DEBUG] Validando convite (Service):", inviteCode);
+    console.log("🔍 [DEBUG] Validando token:", inviteTokenParam);
 
-    let query = sb.from('invite_tokens').select('*, organization_ministries(label)');
-
-    // Lógica Híbrida: UUID = Legacy/ID, Curto = public_code
-    if (isUUID(inviteCode)) {
-        console.log("🔍 [DEBUG] Formato UUID detectado. Buscando por ID...");
-        query = query.eq('id', inviteCode);
-    } else {
-        console.log("🔍 [DEBUG] Formato Curto detectado. Buscando por public_code...");
-        query = query.eq('public_code', inviteCode);
-    }
-
-    // PASSO 6: Alteração para .limit(1) e remoção de filtros extras na query
-    const { data: resultData, error } = await query.limit(1);
-
-    console.log("🔍 [DEBUG] Retorno do Banco:", { data: resultData, error });
+    // Busca exata pelo token
+    const { data, error } = await sb
+        .from('invite_tokens')
+        .select('*, organization_ministries(label)')
+        .eq('token', inviteTokenParam)
+        .maybeSingle();
 
     if (error) {
         console.error("❌ [DEBUG] Erro SQL:", error.message);
-        return { valid: false, message: "Erro interno ao validar convite." };
+        return { valid: false, message: "Erro ao validar convite." };
     }
 
-    if (!resultData || resultData.length === 0) {
-        console.warn("⚠️ [DEBUG] Nenhum convite encontrado para:", inviteCode);
-        return { valid: false, message: "Convite inválido ou não encontrado." };
+    if (!data) {
+        console.warn("⚠️ [DEBUG] Token não encontrado.");
+        return { valid: false, message: "Link inválido ou não encontrado." };
     }
-
-    const data = resultData[0];
-
-    // Validações pós-query (Passo 5)
-    if (data.used === true) { 
-        console.warn("⚠️ [DEBUG] Convite já utilizado.");
+    
+    if (data.used) { 
         return { valid: false, message: "Este convite já foi utilizado." };
     }
     
     const now = new Date();
     const expires = new Date(data.expires_at);
     if (expires < now) {
-        console.warn("⚠️ [DEBUG] Convite expirado.");
         return { valid: false, message: "Este convite expirou." };
     }
 
     return { 
         valid: true, 
         data: {
-            id: data.id, // Retorna ID interno para update
+            token: data.token, // Identificador para uso no registro
             ministryId: data.ministry_id,
             orgId: data.organization_id,
-            ministryLabel: data.organization_ministries?.label || data.ministry_id
+            ministryLabel: data.organization_ministries?.label || 'Ministério'
         } 
     };
 };
 
 export const registerWithInvite = async (
-    inviteCodeFromUrl: string, 
+    token: string, 
     formData: {
         name: string,
         email: string,
@@ -236,8 +215,8 @@ export const registerWithInvite = async (
     if (!sb) return { success: false, message: "Sem conexão" };
 
     try {
-        // 1. Revalidar e pegar ID interno
-        const { valid, data: invite } = await validateInviteToken(inviteCodeFromUrl);
+        // 1. Revalidar Token
+        const { valid, data: invite } = await validateInviteToken(token);
         if (!valid || !invite) throw new Error("Convite inválido ou expirado.");
 
         // 2. Criar Auth User
@@ -257,7 +236,7 @@ export const registerWithInvite = async (
 
         const userId = authData.user.id;
 
-        // 3. Atualizar/Criar Profile
+        // 3. Atualizar/Criar Profile (Vinculado à organização do convite)
         const { error: profileError } = await sb.from('profiles').upsert({
             id: userId,
             name: formData.name,
@@ -280,16 +259,13 @@ export const registerWithInvite = async (
             functions: formData.roles || [] 
         });
 
-        // 5. Marcar convite como usado (usando ID interno)
-        const usedUpdate: any = { used: true };
-        
-        // Tentativa segura de update
-        await sb.from('invite_tokens').update(usedUpdate).eq('id', invite.id);
+        // 5. Marcar convite como usado
+        await sb.from('invite_tokens').update({ used: true }).eq('token', token);
 
         return { success: true };
 
     } catch (e: any) {
-        console.error(e);
+        console.error("Erro no registro:", e);
         return { success: false, message: e.message || "Erro desconhecido ao registrar." };
     }
 };
