@@ -41,7 +41,8 @@ export const InviteModal = ({ isOpen, onClose, ministryId, orgId }: { isOpen: bo
 
     const handleGenerate = async () => {
         setLoading(true);
-        const res = await createInviteToken(ministryId, orgId);
+        // Passa o label do ministério para gerar o slug na URL
+        const res = await createInviteToken(ministryId, orgId, currentMinistry?.label);
         setLoading(false);
 
         if (res.success && res.url) {

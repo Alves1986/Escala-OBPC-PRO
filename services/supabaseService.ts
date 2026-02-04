@@ -102,9 +102,18 @@ const filterRolesBySettings = async (roles: string[], ministryId: string, orgId:
     return roles.filter(r => dbRoles.includes(r));
 };
 
+const slugify = (text: string) => {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '');
+};
+
 // --- INVITE SYSTEM (LINK-BASED) ---
 
-export const createInviteToken = async (ministryId: string, orgId: string) => {
+export const createInviteToken = async (ministryId: string, orgId: string, ministryName?: string) => {
     const sb = getSupabase();
     if (!sb) return { success: false, message: "Sem conexão" };
 
@@ -122,8 +131,22 @@ export const createInviteToken = async (ministryId: string, orgId: string) => {
 
         if (error) throw error;
 
-        // Gera link limpo
-        const url = `${window.location.origin}/?invite=${token}`;
+        // Gerar slug para a URL (apenas visual)
+        let slug = "";
+        if (ministryName) {
+            slug = slugify(ministryName);
+        } else {
+            // Tenta buscar o label se não foi fornecido
+            const { data } = await sb.from('organization_ministries').select('label').eq('id', ministryId).single();
+            if (data?.label) slug = slugify(data.label);
+        }
+
+        // Gera link enriquecido
+        let url = `${window.location.origin}/?invite=${token}`;
+        if (slug) {
+            url += `&ministry=${slug}`;
+        }
+
         return { success: true, url };
     } catch (e: any) {
         return { success: false, message: e.message || "Erro ao gerar convite" };
