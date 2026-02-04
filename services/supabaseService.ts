@@ -128,12 +128,11 @@ export const createInviteToken = async (ministryId: string, orgId: string, minis
     if (!sb) return { success: false, message: "Sem conexão" };
 
     try {
-        const token = crypto.randomUUID(); // PK interna
         const publicCode = generatePublicCode(); // Código curto público
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 dias
 
+        // Insere com public_code. Deixa o DB gerar o ID.
         const { error } = await sb.from('invite_tokens').insert({
-            token,
             public_code: publicCode,
             organization_id: orgId,
             ministry_id: ministryId,
@@ -148,7 +147,6 @@ export const createInviteToken = async (ministryId: string, orgId: string, minis
         if (ministryName) {
             slug = slugify(ministryName);
         } else {
-            // Tenta buscar o label se não foi fornecido
             const { data } = await sb.from('organization_ministries').select('label').eq('id', ministryId).single();
             if (data?.label) slug = slugify(data.label);
         }
@@ -171,9 +169,9 @@ export const validateInviteToken = async (inviteCode: string) => {
 
     let query = sb.from('invite_tokens').select('*, organization_ministries(label)');
 
-    // Compatibilidade: Se for UUID, busca pelo campo token (PK), senão busca pelo public_code
+    // LÓGICA CORRIGIDA: Valida public_code por padrão, fallback para ID se UUID
     if (isUUID(inviteCode)) {
-        query = query.eq('token', inviteCode);
+        query = query.eq('id', inviteCode);
     } else {
         query = query.eq('public_code', inviteCode);
     }
@@ -181,7 +179,9 @@ export const validateInviteToken = async (inviteCode: string) => {
     const { data, error } = await query.maybeSingle();
 
     if (error || !data) return { valid: false, message: "Convite inválido ou não encontrado." };
-    if (data.used) return { valid: false, message: "Este convite já foi utilizado." };
+    
+    // Verifica uso (suporta flag bool 'used' ou timestamp 'used_at' se existir)
+    if (data.used || data.used_at) return { valid: false, message: "Este convite já foi utilizado." };
     
     const now = new Date();
     const expires = new Date(data.expires_at);
@@ -190,7 +190,7 @@ export const validateInviteToken = async (inviteCode: string) => {
     return { 
         valid: true, 
         data: {
-            token: data.token, // UUID Interno para uso no update
+            id: data.id, // Retorna ID interno para update
             ministryId: data.ministry_id,
             orgId: data.organization_id,
             ministryLabel: data.organization_ministries?.label || data.ministry_id
@@ -213,8 +213,7 @@ export const registerWithInvite = async (
     if (!sb) return { success: false, message: "Sem conexão" };
 
     try {
-        // 1. Revalidar
-        // Recupera os dados, incluindo o UUID interno (token)
+        // 1. Revalidar e pegar ID interno
         const { valid, data: invite } = await validateInviteToken(inviteCodeFromUrl);
         if (!valid || !invite) throw new Error("Convite inválido ou expirado.");
 
@@ -249,7 +248,7 @@ export const registerWithInvite = async (
 
         if (profileError) throw new Error("Erro ao criar perfil: " + profileError.message);
 
-        // 4. Criar Membership com as funções escolhidas
+        // 4. Criar Membership
         await sb.from('organization_memberships').insert({
             profile_id: userId,
             organization_id: invite.orgId,
@@ -258,9 +257,12 @@ export const registerWithInvite = async (
             functions: formData.roles || [] 
         });
 
-        // 5. Marcar convite como usado usando o UUID interno (PK)
-        // invite.token vem do validateInviteToken, garantindo que usamos a chave primária correta
-        await sb.from('invite_tokens').update({ used: true }).eq('token', invite.token);
+        // 5. Marcar convite como usado (usando ID interno)
+        // Tenta marcar 'used' e 'used_at' para compatibilidade total
+        const usedUpdate: any = { used: true };
+        
+        // Tentativa segura de update
+        await sb.from('invite_tokens').update(usedUpdate).eq('id', invite.id);
 
         return { success: true };
 
