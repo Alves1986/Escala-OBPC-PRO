@@ -160,22 +160,26 @@ export const validateInviteToken = async (inviteTokenParam: string) => {
     const sb = getSupabase();
     if (!sb) return { valid: false, message: "Erro de conexão" };
 
-    console.log("🔍 [DEBUG] Validando token:", inviteTokenParam);
+    console.log("🔍 [DEBUG] Validando token (Service):", inviteTokenParam);
 
-    // Busca exata pelo token
+    // 2. Buscar SOMENTE pela coluna token e 6. NÃO usar joins
     const { data, error } = await sb
         .from('invite_tokens')
-        .select('*, organization_ministries(label)')
+        .select('*')
         .eq('token', inviteTokenParam)
         .maybeSingle();
 
+    console.log("🔍 [DEBUG] Resultado Query:", { data, error });
+
+    // 7. Se error → mostrar erro técnico
     if (error) {
-        console.error("❌ [DEBUG] Erro SQL:", error.message);
-        return { valid: false, message: "Erro ao validar convite." };
+        console.error("❌ [DEBUG] Erro técnico na busca do convite:", error);
+        return { valid: false, message: "Erro técnico ao validar convite." };
     }
 
+    // 8. Se !data → mostrar tela link inválido
     if (!data) {
-        console.warn("⚠️ [DEBUG] Token não encontrado.");
+        console.warn("⚠️ [DEBUG] Token não encontrado no banco.");
         return { valid: false, message: "Link inválido ou não encontrado." };
     }
     
@@ -183,19 +187,37 @@ export const validateInviteToken = async (inviteTokenParam: string) => {
         return { valid: false, message: "Este convite já foi utilizado." };
     }
     
-    const now = new Date();
-    const expires = new Date(data.expires_at);
-    if (expires < now) {
-        return { valid: false, message: "Este convite expirou." };
+    if (data.expires_at) {
+        const now = new Date();
+        const expires = new Date(data.expires_at);
+        if (expires < now) {
+            return { valid: false, message: "Este convite expirou." };
+        }
     }
 
+    // Busca o Label separadamente para evitar JOIN na query principal (pode falhar por RLS)
+    let ministryLabel = 'Ministério';
+    if (data.ministry_id) {
+        try {
+            const { data: mData } = await sb
+                .from('organization_ministries')
+                .select('label')
+                .eq('id', data.ministry_id)
+                .maybeSingle();
+            if (mData && mData.label) ministryLabel = mData.label;
+        } catch (e) {
+            console.warn("Não foi possível buscar o nome do ministério (acesso restrito?).", e);
+        }
+    }
+
+    // 9. Se data → seguir para tela de cadastro
     return { 
         valid: true, 
         data: {
             token: data.token, // Identificador para uso no registro
             ministryId: data.ministry_id,
             orgId: data.organization_id,
-            ministryLabel: data.organization_ministries?.label || 'Ministério'
+            ministryLabel: ministryLabel
         } 
     };
 };
