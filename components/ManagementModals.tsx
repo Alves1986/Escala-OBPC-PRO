@@ -4,6 +4,7 @@ import { CustomEvent, AvailabilityMap, AuditLogEntry, Role, TeamMemberProfile } 
 import { X, Plus, Trash2, Calendar, ShieldAlert, Undo2, ArrowUp, ArrowDown, GripVertical, User, Check, Briefcase, Hash, History, Link, Copy, Loader2, Mail } from 'lucide-react';
 import { useToast } from './Toast';
 import { createInviteToken } from '../services/supabaseService';
+import { useAppStore } from '../store/appStore';
 
 interface ModalProps {
   isOpen: boolean;
@@ -30,20 +31,18 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
 };
 
 // --- Invite Modal ---
-export const InviteModal = ({ isOpen, onClose, ministryId, orgId }: { isOpen: boolean; onClose: () => void; ministryId: string; orgId: string }) => {
-    const [email, setEmail] = useState("");
+export const InviteModal = ({ isOpen, onClose, ministryId, orgId, availableRoles = [] }: { isOpen: boolean; onClose: () => void; ministryId: string; orgId: string; availableRoles?: string[] }) => {
+    const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
     const [generatedLink, setGeneratedLink] = useState("");
     const [loading, setLoading] = useState(false);
     const { addToast } = useToast();
+    const { availableMinistries } = useAppStore();
+
+    const currentMinistry = availableMinistries.find(m => m.id === ministryId);
 
     const handleGenerate = async () => {
-        if (!email.trim() || !email.includes('@')) {
-            addToast("Digite um e-mail válido.", "warning");
-            return;
-        }
-        
         setLoading(true);
-        const res = await createInviteToken(email.trim().toLowerCase(), ministryId, orgId);
+        const res = await createInviteToken(ministryId, selectedRoles, orgId);
         setLoading(false);
 
         if (res.success && res.url) {
@@ -59,8 +58,16 @@ export const InviteModal = ({ isOpen, onClose, ministryId, orgId }: { isOpen: bo
         addToast("Link copiado para a área de transferência!", "success");
     };
 
+    const toggleRole = (role: string) => {
+        if (selectedRoles.includes(role)) {
+            setSelectedRoles(selectedRoles.filter(r => r !== role));
+        } else {
+            setSelectedRoles([...selectedRoles, role]);
+        }
+    };
+
     const reset = () => {
-        setEmail("");
+        setSelectedRoles([]);
         setGeneratedLink("");
     };
 
@@ -75,21 +82,38 @@ export const InviteModal = ({ isOpen, onClose, ministryId, orgId }: { isOpen: bo
                     <>
                         <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800/30 text-xs text-blue-700 dark:text-blue-300 flex gap-2">
                             <ShieldAlert size={16} className="shrink-0"/>
-                            <p>O cadastro é restrito via link. O novo membro será adicionado automaticamente a este ministério após o registro.</p>
+                            <p>O cadastro é feito via link. O novo membro será adicionado ao ministério <strong>{currentMinistry?.label || 'Selecionado'}</strong> com as funções abaixo.</p>
                         </div>
+                        
                         <div>
-                            <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">E-mail do Membro</label>
-                            <div className="relative">
-                                <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"/>
-                                <input 
-                                    type="email" 
-                                    value={email} 
-                                    onChange={e => setEmail(e.target.value)} 
-                                    placeholder="exemplo@email.com"
-                                    className="w-full pl-9 pr-4 py-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none text-zinc-800 dark:text-white"
-                                />
-                            </div>
+                            <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block flex items-center gap-1">
+                                <Briefcase size={12}/> Funções / Cargos (Opcional)
+                            </label>
+                            {availableRoles.length > 0 ? (
+                                <div className="flex flex-wrap gap-2">
+                                    {availableRoles.map(role => {
+                                        const isSelected = selectedRoles.includes(role);
+                                        return (
+                                            <button
+                                                key={role}
+                                                onClick={() => toggleRole(role)}
+                                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1 ${
+                                                    isSelected 
+                                                    ? 'bg-blue-600 text-white border-blue-500 shadow-md' 
+                                                    : 'bg-zinc-50 dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-zinc-300'
+                                                }`}
+                                            >
+                                                {role}
+                                                {isSelected && <Check size={12} />}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-zinc-400 italic">Nenhuma função cadastrada neste ministério.</p>
+                            )}
                         </div>
+
                         <button 
                             onClick={handleGenerate}
                             disabled={loading}
@@ -106,7 +130,7 @@ export const InviteModal = ({ isOpen, onClose, ministryId, orgId }: { isOpen: bo
                                 <Check size={24}/>
                             </div>
                             <h3 className="font-bold text-zinc-800 dark:text-white">Convite Gerado!</h3>
-                            <p className="text-xs text-zinc-500 mt-1">Envie este link para <strong>{email}</strong></p>
+                            <p className="text-xs text-zinc-500 mt-1">Qualquer pessoa com este link poderá se cadastrar.</p>
                         </div>
                         
                         <div className="bg-zinc-50 dark:bg-zinc-900 p-3 rounded-xl border border-zinc-200 dark:border-zinc-700 flex items-center gap-2">

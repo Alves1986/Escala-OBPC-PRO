@@ -102,27 +102,28 @@ const filterRolesBySettings = async (roles: string[], ministryId: string, orgId:
     return roles.filter(r => dbRoles.includes(r));
 };
 
-// --- INVITE SYSTEM ---
+// --- INVITE SYSTEM (LINK-BASED) ---
 
-export const createInviteToken = async (email: string, ministryId: string, orgId: string) => {
+export const createInviteToken = async (ministryId: string, roles: string[], orgId: string) => {
     const sb = getSupabase();
     if (!sb) return { success: false, message: "Sem conexão" };
 
     try {
         const token = crypto.randomUUID();
-        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(); // 48h
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 dias
 
         const { error } = await sb.from('invite_tokens').insert({
             token,
-            email,
-            ministry_id: ministryId,
             organization_id: orgId,
+            ministry_id: ministryId,
+            roles: roles,
             used: false,
             expires_at: expiresAt
         });
 
         if (error) throw error;
 
+        // Gera link limpo
         const url = `${window.location.origin}/?invite=${token}`;
         return { success: true, url };
     } catch (e: any) {
@@ -135,7 +136,7 @@ export const validateInviteToken = async (token: string) => {
     if (!sb) return { valid: false, message: "Erro de conexão" };
 
     const { data, error } = await sb.from('invite_tokens')
-        .select('*')
+        .select('*, organization_ministries(label)')
         .eq('token', token)
         .maybeSingle();
 
@@ -146,59 +147,84 @@ export const validateInviteToken = async (token: string) => {
     const expires = new Date(data.expires_at);
     if (expires < now) return { valid: false, message: "Este convite expirou." };
 
-    return { valid: true, data };
+    return { 
+        valid: true, 
+        data: {
+            ministryId: data.ministry_id,
+            roles: data.roles,
+            orgId: data.organization_id,
+            ministryLabel: data.organization_ministries?.label || data.ministry_id
+        } 
+    };
 };
 
-export const registerWithInvite = async (token: string, name: string, password: string) => {
+export const registerWithInvite = async (
+    token: string, 
+    formData: {
+        name: string,
+        email: string,
+        password: string,
+        whatsapp: string,
+        birthDate: string
+    }
+) => {
     const sb = getSupabase();
     if (!sb) return { success: false, message: "Sem conexão" };
 
-    // 1. Revalidar
-    const { valid, data: invite } = await validateInviteToken(token);
-    if (!valid || !invite) return { success: false, message: "Convite inválido." };
+    try {
+        // 1. Revalidar
+        const { valid, data: invite } = await validateInviteToken(token);
+        if (!valid || !invite) throw new Error("Convite inválido ou expirado.");
 
-    // 2. Criar Auth User
-    const { data: authData, error: authError } = await sb.auth.signUp({
-        email: invite.email,
-        password: password,
-        options: {
-            data: {
-                full_name: name,
-                organization_id: invite.organization_id
+        // 2. Criar Auth User
+        const { data: authData, error: authError } = await sb.auth.signUp({
+            email: formData.email,
+            password: formData.password,
+            options: {
+                data: {
+                    full_name: formData.name,
+                    organization_id: invite.orgId
+                }
             }
-        }
-    });
+        });
 
-    if (authError) return { success: false, message: authError.message };
-    if (!authData.user) return { success: false, message: "Erro ao criar usuário." };
+        if (authError) throw authError;
+        if (!authData.user) throw new Error("Erro ao criar usuário.");
 
-    const userId = authData.user.id;
+        const userId = authData.user.id;
 
-    // 3. Atualizar/Criar Profile
-    const { error: profileError } = await sb.from('profiles').upsert({
-        id: userId,
-        name: name,
-        email: invite.email,
-        organization_id: invite.organization_id,
-        allowed_ministries: [invite.ministry_id], // Inicia com o ministério do convite
-        ministry_id: invite.ministry_id // Define como ativo inicial
-    });
+        // 3. Atualizar/Criar Profile
+        const { error: profileError } = await sb.from('profiles').upsert({
+            id: userId,
+            name: formData.name,
+            email: formData.email,
+            whatsapp: formData.whatsapp,
+            birth_date: formData.birthDate,
+            organization_id: invite.orgId,
+            allowed_ministries: [invite.ministryId], 
+            ministry_id: invite.ministryId 
+        });
 
-    if (profileError) return { success: false, message: "Erro ao criar perfil: " + profileError.message };
+        if (profileError) throw new Error("Erro ao criar perfil: " + profileError.message);
 
-    // 4. Criar Membership
-    await sb.from('organization_memberships').insert({
-        profile_id: userId,
-        organization_id: invite.organization_id,
-        ministry_id: invite.ministry_id,
-        role: 'member',
-        functions: []
-    });
+        // 4. Criar Membership
+        await sb.from('organization_memberships').insert({
+            profile_id: userId,
+            organization_id: invite.orgId,
+            ministry_id: invite.ministryId,
+            role: 'member',
+            functions: invite.roles || []
+        });
 
-    // 5. Marcar convite como usado
-    await sb.from('invite_tokens').update({ used: true }).eq('token', token);
+        // 5. Marcar convite como usado
+        await sb.from('invite_tokens').update({ used: true }).eq('token', token);
 
-    return { success: true };
+        return { success: true };
+
+    } catch (e: any) {
+        console.error(e);
+        return { success: false, message: e.message || "Erro desconhecido ao registrar." };
+    }
 };
 
 // --- CORE SAAS FUNCTIONS ---
