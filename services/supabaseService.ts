@@ -691,7 +691,17 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
 export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) => {
     const sb = getSupabase();
     if (!sb || !orgId) return [];
-    const { data } = await sb.from('announcements').select(`*, announcement_reads (user_id, profiles(name), created_at), announcement_likes (user_id, profiles(name), created_at)`).eq('ministry_id', ministryId).eq('organization_id', orgId).gte('expiration_date', new Date().toISOString()).order('created_at', { ascending: false });
+    
+    // Fix: Date-only comparison (YYYY-MM-DD) to avoid timezone issues, allowing NULL expiration
+    const today = new Date().toISOString().slice(0, 10);
+
+    const { data } = await sb.from('announcements')
+        .select(`*, announcement_reads (user_id, profiles(name), created_at), announcement_likes (user_id, profiles(name), created_at)`)
+        .eq('ministry_id', ministryId)
+        .eq('organization_id', orgId)
+        .or(`expiration_date.is.null,expiration_date.gte.${today}`)
+        .order('created_at', { ascending: false });
+
     return (data || []).map((a: any) => ({
         id: a.id, title: a.title, message: a.message, type: a.type, timestamp: a.created_at, expirationDate: a.expiration_date, author: a.author_name || 'Admin',
         readBy: a.announcement_reads.map((r: any) => ({ userId: r.user_id, name: r.profiles?.name, timestamp: r.created_at })),
