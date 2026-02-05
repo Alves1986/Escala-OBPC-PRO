@@ -940,7 +940,7 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
 
     if (action === 'like') {
         const { data } = await sb.from('announcement_interactions')
-            .select('id')
+            .select('announcement_id')
             .eq('announcement_id', id)
             .eq('user_id', userId)
             .eq('organization_id', orgId)
@@ -949,17 +949,40 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
             .maybeSingle();
 
         if (data) {
-            await sb.from('announcement_interactions').delete().eq('id', data.id).eq('organization_id', orgId);
+            await sb.from('announcement_interactions')
+                .delete()
+                .eq('announcement_id', id)
+                .eq('user_id', userId)
+                .eq('organization_id', orgId)
+                .eq('ministry_id', ministryId)
+                .eq('type', 'like');
             console.log('ANNOUNCEMENT LIKE SAVE', { announcement_id: id, user_id: userId, liked: false });
         } else {
             await sb.from('announcement_interactions').insert({ announcement_id: id, user_id: userId, organization_id: orgId, ministry_id: ministryId, type: 'like' });
             console.log('ANNOUNCEMENT LIKE SAVE', { announcement_id: id, user_id: userId, liked: true });
         }
     } else {
-        const { error } = await sb.from('announcement_interactions').upsert(
-            { announcement_id: id, user_id: userId, organization_id: orgId, ministry_id: ministryId, type: 'read' },
-            { onConflict: 'announcement_id, user_id, type' }
-        );
+        const { data: existingRead } = await sb.from('announcement_interactions')
+            .select('announcement_id')
+            .eq('announcement_id', id)
+            .eq('user_id', userId)
+            .eq('organization_id', orgId)
+            .eq('ministry_id', ministryId)
+            .eq('type', 'read')
+            .maybeSingle();
+
+        let error = null as any;
+        if (!existingRead) {
+            const res = await sb.from('announcement_interactions').insert({
+                announcement_id: id,
+                user_id: userId,
+                organization_id: orgId,
+                ministry_id: ministryId,
+                type: 'read'
+            });
+            error = res.error;
+        }
+
         console.log('ANNOUNCEMENT READ SAVE', { announcement_id: id, user_id: userId, error });
     }
 };
