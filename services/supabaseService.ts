@@ -356,6 +356,7 @@ export const fetchMinistrySettings = async (ministryId: string, orgId?: string):
     }
 
     console.log('WINDOW READ', ministryDef);
+    console.log('ORG_MINISTRY RAW ROW', ministryDef);
     console.log('WINDOW DB RAW', {
         availability_start: ministryDef?.availability_start,
         availability_end: ministryDef?.availability_end
@@ -717,6 +718,14 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
     if (!sb) return [];
     if (!orgId) throw new Error('ORG_CONTEXT_REQUIRED');
 
+    const { data: sampleData, error: sampleError } = await sb.from('announcements')
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('ministry_id', ministryId)
+        .limit(5);
+
+    console.log('ANNOUNCEMENTS SAMPLE COUNT', sampleData?.length || 0, sampleError);
+
     const { data, error } = await sb.from('announcements')
         .select('*')
         .eq('ministry_id', ministryId)
@@ -953,6 +962,23 @@ export const saveMinistrySettings = async (ministryId: string, orgId: string, di
 
         console.log('WINDOW SAVE RESULT', data, error);
         if (error) throw error;
+
+        const { data: refreshedRow, error: refreshError } = await sb
+            .from('organization_ministries')
+            .select('*')
+            .eq('id', ministryId)
+            .eq('organization_id', orgId)
+            .maybeSingle();
+
+        console.log('ORG_MINISTRY RAW ROW', refreshedRow);
+        console.log('WINDOW SAVE RECHECK', {
+            availability_start: refreshedRow?.availability_start,
+            availability_end: refreshedRow?.availability_end,
+            expected_start: start,
+            expected_end: end,
+            refreshError
+        });
+        if (refreshError) throw refreshError;
     }
 };
 
