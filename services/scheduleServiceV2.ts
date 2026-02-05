@@ -373,6 +373,10 @@ export const fetchNextEventCardData = async (
   if (nextAssignment.event_id) {
     assignmentsQuery = assignmentsQuery.eq('event_id', nextAssignment.event_id);
   } else {
+    console.log('NEXT EVENT FALLBACK BRANCH', {
+      event_key: nextAssignment.event_key,
+      event_date: nextAssignment.event_date
+    });
     assignmentsQuery = assignmentsQuery
       .eq('event_key', nextAssignment.event_key)
       .eq('event_date', nextAssignment.event_date);
@@ -386,7 +390,7 @@ export const fetchNextEventCardData = async (
   const eventId = nextAssignment.event_id || `${nextAssignment.event_key}_${nextAssignment.event_date}`;
 
   if (!nextAssignment.event_id && (!assignments || assignments.length === 0)) {
-    return {
+    const payload = {
       event: {
         id: eventId,
         title: eventRule?.title || 'Evento',
@@ -396,6 +400,8 @@ export const fetchNextEventCardData = async (
       },
       members: []
     };
+    console.log('NEXT EVENT FINAL PAYLOAD', payload);
+    return payload;
   }
 
   const members = (assignments || []).map((a: any) => {
@@ -411,7 +417,7 @@ export const fetchNextEventCardData = async (
     };
   });
 
-  return {
+  const payload = {
     event: {
       id: eventId,
       title: eventRule?.title || 'Evento',
@@ -421,4 +427,7 @@ export const fetchNextEventCardData = async (
     },
     members
   };
+
+  console.log('NEXT EVENT FINAL PAYLOAD', payload);
+  return payload;
 };

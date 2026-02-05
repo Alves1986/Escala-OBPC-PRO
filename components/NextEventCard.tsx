@@ -20,6 +20,9 @@ export const NextEventCard: React.FC<Props> = ({ attendance, members, onConfirm,
   const [minutesToOpen, setMinutesToOpen] = useState(0);
 
   const orgId = currentUser?.organizationId;
+  const enabled = !!ministryId && !!orgId;
+
+  console.log('NEXT EVENT QUERY CTX', { ministryId, orgId, enabled });
 
   const { data: cardData, isLoading } = useQuery({
     queryKey: ['next_event_card', ministryId, orgId],
@@ -31,7 +34,7 @@ export const NextEventCard: React.FC<Props> = ({ attendance, members, onConfirm,
 
       return event;
     },
-    enabled: !!ministryId && !!orgId && orgId.length > 10,
+    enabled,
     refetchOnWindowFocus: false
   });
 
