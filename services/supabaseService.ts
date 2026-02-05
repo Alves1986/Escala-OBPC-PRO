@@ -345,7 +345,7 @@ export const fetchMinistrySettings = async (ministryId: string, orgId?: string):
     if (!sb || !ministryId || !orgId) return null;
 
     const { data: ministryDef, error: defError } = await sb.from('organization_ministries')
-        .select('id, label, roles, availability_start, availability_end, spotify_client_id, spotify_client_secret')
+        .select('*')
         .eq('id', ministryId)
         .eq('organization_id', orgId)
         .maybeSingle();
@@ -378,13 +378,13 @@ export const fetchMinistrySettings = async (ministryId: string, orgId?: string):
     return {
         id: ministryDef?.id,
         organizationMinistryId: ministryId,
-        displayName: ministryDef?.label || 'Ministério',
-        roles: Array.isArray(ministryDef?.roles) ? ministryDef.roles : [],
-        availabilityStart: ministryDef?.availability_start,
-        availabilityEnd: ministryDef?.availability_end,
+        displayName: ministryDef?.label ?? '',
+        roles: (ministryDef as any)?.roles ?? null as any,
+        availabilityStart: ministryDef?.availability_start ?? null as any,
+        availabilityEnd: ministryDef?.availability_end ?? null as any,
         organizationId: orgId,
-        spotifyClientId: ministryDef?.spotify_client_id,
-        spotifyClientSecret: ministryDef?.spotify_client_secret
+        spotifyClientId: ministryDef?.spotify_client_id ?? null as any,
+        spotifyClientSecret: ministryDef?.spotify_client_secret ?? null as any
     };
 };
 
@@ -701,7 +701,7 @@ export const fetchMinistryAvailability = async (ministryId: string, orgId?: stri
 export const fetchNotificationsSQL = async (ministryIds: string[], userId: string, orgId?: string) => {
     const sb = getSupabase();
     if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
-    if (!orgId) throw new Error('orgId missing');
+    if (!orgId) throw new Error('ORG_CONTEXT_REQUIRED');
     const { data, error } = await sb.from('notifications').select('*').in('ministry_id', ministryIds).eq('organization_id', orgId).order('created_at', { ascending: false }).limit(50);
     if (error) throw error;
     const { data: reads, error: readsError } = await sb.from('notification_reads').select('notification_id').eq('user_id', userId).eq('organization_id', orgId);
@@ -714,10 +714,11 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
 
 export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) => {
     const sb = getSupabase();
-    if (!sb || !orgId) return [];
+    if (!sb) return [];
+    if (!orgId) throw new Error('ORG_CONTEXT_REQUIRED');
 
     const { data, error } = await sb.from('announcements')
-        .select(`*, announcement_reads (user_id, profiles(name), created_at), announcement_likes (user_id, profiles(name), created_at)`)
+        .select('*')
         .eq('ministry_id', ministryId)
         .eq('organization_id', orgId)
         .order('created_at', { ascending: false });
@@ -727,7 +728,33 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
         return [];
     }
 
-    if (!data) return [];
+    if (!data || data.length === 0) return [];
+
+    const announcementIds = data.map((a: any) => a.id);
+
+    const [{ data: reads }, { data: likes }] = await Promise.all([
+        sb.from('announcement_reads')
+            .select('announcement_id, user_id, created_at')
+            .eq('organization_id', orgId)
+            .in('announcement_id', announcementIds),
+        sb.from('announcement_likes')
+            .select('announcement_id, user_id, created_at')
+            .eq('organization_id', orgId)
+            .in('announcement_id', announcementIds)
+    ]);
+
+    const readByAnnouncement: Record<string, any[]> = {};
+    const likedByAnnouncement: Record<string, any[]> = {};
+
+    (reads || []).forEach((r: any) => {
+        if (!readByAnnouncement[r.announcement_id]) readByAnnouncement[r.announcement_id] = [];
+        readByAnnouncement[r.announcement_id].push({ userId: r.user_id, name: undefined, timestamp: r.created_at });
+    });
+
+    (likes || []).forEach((l: any) => {
+        if (!likedByAnnouncement[l.announcement_id]) likedByAnnouncement[l.announcement_id] = [];
+        likedByAnnouncement[l.announcement_id].push({ userId: l.user_id, name: undefined, timestamp: l.created_at });
+    });
 
     return data.map((a: any) => ({
         id: a.id,
@@ -737,16 +764,8 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
         timestamp: a.created_at,
         expirationDate: a.expiration_date,
         author: a.author_name || 'Admin',
-        readBy: a.announcement_reads?.map((r: any) => ({ 
-            userId: r.user_id, 
-            name: r.profiles?.name, 
-            timestamp: r.created_at 
-        })) || [],
-        likedBy: a.announcement_likes?.map((l: any) => ({ 
-            userId: l.user_id, 
-            name: l.profiles?.name, 
-            timestamp: l.created_at 
-        })) || []
+        readBy: readByAnnouncement[a.id] || [],
+        likedBy: likedByAnnouncement[a.id] || []
     }));
 };
 
