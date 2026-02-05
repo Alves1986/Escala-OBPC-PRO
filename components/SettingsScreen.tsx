@@ -7,14 +7,19 @@ import { ThemeMode } from '../types';
 import { sendNotificationSQL } from '../services/supabaseService';
 
 const computeWindowOpen = (start?: string, end?: string, now: Date = new Date()) => {
-  if (!start && !end) return true;
+  let result = true;
 
-  const startDate = start ? new Date(start) : new Date(0);
-  const endDate = end ? new Date(end) : new Date(8640000000000000);
+  if (start || end) {
+    const startDate = start ? new Date(start) : new Date(0);
+    const endDate = end ? new Date(end) : new Date(8640000000000000);
 
-  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return true;
+    if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime())) {
+      result = now >= startDate && now <= endDate;
+    }
+  }
 
-  return now >= startDate && now <= endDate;
+  console.log('WINDOW COMPUTE', { start, end, now, result });
+  return result;
 };
 
 
@@ -38,6 +43,7 @@ export const SettingsScreen: React.FC<Props> = ({
     onSaveTitle, onAnnounceUpdate, onEnableNotifications, 
     onSaveAvailabilityWindow, availabilityWindow, isAdmin = false, orgId
 }) => {
+  console.log('SETTINGS WINDOW INPUT', availabilityWindow);
   const [tempTitle, setTempTitle] = useState(initialTitle);
   const [availStart, setAvailStart] = useState("");
   const [availEnd, setAvailEnd] = useState("");
