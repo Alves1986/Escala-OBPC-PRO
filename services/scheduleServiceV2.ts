@@ -338,62 +338,64 @@ export const fetchNextEventCardData = async (
   const sb = getSupabase();
   if (!sb) return null;
 
-  const today = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+  const todayWeekday = now.getDay();
 
-  const { data: nextAssignment, error: nextAssignmentError } = await sb
-    .from('schedule_assignments')
-    .select('event_id, event_key, event_date')
+  const { data: rules, error: rulesError } = await sb
+    .from('event_rules')
+    .select('id, title, time, type, date, weekday')
     .eq('organization_id', orgId)
     .eq('ministry_id', ministryId)
-    .gte('event_date', today)
-    .order('event_date', { ascending: true })
-    .order('event_key', { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .or(`and(type.eq.single,date.gte.${today}),and(type.eq.weekly,weekday.gte.${todayWeekday})`)
+    .order('date', { ascending: true, nullsFirst: false })
+    .order('weekday', { ascending: true, nullsFirst: false })
+    .order('time', { ascending: true })
+    .limit(1);
 
-  if (nextAssignmentError) throw nextAssignmentError;
-  console.log('NEXT EVENT ASSIGNMENT', nextAssignment);
-  if (!nextAssignment?.event_key || !nextAssignment?.event_date) return null;
-  console.log('NEXT EVENT EVENT_ID USED', nextAssignment.event_id);
+  if (rulesError) throw rulesError;
 
-  const eventRule = nextAssignment.event_id
-    ? (await sb
-        .from('event_rules')
-        .select('title, time, type')
-        .eq('id', nextAssignment.event_id)
-        .eq('organization_id', orgId)
-        .eq('ministry_id', ministryId)
-        .maybeSingle()).data
-    : null;
+  const nextRule = rules?.[0];
+  if (!nextRule?.id) return null;
 
-  const time = eventRule?.time || '00:00';
-  const iso = `${nextAssignment.event_date}T${time}`;
+  const eventId = nextRule.id;
+  console.log('NEXT EVENT EVENT_ID USED', eventId);
+
+  const ruleTime = nextRule.time || '00:00';
+  let eventDateIso = now.toISOString().split('T')[0];
+
+  if (nextRule.type === 'single' && nextRule.date) {
+    eventDateIso = nextRule.date;
+  } else if (nextRule.type === 'weekly' && typeof nextRule.weekday === 'number') {
+    const delta = (nextRule.weekday - todayWeekday + 7) % 7;
+    const nextWeeklyDate = new Date(now);
+    nextWeeklyDate.setDate(now.getDate() + delta);
+    eventDateIso = nextWeeklyDate.toISOString().split('T')[0];
+  }
+
+  const iso = `${eventDateIso}T${ruleTime}`;
   const eventDate = new Date(iso);
   const dateDisplay = eventDate.toLocaleDateString('pt-BR', {
     day: '2-digit',
     month: '2-digit'
   });
 
-  const assignments = nextAssignment.event_id
-    ? (await sb
-        .from('schedule_assignments')
-        .select('event_id, event_key, event_date, role, member_id, confirmed, profiles(name)')
-        .eq('event_id', nextAssignment.event_id)
-        .eq('organization_id', orgId)
-        .eq('ministry_id', ministryId)).data
-    : [];
+  const { data: assignments, error: assignmentsError } = await sb
+    .from('schedule_assignments')
+    .select('event_id, event_key, event_date, role, member_id, confirmed, profiles(name)')
+    .eq('event_id', eventId)
+    .eq('organization_id', orgId)
+    .eq('ministry_id', ministryId);
 
+  if (assignmentsError) throw assignmentsError;
   console.log('NEXT EVENT MEMBERS RAW', assignments?.length ?? 0);
-  console.log('NEXT EVENT MEMBERS COUNT', assignments?.length ?? 0);
-
-  const eventId = nextAssignment.event_id || `${nextAssignment.event_key}_${nextAssignment.event_date}`;
 
   const dedupedMembersMap = new Map<string, any>();
 
   (assignments || []).forEach((a: any) => {
     const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
     const assignmentKey = `${a.event_key}_${a.event_date}_${a.role}`;
-    const dedupeKey = `${a.event_id || nextAssignment.event_id || 'unknown'}_${a.role || 'unknown'}_${a.member_id || 'unknown'}`;
+    const dedupeKey = `${eventId}_${a.role || 'unknown'}_${a.member_id || 'unknown'}`;
 
     if (!dedupedMembersMap.has(dedupeKey)) {
       dedupedMembersMap.set(dedupeKey, {
@@ -412,11 +414,11 @@ export const fetchNextEventCardData = async (
   const payload = {
     event: {
       id: eventId,
-      title: eventRule?.title || 'Evento',
+      title: nextRule?.title || 'Evento',
       iso,
       dateDisplay,
-      time,
-      type: eventRule?.type
+      time: ruleTime,
+      type: nextRule?.type
     },
     members
   };
