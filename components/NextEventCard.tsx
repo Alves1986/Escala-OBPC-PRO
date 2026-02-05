@@ -37,7 +37,7 @@ export const NextEventCard: React.FC<Props> = ({ attendance, members, onConfirm,
 
   console.log('NEXT EVENT CARD DATA', cardData);
 
-  const event = cardData?.event ?? null;
+  const event = cardData?.event;
   const team = cardData?.members || [];
   const eventIso = event ? `${event.date}T${event.time || '00:00'}` : '';
   const eventDateDisplay = event
@@ -168,15 +168,6 @@ export const NextEventCard: React.FC<Props> = ({ attendance, members, onConfirm,
 
           <div className="mt-12 relative z-10">
             {(() => {
-              if (!event) {
-                return (
-                  <div className="p-5 rounded-[1.5rem] bg-white/5 border border-white/10 backdrop-blur-md text-center">
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-1">Status</p>
-                    <p className="text-xs font-bold text-slate-300">Evento sem identidade válida (event_id ausente).</p>
-                  </div>
-                );
-              }
-
               const myRole = team.find(t => currentUser && t.memberName === currentUser.name);
               if (myRole) {
                 const isConfirmed = myRole.confirmed || !!attendance[myRole.assignmentKey];
@@ -207,7 +198,7 @@ export const NextEventCard: React.FC<Props> = ({ attendance, members, onConfirm,
           ) : team.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-[2.5rem]">
               <CalendarClock size={48} className="text-slate-200 dark:text-slate-800 mb-4" />
-              <p className="text-slate-400 font-bold text-sm">Escala em processamento...</p>
+              <p className="text-slate-400 font-bold text-sm">Sem equipe escalada</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">

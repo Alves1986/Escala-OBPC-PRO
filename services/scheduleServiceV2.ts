@@ -315,11 +315,11 @@ export const fetchNextEventTeam = async (ministryId: string, orgId: string) => {
 
 export interface NextEventCardData {
   event: {
-    id: string;
+    id: string | null;
     title: string;
-    time: string;
+    time: string | null;
     date: string;
-  } | null;
+  };
   members: {
     role: string;
     memberId: string;
@@ -354,35 +354,37 @@ export const fetchNextEventCardData = async (
 
   if (!nextAssignment) return null;
 
-  const eventId = nextAssignment.event_id;
-  if (!eventId) {
-    const payload: NextEventCardData = { event: null, members: [] };
-    console.log('NEXT EVENT EVENT_ID USED', null);
-    console.log('NEXT EVENT MEMBERS RAW', 0);
-    console.log('NEXT EVENT FINAL PAYLOAD', payload);
-    return payload;
-  }
-
+  const eventId = nextAssignment.event_id ?? null;
   console.log('NEXT EVENT EVENT_ID USED', eventId);
 
-  const { data: rule, error: ruleError } = await sb
-    .from('event_rules')
-    .select('*')
-    .eq('id', eventId)
-    .maybeSingle();
+  let rule = null as any;
 
-  if (ruleError) throw ruleError;
+  if (eventId) {
+    const { data: resolvedRule, error: ruleError } = await sb
+      .from('event_rules')
+      .select('*')
+      .eq('id', eventId)
+      .maybeSingle();
 
-  const { data: assignments, error: assignmentsError } = await sb
-    .from('schedule_assignments')
-    .select('event_id, event_key, event_date, role, member_id, confirmed, profiles(name)')
-    .eq('event_id', eventId)
-    .eq('organization_id', orgId)
-    .eq('ministry_id', ministryId);
+    if (ruleError) throw ruleError;
+    rule = resolvedRule;
+  }
 
-  if (assignmentsError) throw assignmentsError;
+  let assignments: any[] = [];
 
-  console.log('NEXT EVENT MEMBERS RAW', assignments?.length ?? 0);
+  if (eventId) {
+    const { data: assignmentRows, error: assignmentsError } = await sb
+      .from('schedule_assignments')
+      .select('event_id, event_key, event_date, role, member_id, confirmed, profiles(name)')
+      .eq('event_id', eventId)
+      .eq('organization_id', orgId)
+      .eq('ministry_id', ministryId);
+
+    if (assignmentsError) throw assignmentsError;
+    assignments = assignmentRows || [];
+  }
+
+  console.log('NEXT EVENT MEMBERS RAW', assignments.length);
 
   const dedupedMembersMap = new Map<string, any>();
 
@@ -406,7 +408,7 @@ export const fetchNextEventCardData = async (
     event: {
       id: eventId,
       title: rule?.title || 'Evento',
-      time: rule?.time || '00:00',
+      time: rule?.time ?? null,
       date: nextAssignment.event_date || rule?.date || today
     },
     members: Array.from(dedupedMembersMap.values())
