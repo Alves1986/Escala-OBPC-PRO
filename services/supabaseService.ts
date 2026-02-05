@@ -380,7 +380,7 @@ export const fetchMinistrySettings = async (ministryId: string, orgId?: string):
         id: ministryDef?.id,
         organizationMinistryId: ministryId,
         displayName: ministryDef?.label ?? '',
-        roles: (ministryDef as any)?.roles ?? null as any,
+        roles: Array.isArray((ministryDef as any)?.roles) ? (ministryDef as any).roles : [],
         availabilityStart: ministryDef?.availability_start ?? null as any,
         availabilityEnd: ministryDef?.availability_end ?? null as any,
         organizationId: orgId,
