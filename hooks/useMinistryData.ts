@@ -150,6 +150,8 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   const events = useMemo(() => {
       return generatedEvents.map(e => ({
           id: e.id,       // Chave Determinística (RuleID_Data)
+          ruleId: e.ruleId,
+          date: e.date,
           iso: e.iso,     // Representação ISO (YYYY-MM-DDTHH:mm) para UI
           title: e.title,
           dateDisplay: e.date.split('-').reverse().slice(0, 2).join('/')

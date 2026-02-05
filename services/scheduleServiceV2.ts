@@ -268,11 +268,43 @@ export const generateOccurrencesV2 = (
   return occurrences.sort((a, b) => a.iso.localeCompare(b.iso));
 };
 
-export const fetchNextEventTeam = async (ministryId: string, orgId: string) => {
+export const fetchNextEventTeam = async (
+  ministryId: string,
+  orgId: string,
+  target?: { ruleId?: string; date?: string }
+) => {
   const sb = getSupabase();
   if (!sb) return { date: null, team: [] };
 
   const today = new Date().toISOString().split('T')[0];
+  const targetDate = target?.date;
+  const targetRuleId = target?.ruleId;
+
+  if (targetDate && targetRuleId) {
+    const { data: assignments } = await sb
+      .from('schedule_assignments')
+      .select(`
+          event_key,
+          event_date,
+          role,
+          member_id,
+          profiles(name)
+      `)
+      .eq('organization_id', orgId)
+      .eq('ministry_id', ministryId)
+      .eq('event_key', targetRuleId)
+      .eq('event_date', targetDate);
+
+    const team = (assignments || []).map((a: any) => ({
+      role: a.role,
+      memberId: a.member_id,
+      memberName: a.profiles?.name || 'Membro',
+      eventKey: a.event_key,
+      eventDate: a.event_date || targetDate
+    }));
+
+    return { date: targetDate, team };
+  }
 
   // 1. Buscar o próximo evento
   const { data: nextEvents } = await sb

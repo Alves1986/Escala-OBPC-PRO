@@ -5,7 +5,7 @@ import { getLocalDateISOString, generateGoogleCalendarUrl } from '../utils/dateU
 import { fetchNextEventTeam } from '../services/scheduleServiceV2';
 
 interface Props {
-  event: { iso: string; dateDisplay: string; title: string } | undefined;
+  event: { iso: string; dateDisplay: string; title: string; ruleId?: string; date?: string } | undefined;
   schedule: Record<string, string>;
   attendance: AttendanceMap;
   roles: Role[];
@@ -29,7 +29,10 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
   useEffect(() => {
     if (ministryId && currentUser?.organizationId) {
         setLoadingTeam(true);
-        fetchNextEventTeam(ministryId, currentUser.organizationId)
+        fetchNextEventTeam(ministryId, currentUser.organizationId, {
+          ruleId: event?.ruleId,
+          date: event?.date
+        })
             .then(data => {
                 if (data && data.team) {
                     setDbTeam(data.team);
@@ -40,7 +43,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
     } else {
         setLoadingTeam(false);
     }
-  }, [ministryId, currentUser]);
+  }, [ministryId, currentUser, event?.ruleId, event?.date]);
 
   const checkTimeWindow = () => {
     if (!event) return;
