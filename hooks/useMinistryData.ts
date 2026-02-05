@@ -82,7 +82,9 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
           query.queryKey[0] === 'conflicts' ||
           query.queryKey[0] === 'assignments' ||
           query.queryKey[0] === 'rules' ||
-          query.queryKey[0] === 'availability'
+          query.queryKey[0] === 'availability' ||
+          query.queryKey[0] === 'notifications' ||
+          query.queryKey[0] === 'announcements'
       });
   };
 
@@ -114,6 +116,13 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
             { event: 'INSERT', schema: 'public', table: 'notifications', filter: `ministry_id=eq.${mid}` }, 
             () => {
                 queryClient.invalidateQueries({ queryKey: ['notifications'] });
+            }
+        )
+        .on(
+            'postgres_changes', 
+            { event: '*', schema: 'public', table: 'announcements', filter: `ministry_id=eq.${mid}` }, 
+            () => {
+                queryClient.invalidateQueries({ queryKey: keys.announcements(mid, orgId) });
             }
         )
         .on(
