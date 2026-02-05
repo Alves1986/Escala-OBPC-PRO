@@ -203,14 +203,16 @@ export const validateInviteToken = async (inviteTokenParam: string) => {
 
     // Busca o Label separadamente para evitar JOIN na query principal (pode falhar por RLS)
     let ministryLabel = 'Ministério';
+    let ministryCode: string | null = null;
     if (data.ministry_id) {
         try {
             const { data: mData } = await sb
                 .from('organization_ministries')
-                .select('label')
+                .select('label, code')
                 .eq('id', data.ministry_id)
                 .maybeSingle();
             if (mData && mData.label) ministryLabel = mData.label;
+            if (mData && mData.code) ministryCode = mData.code;
         } catch (e) {
             console.warn("Não foi possível buscar o nome do ministério (acesso restrito?).", e);
         }
@@ -223,7 +225,8 @@ export const validateInviteToken = async (inviteTokenParam: string) => {
             token: data.token, // Identificador para uso no registro
             ministryId: data.ministry_id,
             orgId: data.organization_id,
-            ministryLabel: ministryLabel
+            ministryLabel: ministryLabel,
+            ministryCode: ministryCode
         } 
     };
 };
