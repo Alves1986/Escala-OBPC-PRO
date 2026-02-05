@@ -871,14 +871,36 @@ export const cancelSwapRequestSQL = async (requestId: string, orgId: string) => 
 export const interactAnnouncementSQL = async (id: string, userId: string, userName: string, action: 'read'|'like', orgId: string) => {
     const sb = getSupabase();
     if (!sb) return;
+
+    // 1. Garantir que o perfil existe antes de interagir (Constraint check)
+    const { data: profile } = await sb.from('profiles').select('id').eq('id', userId).maybeSingle();
+    if (!profile) {
+        await sb.from('profiles').insert({ id: userId, name: userName, organization_id: orgId });
+    }
+
     const table = action === 'read' ? 'announcement_reads' : 'announcement_likes';
+    
     if (action === 'like') {
         const { data } = await sb.from(table).select('id').eq('announcement_id', id).eq('user_id', userId).eq('organization_id', orgId).maybeSingle();
-        if (data) { await sb.from(table).delete().eq('id', data.id).eq('organization_id', orgId); } 
-        else { await sb.from(table).insert({ announcement_id: id, user_id: userId, organization_id: orgId }); }
+        if (data) { 
+            await sb.from(table).delete().eq('id', data.id).eq('organization_id', orgId); 
+            console.log("ANN LIKE WRITE RESULT", "Deleted");
+        } else { 
+            await sb.from(table).insert({ announcement_id: id, user_id: userId, organization_id: orgId }); 
+            console.log("ANN LIKE WRITE RESULT", "Inserted");
+        }
     } else {
-        await sb.from(table).upsert({ announcement_id: id, user_id: userId, organization_id: orgId }, { onConflict: 'announcement_id, user_id' });
+        // Read is idempotent upsert
+        const { error } = await sb.from(table).upsert(
+            { announcement_id: id, user_id: userId, organization_id: orgId }, 
+            { onConflict: 'announcement_id, user_id' }
+        );
+        console.log("ANN READ WRITE RESULT", error || "Success");
     }
+
+    // Optional: Log interactions state for debug
+    const { data: interactions } = await sb.from(table).select('*').eq('announcement_id', id);
+    console.log("ANN INTERACTIONS RAW AFTER WRITE", interactions);
 };
 
 export const updateUserProfile = async (name: string, whatsapp: string, avatar: string | undefined, functions: string[] | undefined, birthDate: string | undefined, ministryId?: string, orgId?: string) => {

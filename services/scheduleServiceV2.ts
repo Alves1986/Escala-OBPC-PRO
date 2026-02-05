@@ -254,44 +254,91 @@ export const generateOccurrencesV2 = (
   return occurrences.sort((a, b) => a.iso.localeCompare(b.iso));
 };
 
-export const fetchNextEventTeam = async (ministryId: string, orgId: string) => {
+export const fetchNextEventCardData = async (ministryId: string, orgId: string) => {
   const sb = getSupabase();
-  if (!sb) return { date: null, team: [] };
+  if (!sb) return null;
 
   const today = new Date().toISOString().split('T')[0];
 
-  // 1. Buscar o próximo evento
-  const { data: nextEvents } = await sb
+  // 1. Fonte canônica: schedule_assignments (Próximo evento com atividade)
+  const { data: nextAssignment, error: assignError } = await sb
       .from('schedule_assignments')
-      .select('event_date')
+      .select('event_key, event_date')
       .eq('organization_id', orgId)
       .eq('ministry_id', ministryId)
       .gte('event_date', today)
       .order('event_date', { ascending: true })
-      .limit(1);
+      .limit(1)
+      .maybeSingle();
 
-  if (!nextEvents || nextEvents.length === 0) return { date: null, team: [] };
+  if (assignError || !nextAssignment) {
+      return null;
+  }
 
-  const nextDate = nextEvents[0].event_date;
+  // Identidade do evento (Regra + Data)
+  const ruleId = nextAssignment.event_key;
+  const eventDate = nextAssignment.event_date;
 
-  // 2. Buscar TODOS assignments desse dia
-  const { data: assignments } = await sb
+  // 2. Metadados do evento (event_rules)
+  const { data: ruleData, error: ruleError } = await sb
+      .from('event_rules')
+      .select('title, time, type')
+      .eq('id', ruleId)
+      .maybeSingle();
+
+  // Fallback de título se a regra foi deletada mas a escala persiste
+  const eventTitle = ruleData?.title || 'Evento';
+  const eventTime = ruleData?.time || '00:00';
+  const eventIso = `${eventDate}T${eventTime}`;
+
+  // 3. Membros do evento (Deduplicação via query)
+  const { data: membersData } = await sb
       .from('schedule_assignments')
       .select(`
           role,
           member_id,
-          profiles(name)
+          confirmed,
+          profiles ( name, avatar_url )
       `)
       .eq('organization_id', orgId)
       .eq('ministry_id', ministryId)
-      .eq('event_date', nextDate);
+      .eq('event_key', ruleId)
+      .eq('event_date', eventDate);
 
-  // 3. Mapear para estrutura
-  const team = (assignments || []).map((a: any) => ({
-      role: a.role,
-      memberId: a.member_id,
-      memberName: a.profiles?.name || 'Membro'
+  const members = (membersData || []).map((m: any) => ({
+      role: m.role,
+      memberId: m.member_id,
+      name: m.profiles?.name || 'Membro',
+      avatarUrl: m.profiles?.avatar_url,
+      confirmed: m.confirmed,
+      key: `${eventIso}_${m.role}` // Chave composta para UI legacy compatibility
   }));
 
-  return { date: nextDate, team };
+  // Contrato de retorno obrigatório
+  return {
+      event: {
+          id: ruleId,
+          date: eventDate,
+          time: eventTime,
+          title: eventTitle,
+          iso: eventIso,
+          type: ruleData?.type || 'weekly'
+      },
+      members: members
+  };
+};
+
+// Mantido para compatibilidade, mas redireciona internamente se necessário
+export const fetchNextEventTeam = async (ministryId: string, orgId: string) => {
+    const data = await fetchNextEventCardData(ministryId, orgId);
+    if (!data) return { date: null, team: [] };
+    
+    return {
+        date: data.event.date,
+        team: data.members.map(m => ({
+            role: m.role,
+            memberId: m.memberId,
+            memberName: m.name
+        }))
+    };
 };

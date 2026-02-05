@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useMemo } from 'react';
 import { User, Role, DEFAULT_ROLES } from '../types';
 import { useMinistryQueries, keys } from './useMinistryQueries';
@@ -23,6 +22,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     conflictsQuery,
     auditLogsQuery,
     rulesQuery,
+    nextEventQuery,
     isLoading: isLoadingQueries
   } = useMinistryQueries(mid, currentMonth, currentUser);
 
@@ -82,7 +82,8 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
           query.queryKey[0] === 'conflicts' ||
           query.queryKey[0] === 'assignments' ||
           query.queryKey[0] === 'rules' ||
-          query.queryKey[0] === 'availability'
+          query.queryKey[0] === 'availability' ||
+          query.queryKey[0] === 'nextEvent'
       });
   };
 
@@ -100,6 +101,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
             () => {
                 queryClient.invalidateQueries({ queryKey: ['event_rules', mid, orgId] });
                 queryClient.invalidateQueries({ queryKey: keys.rules(mid, orgId) });
+                queryClient.invalidateQueries({ queryKey: keys.nextEvent(mid, orgId) });
             }
         )
         .on(
@@ -107,6 +109,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
             { event: '*', schema: 'public', table: 'schedule_assignments', filter: `ministry_id=eq.${mid}` }, 
             () => {
                 queryClient.invalidateQueries({ queryKey: keys.assignments(mid, currentMonth, orgId) });
+                queryClient.invalidateQueries({ queryKey: keys.nextEvent(mid, orgId) });
             }
         )
         .on(
@@ -167,6 +170,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     globalConflicts: conflictsQuery.data || {}, 
     auditLogs: auditLogsQuery.data || [], 
     eventRules, 
+    nextEvent: nextEventQuery.data || null, // NEW
     roles,
     ministryTitle,
     availabilityWindow,

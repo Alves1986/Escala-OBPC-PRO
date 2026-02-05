@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { CalendarClock, CheckCircle2, Clock, MapPin, AlertCircle, ShieldCheck, CalendarPlus, Sparkles } from 'lucide-react';
 import { Role, AttendanceMap, User as UserType, TeamMemberProfile } from '../types';
 import { getLocalDateISOString, generateGoogleCalendarUrl } from '../utils/dateUtils';
-import { fetchNextEventTeam } from '../services/scheduleServiceV2';
+import { useMinistryData } from '../hooks/useMinistryData'; // Import hook to get data
 
+// UPDATE PROPS: Remove explicit event/schedule/etc if we use internal data or update usage
 interface Props {
-  event: { iso: string; dateDisplay: string; title: string } | undefined;
-  schedule: Record<string, string>;
-  attendance: AttendanceMap;
+  event: any; // Now receives the structured nextEvent object { event: ..., members: ... }
+  schedule: Record<string, string>; // Legacy support if needed, but prefere internal data
+  attendance: AttendanceMap; // Legacy support
   roles: Role[];
   members: TeamMemberProfile[];
   onConfirm: (key: string) => void;
@@ -17,41 +18,42 @@ interface Props {
 
 type TimeStatus = 'early' | 'open' | 'closed';
 
-export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, roles, members, onConfirm, ministryId, currentUser }) => {
+export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, attendance, roles, members, onConfirm, ministryId, currentUser }) => {
   const [timeStatus, setTimeStatus] = useState<TimeStatus>('early');
   const [minutesToOpen, setMinutesToOpen] = useState(0);
   
-  // Estado para armazenar a equipe real vinda do banco
-  const [dbTeam, setDbTeam] = useState<{role: string, memberId: string, memberName: string}[]>([]);
-  const [loadingTeam, setLoadingTeam] = useState(true);
-
-  // Busca dados reais do banco
-  useEffect(() => {
-    if (ministryId && currentUser?.organizationId) {
-        setLoadingTeam(true);
-        fetchNextEventTeam(ministryId, currentUser.organizationId)
-            .then(data => {
-                if (data && data.team) {
-                    setDbTeam(data.team);
-                }
-            })
-            .catch(err => console.error("Erro ao buscar equipe do próximo evento", err))
-            .finally(() => setLoadingTeam(false));
-    } else {
-        setLoadingTeam(false);
-    }
-  }, [ministryId, currentUser]);
+  // Use data directly passed from the new hook structure in App.tsx
+  // The prop `event` now comes as `nextEvent` from `useMinistryData` which has `{ event, members }` structure.
+  // We need to handle both cases if the parent hasn't updated yet, but assuming App.tsx passes `nextEvent` as `event`.
+  
+  const eventData = propEvent?.event ? propEvent.event : propEvent; // Handle structure
+  const eventMembers = propEvent?.members || [];
 
   const checkTimeWindow = () => {
-    if (!event) return;
+    if (!eventData) return;
     const now = new Date();
-    const eventDate = new Date(event.iso);
+    const eventDate = new Date(eventData.iso);
     const diffInMinutes = (now.getTime() - eventDate.getTime()) / (1000 * 60);
+
+    // Dynamic window based on type
+    const isSingle = eventData.type === 'single';
+    // If single, valid until 23:59 of that day.
+    // If weekly/recurring, valid for 2 hours after start.
+    
+    let isClosed = false;
+    
+    if (isSingle) {
+        const endOfDay = new Date(eventDate);
+        endOfDay.setHours(23, 59, 59, 999);
+        isClosed = now > endOfDay;
+    } else {
+        isClosed = diffInMinutes > 120; // 2 hours after
+    }
 
     if (diffInMinutes < -60) {
       setTimeStatus('early');
       setMinutesToOpen(Math.abs(Math.floor(diffInMinutes + 60)));
-    } else if (diffInMinutes > 150) {
+    } else if (isClosed) {
       setTimeStatus('closed');
     } else {
       setTimeStatus('open');
@@ -62,47 +64,18 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
     checkTimeWindow();
     const interval = setInterval(checkTimeWindow, 60000);
     return () => clearInterval(interval);
-  }, [event]);
+  }, [eventData]);
 
-  if (!event) return null;
+  if (!eventData) return null;
 
-  // Usa dados do banco se disponíveis, senão fallback (que provavelmente estará vazio se o mês virou)
-  const getAssignedMembers = () => {
-    // Se temos dados do DB, usamos (Prioridade)
-    if (dbTeam.length > 0) {
-        return dbTeam.map(t => ({
-            role: t.role,
-            name: t.memberName,
-            key: `db_${t.role}_${t.memberId}` // Chave fictícia pois não temos confirmed/key real na query simplificada
-        }));
-    }
-
-    // Fallback original (prop schedule)
-    const assigned: { role: string; name: string; key: string }[] = [];
-    roles.forEach(role => {
-      if (ministryId === 'louvor' && role === 'Vocal') {
-          [1, 2, 3, 4, 5].forEach(i => {
-              const key = `${event.iso}_Vocal_${i}`;
-              const member = schedule[key];
-              if (member) assigned.push({ role: `Vocal ${i}`, name: member, key });
-          });
-      } else {
-          const key = `${event.iso}_${role}`;
-          const member = schedule[key];
-          if (member) assigned.push({ role, name: member, key });
-      }
-    });
-    return assigned;
-  };
-
-  const team = getAssignedMembers();
-  const eventIsToday = getLocalDateISOString() === event.iso.split('T')[0];
-  const eventTime = event.iso.split('T')[1];
+  const eventIsToday = getLocalDateISOString() === eventData.iso.split('T')[0];
+  const eventTime = eventData.iso.split('T')[1].substring(0, 5);
+  const dateDisplay = eventData.date.split('-').reverse().slice(0, 2).join('/');
 
   const renderActionButton = (memberKey: string, isConfirmed: boolean, role: string) => {
       const googleCalUrl = generateGoogleCalendarUrl(
-          `Escala: ${event.title}`,
-          event.iso,
+          `Escala: ${eventData.title}`,
+          eventData.iso,
           `Você está escalado como: ${role}.\nMinistério: ${ministryId?.toUpperCase()}`
       );
 
@@ -185,13 +158,13 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
                   </div>
                   
                   <h2 className="text-4xl lg:text-5xl font-black text-white leading-[1.1] mb-6 tracking-tighter">
-                      {event.title}
+                      {eventData.title}
                   </h2>
                   
                   <div className="space-y-4">
                       <div className="flex items-center gap-3 text-emerald-400">
                           <CalendarClock size={20} />
-                          <span className="text-lg font-bold tracking-tight">{event.dateDisplay}</span>
+                          <span className="text-lg font-bold tracking-tight">{dateDisplay}</span>
                       </div>
                       <div className="flex items-center gap-3 text-slate-300">
                           <Clock size={20} />
@@ -202,18 +175,11 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
               
               <div className="mt-12 relative z-10">
                   {(() => {
-                      // Usa props para verificação de presença pois o fetch simplificado não traz 'confirmed'
-                      // Tenta achar match pelo nome
-                      const myRole = team.find(t => currentUser && t.name === currentUser.name);
+                      const myRole = eventMembers.find((t: any) => currentUser && t.name === currentUser.name);
                       
-                      // Check fallback na prop schedule original se dbTeam não tiver a info completa
-                      let isConfirmed = false;
-                      if (myRole && !myRole.key.startsWith('db_')) {
-                          isConfirmed = !!attendance[myRole.key];
-                      }
-
                       if (myRole) {
-                          return renderActionButton(myRole.key, isConfirmed, myRole.role);
+                          // Note: myRole.key is constructed in fetchNextEventCardData as eventIso_role
+                          return renderActionButton(myRole.key, myRole.confirmed, myRole.role);
                       }
                       return (
                           <div className="p-5 rounded-[1.5rem] bg-white/5 border border-white/10 backdrop-blur-md text-center">
@@ -229,22 +195,20 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
           <div className="lg:col-span-8 p-8 lg:p-12 bg-white dark:bg-slate-900">
               <div className="flex items-center justify-between mb-8">
                   <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.3em]">Equipe Escalada</h3>
-                  <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-full">{team.length} Integrantes</span>
+                  <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-full">{eventMembers.length} Integrantes</span>
               </div>
 
-              {team.length === 0 ? (
+              {eventMembers.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-[2.5rem]">
                       <CalendarClock size={48} className="text-slate-200 dark:text-slate-800 mb-4" />
-                      <p className="text-slate-400 font-bold text-sm">Escala em processamento...</p>
+                      <p className="text-slate-400 font-bold text-sm">Ninguém escalado ainda.</p>
                   </div>
               ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                      {team.map((t, idx) => {
+                      {eventMembers.map((t: any, idx: number) => {
                           const isMe = currentUser && t.name === currentUser.name;
-                          const memberProfile = members.find(m => m.name === t.name);
-                          
-                          // Confirmação visual só funciona se vier da prop original por enquanto
-                          const isConfirmed = !t.key.startsWith('db_') && attendance[t.key];
+                          // Use avatarUrl directly from the fetched data if available
+                          const avatar = t.avatarUrl; 
                           
                           return (
                               <div key={idx} className={`group flex items-center p-4 rounded-[2rem] border transition-all duration-500 ${
@@ -253,16 +217,16 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
                                   : 'bg-slate-50/50 dark:bg-slate-800/40 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:border-slate-200 dark:hover:border-slate-700 hover:shadow-xl'
                               }`}>
                                   <div className="relative shrink-0">
-                                      <div className={`w-14 h-14 rounded-2xl overflow-hidden border-2 transition-all duration-500 ${isConfirmed ? 'border-emerald-500 shadow-lg shadow-emerald-500/20' : 'border-slate-200 dark:border-slate-700'}`}>
-                                          {memberProfile?.avatar_url ? (
-                                              <img src={memberProfile.avatar_url} className="w-full h-full object-cover" />
+                                      <div className={`w-14 h-14 rounded-2xl overflow-hidden border-2 transition-all duration-500 ${t.confirmed ? 'border-emerald-500 shadow-lg shadow-emerald-500/20' : 'border-slate-200 dark:border-slate-700'}`}>
+                                          {avatar ? (
+                                              <img src={avatar} className="w-full h-full object-cover" />
                                           ) : (
-                                              <div className={`w-full h-full flex items-center justify-center font-black text-xl ${isConfirmed ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-400'}`}>
+                                              <div className={`w-full h-full flex items-center justify-center font-black text-xl ${t.confirmed ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-400'}`}>
                                                   {t.name.charAt(0)}
                                               </div>
                                           )}
                                       </div>
-                                      {isConfirmed && (
+                                      {t.confirmed && (
                                           <div className="absolute -top-2 -right-2 bg-emerald-500 text-white rounded-full p-1 border-4 border-white dark:border-slate-900 shadow-lg scale-110">
                                               <CheckCircle2 size={12} />
                                           </div>
@@ -271,7 +235,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
                                   
                                   <div className="ml-5 flex-1 min-w-0">
                                       <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-widest mb-0.5">{t.role}</p>
-                                      <p className={`text-base font-black truncate tracking-tight ${isConfirmed ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
+                                      <p className={`text-base font-black truncate tracking-tight ${t.confirmed ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
                                           {t.name}
                                       </p>
                                       {isMe && <span className="inline-block mt-1 text-[9px] font-black bg-emerald-500 text-white px-2 py-0.5 rounded-full uppercase tracking-tighter">Você</span>}

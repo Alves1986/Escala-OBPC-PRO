@@ -158,7 +158,7 @@ const InnerApp = () => {
     membersMap, publicMembers, availability,
     availabilityNotes, notifications, announcements, 
     repertoire, swapRequests, globalConflicts, auditLogs, roles, 
-    ministryTitle, availabilityWindow, eventRules,
+    ministryTitle, availabilityWindow, eventRules, nextEvent, // USE nextEvent
     refreshData, isLoading: loadingData,
     setAvailability, setNotifications 
   } = useMinistryData(ministryId, currentMonth, user);
@@ -348,18 +348,35 @@ const InnerApp = () => {
                     </div>
 
                     <div className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
-                        {(() => {
-                            const now = new Date();
-                            const bufferMs = 2.5 * 60 * 60 * 1000; 
-                            
-                            const upcoming = events.filter(e => {
-                                const eventDate = new Date(e.iso);
-                                const expirationDate = new Date(eventDate.getTime() + bufferMs);
-                                return expirationDate > now;
-                            }).sort((a, b) => a.iso.localeCompare(b.iso))[0];
-
-                            return <NextEventCard event={upcoming} schedule={schedule} attendance={attendance} roles={roles} members={publicMembers} onConfirm={(key) => { const assignment = Object.entries(schedule).find(([k, v]) => k === key); if (assignment) setConfirmModalData({ key, memberName: assignment[1], eventName: upcoming.title, date: upcoming.dateDisplay, role: key.split('_').pop() || '' }); }} ministryId={ministryId} currentUser={user} />;
-                        })()}
+                        {/* 
+                           UPDATE: Agora passamos o nextEvent (do banco) diretamente.
+                           Se nextEvent for nulo (sem eventos futuros), o componente tratará.
+                        */}
+                        <NextEventCard 
+                            event={nextEvent} 
+                            schedule={schedule} 
+                            attendance={attendance} 
+                            roles={roles} 
+                            members={publicMembers} 
+                            onConfirm={async (key) => {
+                                // key aqui vem como "eventIso_role", precisamos extrair para confirmação
+                                // O ideal seria ter o ID da assignment, mas o fluxo atual usa chave composta
+                                const assignment = Object.entries(schedule).find(([k, v]) => k === key); 
+                                if (nextEvent && nextEvent.event) {
+                                    const role = key.split('_').pop() || '';
+                                    const memberName = user.name;
+                                    setConfirmModalData({ 
+                                        key, 
+                                        memberName, 
+                                        eventName: nextEvent.event.title, 
+                                        date: nextEvent.event.date.split('-').reverse().slice(0, 2).join('/'), 
+                                        role 
+                                    }); 
+                                }
+                            }} 
+                            ministryId={ministryId} 
+                            currentUser={user} 
+                        />
                     </div>
 
                     <div className="hidden lg:block space-y-4 animate-slide-up" style={{ animationDelay: '0.3s' }}>
@@ -551,16 +568,16 @@ const InnerApp = () => {
   );
 };
 
-export default function App() {
+const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
+      <SessionProvider>
         <ToastProvider>
-            <SessionProvider>
-                <ErrorBoundary>
-                    <InnerApp />
-                </ErrorBoundary>
-            </SessionProvider>
+          <InnerApp />
         </ToastProvider>
+      </SessionProvider>
     </QueryClientProvider>
   );
-}
+};
+
+export default App;

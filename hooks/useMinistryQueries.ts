@@ -1,7 +1,7 @@
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Supabase from '../services/supabaseService';
 import { fetchEventRules } from '../infra/supabase/fetchEventRules'; // Importação da Camada Infra
+import { fetchNextEventCardData } from '../services/scheduleServiceV2'; // New Service
 import { useAppStore } from '../store/appStore';
 
 // Keys for caching
@@ -17,7 +17,8 @@ export const keys = {
   repertoire: (mid: string, oid: string) => ['repertoire', mid, oid],
   globalConflicts: (mid: string, month: string, oid: string) => ['conflicts', mid, month, oid],
   ranking: (mid: string, oid: string) => ['ranking', mid, oid],
-  auditLogs: (mid: string, oid: string) => ['audit', mid, oid]
+  auditLogs: (mid: string, oid: string) => ['audit', mid, oid],
+  nextEvent: (mid: string, oid: string) => ['nextEvent', mid, oid] // NEW Key
 };
 
 export function useMinistryQueries(ministryId: string, currentMonth: string, user: any) {
@@ -104,6 +105,15 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     enabled: isQueryEnabled
   });
 
+  // 12. Next Event (NEW)
+  const nextEventQuery = useQuery({
+    queryKey: keys.nextEvent(ministryId, orgId),
+    queryFn: () => fetchNextEventCardData(ministryId, orgId),
+    enabled: isQueryEnabled,
+    retry: false,
+    refetchOnWindowFocus: false
+  });
+
   return {
     settingsQuery,
     assignmentsQuery,
@@ -116,6 +126,7 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     conflictsQuery,
     auditLogsQuery,
     rulesQuery,
+    nextEventQuery,
     isLoading: isQueryEnabled && (settingsQuery.isLoading || assignmentsQuery.isLoading || membersQuery.isLoading)
   };
 }
