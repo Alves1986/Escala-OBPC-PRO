@@ -948,44 +948,61 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
     if (action === 'like') {
         const { data: existingLike } = await sb.from('announcement_interactions')
             .select('announcement_id')
-            .eq('announcement_id', id)
-            .eq('user_id', userId)
             .eq('organization_id', orgId)
             .eq('ministry_id', ministryId)
+            .eq('announcement_id', id)
+            .eq('user_id', userId)
             .eq('interaction_type', 'like')
             .maybeSingle();
+
+        let writeError: any = null;
+        let liked = false;
 
         if (existingLike) {
             const { error } = await sb.from('announcement_interactions')
                 .delete()
-                .eq('announcement_id', id)
-                .eq('user_id', userId)
                 .eq('organization_id', orgId)
                 .eq('ministry_id', ministryId)
+                .eq('announcement_id', id)
+                .eq('user_id', userId)
                 .eq('interaction_type', 'like');
 
-            console.log('ANN LIKE WRITE', { announcement_id: id, user_id: userId, liked: false, error });
+            writeError = error;
+            liked = false;
         } else {
             const { error } = await sb.from('announcement_interactions').insert({
-                announcement_id: id,
-                user_id: userId,
                 organization_id: orgId,
                 ministry_id: ministryId,
+                announcement_id: id,
+                user_id: userId,
                 interaction_type: 'like'
             });
 
-            console.log('ANN LIKE WRITE', { announcement_id: id, user_id: userId, liked: true, error });
+            writeError = error;
+            liked = true;
         }
+
+        console.log('ANN LIKE WRITE RESULT', { organization_id: orgId, ministry_id: ministryId, announcement_id: id, user_id: userId, liked, error: writeError });
     } else {
-        const { error } = await sb.from('announcement_interactions').upsert({
-            announcement_id: id,
-            user_id: userId,
+        const { error: writeError } = await sb.from('announcement_interactions').upsert({
             organization_id: orgId,
             ministry_id: ministryId,
+            announcement_id: id,
+            user_id: userId,
             interaction_type: 'read'
-        });
-        console.log('ANN READ WRITE', { announcement_id: id, user_id: userId, error });
+        }, { onConflict: 'organization_id,ministry_id,announcement_id,user_id,interaction_type' });
+
+        console.log('ANN READ WRITE RESULT', { organization_id: orgId, ministry_id: ministryId, announcement_id: id, user_id: userId, error: writeError });
     }
+
+    const { data: rawAfterWrite, error: rawAfterWriteError } = await sb.from('announcement_interactions')
+        .select('announcement_id, user_id, created_at, interaction_type')
+        .eq('organization_id', orgId)
+        .eq('ministry_id', ministryId)
+        .eq('announcement_id', id)
+        .eq('user_id', userId);
+
+    console.log('ANN INTERACTIONS RAW AFTER WRITE', { organization_id: orgId, ministry_id: ministryId, announcement_id: id, user_id: userId, error: rawAfterWriteError, rows: rawAfterWrite || [] });
 };
 
 export const updateUserProfile = async (name: string, whatsapp: string, avatar: string | undefined, functions: string[] | undefined, birthDate: string | undefined, ministryId?: string, orgId?: string) => {
