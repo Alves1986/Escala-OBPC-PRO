@@ -19,14 +19,15 @@ interface Props {
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
 
+const computeWindowOpen = (start?: string, end?: string, now: Date = new Date()) => {
+  if (!start && !end) return true;
 
-const BLOCKED_WINDOW_THRESHOLD_UTC = new Date('1970-01-02T00:00:00.000Z');
+  const startDate = start ? new Date(start) : new Date(0);
+  const endDate = end ? new Date(end) : new Date(8640000000000000);
 
-const isWindowBlocked = (value?: string) => {
-  if (!value) return false;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return false;
-  return parsed <= BLOCKED_WINDOW_THRESHOLD_UTC;
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return true;
+
+  return now >= startDate && now <= endDate;
 };
 
 
@@ -66,17 +67,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   // Check Window Status
   const isWindowOpenForMembers = React.useMemo(() => {
-      if (!availabilityWindow?.start && !availabilityWindow?.end) return true;
-      if (isWindowBlocked(availabilityWindow.start)) return false;
-
-      const now = new Date();
-      let start = new Date(0);
-      let end = new Date(8640000000000000); 
-
-      if (availabilityWindow.start) start = new Date(availabilityWindow.start);
-      if (availabilityWindow.end) end = new Date(availabilityWindow.end);
-      
-      return now >= start && now <= end;
+      return computeWindowOpen(availabilityWindow?.start, availabilityWindow?.end, new Date());
   }, [availabilityWindow]);
 
   const canEdit = isAdmin || isWindowOpenForMembers;

@@ -6,13 +6,15 @@ import { LegalModal, LegalDocType } from './LegalDocuments';
 import { ThemeMode } from '../types';
 import { sendNotificationSQL } from '../services/supabaseService';
 
-const BLOCKED_WINDOW_THRESHOLD_UTC = new Date('1970-01-02T00:00:00.000Z');
+const computeWindowOpen = (start?: string, end?: string, now: Date = new Date()) => {
+  if (!start && !end) return true;
 
-const isWindowBlocked = (value?: string) => {
-  if (!value) return false;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return false;
-  return parsed <= BLOCKED_WINDOW_THRESHOLD_UTC;
+  const startDate = start ? new Date(start) : new Date(0);
+  const endDate = end ? new Date(end) : new Date(8640000000000000);
+
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return true;
+
+  return now >= startDate && now <= endDate;
 };
 
 
@@ -47,7 +49,6 @@ export const SettingsScreen: React.FC<Props> = ({
 
   const toLocalInput = (isoString?: string) => {
       if (!isoString) return "";
-      if (isWindowBlocked(isoString)) return "";
       try {
           const date = new Date(isoString);
           const offset = date.getTimezoneOffset() * 60000;
@@ -74,21 +75,12 @@ export const SettingsScreen: React.FC<Props> = ({
 
   const isWindowActive = () => {
       const dbStart = availabilityWindow?.start;
-
-      if (isWindowBlocked(dbStart)) return false;
       if (!dbStart && !availabilityWindow?.end && !availStart && !availEnd) return true;
       
       const startIso = availStart ? fromLocalInput(availStart) : dbStart;
       const endIso = availEnd ? fromLocalInput(availEnd) : availabilityWindow?.end;
 
-      if (!startIso || !endIso) return true;
-      
-      const now = new Date();
-      const s = new Date(startIso);
-      const e = new Date(endIso);
-      if (isWindowBlocked(startIso)) return false;
-
-      return now >= s && now <= e;
+      return computeWindowOpen(startIso, endIso, new Date());
   };
 
   const status = isWindowActive();
@@ -135,8 +127,8 @@ export const SettingsScreen: React.FC<Props> = ({
       let newEndStr = "";
 
       if (action === 'block') {
-          newStartStr = "1970-01-01T00:00:00.000Z";
-          newEndStr = "1970-01-01T00:00:00.000Z";
+          newStartStr = now.toISOString();
+          newEndStr = now.toISOString();
           
           await sendNotificationSQL(ministryId, orgId, {
               title: "🔒 Janela Fechada",
