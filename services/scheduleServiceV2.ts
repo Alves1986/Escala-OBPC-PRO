@@ -148,12 +148,21 @@ export const saveAssignmentV2 = async (
   const sb = getSupabase();
   if (!sb) throw new Error("NO_SUPABASE");
 
+  const { data: rule } = await sb
+    .from('event_rules')
+    .select('id, title, time')
+    .eq('organization_id', orgId)
+    .eq('ministry_id', ministryId)
+    .eq('id', payload.event_key)
+    .maybeSingle();
+
   const { data, error } = await sb
     .from("schedule_assignments")
     .upsert(
       {
         organization_id: orgId,
         ministry_id: ministryId,
+        event_id: rule?.id ?? null,
         event_key: payload.event_key,
         event_date: payload.event_date,
         role: payload.role,
@@ -334,6 +343,7 @@ export const fetchNextEventCardData = async (
     .maybeSingle();
 
   if (nextAssignmentError) throw nextAssignmentError;
+  console.log('NEXT EVENT ASSIGNMENT', nextAssignment);
   if (!nextAssignment?.event_key || !nextAssignment?.event_date) return null;
 
   const { data: eventRule } = await sb
@@ -358,6 +368,8 @@ export const fetchNextEventCardData = async (
     .eq('organization_id', orgId)
     .eq('ministry_id', ministryId);
 
+  console.log('NEXT EVENT USING EVENT_ID', nextAssignment.event_id);
+
   if (nextAssignment.event_id) {
     assignmentsQuery = assignmentsQuery.eq('event_id', nextAssignment.event_id);
   } else {
@@ -369,8 +381,22 @@ export const fetchNextEventCardData = async (
   const { data: assignments, error: assignmentsError } = await assignmentsQuery;
 
   if (assignmentsError) throw assignmentsError;
+  console.log('NEXT EVENT MEMBERS COUNT', assignments?.length ?? 0);
 
   const eventId = nextAssignment.event_id || `${nextAssignment.event_key}_${nextAssignment.event_date}`;
+
+  if (!nextAssignment.event_id && (!assignments || assignments.length === 0)) {
+    return {
+      event: {
+        id: eventId,
+        title: eventRule?.title || 'Evento',
+        iso,
+        dateDisplay,
+        time
+      },
+      members: []
+    };
+  }
 
   const members = (assignments || []).map((a: any) => {
     const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
