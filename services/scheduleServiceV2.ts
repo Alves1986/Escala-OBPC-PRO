@@ -295,3 +295,84 @@ export const fetchNextEventTeam = async (ministryId: string, orgId: string) => {
 
   return { date: nextDate, team };
 };
+
+export interface NextEventCardData {
+  event: {
+    id: string;
+    title: string;
+    iso: string;
+    dateDisplay: string;
+    time: string;
+  };
+  members: {
+    role: string;
+    memberId: string;
+    memberName: string;
+    assignmentKey: string;
+    confirmed: boolean;
+  }[];
+}
+
+export const fetchNextEventCardData = async (
+  ministryId: string,
+  orgId: string
+): Promise<NextEventCardData | null> => {
+  const sb = getSupabase();
+  if (!sb) return null;
+
+  const nowIso = new Date().toISOString();
+
+  const { data: nextEvent, error: nextEventError } = await sb
+    .from('events')
+    .select('id, title, date_time')
+    .eq('organization_id', orgId)
+    .eq('ministry_id', ministryId)
+    .gte('date_time', nowIso)
+    .order('date_time', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (nextEventError) throw nextEventError;
+  if (!nextEvent?.id || !nextEvent?.date_time) return null;
+
+  const eventDate = new Date(nextEvent.date_time);
+  const dateDisplay = eventDate.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit'
+  });
+
+  const time = eventDate.toISOString().split('T')[1].slice(0, 5);
+
+  const { data: assignments, error: assignmentsError } = await sb
+    .from('schedule_assignments')
+    .select('event_key, event_date, role, member_id, confirmed, profiles(name)')
+    .eq('organization_id', orgId)
+    .eq('ministry_id', ministryId)
+    .eq('event_id', nextEvent.id);
+
+  if (assignmentsError) throw assignmentsError;
+
+  const members = (assignments || []).map((a: any) => {
+    const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
+    const assignmentKey = `${a.event_key || nextEvent.id}_${a.event_date || eventDate.toISOString().split('T')[0]}_${a.role}`;
+
+    return {
+      role: a.role,
+      memberId: a.member_id,
+      memberName: profile?.name || 'Membro',
+      assignmentKey,
+      confirmed: !!a.confirmed
+    };
+  });
+
+  return {
+    event: {
+      id: nextEvent.id,
+      title: nextEvent.title || 'Evento',
+      iso: nextEvent.date_time,
+      dateDisplay,
+      time
+    },
+    members
+  };
+};

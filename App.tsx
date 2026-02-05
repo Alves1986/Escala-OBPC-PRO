@@ -384,18 +384,24 @@ const InnerApp = () => {
                     </div>
 
                     <div className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
-                        {(() => {
-                            const now = new Date();
-                            const bufferMs = 2.5 * 60 * 60 * 1000; 
-                            
-                            const upcoming = events.filter(e => {
-                                const eventDate = new Date(e.iso);
-                                const expirationDate = new Date(eventDate.getTime() + bufferMs);
-                                return expirationDate > now;
-                            }).sort((a, b) => a.iso.localeCompare(b.iso))[0];
-
-                            return <NextEventCard event={upcoming} schedule={schedule} attendance={attendance} roles={roles} members={publicMembers} onConfirm={(key) => { const assignment = Object.entries(schedule).find(([k, v]) => k === key); if (assignment) setConfirmModalData({ key, memberName: assignment[1], eventName: upcoming.title, date: upcoming.dateDisplay, role: key.split('_').pop() || '' }); }} ministryId={ministryId} currentUser={user} />;
-                        })()}
+                        <NextEventCard
+                            attendance={attendance}
+                            members={publicMembers}
+                            onConfirm={(key) => {
+                                const assignment = Object.entries(schedule).find(([k]) => k === key);
+                                if (assignment) {
+                                    setConfirmModalData({
+                                        key,
+                                        memberName: assignment[1],
+                                        eventName: 'Próximo Evento',
+                                        date: '',
+                                        role: key.split('_').pop() || ''
+                                    });
+                                }
+                            }}
+                            ministryId={ministryId}
+                            currentUser={user}
+                        />
                     </div>
 
                     <div className="hidden lg:block space-y-4 animate-slide-up" style={{ animationDelay: '0.3s' }}>
