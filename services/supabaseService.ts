@@ -921,11 +921,13 @@ export const saveMinistrySettings = async (ministryId: string, orgId: string, di
         organization_id: orgId,
         ...updates
     };
+    console.log("WINDOW SAVE INPUT", payload);
     console.log("SAVE_MINISTRY_SETTINGS PAYLOAD", payload);
     const { data, error } = await sb
       .from('ministry_settings')
       .upsert(payload, { onConflict: 'organization_id,ministry_id' })
       .select();
+    console.log("WINDOW SAVE RESULT", { data, error });
     console.log("SAVE_MINISTRY_SETTINGS RESULT", { data, error });
     const check = await sb
       .from('ministry_settings')
@@ -933,6 +935,7 @@ export const saveMinistrySettings = async (ministryId: string, orgId: string, di
       .eq('organization_id', orgId)
       .eq('ministry_id', ministryId)
       .single();
+    console.log("WINDOW READ RESULT", check?.data);
     console.log("SAVE_MINISTRY_SETTINGS DB CHECK", check);
 };
 
