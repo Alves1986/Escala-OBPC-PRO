@@ -908,14 +908,32 @@ export const saveMinistrySettings = async (ministryId: string, orgId: string, di
     if (roles) updates.roles = roles;
     if (start) updates.availability_start = start;
     if (end) updates.availability_end = end;
+    console.log("SAVE_MINISTRY_SETTINGS INPUT", {
+        ministryId,
+        orgId,
+        displayName,
+        roles,
+        start,
+        end
+    });
     const payload = {
         ministry_id: ministryId,
         organization_id: orgId,
         ...updates
     };
-    await sb
+    console.log("SAVE_MINISTRY_SETTINGS PAYLOAD", payload);
+    const { data, error } = await sb
       .from('ministry_settings')
-      .upsert(payload, { onConflict: 'organization_id,ministry_id' });
+      .upsert(payload, { onConflict: 'organization_id,ministry_id' })
+      .select();
+    console.log("SAVE_MINISTRY_SETTINGS RESULT", { data, error });
+    const check = await sb
+      .from('ministry_settings')
+      .select('*')
+      .eq('organization_id', orgId)
+      .eq('ministry_id', ministryId)
+      .single();
+    console.log("SAVE_MINISTRY_SETTINGS DB CHECK", check);
 };
 
 export const toggleAdminSQL = async (email: string, status: boolean, ministryId: string, orgId: string) => {
