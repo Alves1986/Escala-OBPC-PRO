@@ -300,6 +300,22 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
         await sb.from('profiles').insert({ id: userId, name: userName, organization_id: orgId });
     }
 
+    // 1. Fetch Ministry ID from announcement to ensure FK integrity
+    const { data: announcement } = await sb.from('announcements')
+        .select('ministry_id')
+        .eq('id', id)
+        .eq('organization_id', orgId)
+        .maybeSingle();
+    
+    if (!announcement || !announcement.ministry_id) {
+        console.warn('InteractAnnouncement: Ministry ID not found for announcement', id);
+        return;
+    }
+
+    const ministryId = announcement.ministry_id;
+
+    let rows: any = null;
+
     if (action === 'like') {
         // TOGGLE Logic for Like
         const { data: existing } = await sb.from('announcement_interactions')
@@ -312,26 +328,34 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
 
         if (existing) {
             // Remove Like
-            await sb.from('announcement_interactions').delete().eq('id', existing.id);
+            const { data } = await sb.from('announcement_interactions').delete().eq('id', existing.id).select();
+            rows = data;
         } else {
-            // Add Like
-            await sb.from('announcement_interactions').insert({
+            // Add Like (Correct Ministry ID)
+            const { data } = await sb.from('announcement_interactions').insert({
                 announcement_id: id,
                 user_id: userId,
                 organization_id: orgId,
-                ministry_id: '', // Will be filled by trigger or safely ignored if optional
+                ministry_id: ministryId, // FIXED
                 interaction_type: 'like'
-            });
+            }).select();
+            rows = data;
         }
     } else {
-        // UPSERT Logic for Read (Idempotent)
-        await sb.from('announcement_interactions').upsert({
+        // UPSERT Logic for Read (Idempotent + Correct OnConflict)
+        const { data } = await sb.from('announcement_interactions').upsert({
             announcement_id: id,
             user_id: userId,
             organization_id: orgId,
+            ministry_id: ministryId, // FIXED
             interaction_type: 'read'
-        }, { onConflict: 'announcement_id,user_id,interaction_type' });
+        }, { 
+            onConflict: 'announcement_id,user_id,organization_id,ministry_id,interaction_type' 
+        }).select();
+        rows = data;
     }
+
+    console.log('ANN WRITE CHECK', rows);
 };
 
 // --- RANKING LOGIC (CORRIGIDA) ---

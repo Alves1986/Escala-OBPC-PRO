@@ -7,7 +7,7 @@ import { getSupabase } from '../services/supabaseService';
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  event: { iso: string; title: string; dateDisplay: string } | null;
+  event: { id?: string; iso: string; title: string; dateDisplay: string } | null;
   schedule: ScheduleMap;
   roles: Role[];
   allMembers?: TeamMemberProfile[]; // Added to lookup avatars
@@ -45,7 +45,11 @@ export const EventDetailsModal: React.FC<Props> = ({
             const sb = getSupabase();
             if(!sb) return;
 
-            const { data } = await sb
+            // Extract Rule ID (Event Key) from the event ID (format: ruleId_date)
+            // If event.id is not present, we fall back to generic date fetch, but this is less safe for multi-service days.
+            const ruleId = event.id ? event.id.split('_')[0] : null;
+
+            let query = sb
                 .from('schedule_assignments')
                 .select(`
                     role,
@@ -55,6 +59,12 @@ export const EventDetailsModal: React.FC<Props> = ({
                 .eq('organization_id', currentUser.organizationId)
                 .eq('ministry_id', ministryId)
                 .eq('event_date', datePart);
+            
+            if (ruleId) {
+                query = query.eq('event_key', ruleId);
+            }
+
+            const { data } = await query;
             
             const grouped: Record<string, any[]> = {};
             if (data) {

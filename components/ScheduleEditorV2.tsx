@@ -58,7 +58,7 @@ interface ScheduleCellProps {
     role: string;
     currentMemberId: string | null;
     members: MemberV2[];
-    onAssign: (date: string, role: string, memberId: string | null) => void;
+    onAssign: (date: string, role: string, memberId: string | null, ruleId: string) => void;
     processing: boolean;
 }
 
@@ -113,14 +113,15 @@ const ScheduleCell: React.FC<ScheduleCellProps> = ({
         console.log("SELECT MEMBER CLICK", {
             occurrenceDate: occurrence.date,
             role,
-            memberId
+            memberId,
+            ruleId: occurrence.ruleId
         });
-        onAssign(occurrence.date, role, memberId);
+        onAssign(occurrence.date, role, memberId, occurrence.ruleId);
         setIsOpen(false);
     };
 
     const handleRemove = () => {
-        onAssign(occurrence.date, role, null);
+        onAssign(occurrence.date, role, null, occurrence.ruleId);
         setIsOpen(false);
     };
 
@@ -299,27 +300,23 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
         setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
     };
 
-    const handleAssignmentChange = async (date: string, role: string, memberId: string | null) => {
-        console.log("ASSIGNMENT CHANGE START", { date, role, memberId });
+    const handleAssignmentChange = async (date: string, role: string, memberId: string | null, ruleId: string) => {
+        console.log("ASSIGNMENT CHANGE START", { date, role, memberId, ruleId });
         setProcessing(true);
         
         // ID temporário para Optimistic UI
         const tempId = `temp-${Date.now()}`;
         const previousAssignments = [...assignments];
         
-        // Encontra ruleId da ocorrência
-        const occurrence = occurrences.find(o => o.date === date);
-        const ruleId = occurrence ? occurrence.ruleId : 'manual';
-
         // Atualização Otimista (feedback instantâneo)
         setAssignments(prev => {
-            // FIX: Usar event_date ao filtrar
-            const filtered = prev.filter(a => !(a.event_date === date && a.role === role));
+            // FIX: Usar event_key + event_date + role ao filtrar
+            const filtered = prev.filter(a => !(a.event_date === date && a.role === role && a.event_key === ruleId));
             const next = memberId
                 ? [...filtered, {
                     id: tempId,
-                    event_key: ruleId, // Adiciona event_key
-                    event_date: date, // Usa event_date (correto do contrato)
+                    event_key: ruleId, // Adiciona event_key correto da ocorrência
+                    event_date: date,
                     role,
                     member_id: memberId,
                     confirmed: false
@@ -332,7 +329,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
 
         try {
             if (memberId) {
-                // FIX: Ordem e payload corretos
+                // FIX: Ordem e payload corretos com ruleId explícito
                 await saveAssignmentV2(ministryId, orgId, {
                     event_key: ruleId,
                     event_date: date,
@@ -350,8 +347,6 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
                 });
                 addToast('Removido da escala', 'success');
             }
-            // Recarrega para garantir IDs reais se necessário, 
-            // mas o optimistic update já resolve a UX imediata.
         } catch (error) {
             console.error(error);
             addToast('Erro ao salvar alteração', 'error');
@@ -426,7 +421,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
                     </thead>
                     <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                         {occurrences.map((occurrence) => (
-                            <tr key={`${occurrence.date}-${occurrence.time}`} className="group hover:bg-zinc-50 dark:hover:bg-zinc-800/30">
+                            <tr key={`${occurrence.date}-${occurrence.time}-${occurrence.ruleId}`} className="group hover:bg-zinc-50 dark:hover:bg-zinc-800/30">
                                 {/* Coluna Fixa de Data */}
                                 <td className="p-3 border-b border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 group-hover:bg-zinc-50 dark:group-hover:bg-zinc-800/30 sticky left-0 z-10 border-r border-zinc-200 dark:border-zinc-800">
                                     <div className="flex flex-col">
@@ -437,31 +432,21 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
                                             <span className="text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-500 px-1.5 rounded">
                                                 {occurrence.time.substring(0, 5)}
                                             </span>
-                                            {/* (Removido is_special, não existe em OccurrenceV2) */}
+                                            <span className="text-[10px] text-zinc-400 truncate max-w-[80px]" title={occurrence.title}>
+                                                {occurrence.title}
+                                            </span>
                                         </div>
                                     </div>
                                 </td>
                                 
                                 {/* Células de Escala */}
                                 {roles.map(role => {
-                                    // DEBUG LOGGING IN RENDER
-                                    console.log("RENDER MATCH CHECK", {
-                                        occurrenceDate: occurrence.date,
-                                        role,
-                                        assignmentsCount: assignments.length
-                                    });
-
-                                    // FIX: Busca assignment usando event_date
+                                    // FIX CRÍTICO: Busca assignment usando event_date + event_key (ruleId)
                                     const assignment = assignments.find(a => {
                                         const aDate = a.event_date?.slice(0, 10);
                                         const oDate = occurrence.date?.slice(0, 10);
-                                        const match = aDate === oDate && a.role === role;
-                                  
-                                        if (match) {
-                                          console.log("MATCH FOUND", a);
-                                        }
-                                  
-                                        return match;
+                                        // Match obrigatório: DATA + ROLE + KEY
+                                        return aDate === oDate && a.role === role && a.event_key === occurrence.ruleId;
                                     });
 
                                     return (
