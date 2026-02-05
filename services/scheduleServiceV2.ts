@@ -1,4 +1,3 @@
-
 import { getSupabase } from "./supabaseService";
 
 export interface EventRuleV2 {
@@ -144,18 +143,18 @@ export const saveAssignmentV2 = async (
     member_id: string;
   }
 ) => {
-  console.log("[saveAssignmentV2] START", { ministryId, orgId, payload });
-
   const sb = getSupabase();
   if (!sb) throw new Error("NO_SUPABASE");
 
+  // Garantir que event_key (Rule ID) está sendo usado como identificador
+  
   const { data, error } = await sb
     .from("schedule_assignments")
     .upsert(
       {
         organization_id: orgId,
         ministry_id: ministryId,
-        event_key: payload.event_key,
+        event_key: payload.event_key, // CRÍTICO: Identifica QUAL culto do dia
         event_date: payload.event_date,
         role: payload.role,
         member_id: payload.member_id,
@@ -167,14 +166,7 @@ export const saveAssignmentV2 = async (
     )
     .select();
 
-  console.log("[saveAssignmentV2] DB RESPONSE", { data, error });
-
-  if (error) {
-    console.error("[saveAssignmentV2] ERROR", error);
-    throw error;
-  }
-
-  console.log("[saveAssignmentV2] SUCCESS");
+  if (error) throw error;
 };
 
 export const removeAssignmentV2 = async (
@@ -186,29 +178,19 @@ export const removeAssignmentV2 = async (
     role: string;
   }
 ) => {
-  console.log("[removeAssignmentV2] START", { ministryId, orgId, key });
-
   const sb = getSupabase();
   if (!sb) throw new Error("NO_SUPABASE");
 
-  const { data, error } = await sb
+  const { error } = await sb
     .from("schedule_assignments")
     .delete()
     .eq("organization_id", orgId)
     .eq("ministry_id", ministryId)
-    .eq("event_key", key.event_key)
+    .eq("event_key", key.event_key) // CRÍTICO: Remove apenas deste culto específico
     .eq("event_date", key.event_date)
-    .eq("role", key.role)
-    .select();
+    .eq("role", key.role);
 
-  console.log("[removeAssignmentV2] DB RESPONSE", { data, error });
-
-  if (error) {
-    console.error("[removeAssignmentV2] ERROR", error);
-    throw error;
-  }
-
-  console.log("[removeAssignmentV2] SUCCESS");
+  if (error) throw error;
 };
 
 export const generateOccurrencesV2 = (
@@ -262,23 +244,24 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
 
-  // 1. Passo: Buscar Assignments Futuros (Sem limit 1, pois precisamos ordenar por HORA também)
+  // 1. Buscar assignments futuros sem limit 1, para podermos calcular a hora correta
+  // Precisamos de todas as assignments futuras para encontrar a REALMENTE próxima com base na hora da regra
   const { data: assignments, error: assignError } = await sb
       .from('schedule_assignments')
       .select('event_key, event_date')
       .eq('organization_id', orgId)
       .eq('ministry_id', ministryId)
       .gte('event_date', todayStr)
-      .order('event_date', { ascending: true }); // Ordena por data, mas hora ainda desconhecida
+      .order('event_date', { ascending: true }); // Ordena por data (hora ainda desconhecida)
 
   if (assignError || !assignments || assignments.length === 0) {
       return null;
   }
 
-  // Extrair IDs de regras únicos para buscar horários
+  // 2. Extrair IDs de regras únicos para buscar horários
   const ruleIds = [...new Set(assignments.map((a: any) => a.event_key))];
 
-  // 2. Passo: Buscar Regras para obter horários
+  // 3. Buscar Regras para obter horários e títulos
   const { data: rules } = await sb
       .from('event_rules')
       .select('id, title, time, type')
@@ -286,10 +269,10 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
 
   const rulesMap = new Map(rules?.map((r: any) => [r.id, r]));
 
-  // 3. Passo: Montar Datetime real e filtrar/ordenar
+  // 4. Montar objetos completos com DataHora real
   const candidates = assignments.map((a: any) => {
-      const rule: any = rulesMap.get(a.event_key);
-      if (!rule) return null;
+      const rule = rulesMap.get(a.event_key) as any;
+      if (!rule) return null; // Regra deletada ou órfã
 
       const dateTimeStr = `${a.event_date}T${rule.time}`;
       const eventDateObj = new Date(dateTimeStr);
@@ -302,17 +285,18 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
       };
   })
   .filter((c: any) => c !== null)
-  // Filtra eventos que já passaram HOJE (ex: agora é 20h, evento foi 09h)
-  .filter((c: any) => c.dateObj >= new Date(Date.now() - 2 * 60 * 60 * 1000)) // Tolerância de 2h
+  // Filtra eventos que já passaram HOJE (com tolerância de 2h após início)
+  .filter((c: any) => c.dateObj >= new Date(Date.now() - 2 * 60 * 60 * 1000))
+  // Ordena cronologicamente (Data + Hora)
   .sort((a: any, b: any) => a.dateObj.getTime() - b.dateObj.getTime());
 
-  // Se não sobrou nenhum evento futuro
   if (candidates.length === 0) return null;
 
-  const nextEvent = candidates[0]; // O mais próximo de agora
+  // 5. Selecionar o vencedor (o mais próximo)
+  const nextEvent = candidates[0];
 
-  // 4. Passo: Buscar Membros deste evento específico
-  // IMPORTANTE: Busca por event_key + event_date para garantir integridade do bloco
+  // 6. Buscar Membros DESTE evento específico (RuleID + Date)
+  // ISSO EVITA MISTURAR CULTOS DO MESMO DIA
   const { data: membersData } = await sb
       .from('schedule_assignments')
       .select(`
@@ -323,7 +307,7 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
       `)
       .eq('organization_id', orgId)
       .eq('ministry_id', ministryId)
-      .eq('event_key', nextEvent.assignment.event_key)
+      .eq('event_key', nextEvent.assignment.event_key) // Chave do culto específico (Manhã vs Noite)
       .eq('event_date', nextEvent.assignment.event_date);
 
   const members = (membersData || []).map((m: any) => ({
@@ -332,10 +316,9 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
       name: m.profiles?.name || 'Membro',
       avatarUrl: m.profiles?.avatar_url,
       confirmed: m.confirmed,
-      key: `${nextEvent.iso}_${m.role}` // Chave para UI
+      key: `${nextEvent.iso}_${m.role}` // Chave composta para UI
   }));
 
-  // 5. Passo: Contrato Obrigatório
   return {
       event: {
           id: nextEvent.rule.id,
@@ -349,7 +332,6 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
   };
 };
 
-// Mantido para compatibilidade, mas redireciona internamente se necessário
 export const fetchNextEventTeam = async (ministryId: string, orgId: string) => {
     const data = await fetchNextEventCardData(ministryId, orgId);
     if (!data) return { date: null, team: [] };

@@ -174,9 +174,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
                       });
                   } else {
                       // Se não achou na projeção (talvez regra deletada mas escala existe),
-                      // cria um placeholder. Idealmente deveria buscar o título da regra no DB, 
-                      // mas aqui assumimos que generatedEvents cobre as regras ativas.
-                      // Fallback visual simples.
+                      // cria um placeholder. 
                       assignmentBasedEvents.push({
                           id: uniqueEventKey,
                           iso: `${date}T00:00`, // Horário desconhecido se regra sumiu
