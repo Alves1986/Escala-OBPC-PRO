@@ -584,14 +584,14 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
     const [assignmentsRes, swapsRes, interactionsRes] = await Promise.all([
         sb.from('schedule_assignments').select('member_id, event_date, role').eq('organization_id', orgId).eq('ministry_id', ministryId).eq('confirmed', true).lte('event_date', today),
         sb.from('swap_requests').select('requester_id, created_at').eq('organization_id', orgId).eq('ministry_id', ministryId),
-        sb.from('announcement_interactions').select('user_id, created_at, type').eq('organization_id', orgId).eq('ministry_id', ministryId)
+        sb.from('announcement_interactions').select('user_id, created_at, interaction_type').eq('organization_id', orgId).eq('ministry_id', ministryId)
     ]) as any;
 
     const assignments = assignmentsRes.data || [];
     const swaps = swapsRes.data || [];
     const interactions = interactionsRes.data || [];
-    const reads = interactions.filter((i: any) => i.type === 'read');
-    const likes = interactions.filter((i: any) => i.type === 'like');
+    const reads = interactions.filter((i: any) => i.interaction_type === 'read');
+    const likes = interactions.filter((i: any) => i.interaction_type === 'like');
 
     return (members || []).map((m: any) => {
         let points = 0;
@@ -742,7 +742,7 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
     const announcementIds = data.map((a: any) => a.id);
 
     const { data: interactions, error: interactionsError } = await sb.from('announcement_interactions')
-        .select('announcement_id, user_id, created_at, type')
+        .select('announcement_id, user_id, created_at, interaction_type')
         .eq('organization_id', orgId)
         .eq('ministry_id', ministryId)
         .in('announcement_id', announcementIds);
@@ -751,18 +751,18 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
         console.error('fetchAnnouncementsSQL interactions error', interactionsError);
     }
 
-    console.log('ANNOUNCEMENT INTERACTIONS COUNT', interactions?.length || 0);
+    console.log('ANN INTERACTIONS RAW', interactions?.length || 0, interactions);
 
     const readByAnnouncement: Record<string, any[]> = {};
     const likedByAnnouncement: Record<string, any[]> = {};
 
     (interactions || []).forEach((item: any) => {
-        if (item.type === 'read') {
+        if (item.interaction_type === 'read') {
             if (!readByAnnouncement[item.announcement_id]) readByAnnouncement[item.announcement_id] = [];
             readByAnnouncement[item.announcement_id].push({ userId: item.user_id, name: undefined, timestamp: item.created_at });
         }
 
-        if (item.type === 'like') {
+        if (item.interaction_type === 'like') {
             if (!likedByAnnouncement[item.announcement_id]) likedByAnnouncement[item.announcement_id] = [];
             likedByAnnouncement[item.announcement_id].push({ userId: item.user_id, name: undefined, timestamp: item.created_at });
         }
@@ -946,51 +946,45 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
     if (!ministryId) return;
 
     if (action === 'like') {
-        const { data } = await sb.from('announcement_interactions')
+        const { data: existingLike } = await sb.from('announcement_interactions')
             .select('announcement_id')
             .eq('announcement_id', id)
             .eq('user_id', userId)
             .eq('organization_id', orgId)
             .eq('ministry_id', ministryId)
-            .eq('type', 'like')
+            .eq('interaction_type', 'like')
             .maybeSingle();
 
-        if (data) {
-            await sb.from('announcement_interactions')
+        if (existingLike) {
+            const { error } = await sb.from('announcement_interactions')
                 .delete()
                 .eq('announcement_id', id)
                 .eq('user_id', userId)
                 .eq('organization_id', orgId)
                 .eq('ministry_id', ministryId)
-                .eq('type', 'like');
-            console.log('ANNOUNCEMENT LIKE SAVE', { announcement_id: id, user_id: userId, liked: false });
-        } else {
-            await sb.from('announcement_interactions').insert({ announcement_id: id, user_id: userId, organization_id: orgId, ministry_id: ministryId, type: 'like' });
-            console.log('ANNOUNCEMENT LIKE SAVE', { announcement_id: id, user_id: userId, liked: true });
-        }
-    } else {
-        const { data: existingRead } = await sb.from('announcement_interactions')
-            .select('announcement_id')
-            .eq('announcement_id', id)
-            .eq('user_id', userId)
-            .eq('organization_id', orgId)
-            .eq('ministry_id', ministryId)
-            .eq('type', 'read')
-            .maybeSingle();
+                .eq('interaction_type', 'like');
 
-        let error = null as any;
-        if (!existingRead) {
-            const res = await sb.from('announcement_interactions').insert({
+            console.log('ANN LIKE WRITE', { announcement_id: id, user_id: userId, liked: false, error });
+        } else {
+            const { error } = await sb.from('announcement_interactions').insert({
                 announcement_id: id,
                 user_id: userId,
                 organization_id: orgId,
                 ministry_id: ministryId,
-                type: 'read'
+                interaction_type: 'like'
             });
-            error = res.error;
-        }
 
-        console.log('ANNOUNCEMENT READ SAVE', { announcement_id: id, user_id: userId, error });
+            console.log('ANN LIKE WRITE', { announcement_id: id, user_id: userId, liked: true, error });
+        }
+    } else {
+        const { error } = await sb.from('announcement_interactions').upsert({
+            announcement_id: id,
+            user_id: userId,
+            organization_id: orgId,
+            ministry_id: ministryId,
+            interaction_type: 'read'
+        });
+        console.log('ANN READ WRITE', { announcement_id: id, user_id: userId, error });
     }
 };
 
