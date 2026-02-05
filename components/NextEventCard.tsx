@@ -5,12 +5,12 @@ import { getLocalDateISOString, generateGoogleCalendarUrl } from '../utils/dateU
 import { fetchNextEventTeam } from '../services/scheduleServiceV2';
 
 interface Props {
-  event: { iso: string; dateDisplay: string; title: string } | undefined;
+  event: { iso: string; dateDisplay: string; title: string; ruleId?: string; date?: string } | undefined;
   schedule: Record<string, string>;
   attendance: AttendanceMap;
   roles: Role[];
   members: TeamMemberProfile[];
-  onConfirm: (key: string) => void;
+  onConfirm: (payload: { key: string; memberName: string; eventName: string; date: string; role: string }) => void;
   ministryId: string | null;
   currentUser: UserType | null;
 }
@@ -22,14 +22,17 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
   const [minutesToOpen, setMinutesToOpen] = useState(0);
   
   // Estado para armazenar a equipe real vinda do banco
-  const [dbTeam, setDbTeam] = useState<{role: string, memberId: string, memberName: string}[]>([]);
+  const [dbTeam, setDbTeam] = useState<{role: string, memberId: string, memberName: string, eventKey: string, eventDate: string}[]>([]);
   const [loadingTeam, setLoadingTeam] = useState(true);
 
   // Busca dados reais do banco
   useEffect(() => {
     if (ministryId && currentUser?.organizationId) {
         setLoadingTeam(true);
-        fetchNextEventTeam(ministryId, currentUser.organizationId)
+        fetchNextEventTeam(ministryId, currentUser.organizationId, {
+          ruleId: event?.ruleId,
+          date: event?.date
+        })
             .then(data => {
                 if (data && data.team) {
                     setDbTeam(data.team);
@@ -40,7 +43,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
     } else {
         setLoadingTeam(false);
     }
-  }, [ministryId, currentUser]);
+  }, [ministryId, currentUser, event?.ruleId, event?.date]);
 
   const checkTimeWindow = () => {
     if (!event) return;
@@ -73,7 +76,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
         return dbTeam.map(t => ({
             role: t.role,
             name: t.memberName,
-            key: `db_${t.role}_${t.memberId}` // Chave fictícia pois não temos confirmed/key real na query simplificada
+            key: `${t.eventKey}_${t.eventDate}_${t.role}`
         }));
     }
 
@@ -99,7 +102,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
   const eventIsToday = getLocalDateISOString() === event.iso.split('T')[0];
   const eventTime = event.iso.split('T')[1];
 
-  const renderActionButton = (memberKey: string, isConfirmed: boolean, role: string) => {
+  const renderActionButton = (memberKey: string, isConfirmed: boolean, role: string, memberName: string) => {
       const googleCalUrl = generateGoogleCalendarUrl(
           `Escala: ${event.title}`,
           event.iso,
@@ -154,7 +157,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
           case 'open':
               return (
                   <button 
-                      onClick={() => onConfirm(memberKey)}
+                      onClick={() => onConfirm({ key: memberKey, memberName, eventName: event.title, date: event.dateDisplay, role })}
                       className="w-full flex items-center justify-center gap-3 px-8 py-5 bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-300 hover:to-teal-400 text-emerald-950 rounded-[1.5rem] text-sm font-black uppercase tracking-widest shadow-2xl shadow-emerald-500/30 active:scale-95 transition-all"
                   >
                       <MapPin size={20} /> Confirmar Presença Agora
@@ -213,7 +216,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
                       }
 
                       if (myRole) {
-                          return renderActionButton(myRole.key, isConfirmed, myRole.role);
+                          return renderActionButton(myRole.key, isConfirmed, myRole.role, myRole.name);
                       }
                       return (
                           <div className="p-5 rounded-[1.5rem] bg-white/5 border border-white/10 backdrop-blur-md text-center">

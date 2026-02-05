@@ -82,7 +82,9 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
           query.queryKey[0] === 'conflicts' ||
           query.queryKey[0] === 'assignments' ||
           query.queryKey[0] === 'rules' ||
-          query.queryKey[0] === 'availability'
+          query.queryKey[0] === 'availability' ||
+          query.queryKey[0] === 'notifications' ||
+          query.queryKey[0] === 'announcements'
       });
   };
 
@@ -118,6 +120,13 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
         )
         .on(
             'postgres_changes', 
+            { event: '*', schema: 'public', table: 'announcements', filter: `ministry_id=eq.${mid}` }, 
+            () => {
+                queryClient.invalidateQueries({ queryKey: keys.announcements(mid, orgId) });
+            }
+        )
+        .on(
+            'postgres_changes', 
             { event: '*', schema: 'public', table: 'swap_requests', filter: `ministry_id=eq.${mid}` }, 
             () => {
                 queryClient.invalidateQueries({ queryKey: keys.swapRequests(mid, orgId) });
@@ -141,6 +150,8 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   const events = useMemo(() => {
       return generatedEvents.map(e => ({
           id: e.id,       // Chave Determinística (RuleID_Data)
+          ruleId: e.ruleId,
+          date: e.date,
           iso: e.iso,     // Representação ISO (YYYY-MM-DDTHH:mm) para UI
           title: e.title,
           dateDisplay: e.date.split('-').reverse().slice(0, 2).join('/')

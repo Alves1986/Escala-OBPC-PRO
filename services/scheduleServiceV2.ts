@@ -1,5 +1,7 @@
 import { getSupabase } from "./supabaseService";
 
+const isDev = typeof import.meta !== "undefined" && Boolean(import.meta.env?.DEV);
+
 export interface EventRuleV2 {
   id: string;
   title: string;
@@ -70,7 +72,7 @@ export const fetchAssignmentsV2 = async (
 
   const { data, error } = await sb
     .from("schedule_assignments")
-    .select('id,event_key,event_date,role,member_id,confirmed')
+    .select('id,event_key,event_date,role,member_id,confirmed,profiles(name)')
     .eq("ministry_id", ministryId)
     .eq("organization_id", orgId)
     .like("event_date", `${monthStr}%`);
@@ -143,7 +145,9 @@ export const saveAssignmentV2 = async (
     member_id: string;
   }
 ) => {
-  console.log("[saveAssignmentV2] START", { ministryId, orgId, payload });
+  if (isDev) {
+    console.log("[saveAssignmentV2] START", { ministryId, orgId, payload });
+  }
 
   const sb = getSupabase();
   if (!sb) throw new Error("NO_SUPABASE");
@@ -166,14 +170,18 @@ export const saveAssignmentV2 = async (
     )
     .select();
 
-  console.log("[saveAssignmentV2] DB RESPONSE", { data, error });
+  if (isDev) {
+    console.log("[saveAssignmentV2] DB RESPONSE", { data, error });
+  }
 
   if (error) {
     console.error("[saveAssignmentV2] ERROR", error);
     throw error;
   }
 
-  console.log("[saveAssignmentV2] SUCCESS");
+  if (isDev) {
+    console.log("[saveAssignmentV2] SUCCESS");
+  }
 };
 
 export const removeAssignmentV2 = async (
@@ -185,7 +193,9 @@ export const removeAssignmentV2 = async (
     role: string;
   }
 ) => {
-  console.log("[removeAssignmentV2] START", { ministryId, orgId, key });
+  if (isDev) {
+    console.log("[removeAssignmentV2] START", { ministryId, orgId, key });
+  }
 
   const sb = getSupabase();
   if (!sb) throw new Error("NO_SUPABASE");
@@ -200,14 +210,18 @@ export const removeAssignmentV2 = async (
     .eq("role", key.role)
     .select();
 
-  console.log("[removeAssignmentV2] DB RESPONSE", { data, error });
+  if (isDev) {
+    console.log("[removeAssignmentV2] DB RESPONSE", { data, error });
+  }
 
   if (error) {
     console.error("[removeAssignmentV2] ERROR", error);
     throw error;
   }
 
-  console.log("[removeAssignmentV2] SUCCESS");
+  if (isDev) {
+    console.log("[removeAssignmentV2] SUCCESS");
+  }
 };
 
 export const generateOccurrencesV2 = (
@@ -254,11 +268,43 @@ export const generateOccurrencesV2 = (
   return occurrences.sort((a, b) => a.iso.localeCompare(b.iso));
 };
 
-export const fetchNextEventTeam = async (ministryId: string, orgId: string) => {
+export const fetchNextEventTeam = async (
+  ministryId: string,
+  orgId: string,
+  target?: { ruleId?: string; date?: string }
+) => {
   const sb = getSupabase();
   if (!sb) return { date: null, team: [] };
 
   const today = new Date().toISOString().split('T')[0];
+  const targetDate = target?.date;
+  const targetRuleId = target?.ruleId;
+
+  if (targetDate && targetRuleId) {
+    const { data: assignments } = await sb
+      .from('schedule_assignments')
+      .select(`
+          event_key,
+          event_date,
+          role,
+          member_id,
+          profiles(name)
+      `)
+      .eq('organization_id', orgId)
+      .eq('ministry_id', ministryId)
+      .eq('event_key', targetRuleId)
+      .eq('event_date', targetDate);
+
+    const team = (assignments || []).map((a: any) => ({
+      role: a.role,
+      memberId: a.member_id,
+      memberName: a.profiles?.name || 'Membro',
+      eventKey: a.event_key,
+      eventDate: a.event_date || targetDate
+    }));
+
+    return { date: targetDate, team };
+  }
 
   // 1. Buscar o próximo evento
   const { data: nextEvents } = await sb
@@ -278,6 +324,8 @@ export const fetchNextEventTeam = async (ministryId: string, orgId: string) => {
   const { data: assignments } = await sb
       .from('schedule_assignments')
       .select(`
+          event_key,
+          event_date,
           role,
           member_id,
           profiles(name)
@@ -290,7 +338,9 @@ export const fetchNextEventTeam = async (ministryId: string, orgId: string) => {
   const team = (assignments || []).map((a: any) => ({
       role: a.role,
       memberId: a.member_id,
-      memberName: a.profiles?.name || 'Membro'
+      memberName: a.profiles?.name || 'Membro',
+      eventKey: a.event_key,
+      eventDate: a.event_date || nextDate
   }));
 
   return { date: nextDate, team };
