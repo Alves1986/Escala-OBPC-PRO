@@ -36,6 +36,15 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
             if (res.valid) {
                 setInviteData(res.data);
                 setStatus('valid');
+
+                // --- UX: Limpar URL após validação ---
+                try {
+                    // Mantém o estado no React, mas remove visualmente o token da barra de endereços
+                    const cleanUrl = window.location.origin + window.location.pathname;
+                    window.history.replaceState({}, document.title, cleanUrl);
+                } catch (e) {
+                    console.warn("Não foi possível limpar a URL", e);
+                }
                 
                 // Fetch available roles for this ministry
                 if (res.data?.ministryId && res.data?.orgId) {
