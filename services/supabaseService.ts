@@ -18,12 +18,14 @@ let serviceOrgId: string | null = null;
 // Acesso seguro às variáveis de ambiente para evitar crash (Tela Preta)
 let envUrl = "";
 let envKey = "";
+let isDev = false;
 
 try {
   // @ts-ignore
   if (typeof import.meta !== 'undefined' && import.meta.env) {
     envUrl = import.meta.env.VITE_SUPABASE_URL || "";
     envKey = import.meta.env.VITE_SUPABASE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+    isDev = Boolean(import.meta.env.DEV);
   }
 } catch (e) {
   console.warn("[SupabaseService] Falha ao ler import.meta.env. Usando fallback se disponível.");
@@ -160,7 +162,9 @@ export const validateInviteToken = async (inviteTokenParam: string) => {
     const sb = getSupabase();
     if (!sb) return { valid: false, message: "Erro de conexão" };
 
-    console.log("🔍 [DEBUG] Validando token (Service):", inviteTokenParam);
+    if (isDev) {
+        console.log("🔍 [DEBUG] Validando token (Service):", inviteTokenParam);
+    }
 
     // 2. Buscar SOMENTE pela coluna token e 6. NÃO usar joins
     const { data, error } = await sb
@@ -169,7 +173,9 @@ export const validateInviteToken = async (inviteTokenParam: string) => {
         .eq('token', inviteTokenParam)
         .maybeSingle();
 
-    console.log("🔍 [DEBUG] Resultado Query:", { data, error });
+    if (isDev) {
+        console.log("🔍 [DEBUG] Resultado Query:", { data, error });
+    }
 
     // 7. Se error → mostrar erro técnico
     if (error) {
@@ -197,14 +203,16 @@ export const validateInviteToken = async (inviteTokenParam: string) => {
 
     // Busca o Label separadamente para evitar JOIN na query principal (pode falhar por RLS)
     let ministryLabel = 'Ministério';
+    let ministryCode: string | null = null;
     if (data.ministry_id) {
         try {
             const { data: mData } = await sb
                 .from('organization_ministries')
-                .select('label')
+                .select('label, code')
                 .eq('id', data.ministry_id)
                 .maybeSingle();
             if (mData && mData.label) ministryLabel = mData.label;
+            if (mData && mData.code) ministryCode = mData.code;
         } catch (e) {
             console.warn("Não foi possível buscar o nome do ministério (acesso restrito?).", e);
         }
@@ -217,7 +225,8 @@ export const validateInviteToken = async (inviteTokenParam: string) => {
             token: data.token, // Identificador para uso no registro
             ministryId: data.ministry_id,
             orgId: data.organization_id,
-            ministryLabel: ministryLabel
+            ministryLabel: ministryLabel,
+            ministryCode: ministryCode
         } 
     };
 };
@@ -273,12 +282,14 @@ export const registerWithInvite = async (
         if (profileError) throw new Error("Erro ao criar perfil: " + profileError.message);
 
         // 4. Criar Membership
+        const sanitizedRoles = await filterRolesBySettings(formData.roles || [], invite.ministryId, invite.orgId);
+
         await sb.from('organization_memberships').insert({
             profile_id: userId,
             organization_id: invite.orgId,
             ministry_id: invite.ministryId,
             role: 'member',
-            functions: formData.roles || [] 
+            functions: sanitizedRoles
         });
 
         // 5. Marcar convite como usado
@@ -343,29 +354,23 @@ export const fetchMinistrySettings = async (ministryId: string, orgId?: string):
     if (!sb || !ministryId || !orgId) return null;
 
     const { data: ministryDef, error: defError } = await sb.from('organization_ministries')
-        .select('label')
+        .select('label, availability_start, availability_end')
         .eq('id', ministryId)
         .eq('organization_id', orgId)
         .maybeSingle();
 
     if (defError) return null;
-
-    const { data: settings } = await sb.from('ministry_settings')
-        .select('*')
-        .eq('ministry_id', ministryId)
-        .eq('organization_id', orgId)
-        .maybeSingle();
     
     return {
-        id: settings?.id,
+        id: ministryDef?.id,
         organizationMinistryId: ministryId, 
-        displayName: ministryDef?.label || settings?.display_name || 'Ministério',
-        roles: settings?.roles || [],
-        availabilityStart: settings?.availability_start,
-        availabilityEnd: settings?.availability_end,
+        displayName: ministryDef?.label || 'Ministério',
+        roles: [],
+        availabilityStart: ministryDef?.availability_start,
+        availabilityEnd: ministryDef?.availability_end,
         organizationId: orgId,
-        spotifyClientId: settings?.spotify_client_id,
-        spotifyClientSecret: settings?.spotify_client_secret
+        spotifyClientId: undefined,
+        spotifyClientSecret: undefined
     };
 };
 
@@ -694,18 +699,37 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
     
     // Fix: Date-only comparison (YYYY-MM-DD) to avoid timezone issues, allowing NULL expiration
     const today = new Date().toISOString().slice(0, 10);
-
-    const { data } = await sb.from('announcements')
+    const { data, error } = await sb.from('announcements')
         .select(`*, announcement_reads (user_id, profiles(name), created_at), announcement_likes (user_id, profiles(name), created_at)`)
         .eq('ministry_id', ministryId)
         .eq('organization_id', orgId)
         .or(`expiration_date.is.null,expiration_date.gte.${today}`)
         .order('created_at', { ascending: false });
 
-    return (data || []).map((a: any) => ({
-        id: a.id, title: a.title, message: a.message, type: a.type, timestamp: a.created_at, expirationDate: a.expiration_date, author: a.author_name || 'Admin',
-        readBy: a.announcement_reads.map((r: any) => ({ userId: r.user_id, name: r.profiles?.name, timestamp: r.created_at })),
-        likedBy: a.announcement_likes.map((l: any) => ({ userId: l.user_id, name: l.profiles?.name, timestamp: l.created_at }))
+    if (!error) {
+        return (data || []).map((a: any) => ({
+            id: a.id, title: a.title, message: a.message, type: a.type, timestamp: a.created_at, expirationDate: a.expiration_date, author: a.author_name || 'Admin',
+            readBy: a.announcement_reads.map((r: any) => ({ userId: r.user_id, name: r.profiles?.name, timestamp: r.created_at })),
+            likedBy: a.announcement_likes.map((l: any) => ({ userId: l.user_id, name: l.profiles?.name, timestamp: l.created_at }))
+        }));
+    }
+
+    const { data: fallback, error: fallbackError } = await sb.from('announcements')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+    if (fallbackError) return [];
+
+    return (fallback || []).map((a: any) => ({
+        id: a.id,
+        title: a.title,
+        message: a.message,
+        type: a.type,
+        timestamp: a.created_at,
+        expirationDate: a.expiration_date ?? a.expirationDate ?? null,
+        author: a.author_name || 'Admin',
+        readBy: [],
+        likedBy: []
     }));
 };
 
@@ -842,13 +866,17 @@ export const cancelSwapRequestSQL = async (requestId: string, orgId: string) => 
 export const interactAnnouncementSQL = async (id: string, userId: string, userName: string, action: 'read'|'like', orgId: string) => {
     const sb = getSupabase();
     if (!sb) return;
-    const table = action === 'read' ? 'announcement_reads' : 'announcement_likes';
-    if (action === 'like') {
-        const { data } = await sb.from(table).select('id').eq('announcement_id', id).eq('user_id', userId).eq('organization_id', orgId).maybeSingle();
-        if (data) { await sb.from(table).delete().eq('id', data.id).eq('organization_id', orgId); } 
-        else { await sb.from(table).insert({ announcement_id: id, user_id: userId, organization_id: orgId }); }
-    } else {
-        await sb.from(table).upsert({ announcement_id: id, user_id: userId, organization_id: orgId }, { onConflict: 'announcement_id, user_id' });
+    try {
+        const table = action === 'read' ? 'announcement_reads' : 'announcement_likes';
+        if (action === 'like') {
+            const { data } = await sb.from(table).select('id').eq('announcement_id', id).eq('user_id', userId).eq('organization_id', orgId).maybeSingle();
+            if (data) { await sb.from(table).delete().eq('id', data.id).eq('organization_id', orgId); } 
+            else { await sb.from(table).insert({ announcement_id: id, user_id: userId, organization_id: orgId }); }
+        } else {
+            await sb.from(table).upsert({ announcement_id: id, user_id: userId, organization_id: orgId }, { onConflict: 'announcement_id, user_id' });
+        }
+    } catch (e) {
+        console.warn("Interação de aviso não disponível com o schema atual.", e);
     }
 };
 
@@ -870,11 +898,38 @@ export const saveMinistrySettings = async (ministryId: string, orgId: string, di
     const sb = getSupabase();
     if (!sb) return;
     const updates: any = {};
-    if (displayName) updates.display_name = displayName;
-    if (roles) updates.roles = roles;
+    if (displayName) updates.label = displayName;
     if (start) updates.availability_start = start;
     if (end) updates.availability_end = end;
-    await sb.from('ministry_settings').update(updates).eq('ministry_id', ministryId).eq('organization_id', orgId);
+    console.log("SAVE_MINISTRY_SETTINGS INPUT", {
+        ministryId,
+        orgId,
+        displayName,
+        roles,
+        start,
+        end
+    });
+    const payload = {
+        id: ministryId,
+        organization_id: orgId,
+        ...updates
+    };
+    console.log("WINDOW SAVE INPUT", payload);
+    console.log("SAVE_MINISTRY_SETTINGS PAYLOAD", payload);
+    const { data, error } = await sb
+      .from('organization_ministries')
+      .upsert(payload, { onConflict: 'organization_id,id' })
+      .select();
+    console.log("WINDOW SAVE RESULT", { data, error });
+    console.log("SAVE_MINISTRY_SETTINGS RESULT", { data, error });
+    const check = await sb
+      .from('organization_ministries')
+      .select('*')
+      .eq('organization_id', orgId)
+      .eq('id', ministryId)
+      .single();
+    console.log("WINDOW READ RESULT", check?.data);
+    console.log("SAVE_MINISTRY_SETTINGS DB CHECK", check);
 };
 
 export const toggleAdminSQL = async (email: string, status: boolean, ministryId: string, orgId: string) => {
@@ -908,7 +963,13 @@ export const sendNotificationSQL = async (ministryId: string, orgId: string, not
 export const createAnnouncementSQL = async (ministryId: string, orgId: string, announcement: any, authorName: string) => {
     const sb = getSupabase();
     if (!sb) return;
-    await sb.from('announcements').insert({ ministry_id: ministryId, organization_id: orgId, title: announcement.title, message: announcement.message, type: announcement.type, expiration_date: announcement.expirationDate, author_name: authorName });
+    const { error } = await sb.from('announcements').insert({ ministry_id: ministryId, organization_id: orgId, title: announcement.title, message: announcement.message, type: announcement.type, expiration_date: announcement.expirationDate, author_name: authorName });
+    if (error) {
+        const fallback = await sb.from('announcements').insert({ title: announcement.title, message: announcement.message, type: announcement.type, expiration_date: announcement.expirationDate, author_name: authorName });
+        if (fallback.error) {
+            console.error("Falha ao criar aviso:", fallback.error);
+        }
+    }
 };
 
 export const joinMinistry = async (ministryId: string, orgId: string, roles: string[]) => {

@@ -2,45 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { CalendarClock, CheckCircle2, Clock, MapPin, AlertCircle, ShieldCheck, CalendarPlus, Sparkles } from 'lucide-react';
 import { Role, AttendanceMap, User as UserType, TeamMemberProfile } from '../types';
 import { getLocalDateISOString, generateGoogleCalendarUrl } from '../utils/dateUtils';
-import { fetchNextEventTeam } from '../services/scheduleServiceV2';
 
 interface Props {
-  event: { iso: string; dateDisplay: string; title: string } | undefined;
+  event: { iso: string; dateDisplay: string; title: string; ruleId?: string; date?: string } | undefined;
   schedule: Record<string, string>;
   attendance: AttendanceMap;
   roles: Role[];
   members: TeamMemberProfile[];
-  onConfirm: (key: string) => void;
+  team: { role: string; name: string; key: string }[];
+  loadingTeam: boolean;
+  onConfirm: (payload: { key: string; memberName: string; eventName: string; date: string; role: string }) => void;
   ministryId: string | null;
   currentUser: UserType | null;
 }
 
 type TimeStatus = 'early' | 'open' | 'closed';
 
-export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, roles, members, onConfirm, ministryId, currentUser }) => {
+export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, roles, members, team, loadingTeam, onConfirm, ministryId, currentUser }) => {
   const [timeStatus, setTimeStatus] = useState<TimeStatus>('early');
   const [minutesToOpen, setMinutesToOpen] = useState(0);
-  
-  // Estado para armazenar a equipe real vinda do banco
-  const [dbTeam, setDbTeam] = useState<{role: string, memberId: string, memberName: string}[]>([]);
-  const [loadingTeam, setLoadingTeam] = useState(true);
-
-  // Busca dados reais do banco
-  useEffect(() => {
-    if (ministryId && currentUser?.organizationId) {
-        setLoadingTeam(true);
-        fetchNextEventTeam(ministryId, currentUser.organizationId)
-            .then(data => {
-                if (data && data.team) {
-                    setDbTeam(data.team);
-                }
-            })
-            .catch(err => console.error("Erro ao buscar equipe do próximo evento", err))
-            .finally(() => setLoadingTeam(false));
-    } else {
-        setLoadingTeam(false);
-    }
-  }, [ministryId, currentUser]);
 
   const checkTimeWindow = () => {
     if (!event) return;
@@ -68,14 +48,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
 
   // Usa dados do banco se disponíveis, senão fallback (que provavelmente estará vazio se o mês virou)
   const getAssignedMembers = () => {
-    // Se temos dados do DB, usamos (Prioridade)
-    if (dbTeam.length > 0) {
-        return dbTeam.map(t => ({
-            role: t.role,
-            name: t.memberName,
-            key: `db_${t.role}_${t.memberId}` // Chave fictícia pois não temos confirmed/key real na query simplificada
-        }));
-    }
+    if (team.length > 0) return team;
 
     // Fallback original (prop schedule)
     const assigned: { role: string; name: string; key: string }[] = [];
@@ -95,11 +68,11 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
     return assigned;
   };
 
-  const team = getAssignedMembers();
+  const assignedTeam = getAssignedMembers();
   const eventIsToday = getLocalDateISOString() === event.iso.split('T')[0];
   const eventTime = event.iso.split('T')[1];
 
-  const renderActionButton = (memberKey: string, isConfirmed: boolean, role: string) => {
+  const renderActionButton = (memberKey: string, isConfirmed: boolean, role: string, memberName: string) => {
       const googleCalUrl = generateGoogleCalendarUrl(
           `Escala: ${event.title}`,
           event.iso,
@@ -154,7 +127,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
           case 'open':
               return (
                   <button 
-                      onClick={() => onConfirm(memberKey)}
+                      onClick={() => onConfirm({ key: memberKey, memberName, eventName: event.title, date: event.dateDisplay, role })}
                       className="w-full flex items-center justify-center gap-3 px-8 py-5 bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-300 hover:to-teal-400 text-emerald-950 rounded-[1.5rem] text-sm font-black uppercase tracking-widest shadow-2xl shadow-emerald-500/30 active:scale-95 transition-all"
                   >
                       <MapPin size={20} /> Confirmar Presença Agora
@@ -204,7 +177,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
                   {(() => {
                       // Usa props para verificação de presença pois o fetch simplificado não traz 'confirmed'
                       // Tenta achar match pelo nome
-                      const myRole = team.find(t => currentUser && t.name === currentUser.name);
+                      const myRole = assignedTeam.find(t => currentUser && t.name === currentUser.name);
                       
                       // Check fallback na prop schedule original se dbTeam não tiver a info completa
                       let isConfirmed = false;
@@ -213,7 +186,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
                       }
 
                       if (myRole) {
-                          return renderActionButton(myRole.key, isConfirmed, myRole.role);
+                          return renderActionButton(myRole.key, isConfirmed, myRole.role, myRole.name);
                       }
                       return (
                           <div className="p-5 rounded-[1.5rem] bg-white/5 border border-white/10 backdrop-blur-md text-center">
@@ -229,17 +202,19 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
           <div className="lg:col-span-8 p-8 lg:p-12 bg-white dark:bg-slate-900">
               <div className="flex items-center justify-between mb-8">
                   <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.3em]">Equipe Escalada</h3>
-                  <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-full">{team.length} Integrantes</span>
+                  <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-full">{assignedTeam.length} Integrantes</span>
               </div>
 
-              {team.length === 0 ? (
+              {assignedTeam.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-[2.5rem]">
                       <CalendarClock size={48} className="text-slate-200 dark:text-slate-800 mb-4" />
-                      <p className="text-slate-400 font-bold text-sm">Escala em processamento...</p>
+                      <p className="text-slate-400 font-bold text-sm">
+                        {loadingTeam ? 'Escala em processamento...' : 'Nenhum escalado encontrado.'}
+                      </p>
                   </div>
               ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                      {team.map((t, idx) => {
+                      {assignedTeam.map((t, idx) => {
                           const isMe = currentUser && t.name === currentUser.name;
                           const memberProfile = members.find(m => m.name === t.name);
                           

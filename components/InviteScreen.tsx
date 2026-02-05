@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowRight, CheckCircle2, UserPlus, AlertOctagon, Loader2, Mail, Lock, Phone, User, Calendar, Briefcase, Building2, Check } from 'lucide-react';
 import { validateInviteToken, registerWithInvite, fetchMinistrySettings } from '../services/supabaseService';
+import { DEFAULT_ROLES } from '../types';
 
 interface Props {
     token: string;
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
+    const isDev = typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
     const [status, setStatus] = useState<'loading' | 'valid' | 'invalid' | 'success'>('loading');
     const [inviteData, setInviteData] = useState<any>(null);
     const [errorMsg, setErrorMsg] = useState("");
@@ -29,7 +31,9 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
 
     useEffect(() => {
         // LOG SOLICITADO
-        console.log("🔍 [DEBUG] InviteScreen mounted. Token:", token);
+        if (isDev) {
+            console.log("🔍 [DEBUG] InviteScreen mounted. Token:", token);
+        }
 
         const check = async () => {
             const res = await validateInviteToken(token);
@@ -51,11 +55,16 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                     setLoadingRoles(true);
                     try {
                         const settings = await fetchMinistrySettings(res.data.ministryId, res.data.orgId);
-                        if (settings && settings.roles) {
+                        const fallbackRoles = DEFAULT_ROLES[res.data?.ministryCode] || DEFAULT_ROLES.default || [];
+                        if (settings && settings.roles && settings.roles.length > 0) {
                             setAvailableRoles(settings.roles);
+                        } else {
+                            setAvailableRoles(fallbackRoles);
                         }
                     } catch (e) {
                         console.error("Failed to load roles", e);
+                        const fallbackRoles = DEFAULT_ROLES[res.data?.ministryCode] || DEFAULT_ROLES.default || [];
+                        setAvailableRoles(fallbackRoles);
                     } finally {
                         setLoadingRoles(false);
                     }
