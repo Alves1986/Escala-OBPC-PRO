@@ -320,6 +320,7 @@ export interface NextEventCardData {
     iso: string;
     dateDisplay: string;
     time: string;
+    type?: 'weekly' | 'single';
   };
   members: {
     role: string;
@@ -355,13 +356,15 @@ export const fetchNextEventCardData = async (
   if (!nextAssignment?.event_key || !nextAssignment?.event_date) return null;
   console.log('NEXT EVENT EVENT_ID USED', nextAssignment.event_id);
 
-  const { data: eventRule } = await sb
-    .from('event_rules')
-    .select('title, time')
-    .eq('id', nextAssignment.event_key)
-    .eq('organization_id', orgId)
-    .eq('ministry_id', ministryId)
-    .maybeSingle();
+  const eventRule = nextAssignment.event_id
+    ? (await sb
+        .from('event_rules')
+        .select('title, time, type')
+        .eq('id', nextAssignment.event_id)
+        .eq('organization_id', orgId)
+        .eq('ministry_id', ministryId)
+        .maybeSingle()).data
+    : null;
 
   const time = eventRule?.time || '00:00';
   const iso = `${nextAssignment.event_date}T${time}`;
@@ -371,46 +374,19 @@ export const fetchNextEventCardData = async (
     month: '2-digit'
   });
 
-  let assignmentsQuery = sb
-    .from('schedule_assignments')
-    .select('event_key, event_date, role, member_id, confirmed, profiles(name)')
-    .eq('organization_id', orgId)
-    .eq('ministry_id', ministryId);
+  const assignments = nextAssignment.event_id
+    ? (await sb
+        .from('schedule_assignments')
+        .select('event_id, event_key, event_date, role, member_id, confirmed, profiles(name)')
+        .eq('event_id', nextAssignment.event_id)
+        .eq('organization_id', orgId)
+        .eq('ministry_id', ministryId)).data
+    : [];
 
-  if (nextAssignment.event_id) {
-    assignmentsQuery = assignmentsQuery.eq('event_id', nextAssignment.event_id);
-  } else {
-    console.log('NEXT EVENT FALLBACK BRANCH', {
-      event_key: nextAssignment.event_key,
-      event_date: nextAssignment.event_date
-    });
-    assignmentsQuery = assignmentsQuery
-      .eq('event_key', nextAssignment.event_key)
-      .eq('event_date', nextAssignment.event_date);
-  }
-
-  const { data: assignments, error: assignmentsError } = await assignmentsQuery;
-
-  if (assignmentsError) throw assignmentsError;
   console.log('NEXT EVENT MEMBERS RAW', assignments?.length ?? 0);
   console.log('NEXT EVENT MEMBERS COUNT', assignments?.length ?? 0);
 
   const eventId = nextAssignment.event_id || `${nextAssignment.event_key}_${nextAssignment.event_date}`;
-
-  if (!nextAssignment.event_id && (!assignments || assignments.length === 0)) {
-    const payload = {
-      event: {
-        id: eventId,
-        title: eventRule?.title || 'Evento',
-        iso,
-        dateDisplay,
-        time
-      },
-      members: []
-    };
-    console.log('NEXT EVENT FINAL PAYLOAD', payload);
-    return payload;
-  }
 
   const dedupedMembersMap = new Map<string, any>();
 
@@ -439,7 +415,8 @@ export const fetchNextEventCardData = async (
       title: eventRule?.title || 'Evento',
       iso,
       dateDisplay,
-      time
+      time,
+      type: eventRule?.type
     },
     members
   };

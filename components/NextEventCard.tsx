@@ -53,11 +53,18 @@ export const NextEventCard: React.FC<Props> = ({ attendance, members, onConfirm,
     if (diffInMinutes < -60) {
       setTimeStatus('early');
       setMinutesToOpen(Math.abs(Math.floor(diffInMinutes + 60)));
-    } else if (diffInMinutes > 150) {
-      setTimeStatus('closed');
-    } else {
-      setTimeStatus('open');
+      return;
     }
+
+    if (event.type === 'single') {
+      const endOfDay = new Date(eventDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      setTimeStatus(now > endOfDay ? 'closed' : 'open');
+      return;
+    }
+
+    const weeklyEnd = new Date(eventDate.getTime() + 2 * 60 * 60 * 1000);
+    setTimeStatus(now > weeklyEnd ? 'closed' : 'open');
   };
 
   useEffect(() => {
