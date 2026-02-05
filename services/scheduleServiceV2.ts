@@ -254,28 +254,73 @@ export const generateOccurrencesV2 = (
   return occurrences.sort((a, b) => a.iso.localeCompare(b.iso));
 };
 
-export const fetchNextEventTeam = async (ministryId: string, orgId: string) => {
+export interface NextEventCardData {
+  event: {
+    id: string;
+    date: string;
+    title: string;
+    time: string | null;
+  } | null;
+  nextAssignment: any | null;
+  members: Array<{
+    role: string;
+    memberId: string;
+    memberName: string;
+  }>;
+}
+
+export const fetchNextEventCardData = async (
+  ministryId: string,
+  orgId: string
+): Promise<NextEventCardData> => {
   const sb = getSupabase();
-  if (!sb) return { date: null, team: [] };
+  if (!sb) return { event: null, nextAssignment: null, members: [] };
 
   const today = new Date().toISOString().split('T')[0];
 
-  // 1. Buscar o próximo evento
-  const { data: nextEvents } = await sb
+  const { data: nextAssignment, error: nextAssignmentError } = await sb
       .from('schedule_assignments')
-      .select('event_date')
+      .select('event_id,event_key,event_date')
       .eq('organization_id', orgId)
       .eq('ministry_id', ministryId)
       .gte('event_date', today)
       .order('event_date', { ascending: true })
-      .limit(1);
+      .limit(1)
+      .maybeSingle();
 
-  if (!nextEvents || nextEvents.length === 0) return { date: null, team: [] };
+  if (nextAssignmentError) throw nextAssignmentError;
 
-  const nextDate = nextEvents[0].event_date;
+  console.log('NEXT EVENT ASSIGNMENT', nextAssignment);
 
-  // 2. Buscar TODOS assignments desse dia
-  const { data: assignments } = await sb
+  if (!nextAssignment) {
+      const finalPayload = { event: null, nextAssignment: null, members: [] };
+      console.log('NEXT EVENT MEMBERS RAW', []);
+      console.log('NEXT EVENT FINAL PAYLOAD', finalPayload);
+      return finalPayload;
+  }
+
+  let rule: { title?: string; time?: string | null } | null = null;
+  if (nextAssignment.event_id) {
+    const { data: eventRule } = await sb
+      .from('event_rules')
+      .select('title,time')
+      .eq('id', nextAssignment.event_id)
+      .eq('organization_id', orgId)
+      .eq('ministry_id', ministryId)
+      .maybeSingle();
+    rule = eventRule;
+  }
+
+  const event = {
+    id: nextAssignment.event_id ?? nextAssignment.event_key,
+    date: nextAssignment.event_date,
+    title: rule?.title ?? 'Evento',
+    time: rule?.time ?? null
+  };
+
+  let rawMembers: any[] = [];
+  if (nextAssignment.event_id) {
+    const { data: membersByEventId, error: membersError } = await sb
       .from('schedule_assignments')
       .select(`
           role,
@@ -284,14 +329,27 @@ export const fetchNextEventTeam = async (ministryId: string, orgId: string) => {
       `)
       .eq('organization_id', orgId)
       .eq('ministry_id', ministryId)
-      .eq('event_date', nextDate);
+      .eq('event_id', nextAssignment.event_id);
 
-  // 3. Mapear para estrutura
-  const team = (assignments || []).map((a: any) => ({
+    if (membersError) throw membersError;
+    rawMembers = membersByEventId || [];
+  }
+
+  console.log('NEXT EVENT MEMBERS RAW', rawMembers);
+
+  const members = rawMembers.map((a: any) => ({
       role: a.role,
       memberId: a.member_id,
       memberName: a.profiles?.name || 'Membro'
   }));
 
-  return { date: nextDate, team };
+  const finalPayload = { event, nextAssignment, members };
+  console.log('NEXT EVENT FINAL PAYLOAD', finalPayload);
+
+  return finalPayload;
+};
+
+export const fetchNextEventTeam = async (ministryId: string, orgId: string) => {
+  const cardData = await fetchNextEventCardData(ministryId, orgId);
+  return { date: cardData.event?.date ?? null, team: cardData.members };
 };

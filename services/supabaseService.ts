@@ -862,14 +862,43 @@ export const cancelSwapRequestSQL = async (requestId: string, orgId: string) => 
 export const interactAnnouncementSQL = async (id: string, userId: string, userName: string, action: 'read'|'like', orgId: string) => {
     const sb = getSupabase();
     if (!sb) return;
+
+    const ensureProfileExists = async () => {
+        const { data: existingProfile } = await sb.from('profiles').select('id').eq('id', userId).maybeSingle();
+        if (!existingProfile?.id) {
+            await sb.from('profiles').upsert(
+                { id: userId, name: 'Usuário' },
+                { onConflict: 'id', ignoreDuplicates: true }
+            );
+        }
+    };
+
     const table = action === 'read' ? 'announcement_reads' : 'announcement_likes';
+
     if (action === 'like') {
         const { data } = await sb.from(table).select('id').eq('announcement_id', id).eq('user_id', userId).eq('organization_id', orgId).maybeSingle();
-        if (data) { await sb.from(table).delete().eq('id', data.id).eq('organization_id', orgId); } 
-        else { await sb.from(table).insert({ announcement_id: id, user_id: userId, organization_id: orgId }); }
+
+        if (data) {
+            const writeResult = await sb.from(table).delete().eq('id', data.id).eq('organization_id', orgId);
+            console.log('ANN LIKE WRITE RESULT', writeResult);
+        } else {
+            await ensureProfileExists();
+            const writeResult = await sb.from(table).insert({ announcement_id: id, user_id: userId, organization_id: orgId });
+            console.log('ANN LIKE WRITE RESULT', writeResult);
+        }
     } else {
-        await sb.from(table).upsert({ announcement_id: id, user_id: userId, organization_id: orgId }, { onConflict: 'announcement_id, user_id' });
+        await ensureProfileExists();
+        const writeResult = await sb.from(table).upsert({ announcement_id: id, user_id: userId, organization_id: orgId }, { onConflict: 'announcement_id, user_id' });
+        console.log('ANN READ WRITE RESULT', writeResult);
     }
+
+    const rawAfterWrite = await sb
+        .from(table)
+        .select('*')
+        .eq('announcement_id', id)
+        .eq('organization_id', orgId);
+
+    console.log('ANN INTERACTIONS RAW AFTER WRITE', rawAfterWrite);
 };
 
 export const updateUserProfile = async (name: string, whatsapp: string, avatar: string | undefined, functions: string[] | undefined, birthDate: string | undefined, ministryId?: string, orgId?: string) => {

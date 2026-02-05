@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CalendarClock, CheckCircle2, Clock, MapPin, AlertCircle, ShieldCheck, CalendarPlus, Sparkles } from 'lucide-react';
 import { Role, AttendanceMap, User as UserType, TeamMemberProfile } from '../types';
 import { getLocalDateISOString, generateGoogleCalendarUrl } from '../utils/dateUtils';
-import { fetchNextEventTeam } from '../services/scheduleServiceV2';
+import { fetchNextEventCardData } from '../services/scheduleServiceV2';
 
 interface Props {
   event: { iso: string; dateDisplay: string; title: string } | undefined;
@@ -21,18 +21,21 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
   const [timeStatus, setTimeStatus] = useState<TimeStatus>('early');
   const [minutesToOpen, setMinutesToOpen] = useState(0);
   
-  // Estado para armazenar a equipe real vinda do banco
-  const [dbTeam, setDbTeam] = useState<{role: string, memberId: string, memberName: string}[]>([]);
+  const [cardData, setCardData] = useState<{
+    event: { id: string; date: string; title: string; time: string | null } | null;
+    nextAssignment: any | null;
+    members: { role: string; memberId: string; memberName: string }[];
+  }>({ event: null, nextAssignment: null, members: [] });
   const [loadingTeam, setLoadingTeam] = useState(true);
 
   // Busca dados reais do banco
   useEffect(() => {
     if (ministryId && currentUser?.organizationId) {
         setLoadingTeam(true);
-        fetchNextEventTeam(ministryId, currentUser.organizationId)
+        fetchNextEventCardData(ministryId, currentUser.organizationId)
             .then(data => {
-                if (data && data.team) {
-                    setDbTeam(data.team);
+                if (data) {
+                    setCardData(data);
                 }
             })
             .catch(err => console.error("Erro ao buscar equipe do próximo evento", err))
@@ -43,9 +46,9 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
   }, [ministryId, currentUser]);
 
   const checkTimeWindow = () => {
-    if (!event) return;
+    if (!effectiveEvent) return;
     const now = new Date();
-    const eventDate = new Date(event.iso);
+    const eventDate = new Date(effectiveEvent.iso);
     const diffInMinutes = (now.getTime() - eventDate.getTime()) / (1000 * 60);
 
     if (diffInMinutes < -60) {
@@ -62,15 +65,19 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
     checkTimeWindow();
     const interval = setInterval(checkTimeWindow, 60000);
     return () => clearInterval(interval);
-  }, [event]);
+  }, [effectiveEvent]);
 
-  if (!event) return null;
+  const effectiveEvent = event || (cardData.event ? {
+    iso: `${cardData.event.date}T${cardData.event.time ?? '00:00:00'}`,
+    dateDisplay: cardData.event.date,
+    title: cardData.event.title
+  } : undefined);
 
   // Usa dados do banco se disponíveis, senão fallback (que provavelmente estará vazio se o mês virou)
   const getAssignedMembers = () => {
     // Se temos dados do DB, usamos (Prioridade)
-    if (dbTeam.length > 0) {
-        return dbTeam.map(t => ({
+    if (cardData.members.length > 0) {
+        return cardData.members.map(t => ({
             role: t.role,
             name: t.memberName,
             key: `db_${t.role}_${t.memberId}` // Chave fictícia pois não temos confirmed/key real na query simplificada
@@ -82,12 +89,12 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
     roles.forEach(role => {
       if (ministryId === 'louvor' && role === 'Vocal') {
           [1, 2, 3, 4, 5].forEach(i => {
-              const key = `${event.iso}_Vocal_${i}`;
+              const key = `${effectiveEvent?.iso}_Vocal_${i}`;
               const member = schedule[key];
               if (member) assigned.push({ role: `Vocal ${i}`, name: member, key });
           });
       } else {
-          const key = `${event.iso}_${role}`;
+          const key = `${effectiveEvent?.iso}_${role}`;
           const member = schedule[key];
           if (member) assigned.push({ role, name: member, key });
       }
@@ -96,13 +103,13 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
   };
 
   const team = getAssignedMembers();
-  const eventIsToday = getLocalDateISOString() === event.iso.split('T')[0];
-  const eventTime = event.iso.split('T')[1];
+  const eventIsToday = getLocalDateISOString() === (effectiveEvent?.iso?.split('T')[0] || '');
+  const eventTime = effectiveEvent?.iso?.split('T')[1] || '--:--';
 
   const renderActionButton = (memberKey: string, isConfirmed: boolean, role: string) => {
       const googleCalUrl = generateGoogleCalendarUrl(
-          `Escala: ${event.title}`,
-          event.iso,
+          `Escala: ${effectiveEvent?.title || 'Evento'}`,
+          effectiveEvent?.iso || '',
           `Você está escalado como: ${role}.\nMinistério: ${ministryId?.toUpperCase()}`
       );
 
@@ -125,7 +132,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
           );
       }
 
-      if (!eventIsToday) {
+      if (!eventIsToday || !effectiveEvent) {
           return (
               <a 
                   href={googleCalUrl}
@@ -177,7 +184,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
                       <div className="px-3 py-1 rounded-full bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-500/30 flex items-center gap-1.5">
                           <Sparkles size={12} fill="currentColor" /> Próximo
                       </div>
-                      {eventIsToday && (
+                      {effectiveEvent && eventIsToday && (
                           <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-emerald-400">
                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> Hoje
                           </div>
@@ -185,13 +192,13 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
                   </div>
                   
                   <h2 className="text-4xl lg:text-5xl font-black text-white leading-[1.1] mb-6 tracking-tighter">
-                      {event.title}
+                      {effectiveEvent?.title || 'Evento'}
                   </h2>
                   
                   <div className="space-y-4">
                       <div className="flex items-center gap-3 text-emerald-400">
                           <CalendarClock size={20} />
-                          <span className="text-lg font-bold tracking-tight">{event.dateDisplay}</span>
+                          <span className="text-lg font-bold tracking-tight">{effectiveEvent?.dateDisplay || cardData.event?.date || 'Data a definir'}</span>
                       </div>
                       <div className="flex items-center gap-3 text-slate-300">
                           <Clock size={20} />
@@ -206,13 +213,13 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
                       // Tenta achar match pelo nome
                       const myRole = team.find(t => currentUser && t.name === currentUser.name);
                       
-                      // Check fallback na prop schedule original se dbTeam não tiver a info completa
+                      // Check fallback na prop schedule original se dados vierem pela agenda
                       let isConfirmed = false;
                       if (myRole && !myRole.key.startsWith('db_')) {
                           isConfirmed = !!attendance[myRole.key];
                       }
 
-                      if (myRole) {
+                      if (myRole && effectiveEvent) {
                           return renderActionButton(myRole.key, isConfirmed, myRole.role);
                       }
                       return (
@@ -235,7 +242,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
               {team.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-[2.5rem]">
                       <CalendarClock size={48} className="text-slate-200 dark:text-slate-800 mb-4" />
-                      <p className="text-slate-400 font-bold text-sm">Escala em processamento...</p>
+                      <p className="text-slate-400 font-bold text-sm">Sem equipe escalada.</p>
                   </div>
               ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
