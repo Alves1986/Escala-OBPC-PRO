@@ -404,18 +404,26 @@ export const fetchNextEventCardData = async (
     return payload;
   }
 
-  const members = (assignments || []).map((a: any) => {
+  const dedupedMembersMap = new Map<string, any>();
+
+  (assignments || []).forEach((a: any) => {
     const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
     const assignmentKey = `${a.event_key}_${a.event_date}_${a.role}`;
+    const dedupeKey = `${a.member_id || 'unknown'}_${a.role || 'unknown'}`;
 
-    return {
-      role: a.role,
-      memberId: a.member_id,
-      memberName: profile?.name || 'Membro',
-      assignmentKey,
-      confirmed: !!a.confirmed
-    };
+    if (!dedupedMembersMap.has(dedupeKey)) {
+      dedupedMembersMap.set(dedupeKey, {
+        role: a.role,
+        memberId: a.member_id,
+        memberName: profile?.name || 'Membro',
+        assignmentKey,
+        confirmed: !!a.confirmed
+      });
+    }
   });
+
+  const members = Array.from(dedupedMembersMap.values());
+  console.log('NEXT EVENT MEMBERS DEDUPED', members.length);
 
   const payload = {
     event: {
