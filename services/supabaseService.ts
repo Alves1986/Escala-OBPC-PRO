@@ -18,12 +18,14 @@ let serviceOrgId: string | null = null;
 // Acesso seguro às variáveis de ambiente para evitar crash (Tela Preta)
 let envUrl = "";
 let envKey = "";
+let isDev = false;
 
 try {
   // @ts-ignore
   if (typeof import.meta !== 'undefined' && import.meta.env) {
     envUrl = import.meta.env.VITE_SUPABASE_URL || "";
     envKey = import.meta.env.VITE_SUPABASE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+    isDev = Boolean(import.meta.env.DEV);
   }
 } catch (e) {
   console.warn("[SupabaseService] Falha ao ler import.meta.env. Usando fallback se disponível.");
@@ -160,7 +162,9 @@ export const validateInviteToken = async (inviteTokenParam: string) => {
     const sb = getSupabase();
     if (!sb) return { valid: false, message: "Erro de conexão" };
 
-    console.log("🔍 [DEBUG] Validando token (Service):", inviteTokenParam);
+    if (isDev) {
+        console.log("🔍 [DEBUG] Validando token (Service):", inviteTokenParam);
+    }
 
     // 2. Buscar SOMENTE pela coluna token e 6. NÃO usar joins
     const { data, error } = await sb
@@ -169,7 +173,9 @@ export const validateInviteToken = async (inviteTokenParam: string) => {
         .eq('token', inviteTokenParam)
         .maybeSingle();
 
-    console.log("🔍 [DEBUG] Resultado Query:", { data, error });
+    if (isDev) {
+        console.log("🔍 [DEBUG] Resultado Query:", { data, error });
+    }
 
     // 7. Se error → mostrar erro técnico
     if (error) {
@@ -273,12 +279,14 @@ export const registerWithInvite = async (
         if (profileError) throw new Error("Erro ao criar perfil: " + profileError.message);
 
         // 4. Criar Membership
+        const sanitizedRoles = await filterRolesBySettings(formData.roles || [], invite.ministryId, invite.orgId);
+
         await sb.from('organization_memberships').insert({
             profile_id: userId,
             organization_id: invite.orgId,
             ministry_id: invite.ministryId,
             role: 'member',
-            functions: formData.roles || [] 
+            functions: sanitizedRoles
         });
 
         // 5. Marcar convite como usado

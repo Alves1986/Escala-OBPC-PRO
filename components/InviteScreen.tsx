@@ -8,6 +8,7 @@ interface Props {
 }
 
 export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
+    const isDev = typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
     const [status, setStatus] = useState<'loading' | 'valid' | 'invalid' | 'success'>('loading');
     const [inviteData, setInviteData] = useState<any>(null);
     const [errorMsg, setErrorMsg] = useState("");
@@ -29,7 +30,9 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
 
     useEffect(() => {
         // LOG SOLICITADO
-        console.log("🔍 [DEBUG] InviteScreen mounted. Token:", token);
+        if (isDev) {
+            console.log("🔍 [DEBUG] InviteScreen mounted. Token:", token);
+        }
 
         const check = async () => {
             const res = await validateInviteToken(token);

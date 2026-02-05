@@ -358,7 +358,7 @@ const InnerApp = () => {
                                 return expirationDate > now;
                             }).sort((a, b) => a.iso.localeCompare(b.iso))[0];
 
-                            return <NextEventCard event={upcoming} schedule={schedule} attendance={attendance} roles={roles} members={publicMembers} onConfirm={(key) => { const assignment = Object.entries(schedule).find(([k, v]) => k === key); if (assignment) setConfirmModalData({ key, memberName: assignment[1], eventName: upcoming.title, date: upcoming.dateDisplay, role: key.split('_').pop() || '' }); }} ministryId={ministryId} currentUser={user} />;
+                            return <NextEventCard event={upcoming} schedule={schedule} attendance={attendance} roles={roles} members={publicMembers} onConfirm={(payload) => { setConfirmModalData(payload); }} ministryId={ministryId} currentUser={user} />;
                         })()}
                     </div>
 
