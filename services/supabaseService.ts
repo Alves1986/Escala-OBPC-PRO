@@ -908,7 +908,14 @@ export const saveMinistrySettings = async (ministryId: string, orgId: string, di
     if (roles) updates.roles = roles;
     if (start) updates.availability_start = start;
     if (end) updates.availability_end = end;
-    await sb.from('ministry_settings').update(updates).eq('ministry_id', ministryId).eq('organization_id', orgId);
+    const payload = {
+        ministry_id: ministryId,
+        organization_id: orgId,
+        ...updates
+    };
+    await sb
+      .from('ministry_settings')
+      .upsert(payload, { onConflict: 'organization_id,ministry_id' });
 };
 
 export const toggleAdminSQL = async (email: string, status: boolean, ministryId: string, orgId: string) => {
