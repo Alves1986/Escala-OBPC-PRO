@@ -353,6 +353,7 @@ export const fetchNextEventCardData = async (
   if (nextAssignmentError) throw nextAssignmentError;
   console.log('NEXT EVENT ASSIGNMENT', nextAssignment);
   if (!nextAssignment?.event_key || !nextAssignment?.event_date) return null;
+  console.log('NEXT EVENT EVENT_ID USED', nextAssignment.event_id);
 
   const { data: eventRule } = await sb
     .from('event_rules')
@@ -376,8 +377,6 @@ export const fetchNextEventCardData = async (
     .eq('organization_id', orgId)
     .eq('ministry_id', ministryId);
 
-  console.log('NEXT EVENT USING EVENT_ID', nextAssignment.event_id);
-
   if (nextAssignment.event_id) {
     assignmentsQuery = assignmentsQuery.eq('event_id', nextAssignment.event_id);
   } else {
@@ -393,6 +392,7 @@ export const fetchNextEventCardData = async (
   const { data: assignments, error: assignmentsError } = await assignmentsQuery;
 
   if (assignmentsError) throw assignmentsError;
+  console.log('NEXT EVENT MEMBERS RAW', assignments?.length ?? 0);
   console.log('NEXT EVENT MEMBERS COUNT', assignments?.length ?? 0);
 
   const eventId = nextAssignment.event_id || `${nextAssignment.event_key}_${nextAssignment.event_date}`;
