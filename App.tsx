@@ -165,6 +165,42 @@ const InnerApp = () => {
 
   const onlineUsers = useOnlinePresence(user?.id, user?.name);
 
+  const saveMinistryConfig = async ({
+    targetMinistryId,
+    targetOrgId,
+    displayName,
+    roles,
+    start,
+    end
+  }: {
+    targetMinistryId: string;
+    targetOrgId: string;
+    displayName?: string;
+    roles?: string[];
+    start?: string;
+    end?: string;
+  }) => {
+    console.log('[saveMinistryConfig] context', {
+      save: { ministryId: targetMinistryId, orgId: targetOrgId },
+      fetch: { ministryId, orgId }
+    });
+
+    if (targetMinistryId !== ministryId || targetOrgId !== orgId) {
+      console.warn('[saveMinistryConfig] mismatch between save and fetch context', {
+        save: { ministryId: targetMinistryId, orgId: targetOrgId },
+        fetch: { ministryId, orgId }
+      });
+    }
+
+    await Supabase.saveMinistrySettings(targetMinistryId, targetOrgId, displayName, roles, start, end);
+
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['settings', targetMinistryId, targetOrgId] }),
+      queryClient.invalidateQueries({ queryKey: ['availability', targetMinistryId, targetOrgId] })
+    ]);
+  };
+
+
   // Modals & UI State
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [showInstallModal, setShowInstallModal] = useState(false);
@@ -527,7 +563,7 @@ const InnerApp = () => {
             
             {currentTab === 'announcements' && safeEnabledTabs.includes('announcements') && <AnnouncementsScreen announcements={announcements} currentUser={user} onMarkRead={(id) => Supabase.interactAnnouncementSQL(id, user.id!, user.name, 'read', orgId!).then(refreshData)} onToggleLike={(id) => Supabase.interactAnnouncementSQL(id, user.id!, user.name, 'like', orgId!).then(refreshData)} />}
             {currentTab === 'profile' && <ProfileScreen user={user} onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId, orgId!); refreshData(); }} availableRoles={roles} />}
-            {currentTab === 'settings' && safeEnabledTabs.includes('settings') && <SettingsScreen initialTitle={ministryTitle} ministryId={ministryId} themeMode={themeMode} onSetThemeMode={(m) => useAppStore.getState().setThemeMode(m)} onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, orgId!, newTitle); refreshData(); }} onSaveAvailabilityWindow={async (start, end) => { await Supabase.saveMinistrySettings(ministryId, orgId!, undefined, undefined, start, end); refreshData(); }} availabilityWindow={availabilityWindow} isAdmin={isAdmin} orgId={orgId!} />}
+            {currentTab === 'settings' && safeEnabledTabs.includes('settings') && <SettingsScreen initialTitle={ministryTitle} ministryId={ministryId} themeMode={themeMode} onSetThemeMode={(m) => useAppStore.getState().setThemeMode(m)} onSaveTitle={async (newTitle) => { await saveMinistryConfig({ targetMinistryId: ministryId, targetOrgId: orgId!, displayName: newTitle }); refreshData(); }} onSaveAvailabilityWindow={async (start, end) => { await saveMinistryConfig({ targetMinistryId: ministryId, targetOrgId: orgId!, start, end }); refreshData(); }} availabilityWindow={availabilityWindow} isAdmin={isAdmin} orgId={orgId!} />}
             {currentTab === 'members' && isAdmin && safeEnabledTabs.includes('members') && <MembersScreen members={publicMembers} onlineUsers={onlineUsers} currentUser={user} availableRoles={roles} onToggleAdmin={async (email, currentStatus, name) => { await Supabase.toggleAdminSQL(email, !currentStatus, ministryId, orgId!); refreshData(); }} onRemoveMember={async (id, name) => { await Supabase.deleteMember(ministryId, orgId!, id, name); refreshData(); }} onUpdateMember={async (id, data) => { await Supabase.updateMemberData(id, orgId!, data); refreshData(); }} />}
             {currentTab === 'event-rules' && isAdmin && safeEnabledTabs.includes('event-rules') && <EventsScreen />}
             {currentTab === 'report' && isAdmin && safeEnabledTabs.includes('report') && <AvailabilityReportScreen availability={availability} registeredMembers={publicMembers} membersMap={membersMap} currentMonth={currentMonth} onMonthChange={setCurrentMonth} availableRoles={roles} onRefresh={async () => { await refreshData(); }} />}
@@ -541,7 +577,7 @@ const InnerApp = () => {
         <JoinMinistryModal isOpen={showJoinModal} onClose={() => setShowJoinModal(false)} onJoin={async (id, r) => { await Supabase.joinMinistry(id, orgId!, r); window.location.reload(); }} alreadyJoined={user.allowedMinistries || []} />
         <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ id: e.iso, title: e.title, iso: e.iso, date: e.iso.split('T')[0], time: e.iso.split('T')[1] }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, orgId!, e); refreshData(); }} onRemove={async (id) => { await Supabase.deleteMinistryEvent(ministryId, orgId!, id); refreshData(); }} />
         <AvailabilityModal isOpen={isAvailModalOpen} onClose={() => setAvailModalOpen(false)} members={publicMembers.map(m => m.name)} availability={availability} onUpdate={async (m, d) => { await Supabase.saveMemberAvailability(ministryId, orgId!, m, d, {}, currentMonth); refreshData(); }} currentMonth={currentMonth} />
-        <RolesModal isOpen={isRolesModalOpen} onClose={() => setRolesModalOpen(false)} roles={roles} onUpdate={async (r) => { await Supabase.saveMinistrySettings(ministryId, orgId!, undefined, r); refreshData(); }} />
+        <RolesModal isOpen={isRolesModalOpen} onClose={() => setRolesModalOpen(false)} roles={roles} onUpdate={async (r) => { await saveMinistryConfig({ targetMinistryId: ministryId, targetOrgId: orgId!, roles: r }); refreshData(); }} />
         <AuditModal isOpen={isAuditModalOpen} onClose={() => setAuditModalOpen(false)} logs={auditLogs} />
         
         {eventDetailsModal.isOpen && <EventDetailsModal isOpen={eventDetailsModal.isOpen} onClose={() => setEventDetailsModal({ isOpen: false, event: null })} event={eventDetailsModal.event} schedule={schedule} roles={roles} allMembers={publicMembers} onSave={async (oldIso, newTitle, newTime, apply) => { const newIso = oldIso.split('T')[0] + 'T' + newTime; await Supabase.updateMinistryEvent(ministryId, orgId!, oldIso, newTitle, newIso, apply); refreshData(); setEventDetailsModal({ isOpen: false, event: null }); }} onSwapRequest={async (r, i, t) => { await Supabase.createSwapRequestSQL(ministryId, orgId!, { id: '', ministryId, requesterName: user.name, requesterId: user.id, role: r, eventIso: i, eventTitle: t, status: 'pending', createdAt: new Date().toISOString() }); refreshData(); setEventDetailsModal({ isOpen: false, event: null }); }} currentUser={user} ministryId={ministryId} canEdit={isAdmin} />}

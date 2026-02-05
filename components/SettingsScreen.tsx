@@ -6,6 +6,16 @@ import { LegalModal, LegalDocType } from './LegalDocuments';
 import { ThemeMode } from '../types';
 import { sendNotificationSQL } from '../services/supabaseService';
 
+const BLOCKED_WINDOW_THRESHOLD_UTC = new Date('1970-01-02T00:00:00.000Z');
+
+const isWindowBlocked = (value?: string) => {
+  if (!value) return false;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed <= BLOCKED_WINDOW_THRESHOLD_UTC;
+};
+
+
 interface Props {
   initialTitle: string;
   ministryId: string | null;
@@ -37,9 +47,7 @@ export const SettingsScreen: React.FC<Props> = ({
 
   const toLocalInput = (isoString?: string) => {
       if (!isoString) return "";
-      if (isoString.includes('1970')) return "";
-      const d = new Date(isoString);
-      if(d.getFullYear() === 1970 || d.getUTCFullYear() === 1970) return "";
+      if (isWindowBlocked(isoString)) return "";
       try {
           const date = new Date(isoString);
           const offset = date.getTimezoneOffset() * 60000;
@@ -66,9 +74,8 @@ export const SettingsScreen: React.FC<Props> = ({
 
   const isWindowActive = () => {
       const dbStart = availabilityWindow?.start;
-      const isDbBlocked = dbStart && (dbStart.includes('1970') || new Date(dbStart).getUTCFullYear() === 1970);
 
-      if (isDbBlocked) return false;
+      if (isWindowBlocked(dbStart)) return false;
       if (!dbStart && !availabilityWindow?.end && !availStart && !availEnd) return true;
       
       const startIso = availStart ? fromLocalInput(availStart) : dbStart;
@@ -79,7 +86,7 @@ export const SettingsScreen: React.FC<Props> = ({
       const now = new Date();
       const s = new Date(startIso);
       const e = new Date(endIso);
-      if(s.getUTCFullYear() === 1970) return false;
+      if (isWindowBlocked(startIso)) return false;
 
       return now >= s && now <= e;
   };

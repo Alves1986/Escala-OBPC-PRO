@@ -343,12 +343,14 @@ export const fetchMinistrySettings = async (ministryId: string, orgId?: string):
     if (!sb || !ministryId || !orgId) return null;
 
     const { data: ministryDef, error: defError } = await sb.from('organization_ministries')
-        .select('label')
+        .select('label, availability_start, availability_end')
         .eq('id', ministryId)
         .eq('organization_id', orgId)
         .maybeSingle();
 
     if (defError) return null;
+
+    console.log('WINDOW READ', ministryDef);
 
     const { data: settings } = await sb.from('ministry_settings')
         .select('*')
@@ -361,8 +363,8 @@ export const fetchMinistrySettings = async (ministryId: string, orgId?: string):
         organizationMinistryId: ministryId, 
         displayName: ministryDef?.label || settings?.display_name || 'Ministério',
         roles: settings?.roles || [],
-        availabilityStart: settings?.availability_start,
-        availabilityEnd: settings?.availability_end,
+        availabilityStart: ministryDef?.availability_start,
+        availabilityEnd: ministryDef?.availability_end,
         organizationId: orgId,
         spotifyClientId: settings?.spotify_client_id,
         spotifyClientSecret: settings?.spotify_client_secret
@@ -889,12 +891,30 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar: 
 export const saveMinistrySettings = async (ministryId: string, orgId: string, displayName?: string, roles?: string[], start?: string, end?: string) => {
     const sb = getSupabase();
     if (!sb) return;
-    const updates: any = {};
-    if (displayName) updates.display_name = displayName;
-    if (roles) updates.roles = roles;
-    if (start) updates.availability_start = start;
-    if (end) updates.availability_end = end;
-    await sb.from('ministry_settings').update(updates).eq('ministry_id', ministryId).eq('organization_id', orgId);
+
+    const settingsUpdates: any = {};
+    if (displayName) settingsUpdates.display_name = displayName;
+    if (roles) settingsUpdates.roles = roles;
+
+    if (Object.keys(settingsUpdates).length > 0) {
+        await sb
+            .from('ministry_settings')
+            .update(settingsUpdates)
+            .eq('ministry_id', ministryId)
+            .eq('organization_id', orgId);
+    }
+
+    const ministryUpdates: any = {};
+    if (start) ministryUpdates.availability_start = start;
+    if (end) ministryUpdates.availability_end = end;
+
+    if (Object.keys(ministryUpdates).length > 0) {
+        await sb
+            .from('organization_ministries')
+            .update(ministryUpdates)
+            .eq('id', ministryId)
+            .eq('organization_id', orgId);
+    }
 };
 
 export const toggleAdminSQL = async (email: string, status: boolean, ministryId: string, orgId: string) => {

@@ -19,6 +19,17 @@ interface Props {
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
 
+
+const BLOCKED_WINDOW_THRESHOLD_UTC = new Date('1970-01-02T00:00:00.000Z');
+
+const isWindowBlocked = (value?: string) => {
+  if (!value) return false;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed <= BLOCKED_WINDOW_THRESHOLD_UTC;
+};
+
+
 export const AvailabilityScreen: React.FC<Props> = ({
   availability,
   availabilityNotes,
@@ -56,7 +67,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
   // Check Window Status
   const isWindowOpenForMembers = React.useMemo(() => {
       if (!availabilityWindow?.start && !availabilityWindow?.end) return true;
-      if (availabilityWindow.start?.includes('1970')) return false;
+      if (isWindowBlocked(availabilityWindow.start)) return false;
 
       const now = new Date();
       let start = new Date(0);
