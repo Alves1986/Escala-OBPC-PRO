@@ -356,6 +356,10 @@ export const fetchMinistrySettings = async (ministryId: string, orgId?: string):
     }
 
     console.log('WINDOW READ', ministryDef);
+    console.log('WINDOW DB RAW', {
+        availability_start: ministryDef?.availability_start,
+        availability_end: ministryDef?.availability_end
+    });
 
     if (!ministryDef) {
         return {
@@ -912,6 +916,8 @@ export const saveMinistrySettings = async (ministryId: string, orgId: string, di
     const sb = getSupabase();
     if (!sb) return;
 
+    console.log('WINDOW SAVE INPUT', { start, end, ministryId, orgId });
+
     const ministryUpdates: any = {};
     if (displayName) ministryUpdates.label = displayName;
     if (roles) ministryUpdates.roles = roles;
@@ -919,11 +925,15 @@ export const saveMinistrySettings = async (ministryId: string, orgId: string, di
     if (end) ministryUpdates.availability_end = end;
 
     if (Object.keys(ministryUpdates).length > 0) {
-        await sb
+        const { data, error } = await sb
             .from('organization_ministries')
             .update(ministryUpdates)
             .eq('id', ministryId)
-            .eq('organization_id', orgId);
+            .eq('organization_id', orgId)
+            .select('id, availability_start, availability_end');
+
+        console.log('WINDOW SAVE RESULT', data, error);
+        if (error) throw error;
     }
 };
 

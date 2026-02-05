@@ -73,6 +73,10 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       end: settingsQuery.data?.availabilityEnd
   }), [settingsQuery.data]);
 
+  useEffect(() => {
+      console.log('WINDOW MAPPED', availabilityWindow);
+  }, [availabilityWindow]);
+
   const refreshData = async () => {
       await queryClient.invalidateQueries({ predicate: (query) => 
           query.queryKey[0] === 'event_rules' || 

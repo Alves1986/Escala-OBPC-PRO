@@ -192,6 +192,7 @@ const InnerApp = () => {
       });
     }
 
+    console.log('WINDOW SAVE INPUT', { start, end, ministryId: targetMinistryId, orgId: targetOrgId });
     await Supabase.saveMinistrySettings(targetMinistryId, targetOrgId, displayName, roles, start, end);
 
     await Promise.all([

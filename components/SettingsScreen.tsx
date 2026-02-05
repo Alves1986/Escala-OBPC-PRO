@@ -7,17 +7,22 @@ import { ThemeMode } from '../types';
 import { sendNotificationSQL } from '../services/supabaseService';
 
 const computeWindowOpen = (start?: string, end?: string, now: Date = new Date()) => {
-  let result = true;
-
-  if (start || end) {
-    const startDate = start ? new Date(start) : new Date(0);
-    const endDate = end ? new Date(end) : new Date(8640000000000000);
-
-    if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime())) {
-      result = now >= startDate && now <= endDate;
-    }
+  if (!start || !end) {
+    const result = true;
+    console.log('WINDOW COMPUTE', { start, end, now, result });
+    return result;
   }
 
+  const s = new Date(start);
+  const e = new Date(end);
+
+  if (isNaN(s.getTime()) || isNaN(e.getTime())) {
+    const result = true;
+    console.log('WINDOW COMPUTE', { start, end, now, result });
+    return result;
+  }
+
+  const result = now >= s && now <= e;
   console.log('WINDOW COMPUTE', { start, end, now, result });
   return result;
 };
