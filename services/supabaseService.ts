@@ -81,19 +81,19 @@ const requireOrgId = (orgId: string | null | undefined): string => {
     return effectiveId;
 };
 
-const filterRolesBySettings = async (roles: string[], ministryId: string, orgId: string): Promise<string[]> => {
+const filterRolesByMinistryConfig = async (roles: string[], ministryId: string, orgId: string): Promise<string[]> => {
     const sb = getSupabase();
     if (!sb) return roles;
 
     if (!roles || roles.length === 0) return [];
 
-    const { data: settings } = await sb.from('ministry_settings')
+    const { data: ministry } = await sb.from('organization_ministries')
         .select('roles')
-        .eq('ministry_id', ministryId)
+        .eq('id', ministryId)
         .eq('organization_id', orgId)
         .maybeSingle();
 
-    const dbRoles = settings?.roles;
+    const dbRoles = ministry?.roles;
 
     if (!dbRoles || !Array.isArray(dbRoles) || dbRoles.length === 0) {
         return roles;
@@ -144,7 +144,7 @@ export const createInviteToken = async (ministryId: string, orgId: string, minis
             public_code: publicCode // Mantido caso o banco exija
         });
 
-        if (error) throw error;
+        if (error) return { schedule: {}, attendance: {} };
 
         // Gera link limpo apenas com o token
         const url = `${window.location.origin}/?invite=${token}`;
@@ -296,7 +296,8 @@ export const registerWithInvite = async (
 
 export const fetchOrganizationMinistries = async (orgId?: string): Promise<MinistryDef[]> => {
     const sb = getSupabase();
-    if (!sb || !orgId) return [];
+    if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+    if (!orgId) throw new Error('orgId missing');
 
     const { data, error } = await sb
         .from('organization_ministries')
@@ -318,7 +319,8 @@ export const fetchOrganizationMinistries = async (orgId?: string): Promise<Minis
 
 export const fetchUserAllowedMinistries = async (userId: string, orgId?: string): Promise<string[]> => {
     const sb = getSupabase();
-    if (!sb || !orgId) return [];
+    if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+    if (!orgId) throw new Error('orgId missing');
     
     const { data: members, error } = await sb.from('organization_memberships')
         .select('ministry_id')
@@ -343,29 +345,47 @@ export const fetchMinistrySettings = async (ministryId: string, orgId?: string):
     if (!sb || !ministryId || !orgId) return null;
 
     const { data: ministryDef, error: defError } = await sb.from('organization_ministries')
-        .select('label')
+        .select('*')
         .eq('id', ministryId)
         .eq('organization_id', orgId)
         .maybeSingle();
 
-    if (defError) return null;
+    if (defError) {
+        console.error('fetchMinistrySettings error', defError);
+        return null;
+    }
 
-    const { data: settings } = await sb.from('ministry_settings')
-        .select('*')
-        .eq('ministry_id', ministryId)
-        .eq('organization_id', orgId)
-        .maybeSingle();
-    
+    console.log('WINDOW READ', ministryDef);
+    console.log('ORG_MINISTRY RAW ROW', ministryDef);
+    console.log('WINDOW DB RAW', {
+        availability_start: ministryDef?.availability_start,
+        availability_end: ministryDef?.availability_end
+    });
+
+    if (!ministryDef) {
+        return {
+            id: undefined,
+            organizationMinistryId: ministryId,
+            displayName: null as any,
+            roles: [],
+            availabilityStart: null as any,
+            availabilityEnd: null as any,
+            organizationId: orgId,
+            spotifyClientId: undefined,
+            spotifyClientSecret: undefined
+        };
+    }
+
     return {
-        id: settings?.id,
-        organizationMinistryId: ministryId, 
-        displayName: ministryDef?.label || settings?.display_name || 'Ministério',
-        roles: settings?.roles || [],
-        availabilityStart: settings?.availability_start,
-        availabilityEnd: settings?.availability_end,
+        id: ministryDef?.id,
+        organizationMinistryId: ministryId,
+        displayName: ministryDef?.label ?? '',
+        roles: Array.isArray((ministryDef as any)?.roles) ? (ministryDef as any).roles : [],
+        availabilityStart: ministryDef?.availability_start ?? null as any,
+        availabilityEnd: ministryDef?.availability_end ?? null as any,
         organizationId: orgId,
-        spotifyClientId: settings?.spotify_client_id,
-        spotifyClientSecret: settings?.spotify_client_secret
+        spotifyClientId: ministryDef?.spotify_client_id ?? null as any,
+        spotifyClientSecret: ministryDef?.spotify_client_secret ?? null as any
     };
 };
 
@@ -378,7 +398,7 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
         .eq('ministry_id', ministryId)
         .eq('organization_id', orgId);
 
-    if (error) return { schedule: {}, attendance: {} };
+    if (error) throw error;
 
     const schedule: any = {};
     const attendance: any = {};
@@ -558,19 +578,20 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
         .in('id', userIds)
         .eq('organization_id', orgId);
         
-    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-    const [assignmentsRes, swapsRes, readsRes, likesRes] = await Promise.all([
+    const [assignmentsRes, swapsRes, interactionsRes] = await Promise.all([
         sb.from('schedule_assignments').select('member_id, event_date, role').eq('organization_id', orgId).eq('ministry_id', ministryId).eq('confirmed', true).lte('event_date', today),
         sb.from('swap_requests').select('requester_id, created_at').eq('organization_id', orgId).eq('ministry_id', ministryId),
-        sb.from('announcement_reads').select('user_id, created_at, announcements!inner(ministry_id)').eq('organization_id', orgId).eq('announcements.ministry_id', ministryId),
-        sb.from('announcement_likes').select('user_id, created_at, announcements!inner(ministry_id)').eq('organization_id', orgId).eq('announcements.ministry_id', ministryId)
+        sb.from('announcement_interactions').select('user_id, created_at, interaction_type').eq('organization_id', orgId).eq('ministry_id', ministryId)
     ]) as any;
 
     const assignments = assignmentsRes.data || [];
     const swaps = swapsRes.data || [];
-    const reads = readsRes.data || [];
-    const likes = likesRes.data || [];
+    const interactions = interactionsRes.data || [];
+    const reads = interactions.filter((i: any) => i.interaction_type === 'read');
+    const likes = interactions.filter((i: any) => i.interaction_type === 'like');
 
     return (members || []).map((m: any) => {
         let points = 0;
@@ -606,7 +627,8 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
 
 export const fetchUserFunctions = async (userId: string, ministryId: string, orgId?: string): Promise<string[]> => {
   const sb = getSupabase();
-  if (!sb || !orgId) return [];
+  if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+    if (!orgId) throw new Error('orgId missing');
 
   const { data } = await sb
     .from('organization_memberships')
@@ -679,9 +701,12 @@ export const fetchMinistryAvailability = async (ministryId: string, orgId?: stri
 
 export const fetchNotificationsSQL = async (ministryIds: string[], userId: string, orgId?: string) => {
     const sb = getSupabase();
-    if (!sb || !orgId) return [];
-    const { data } = await sb.from('notifications').select('*').in('ministry_id', ministryIds).eq('organization_id', orgId).order('created_at', { ascending: false }).limit(50);
-    const { data: reads } = await sb.from('notification_reads').select('notification_id').eq('user_id', userId).eq('organization_id', orgId);
+    if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+    if (!orgId) throw new Error('ORG_CONTEXT_REQUIRED');
+    const { data, error } = await sb.from('notifications').select('*').in('ministry_id', ministryIds).eq('organization_id', orgId).order('created_at', { ascending: false }).limit(50);
+    if (error) throw error;
+    const { data: reads, error: readsError } = await sb.from('notification_reads').select('notification_id').eq('user_id', userId).eq('organization_id', orgId);
+    if (readsError) throw readsError;
     const readIds = new Set(reads?.map((r: any) => r.notification_id));
     return (data || []).map((n: any) => ({
         id: n.id, type: n.type, title: n.title, message: n.message, timestamp: n.created_at, read: readIds.has(n.id), actionLink: n.action_link, ministryId: n.ministry_id
@@ -690,15 +715,21 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
 
 export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) => {
     const sb = getSupabase();
-    if (!sb || !orgId) return [];
+    if (!sb) return [];
+    if (!orgId) throw new Error('ORG_CONTEXT_REQUIRED');
 
-    const now = new Date().toISOString();
+    const { data: sampleData, error: sampleError } = await sb.from('announcements')
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('ministry_id', ministryId)
+        .limit(5);
+
+    console.log('ANNOUNCEMENTS SAMPLE COUNT', sampleData?.length || 0, sampleError);
 
     const { data, error } = await sb.from('announcements')
-        .select(`*, announcement_reads (user_id, profiles(name), created_at), announcement_likes (user_id, profiles(name), created_at)`)
+        .select('*')
         .eq('ministry_id', ministryId)
         .eq('organization_id', orgId)
-        .or(`expiration_date.is.null,expiration_date.gte.${now}`)
         .order('created_at', { ascending: false });
 
     if (error) {
@@ -706,7 +737,37 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
         return [];
     }
 
-    if (!data) return [];
+    if (!data || data.length === 0) return [];
+
+    const announcementIds = data.map((a: any) => a.id);
+
+    const { data: interactions, error: interactionsError } = await sb.from('announcement_interactions')
+        .select('announcement_id, user_id, created_at, interaction_type')
+        .eq('organization_id', orgId)
+        .eq('ministry_id', ministryId)
+        .in('announcement_id', announcementIds);
+
+    if (interactionsError) {
+        console.error('fetchAnnouncementsSQL interactions error', interactionsError);
+    }
+
+    console.log('ANN INTERACTIONS RAW', interactions?.length || 0, interactions);
+
+    const likes = (interactions || []).filter((item: any) => item.interaction_type === 'like');
+    const reads = (interactions || []).filter((item: any) => item.interaction_type === 'read');
+
+    const readByAnnouncement: Record<string, any[]> = {};
+    const likedByAnnouncement: Record<string, any[]> = {};
+
+    reads.forEach((item: any) => {
+        if (!readByAnnouncement[item.announcement_id]) readByAnnouncement[item.announcement_id] = [];
+        readByAnnouncement[item.announcement_id].push({ userId: item.user_id, name: undefined, timestamp: item.created_at });
+    });
+
+    likes.forEach((item: any) => {
+        if (!likedByAnnouncement[item.announcement_id]) likedByAnnouncement[item.announcement_id] = [];
+        likedByAnnouncement[item.announcement_id].push({ userId: item.user_id, name: undefined, timestamp: item.created_at });
+    });
 
     return data.map((a: any) => ({
         id: a.id,
@@ -716,23 +777,17 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
         timestamp: a.created_at,
         expirationDate: a.expiration_date,
         author: a.author_name || 'Admin',
-        readBy: a.announcement_reads?.map((r: any) => ({ 
-            userId: r.user_id, 
-            name: r.profiles?.name, 
-            timestamp: r.created_at 
-        })) || [],
-        likedBy: a.announcement_likes?.map((l: any) => ({ 
-            userId: l.user_id, 
-            name: l.profiles?.name, 
-            timestamp: l.created_at 
-        })) || []
+        readBy: readByAnnouncement[a.id] || [],
+        likedBy: likedByAnnouncement[a.id] || []
     }));
 };
 
 export const fetchSwapRequests = async (ministryId: string, orgId?: string) => {
     const sb = getSupabase();
-    if (!sb || !orgId) return [];
-    const { data } = await sb.from('swap_requests').select('*').eq('ministry_id', ministryId).eq('organization_id', orgId).order('created_at', { ascending: false });
+    if (!sb) return [];
+    if (!orgId) throw new Error('orgId missing');
+    const { data, error } = await sb.from('swap_requests').select('*').eq('ministry_id', ministryId).eq('organization_id', orgId).order('created_at', { ascending: false });
+    if (error) throw error;
     return (data || []).map((s: any) => ({
         id: s.id, ministryId: s.ministry_id, requesterName: s.requester_name, requesterId: s.requester_id, role: s.role, eventIso: s.event_iso, eventTitle: s.event_title, status: s.status, createdAt: s.created_at, takenByName: s.taken_by_name
     }));
@@ -740,7 +795,8 @@ export const fetchSwapRequests = async (ministryId: string, orgId?: string) => {
 
 export const fetchRepertoire = async (ministryId: string, orgId?: string) => {
     const sb = getSupabase();
-    if (!sb || !orgId) return [];
+    if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+    if (!orgId) throw new Error('orgId missing');
     const { data } = await sb.from('repertoire').select('*').eq('ministry_id', ministryId).eq('organization_id', orgId).order('created_at', { ascending: false });
     return (data || []).map((r: any) => ({
         id: r.id, title: r.title, link: r.link, date: r.date_used, observation: r.observation, addedBy: r.added_by, createdAt: r.created_at, content: r.content, key: r.music_key
@@ -749,7 +805,8 @@ export const fetchRepertoire = async (ministryId: string, orgId?: string) => {
 
 export const fetchGlobalSchedules = async (month: string, currentMinistryId: string, orgId?: string) => {
     const sb = getSupabase();
-    if (!sb || !orgId) return {};
+    if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+    if (!orgId) throw new Error('orgId missing');
     const { data } = await sb.from('schedule_assignments').select('event_key, event_date, role, ministry_id, profiles(name)').eq('organization_id', orgId).neq('ministry_id', currentMinistryId);
     const map: any = {};
     data?.forEach((row: any) => {
@@ -765,7 +822,8 @@ export const fetchGlobalSchedules = async (month: string, currentMinistryId: str
 
 export const fetchAuditLogs = async (ministryId: string, orgId?: string) => {
     const sb = getSupabase();
-    if (!sb || !orgId) return [];
+    if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+    if (!orgId) throw new Error('orgId missing');
     const { data } = await sb.from('audit_logs').select('*').eq('ministry_id', ministryId).eq('organization_id', orgId).order('created_at', { ascending: false }).limit(100);
     return (data || []).map((l: any) => ({ id: l.id, date: l.created_at, action: l.action, details: l.details, author: l.author_name }));
 };
@@ -815,7 +873,22 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
     const uuid = parts[0];
     const date = parts[1];
     if (!uuid || !date) return false;
-    const { error } = await sb.from('schedule_assignments').upsert({ event_key: uuid, event_date: date, role, member_id: memberId, ministry_id: ministryId, organization_id: orgId, confirmed: false }, { onConflict: 'event_key, event_date, role' });
+
+    const [eventKeyBase, , eventTime] = eventKey.split('_');
+    let ruleQuery = sb.from('event_rules')
+        .select('id')
+        .eq('organization_id', orgId)
+        .eq('ministry_id', ministryId);
+
+    if (eventTime) {
+        ruleQuery = ruleQuery.eq('time', eventTime);
+    } else {
+        ruleQuery = ruleQuery.eq('id', eventKeyBase || uuid);
+    }
+
+    const { data: rule } = await ruleQuery.maybeSingle();
+
+    const { error } = await sb.from('schedule_assignments').upsert({ event_id: rule?.id ?? null, event_key: uuid, event_date: date, role, member_id: memberId, ministry_id: ministryId, organization_id: orgId, confirmed: false }, { onConflict: 'event_key, event_date, role' });
     if (error) return false;
     return true;
 };
@@ -862,16 +935,80 @@ export const cancelSwapRequestSQL = async (requestId: string, orgId: string) => 
 export const interactAnnouncementSQL = async (id: string, userId: string, userName: string, action: 'read'|'like', orgId: string) => {
     const sb = getSupabase();
     if (!sb) return;
-    const table = action === 'read' ? 'announcement_reads' : 'announcement_likes';
-    if (action === 'like') {
-        const { data } = await sb.from(table).select('id').eq('announcement_id', id).eq('user_id', userId).eq('organization_id', orgId).maybeSingle();
-        if (data) { await sb.from(table).delete().eq('id', data.id).eq('organization_id', orgId); } 
-        else { await sb.from(table).insert({ announcement_id: id, user_id: userId, organization_id: orgId }); }
-    } else {
-        await sb.from(table).upsert({ announcement_id: id, user_id: userId, organization_id: orgId }, { onConflict: 'announcement_id, user_id' });
-    }
-};
 
+    const announcementId = id;
+
+    const { data: announcementRow } = await sb
+        .from('announcements')
+        .select('ministry_id')
+        .eq('id', announcementId)
+        .eq('organization_id', orgId)
+        .maybeSingle();
+
+    const ministryId = announcementRow?.ministry_id;
+    if (!ministryId) return;
+
+    if (action === 'like') {
+        const { data: existingLikes, error: existingLikesError } = await sb
+            .from('announcement_interactions')
+            .select('announcement_id')
+            .eq('announcement_id', announcementId)
+            .eq('user_id', userId)
+            .eq('organization_id', orgId)
+            .eq('ministry_id', ministryId)
+            .eq('interaction_type', 'like')
+            .limit(1);
+
+        if (existingLikesError) {
+            console.log('ANN LIKE WRITE RESULT', { organization_id: orgId, ministry_id: ministryId, announcement_id: announcementId, user_id: userId, liked: null, error: existingLikesError });
+        } else if ((existingLikes || []).length > 0) {
+            const { error } = await sb
+                .from('announcement_interactions')
+                .delete()
+                .eq('announcement_id', announcementId)
+                .eq('user_id', userId)
+                .eq('organization_id', orgId)
+                .eq('ministry_id', ministryId)
+                .eq('interaction_type', 'like');
+
+            console.log('ANN LIKE WRITE RESULT', { organization_id: orgId, ministry_id: ministryId, announcement_id: announcementId, user_id: userId, liked: false, error });
+        } else {
+            const { error } = await sb
+                .from('announcement_interactions')
+                .insert({
+                    announcement_id: announcementId,
+                    user_id: userId,
+                    organization_id: orgId,
+                    ministry_id: ministryId,
+                    interaction_type: 'like'
+                });
+
+            console.log('ANN LIKE WRITE RESULT', { organization_id: orgId, ministry_id: ministryId, announcement_id: announcementId, user_id: userId, liked: true, error });
+        }
+    } else {
+        const { error } = await sb
+            .from('announcement_interactions')
+            .upsert({
+                announcement_id: announcementId,
+                user_id: userId,
+                organization_id: orgId,
+                ministry_id: ministryId,
+                interaction_type: 'read'
+            }, { onConflict: 'announcement_id,user_id,organization_id,ministry_id,interaction_type' });
+
+        console.log('ANN READ WRITE RESULT', { organization_id: orgId, ministry_id: ministryId, announcement_id: announcementId, user_id: userId, error });
+    }
+
+    const { data: rawAfterWrite, error: rawAfterWriteError } = await sb
+        .from('announcement_interactions')
+        .select('announcement_id, user_id, organization_id, ministry_id, interaction_type, created_at')
+        .eq('announcement_id', announcementId)
+        .eq('user_id', userId)
+        .eq('organization_id', orgId)
+        .eq('ministry_id', ministryId);
+
+    console.log('ANN INTERACTIONS RAW AFTER WRITE', { organization_id: orgId, ministry_id: ministryId, announcement_id: announcementId, user_id: userId, error: rawAfterWriteError, rows: rawAfterWrite || [] });
+};
 export const updateUserProfile = async (name: string, whatsapp: string, avatar: string | undefined, functions: string[] | undefined, birthDate: string | undefined, ministryId?: string, orgId?: string) => {
     const sb = getSupabase();
     if (!sb) return;
@@ -881,7 +1018,7 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar: 
     if (avatar) updates.avatar_url = avatar;
     await sb.from('profiles').update(updates).eq('id', user.id).eq('organization_id', orgId);
     if (ministryId && functions && orgId) {
-        const sanitizedRoles = await filterRolesBySettings(functions, ministryId, orgId);
+        const sanitizedRoles = await filterRolesByMinistryConfig(functions, ministryId, orgId);
         await sb.from('organization_memberships').update({ functions: sanitizedRoles }).eq('profile_id', user.id).eq('ministry_id', ministryId).eq('organization_id', orgId);
     }
 };
@@ -889,12 +1026,43 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar: 
 export const saveMinistrySettings = async (ministryId: string, orgId: string, displayName?: string, roles?: string[], start?: string, end?: string) => {
     const sb = getSupabase();
     if (!sb) return;
-    const updates: any = {};
-    if (displayName) updates.display_name = displayName;
-    if (roles) updates.roles = roles;
-    if (start) updates.availability_start = start;
-    if (end) updates.availability_end = end;
-    await sb.from('ministry_settings').update(updates).eq('ministry_id', ministryId).eq('organization_id', orgId);
+
+    console.log('WINDOW SAVE INPUT', { start, end, ministryId, orgId });
+
+    const ministryUpdates: any = {};
+    if (displayName) ministryUpdates.label = displayName;
+    if (roles) ministryUpdates.roles = roles;
+    if (start) ministryUpdates.availability_start = start;
+    if (end) ministryUpdates.availability_end = end;
+
+    if (Object.keys(ministryUpdates).length > 0) {
+        const { data, error } = await sb
+            .from('organization_ministries')
+            .update(ministryUpdates)
+            .eq('id', ministryId)
+            .eq('organization_id', orgId)
+            .select('id, availability_start, availability_end');
+
+        console.log('WINDOW SAVE RESULT', data, error);
+        if (error) throw error;
+
+        const { data: refreshedRow, error: refreshError } = await sb
+            .from('organization_ministries')
+            .select('*')
+            .eq('id', ministryId)
+            .eq('organization_id', orgId)
+            .maybeSingle();
+
+        console.log('ORG_MINISTRY RAW ROW', refreshedRow);
+        console.log('WINDOW SAVE RECHECK', {
+            availability_start: refreshedRow?.availability_start,
+            availability_end: refreshedRow?.availability_end,
+            expected_start: start,
+            expected_end: end,
+            refreshError
+        });
+        if (refreshError) throw refreshError;
+    }
 };
 
 export const toggleAdminSQL = async (email: string, status: boolean, ministryId: string, orgId: string) => {
@@ -914,7 +1082,7 @@ export const updateMemberData = async (id: string, orgId: string, data: any) => 
     if (!sb) return;
     await sb.from('profiles').update({ name: data.name, whatsapp: data.whatsapp }).eq('id', id).eq('organization_id', orgId);
     if (data.ministryId) {
-        const sanitizedRoles = await filterRolesBySettings(data.roles, data.ministryId, orgId);
+        const sanitizedRoles = await filterRolesByMinistryConfig(data.roles, data.ministryId, orgId);
         await sb.from('organization_memberships').update({ functions: sanitizedRoles }).eq('profile_id', id).eq('ministry_id', data.ministryId).eq('organization_id', orgId);
     }
 };
@@ -936,7 +1104,7 @@ export const joinMinistry = async (ministryId: string, orgId: string, roles: str
     if (!sb) return;
     const { data: { user } } = await (sb.auth as any).getUser();
     if (!user) return;
-    const sanitizedRoles = await filterRolesBySettings(roles, ministryId, orgId);
+    const sanitizedRoles = await filterRolesByMinistryConfig(roles, ministryId, orgId);
     await sb.from('organization_memberships').insert({ profile_id: user.id, organization_id: orgId, ministry_id: ministryId, role: 'member', functions: sanitizedRoles });
     const { data: profile } = await sb.from('profiles').select('allowed_ministries').eq('id', user.id).eq('organization_id', orgId).single();
     const current = profile?.allowed_ministries || [];

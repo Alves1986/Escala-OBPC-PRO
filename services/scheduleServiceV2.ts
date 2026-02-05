@@ -122,9 +122,9 @@ export const fetchMinistryRoles = async (
   if (!sb) throw new Error("NO_SUPABASE");
 
   const { data, error } = await sb
-    .from("ministry_settings")
+    .from("organization_ministries")
     .select("roles")
-    .eq("ministry_id", ministryId)
+    .eq("id", ministryId)
     .eq("organization_id", orgId)
     .maybeSingle();
 
@@ -141,6 +141,7 @@ export const saveAssignmentV2 = async (
     event_date: string;
     role: string;
     member_id: string;
+    time?: string;
   }
 ) => {
   console.log("[saveAssignmentV2] START", { ministryId, orgId, payload });
@@ -148,12 +149,28 @@ export const saveAssignmentV2 = async (
   const sb = getSupabase();
   if (!sb) throw new Error("NO_SUPABASE");
 
+  let ruleQuery = sb
+    .from('event_rules')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('ministry_id', ministryId);
+
+  const payloadTime = (payload as any).time;
+  if (payloadTime) {
+    ruleQuery = ruleQuery.eq('time', payloadTime);
+  } else {
+    ruleQuery = ruleQuery.eq('id', payload.event_key);
+  }
+
+  const { data: rule } = await ruleQuery.maybeSingle();
+
   const { data, error } = await sb
     .from("schedule_assignments")
     .upsert(
       {
         organization_id: orgId,
         ministry_id: ministryId,
+        event_id: rule?.id ?? null,
         event_key: payload.event_key,
         event_date: payload.event_date,
         role: payload.role,
@@ -294,4 +311,109 @@ export const fetchNextEventTeam = async (ministryId: string, orgId: string) => {
   }));
 
   return { date: nextDate, team };
+};
+
+export interface NextEventCardData {
+  event: {
+    id: string | null;
+    title: string;
+    time: string | null;
+    date: string;
+  };
+  members: {
+    role: string;
+    memberId: string;
+    memberName: string;
+    assignmentKey: string;
+    confirmed: boolean;
+  }[];
+}
+
+export const fetchNextEventCardData = async (
+  ministryId: string,
+  orgId: string
+): Promise<NextEventCardData | null> => {
+  const sb = getSupabase();
+  if (!sb) return null;
+
+  const today = new Date().toISOString().split('T')[0];
+
+  const { data: nextAssignment, error: nextAssignmentError } = await sb
+    .from('schedule_assignments')
+    .select('event_id, event_date')
+    .eq('organization_id', orgId)
+    .eq('ministry_id', ministryId)
+    .gte('event_date', today)
+    .order('event_date', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (nextAssignmentError) throw nextAssignmentError;
+
+  console.log('NEXT EVENT ASSIGNMENT', nextAssignment);
+
+  if (!nextAssignment) return null;
+
+  const eventId = nextAssignment.event_id ?? null;
+  console.log('NEXT EVENT EVENT_ID USED', eventId);
+
+  let rule = null as any;
+
+  if (eventId) {
+    const { data: resolvedRule, error: ruleError } = await sb
+      .from('event_rules')
+      .select('*')
+      .eq('id', eventId)
+      .maybeSingle();
+
+    if (ruleError) throw ruleError;
+    rule = resolvedRule;
+  }
+
+  let assignments: any[] = [];
+
+  if (eventId) {
+    const { data: assignmentRows, error: assignmentsError } = await sb
+      .from('schedule_assignments')
+      .select('event_id, event_key, event_date, role, member_id, confirmed, profiles(name)')
+      .eq('event_id', eventId)
+      .eq('organization_id', orgId)
+      .eq('ministry_id', ministryId);
+
+    if (assignmentsError) throw assignmentsError;
+    assignments = assignmentRows || [];
+  }
+
+  console.log('NEXT EVENT MEMBERS RAW', assignments.length);
+
+  const dedupedMembersMap = new Map<string, any>();
+
+  (assignments || []).forEach((a: any) => {
+    const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
+    const assignmentKey = `${a.event_key}_${a.event_date}_${a.role}`;
+    const dedupeKey = `${a.event_id || eventId}_${a.role || 'unknown'}_${a.member_id || 'unknown'}`;
+
+    if (!dedupedMembersMap.has(dedupeKey)) {
+      dedupedMembersMap.set(dedupeKey, {
+        role: a.role,
+        memberId: a.member_id,
+        memberName: profile?.name || 'Membro',
+        assignmentKey,
+        confirmed: !!a.confirmed
+      });
+    }
+  });
+
+  const payload: NextEventCardData = {
+    event: {
+      id: eventId,
+      title: rule?.title || 'Evento',
+      time: rule?.time ?? null,
+      date: nextAssignment.event_date || rule?.date || today
+    },
+    members: Array.from(dedupedMembersMap.values())
+  };
+
+  console.log('NEXT EVENT FINAL PAYLOAD', payload);
+  return payload;
 };

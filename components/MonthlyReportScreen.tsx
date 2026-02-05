@@ -28,9 +28,9 @@ export const MonthlyReportScreen: React.FC<Props> = ({
   // Cálculo das Métricas
   const reportData = useMemo(() => {
     // 1. Filtrar eventos do mês
-    const monthEventIsos = events
-      .filter(e => e.iso.startsWith(currentMonth))
-      .map(e => e.iso);
+    const monthEventDates = events
+      .map(e => e.iso.split('T')[0])
+      .filter(date => date.startsWith(currentMonth));
 
     // 2. Processar dados por membro
     const data = members.map(member => {
@@ -39,7 +39,8 @@ export const MonthlyReportScreen: React.FC<Props> = ({
       
       // Analisar Escala e Presença
       Object.entries(schedule).forEach(([key, assignedName]) => {
-        const isThisMonth = monthEventIsos.some(iso => key.startsWith(iso));
+        const eventDateFromKey = key.split('_')[1] || key.split('T')[0];
+        const isThisMonth = monthEventDates.includes(eventDateFromKey);
 
         if (isThisMonth && assignedName === member.name) {
           scheduledCount++;

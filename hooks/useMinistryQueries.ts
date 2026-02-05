@@ -31,7 +31,8 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
   const settingsQuery = useQuery({
     queryKey: keys.settings(ministryId, orgId),
     queryFn: () => Supabase.fetchMinistrySettings(ministryId, orgId),
-    enabled: isQueryEnabled
+    enabled: isQueryEnabled,
+    retry: false
   });
 
   // 2. Assignments (Schedule Map)

@@ -73,6 +73,10 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       end: settingsQuery.data?.availabilityEnd
   }), [settingsQuery.data]);
 
+  useEffect(() => {
+      console.log('WINDOW MAPPED', availabilityWindow);
+  }, [availabilityWindow]);
+
   const refreshData = async () => {
       await queryClient.invalidateQueries({ predicate: (query) => 
           query.queryKey[0] === 'event_rules' || 
@@ -125,7 +129,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
         )
         .on(
             'postgres_changes', 
-            { event: 'UPDATE', schema: 'public', table: 'ministry_settings', filter: `ministry_id=eq.${mid}` }, 
+            { event: 'UPDATE', schema: 'public', table: 'organization_ministries', filter: `id=eq.${mid}` }, 
             () => {
                 queryClient.invalidateQueries({ queryKey: keys.settings(mid, orgId) });
             }

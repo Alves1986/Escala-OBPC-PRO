@@ -6,6 +6,28 @@ import { LegalModal, LegalDocType } from './LegalDocuments';
 import { ThemeMode } from '../types';
 import { sendNotificationSQL } from '../services/supabaseService';
 
+const computeWindowOpen = (start?: string, end?: string, now: Date = new Date()) => {
+  if (!start || !end) {
+    const result = true;
+    console.log('WINDOW COMPUTE', { start, end, now, result });
+    return result;
+  }
+
+  const s = new Date(start);
+  const e = new Date(end);
+
+  if (isNaN(s.getTime()) || isNaN(e.getTime())) {
+    const result = true;
+    console.log('WINDOW COMPUTE', { start, end, now, result });
+    return result;
+  }
+
+  const result = now >= s && now <= e;
+  console.log('WINDOW COMPUTE', { start, end, now, result });
+  return result;
+};
+
+
 interface Props {
   initialTitle: string;
   ministryId: string | null;
@@ -26,6 +48,7 @@ export const SettingsScreen: React.FC<Props> = ({
     onSaveTitle, onAnnounceUpdate, onEnableNotifications, 
     onSaveAvailabilityWindow, availabilityWindow, isAdmin = false, orgId
 }) => {
+  console.log('SETTINGS WINDOW INPUT', availabilityWindow);
   const [tempTitle, setTempTitle] = useState(initialTitle);
   const [availStart, setAvailStart] = useState("");
   const [availEnd, setAvailEnd] = useState("");
@@ -37,9 +60,6 @@ export const SettingsScreen: React.FC<Props> = ({
 
   const toLocalInput = (isoString?: string) => {
       if (!isoString) return "";
-      if (isoString.includes('1970')) return "";
-      const d = new Date(isoString);
-      if(d.getFullYear() === 1970 || d.getUTCFullYear() === 1970) return "";
       try {
           const date = new Date(isoString);
           const offset = date.getTimezoneOffset() * 60000;
@@ -66,22 +86,12 @@ export const SettingsScreen: React.FC<Props> = ({
 
   const isWindowActive = () => {
       const dbStart = availabilityWindow?.start;
-      const isDbBlocked = dbStart && (dbStart.includes('1970') || new Date(dbStart).getUTCFullYear() === 1970);
-
-      if (isDbBlocked) return false;
       if (!dbStart && !availabilityWindow?.end && !availStart && !availEnd) return true;
       
       const startIso = availStart ? fromLocalInput(availStart) : dbStart;
       const endIso = availEnd ? fromLocalInput(availEnd) : availabilityWindow?.end;
 
-      if (!startIso || !endIso) return true;
-      
-      const now = new Date();
-      const s = new Date(startIso);
-      const e = new Date(endIso);
-      if(s.getUTCFullYear() === 1970) return false;
-
-      return now >= s && now <= e;
+      return computeWindowOpen(startIso, endIso, new Date());
   };
 
   const status = isWindowActive();
@@ -128,8 +138,8 @@ export const SettingsScreen: React.FC<Props> = ({
       let newEndStr = "";
 
       if (action === 'block') {
-          newStartStr = "1970-01-01T00:00:00.000Z";
-          newEndStr = "1970-01-01T00:00:00.000Z";
+          newStartStr = now.toISOString();
+          newEndStr = now.toISOString();
           
           await sendNotificationSQL(ministryId, orgId, {
               title: "🔒 Janela Fechada",

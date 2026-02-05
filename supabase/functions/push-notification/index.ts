@@ -74,11 +74,11 @@ Deno.serve(async (req: Request) => {
         return new Response(JSON.stringify({ success: false, message: 'Invalid User Token' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const cleanMid = ministryId ? ministryId.trim().toLowerCase().replace(/\s+/g, '-') : null;
+    const cleanMid = typeof ministryId === 'string' ? ministryId.trim() : null;
 
     const { data: callerProfile } = await supabase
         .from('profiles')
-        .select('ministry_id, allowed_ministries, is_admin')
+        .select('organization_id, ministry_id, allowed_ministries, is_admin')
         .eq('id', user.id)
         .single();
 
@@ -107,16 +107,20 @@ Deno.serve(async (req: Request) => {
              if (profile.ministry_id === cleanMid) updates.ministry_id = newAllowed.length > 0 ? newAllowed[0] : null;
              await supabase.from('profiles').update(updates).eq('id', memberId);
         }
-        const todayIso = new Date().toISOString();
-        const { data: events } = await supabase.from('events').select('id').eq('ministry_id', cleanMid).gte('date_time', todayIso);
-        const eventIds = events?.map((e: any) => e.id) || [];
-        if (eventIds.length > 0) await supabase.from('schedule_assignments').delete().eq('member_id', memberId).in('event_id', eventIds);
+        const today = new Date().toISOString().split('T')[0];
+        await supabase
+            .from('schedule_assignments')
+            .delete()
+            .eq('member_id', memberId)
+            .eq('organization_id', callerProfile.organization_id)
+            .eq('ministry_id', cleanMid)
+            .gte('event_date', today);
         return new Response(JSON.stringify({ success: true, message: 'Membro removido.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
     }
 
     if (action === 'toggle_admin') {
         if (!callerProfile.is_admin) return new Response(JSON.stringify({ success: false, message: 'Restrito a Admin.' }), { status: 403, headers: corsHeaders });
-        await supabase.from('profiles').update({ is_admin: status }).eq('email', targetEmail);
+        await supabase.from('profiles').update({ is_admin: status }).eq('email', targetEmail).eq('organization_id', callerProfile.organization_id);
         return new Response(JSON.stringify({ success: true, message: 'Permissão alterada.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
     }
 
@@ -142,6 +146,7 @@ Deno.serve(async (req: Request) => {
     const { data: profiles } = await supabase
         .from('profiles')
         .select('id')
+        .eq('organization_id', callerProfile.organization_id)
         .or(`ministry_id.eq.${cleanMid},allowed_ministries.cs.{${cleanMid}}`)
         
     const userIds = profiles?.map((p: any) => p.id) || []
