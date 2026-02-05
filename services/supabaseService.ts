@@ -753,19 +753,20 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
 
     console.log('ANN INTERACTIONS RAW', interactions?.length || 0, interactions);
 
+    const likes = (interactions || []).filter((item: any) => item.interaction_type === 'like');
+    const reads = (interactions || []).filter((item: any) => item.interaction_type === 'read');
+
     const readByAnnouncement: Record<string, any[]> = {};
     const likedByAnnouncement: Record<string, any[]> = {};
 
-    (interactions || []).forEach((item: any) => {
-        if (item.interaction_type === 'read') {
-            if (!readByAnnouncement[item.announcement_id]) readByAnnouncement[item.announcement_id] = [];
-            readByAnnouncement[item.announcement_id].push({ userId: item.user_id, name: undefined, timestamp: item.created_at });
-        }
+    reads.forEach((item: any) => {
+        if (!readByAnnouncement[item.announcement_id]) readByAnnouncement[item.announcement_id] = [];
+        readByAnnouncement[item.announcement_id].push({ userId: item.user_id, name: undefined, timestamp: item.created_at });
+    });
 
-        if (item.interaction_type === 'like') {
-            if (!likedByAnnouncement[item.announcement_id]) likedByAnnouncement[item.announcement_id] = [];
-            likedByAnnouncement[item.announcement_id].push({ userId: item.user_id, name: undefined, timestamp: item.created_at });
-        }
+    likes.forEach((item: any) => {
+        if (!likedByAnnouncement[item.announcement_id]) likedByAnnouncement[item.announcement_id] = [];
+        likedByAnnouncement[item.announcement_id].push({ userId: item.user_id, name: undefined, timestamp: item.created_at });
     });
 
     return data.map((a: any) => ({
@@ -935,10 +936,12 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
     const sb = getSupabase();
     if (!sb) return;
 
+    const announcementId = id;
+
     const { data: announcementRow } = await sb
         .from('announcements')
         .select('ministry_id')
-        .eq('id', id)
+        .eq('id', announcementId)
         .eq('organization_id', orgId)
         .maybeSingle();
 
@@ -946,65 +949,66 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
     if (!ministryId) return;
 
     if (action === 'like') {
-        const { data: existingLike } = await sb.from('announcement_interactions')
+        const { data: existingLikes, error: existingLikesError } = await sb
+            .from('announcement_interactions')
             .select('announcement_id')
+            .eq('announcement_id', announcementId)
+            .eq('user_id', userId)
             .eq('organization_id', orgId)
             .eq('ministry_id', ministryId)
-            .eq('announcement_id', id)
-            .eq('user_id', userId)
             .eq('interaction_type', 'like')
-            .maybeSingle();
+            .limit(1);
 
-        let writeError: any = null;
-        let liked = false;
-
-        if (existingLike) {
-            const { error } = await sb.from('announcement_interactions')
+        if (existingLikesError) {
+            console.log('ANN LIKE WRITE RESULT', { organization_id: orgId, ministry_id: ministryId, announcement_id: announcementId, user_id: userId, liked: null, error: existingLikesError });
+        } else if ((existingLikes || []).length > 0) {
+            const { error } = await sb
+                .from('announcement_interactions')
                 .delete()
+                .eq('announcement_id', announcementId)
+                .eq('user_id', userId)
                 .eq('organization_id', orgId)
                 .eq('ministry_id', ministryId)
-                .eq('announcement_id', id)
-                .eq('user_id', userId)
                 .eq('interaction_type', 'like');
 
-            writeError = error;
-            liked = false;
+            console.log('ANN LIKE WRITE RESULT', { organization_id: orgId, ministry_id: ministryId, announcement_id: announcementId, user_id: userId, liked: false, error });
         } else {
-            const { error } = await sb.from('announcement_interactions').insert({
+            const { error } = await sb
+                .from('announcement_interactions')
+                .insert({
+                    announcement_id: announcementId,
+                    user_id: userId,
+                    organization_id: orgId,
+                    ministry_id: ministryId,
+                    interaction_type: 'like'
+                });
+
+            console.log('ANN LIKE WRITE RESULT', { organization_id: orgId, ministry_id: ministryId, announcement_id: announcementId, user_id: userId, liked: true, error });
+        }
+    } else {
+        const { error } = await sb
+            .from('announcement_interactions')
+            .upsert({
+                announcement_id: announcementId,
+                user_id: userId,
                 organization_id: orgId,
                 ministry_id: ministryId,
-                announcement_id: id,
-                user_id: userId,
-                interaction_type: 'like'
-            });
+                interaction_type: 'read'
+            }, { onConflict: 'announcement_id,user_id,organization_id,ministry_id,interaction_type' });
 
-            writeError = error;
-            liked = true;
-        }
-
-        console.log('ANN LIKE WRITE RESULT', { organization_id: orgId, ministry_id: ministryId, announcement_id: id, user_id: userId, liked, error: writeError });
-    } else {
-        const { error: writeError } = await sb.from('announcement_interactions').upsert({
-            organization_id: orgId,
-            ministry_id: ministryId,
-            announcement_id: id,
-            user_id: userId,
-            interaction_type: 'read'
-        }, { onConflict: 'organization_id,ministry_id,announcement_id,user_id,interaction_type' });
-
-        console.log('ANN READ WRITE RESULT', { organization_id: orgId, ministry_id: ministryId, announcement_id: id, user_id: userId, error: writeError });
+        console.log('ANN READ WRITE RESULT', { organization_id: orgId, ministry_id: ministryId, announcement_id: announcementId, user_id: userId, error });
     }
 
-    const { data: rawAfterWrite, error: rawAfterWriteError } = await sb.from('announcement_interactions')
-        .select('announcement_id, user_id, created_at, interaction_type')
+    const { data: rawAfterWrite, error: rawAfterWriteError } = await sb
+        .from('announcement_interactions')
+        .select('announcement_id, user_id, organization_id, ministry_id, interaction_type, created_at')
+        .eq('announcement_id', announcementId)
+        .eq('user_id', userId)
         .eq('organization_id', orgId)
-        .eq('ministry_id', ministryId)
-        .eq('announcement_id', id)
-        .eq('user_id', userId);
+        .eq('ministry_id', ministryId);
 
-    console.log('ANN INTERACTIONS RAW AFTER WRITE', { organization_id: orgId, ministry_id: ministryId, announcement_id: id, user_id: userId, error: rawAfterWriteError, rows: rawAfterWrite || [] });
+    console.log('ANN INTERACTIONS RAW AFTER WRITE', { organization_id: orgId, ministry_id: ministryId, announcement_id: announcementId, user_id: userId, error: rawAfterWriteError, rows: rawAfterWrite || [] });
 };
-
 export const updateUserProfile = async (name: string, whatsapp: string, avatar: string | undefined, functions: string[] | undefined, birthDate: string | undefined, ministryId?: string, orgId?: string) => {
     const sb = getSupabase();
     if (!sb) return;
