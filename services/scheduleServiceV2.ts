@@ -141,6 +141,7 @@ export const saveAssignmentV2 = async (
     event_date: string;
     role: string;
     member_id: string;
+    time?: string;
   }
 ) => {
   console.log("[saveAssignmentV2] START", { ministryId, orgId, payload });
@@ -148,13 +149,20 @@ export const saveAssignmentV2 = async (
   const sb = getSupabase();
   if (!sb) throw new Error("NO_SUPABASE");
 
-  const { data: rule } = await sb
+  let ruleQuery = sb
     .from('event_rules')
-    .select('id, title, time')
+    .select('id')
     .eq('organization_id', orgId)
-    .eq('ministry_id', ministryId)
-    .eq('id', payload.event_key)
-    .maybeSingle();
+    .eq('ministry_id', ministryId);
+
+  const payloadTime = (payload as any).time;
+  if (payloadTime) {
+    ruleQuery = ruleQuery.eq('time', payloadTime);
+  } else {
+    ruleQuery = ruleQuery.eq('id', payload.event_key);
+  }
+
+  const { data: rule } = await ruleQuery.maybeSingle();
 
   const { data, error } = await sb
     .from("schedule_assignments")
@@ -409,7 +417,7 @@ export const fetchNextEventCardData = async (
   (assignments || []).forEach((a: any) => {
     const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
     const assignmentKey = `${a.event_key}_${a.event_date}_${a.role}`;
-    const dedupeKey = `${a.member_id || 'unknown'}_${a.role || 'unknown'}`;
+    const dedupeKey = `${a.event_id || nextAssignment.event_id || 'unknown'}_${a.role || 'unknown'}_${a.member_id || 'unknown'}`;
 
     if (!dedupedMembersMap.has(dedupeKey)) {
       dedupedMembersMap.set(dedupeKey, {

@@ -35,6 +35,7 @@ export const NextEventCard: React.FC<Props> = ({ attendance, members, onConfirm,
       return event;
     },
     enabled,
+    retry: false,
     refetchOnWindowFocus: false
   });
 

@@ -873,12 +873,19 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
     const date = parts[1];
     if (!uuid || !date) return false;
 
-    const { data: rule } = await sb.from('event_rules')
-        .select('id, title, time')
+    const [eventKeyBase, , eventTime] = eventKey.split('_');
+    let ruleQuery = sb.from('event_rules')
+        .select('id')
         .eq('organization_id', orgId)
-        .eq('ministry_id', ministryId)
-        .eq('id', uuid)
-        .maybeSingle();
+        .eq('ministry_id', ministryId);
+
+    if (eventTime) {
+        ruleQuery = ruleQuery.eq('time', eventTime);
+    } else {
+        ruleQuery = ruleQuery.eq('id', eventKeyBase || uuid);
+    }
+
+    const { data: rule } = await ruleQuery.maybeSingle();
 
     const { error } = await sb.from('schedule_assignments').upsert({ event_id: rule?.id ?? null, event_key: uuid, event_date: date, role, member_id: memberId, ministry_id: ministryId, organization_id: orgId, confirmed: false }, { onConflict: 'event_key, event_date, role' });
     if (error) return false;
