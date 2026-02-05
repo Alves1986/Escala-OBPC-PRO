@@ -1,3 +1,4 @@
+
 import { getSupabase } from "./supabaseService";
 
 export interface EventRuleV2 {
@@ -70,7 +71,7 @@ export const fetchAssignmentsV2 = async (
 
   const { data, error } = await sb
     .from("schedule_assignments")
-    .select('id,event_key,event_date,role,member_id,confirmed')
+    .select('id,event_key,event_date,role,member_id,confirmed,profiles(name)')
     .eq("ministry_id", ministryId)
     .eq("organization_id", orgId)
     .like("event_date", `${monthStr}%`);
@@ -258,40 +259,60 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
   const sb = getSupabase();
   if (!sb) return null;
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
 
-  // 1. Fonte canônica: schedule_assignments (Próximo evento com atividade)
-  const { data: nextAssignment, error: assignError } = await sb
+  // 1. Passo: Buscar Assignments Futuros (Sem limit 1, pois precisamos ordenar por HORA também)
+  const { data: assignments, error: assignError } = await sb
       .from('schedule_assignments')
       .select('event_key, event_date')
       .eq('organization_id', orgId)
       .eq('ministry_id', ministryId)
-      .gte('event_date', today)
-      .order('event_date', { ascending: true })
-      .limit(1)
-      .maybeSingle();
+      .gte('event_date', todayStr)
+      .order('event_date', { ascending: true }); // Ordena por data, mas hora ainda desconhecida
 
-  if (assignError || !nextAssignment) {
+  if (assignError || !assignments || assignments.length === 0) {
       return null;
   }
 
-  // Identidade do evento (Regra + Data)
-  const ruleId = nextAssignment.event_key;
-  const eventDate = nextAssignment.event_date;
+  // Extrair IDs de regras únicos para buscar horários
+  const ruleIds = [...new Set(assignments.map((a: any) => a.event_key))];
 
-  // 2. Metadados do evento (event_rules)
-  const { data: ruleData, error: ruleError } = await sb
+  // 2. Passo: Buscar Regras para obter horários
+  const { data: rules } = await sb
       .from('event_rules')
-      .select('title, time, type')
-      .eq('id', ruleId)
-      .maybeSingle();
+      .select('id, title, time, type')
+      .in('id', ruleIds);
 
-  // Fallback de título se a regra foi deletada mas a escala persiste
-  const eventTitle = ruleData?.title || 'Evento';
-  const eventTime = ruleData?.time || '00:00';
-  const eventIso = `${eventDate}T${eventTime}`;
+  const rulesMap = new Map(rules?.map((r: any) => [r.id, r]));
 
-  // 3. Membros do evento (Deduplicação via query)
+  // 3. Passo: Montar Datetime real e filtrar/ordenar
+  const candidates = assignments.map((a: any) => {
+      const rule: any = rulesMap.get(a.event_key);
+      if (!rule) return null;
+
+      const dateTimeStr = `${a.event_date}T${rule.time}`;
+      const eventDateObj = new Date(dateTimeStr);
+
+      return {
+          assignment: a,
+          rule: rule,
+          dateObj: eventDateObj,
+          iso: dateTimeStr
+      };
+  })
+  .filter((c: any) => c !== null)
+  // Filtra eventos que já passaram HOJE (ex: agora é 20h, evento foi 09h)
+  .filter((c: any) => c.dateObj >= new Date(Date.now() - 2 * 60 * 60 * 1000)) // Tolerância de 2h
+  .sort((a: any, b: any) => a.dateObj.getTime() - b.dateObj.getTime());
+
+  // Se não sobrou nenhum evento futuro
+  if (candidates.length === 0) return null;
+
+  const nextEvent = candidates[0]; // O mais próximo de agora
+
+  // 4. Passo: Buscar Membros deste evento específico
+  // IMPORTANTE: Busca por event_key + event_date para garantir integridade do bloco
   const { data: membersData } = await sb
       .from('schedule_assignments')
       .select(`
@@ -302,8 +323,8 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
       `)
       .eq('organization_id', orgId)
       .eq('ministry_id', ministryId)
-      .eq('event_key', ruleId)
-      .eq('event_date', eventDate);
+      .eq('event_key', nextEvent.assignment.event_key)
+      .eq('event_date', nextEvent.assignment.event_date);
 
   const members = (membersData || []).map((m: any) => ({
       role: m.role,
@@ -311,18 +332,18 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
       name: m.profiles?.name || 'Membro',
       avatarUrl: m.profiles?.avatar_url,
       confirmed: m.confirmed,
-      key: `${eventIso}_${m.role}` // Chave composta para UI legacy compatibility
+      key: `${nextEvent.iso}_${m.role}` // Chave para UI
   }));
 
-  // Contrato de retorno obrigatório
+  // 5. Passo: Contrato Obrigatório
   return {
       event: {
-          id: ruleId,
-          date: eventDate,
-          time: eventTime,
-          title: eventTitle,
-          iso: eventIso,
-          type: ruleData?.type || 'weekly'
+          id: nextEvent.rule.id,
+          date: nextEvent.assignment.event_date,
+          time: nextEvent.rule.time,
+          title: nextEvent.rule.title,
+          iso: nextEvent.iso,
+          type: nextEvent.rule.type
       },
       members: members
   };

@@ -26,14 +26,14 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     isLoading: isLoadingQueries
   } = useMinistryQueries(mid, currentMonth, currentUser);
 
-  // CÁLCULO DE DATAS PARA O USEEVENTS
+  // CÁLCULO DE DATAS PARA O USEEVENTS (Regras de projeção)
   const [yearStr, monthStr] = currentMonth.split('-');
   const year = parseInt(yearStr);
   const monthIndex = parseInt(monthStr) - 1;
   const startDate = `${currentMonth}-01`;
   const endDate = new Date(year, monthIndex + 1, 0).toISOString().split('T')[0]; // Último dia do mês
 
-  // NOVA FONTE DE VERDADE: useEvents (Baseado em Regras)
+  // Projeção baseada em regras (apenas para fallback e editor)
   const { events: generatedEvents, isLoading: isLoadingEvents } = useEvents({
       ministryId: mid,
       organizationId: orgId,
@@ -140,15 +140,73 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     };
   }, [mid, currentMonth, queryClient, orgId]);
 
-  // ADAPTADOR CORRIGIDO: Separa ID lógico de ISO visual
+  // ADAPTADOR CORRIGIDO (PARTE 2)
+  // O Calendário deve refletir APENAS o que está em schedule_assignments para renderizar blocos distintos.
+  // Combina generatedEvents (regras) com assignments reais para preencher lacunas, mas usa assignments como autoridade de tempo/ID.
   const events = useMemo(() => {
-      return generatedEvents.map(e => ({
-          id: e.id,       // Chave Determinística (RuleID_Data)
-          iso: e.iso,     // Representação ISO (YYYY-MM-DDTHH:mm) para UI
-          title: e.title,
-          dateDisplay: e.date.split('-').reverse().slice(0, 2).join('/')
-      }));
-  }, [generatedEvents]);
+      // 1. Extrair Assignments únicos (EventKey + Date)
+      const assignmentKeys = new Set<string>();
+      const assignments = assignmentsQuery.data?.schedule || {};
+      
+      // Reconstrói lista de eventos baseada nas assignments existentes
+      // keys em assignments são: ruleId_date_role
+      const assignmentBasedEvents: any[] = [];
+      const processedEventKeys = new Set<string>();
+
+      Object.keys(assignments).forEach(key => {
+          const parts = key.split('_');
+          if (parts.length >= 3) {
+              const ruleId = parts[0];
+              const date = parts[1];
+              const uniqueEventKey = `${ruleId}_${date}`;
+
+              if (!processedEventKeys.has(uniqueEventKey)) {
+                  // Precisamos achar a regra para saber o título e horário
+                  // Tenta achar em generatedEvents primeiro
+                  const ruleEvent = generatedEvents.find(e => e.id === uniqueEventKey);
+                  
+                  if (ruleEvent) {
+                      assignmentBasedEvents.push({
+                          id: ruleEvent.id,
+                          iso: ruleEvent.iso,
+                          title: ruleEvent.title,
+                          dateDisplay: ruleEvent.date.split('-').reverse().slice(0, 2).join('/')
+                      });
+                  } else {
+                      // Se não achou na projeção (talvez regra deletada mas escala existe),
+                      // cria um placeholder. Idealmente deveria buscar o título da regra no DB, 
+                      // mas aqui assumimos que generatedEvents cobre as regras ativas.
+                      // Fallback visual simples.
+                      assignmentBasedEvents.push({
+                          id: uniqueEventKey,
+                          iso: `${date}T00:00`, // Horário desconhecido se regra sumiu
+                          title: 'Evento (Regra Removida)',
+                          dateDisplay: date.split('-').reverse().slice(0, 2).join('/')
+                      });
+                  }
+                  processedEventKeys.add(uniqueEventKey);
+              }
+          }
+      });
+
+      // 2. Merge com Generated Events (para mostrar slots vazios de regras ativas)
+      // Se já processamos via assignment, não duplica.
+      const finalEvents = [...assignmentBasedEvents];
+      
+      generatedEvents.forEach(gen => {
+          if (!processedEventKeys.has(gen.id)) {
+              finalEvents.push({
+                  id: gen.id,
+                  iso: gen.iso,
+                  title: gen.title,
+                  dateDisplay: gen.date.split('-').reverse().slice(0, 2).join('/')
+              });
+          }
+      });
+
+      // Ordena por data/hora
+      return finalEvents.sort((a, b) => a.iso.localeCompare(b.iso));
+  }, [generatedEvents, assignmentsQuery.data]);
 
   // Filtra regras semanais para a UI de "Eventos Padrão"
   const eventRules = useMemo(() => {
