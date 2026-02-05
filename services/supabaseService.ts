@@ -342,31 +342,40 @@ export const fetchMinistrySettings = async (ministryId: string, orgId?: string):
     const sb = getSupabase();
     if (!sb || !ministryId || !orgId) return null;
 
+    // 1. Buscando dados OFICIAIS de organization_ministries (Availability + Label)
     const { data: ministryDef, error: defError } = await sb.from('organization_ministries')
-        .select('label')
+        .select('label, availability_start, availability_end') 
         .eq('id', ministryId)
         .eq('organization_id', orgId)
         .maybeSingle();
 
-    if (defError) return null;
+    if (defError) {
+        console.error('Error fetching ministry definition:', defError);
+        return null;
+    }
 
+    // 2. Buscando configurações LEGADAS (Roles / Spotify)
     const { data: settings } = await sb.from('ministry_settings')
         .select('*')
         .eq('ministry_id', ministryId)
         .eq('organization_id', orgId)
         .maybeSingle();
     
-    return {
+    const result = {
         id: settings?.id,
         organizationMinistryId: ministryId, 
         displayName: ministryDef?.label || settings?.display_name || 'Ministério',
         roles: settings?.roles || [],
-        availabilityStart: settings?.availability_start,
-        availabilityEnd: settings?.availability_end,
+        availabilityStart: ministryDef?.availability_start, // Leitura correta da tabela oficial
+        availabilityEnd: ministryDef?.availability_end,     // Leitura correta da tabela oficial
         organizationId: orgId,
         spotifyClientId: settings?.spotify_client_id,
         spotifyClientSecret: settings?.spotify_client_secret
     };
+
+    console.log('WINDOW READ FINAL', result); // Log obrigatório
+
+    return result;
 };
 
 export const fetchScheduleAssignments = async (ministryId: string, month: string, orgId?: string) => {
@@ -889,12 +898,43 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar: 
 export const saveMinistrySettings = async (ministryId: string, orgId: string, displayName?: string, roles?: string[], start?: string, end?: string) => {
     const sb = getSupabase();
     if (!sb) return;
-    const updates: any = {};
-    if (displayName) updates.display_name = displayName;
-    if (roles) updates.roles = roles;
-    if (start) updates.availability_start = start;
-    if (end) updates.availability_end = end;
-    await sb.from('ministry_settings').update(updates).eq('ministry_id', ministryId).eq('organization_id', orgId);
+
+    // LOG DIAGNÓSTICO INPUT (Task 7)
+    console.log("WINDOW SAVE INPUT", { ministryId, orgId, displayName, roles, start, end });
+
+    // 1. Atualizar Availability & Label na tabela OFICIAL (organization_ministries)
+    if (start !== undefined || end !== undefined || displayName !== undefined) {
+        const orgUpdates: any = {};
+        if (start !== undefined) orgUpdates.availability_start = start;
+        if (end !== undefined) orgUpdates.availability_end = end;
+        if (displayName !== undefined) orgUpdates.label = displayName;
+
+        if (Object.keys(orgUpdates).length > 0) {
+            const { data, error } = await sb.from('organization_ministries')
+                .update(orgUpdates)
+                .eq('id', ministryId)
+                .eq('organization_id', orgId)
+                .select();
+            
+            console.log("WINDOW SAVE ORG_MIN RESULT", { data, error });
+        }
+    }
+
+    // 2. Atualizar Roles na tabela LEGADA (ministry_settings)
+    // Somente se roles foi passado, para evitar escritas desnecessárias
+    if (roles !== undefined) {
+        const payload = {
+            ministry_id: ministryId,
+            organization_id: orgId,
+            roles: roles
+        };
+
+        const { data, error } = await sb.from('ministry_settings')
+            .upsert(payload, { onConflict: 'organization_id,ministry_id' })
+            .select();
+
+        console.log("WINDOW SAVE SETTINGS RESULT (Legacy Roles)", { data, error });
+    }
 };
 
 export const toggleAdminSQL = async (email: string, status: boolean, ministryId: string, orgId: string) => {
