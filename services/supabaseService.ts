@@ -296,7 +296,8 @@ export const registerWithInvite = async (
 
 export const fetchOrganizationMinistries = async (orgId?: string): Promise<MinistryDef[]> => {
     const sb = getSupabase();
-    if (!sb || !orgId) return [];
+    if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+    if (!orgId) throw new Error('orgId missing');
 
     const { data, error } = await sb
         .from('organization_ministries')
@@ -318,7 +319,8 @@ export const fetchOrganizationMinistries = async (orgId?: string): Promise<Minis
 
 export const fetchUserAllowedMinistries = async (userId: string, orgId?: string): Promise<string[]> => {
     const sb = getSupabase();
-    if (!sb || !orgId) return [];
+    if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+    if (!orgId) throw new Error('orgId missing');
     
     const { data: members, error } = await sb.from('organization_memberships')
         .select('ministry_id')
@@ -340,7 +342,9 @@ export const fetchUserAllowedMinistries = async (userId: string, orgId?: string)
 
 export const fetchMinistrySettings = async (ministryId: string, orgId?: string): Promise<MinistrySettings | null> => {
     const sb = getSupabase();
-    if (!sb || !ministryId || !orgId) return null;
+    if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+    if (!ministryId) throw new Error('ministryId missing');
+    if (!orgId) throw new Error('orgId missing');
 
     const { data: ministryDef, error: defError } = await sb.from('organization_ministries')
         .select('id, label, roles, availability_start, availability_end, spotify_client_id, spotify_client_secret')
@@ -348,7 +352,8 @@ export const fetchMinistrySettings = async (ministryId: string, orgId?: string):
         .eq('organization_id', orgId)
         .maybeSingle();
 
-    if (defError) return null;
+    if (defError) throw defError;
+    if (!ministryDef) throw new Error('MINISTRY_CONFIG_NOT_FOUND');
 
     console.log('WINDOW READ', ministryDef);
 
@@ -367,14 +372,15 @@ export const fetchMinistrySettings = async (ministryId: string, orgId?: string):
 
 export const fetchScheduleAssignments = async (ministryId: string, month: string, orgId?: string) => {
     const sb = getSupabase();
-    if (!sb || !orgId) return { schedule: {}, attendance: {} };
+    if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+    if (!orgId) throw new Error('orgId missing');
 
     const { data: assignments, error } = await sb.from('schedule_assignments')
         .select('*, profiles(name)')
         .eq('ministry_id', ministryId)
         .eq('organization_id', orgId);
 
-    if (error) return { schedule: {}, attendance: {} };
+    if (error) throw error;
 
     const schedule: any = {};
     const attendance: any = {};
@@ -499,7 +505,8 @@ export const updateMinistryEvent = async (ministryId: string, orgId: string, old
 
 export const fetchMinistryMembers = async (ministryId: string, orgId?: string) => {
   const sb = getSupabase();
-  if (!sb || !orgId) return { memberMap: {}, publicList: [] };
+  if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+  if (!orgId) throw new Error('orgId missing');
 
   const { data: memberships } = await sb
     .from('organization_memberships')
@@ -539,7 +546,8 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
 
 export const fetchRankingData = async (ministryId: string, orgId?: string): Promise<RankingEntry[]> => {
     const sb = getSupabase();
-    if (!sb || !orgId) return [];
+    if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+    if (!orgId) throw new Error('orgId missing');
     
     const { data: memberships } = await sb.from('organization_memberships')
         .select('profile_id')
@@ -554,7 +562,8 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
         .in('id', userIds)
         .eq('organization_id', orgId);
         
-    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
     const [assignmentsRes, swapsRes, readsRes, likesRes] = await Promise.all([
         sb.from('schedule_assignments').select('member_id, event_date, role').eq('organization_id', orgId).eq('ministry_id', ministryId).eq('confirmed', true).lte('event_date', today),
@@ -602,7 +611,8 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
 
 export const fetchUserFunctions = async (userId: string, ministryId: string, orgId?: string): Promise<string[]> => {
   const sb = getSupabase();
-  if (!sb || !orgId) return [];
+  if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+    if (!orgId) throw new Error('orgId missing');
 
   const { data } = await sb
     .from('organization_memberships')
@@ -659,7 +669,8 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
 
 export const fetchMinistryAvailability = async (ministryId: string, orgId?: string) => {
     const sb = getSupabase();
-    if (!sb || !orgId) return { availability: {}, notes: {} };
+    if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+    if (!orgId) throw new Error('orgId missing');
     const { data } = await sb.from('availability').select('*, profiles(name)').eq('ministry_id', ministryId).eq('organization_id', orgId);
     const availability: any = {};
     const notes: any = {};
@@ -675,9 +686,12 @@ export const fetchMinistryAvailability = async (ministryId: string, orgId?: stri
 
 export const fetchNotificationsSQL = async (ministryIds: string[], userId: string, orgId?: string) => {
     const sb = getSupabase();
-    if (!sb || !orgId) return [];
-    const { data } = await sb.from('notifications').select('*').in('ministry_id', ministryIds).eq('organization_id', orgId).order('created_at', { ascending: false }).limit(50);
-    const { data: reads } = await sb.from('notification_reads').select('notification_id').eq('user_id', userId).eq('organization_id', orgId);
+    if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+    if (!orgId) throw new Error('orgId missing');
+    const { data, error } = await sb.from('notifications').select('*').in('ministry_id', ministryIds).eq('organization_id', orgId).order('created_at', { ascending: false }).limit(50);
+    if (error) throw error;
+    const { data: reads, error: readsError } = await sb.from('notification_reads').select('notification_id').eq('user_id', userId).eq('organization_id', orgId);
+    if (readsError) throw readsError;
     const readIds = new Set(reads?.map((r: any) => r.notification_id));
     return (data || []).map((n: any) => ({
         id: n.id, type: n.type, title: n.title, message: n.message, timestamp: n.created_at, read: readIds.has(n.id), actionLink: n.action_link, ministryId: n.ministry_id
@@ -686,20 +700,22 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
 
 export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) => {
     const sb = getSupabase();
-    if (!sb || !orgId) return [];
+    if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+    if (!orgId) throw new Error('orgId missing');
 
-    const now = new Date().toISOString();
+    const now = new Date();
+    const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
     const { data, error } = await sb.from('announcements')
         .select(`*, announcement_reads (user_id, profiles(name), created_at), announcement_likes (user_id, profiles(name), created_at)`)
         .eq('ministry_id', ministryId)
         .eq('organization_id', orgId)
-        .or(`expiration_date.is.null,expiration_date.gte.${now}`)
+        .or(`expiration_date.is.null,expiration_date.gte.${todayDate}`)
         .order('created_at', { ascending: false });
 
     if (error) {
         console.error('fetchAnnouncementsSQL error', error);
-        return [];
+        throw error;
     }
 
     if (!data) return [];
@@ -727,8 +743,10 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
 
 export const fetchSwapRequests = async (ministryId: string, orgId?: string) => {
     const sb = getSupabase();
-    if (!sb || !orgId) return [];
-    const { data } = await sb.from('swap_requests').select('*').eq('ministry_id', ministryId).eq('organization_id', orgId).order('created_at', { ascending: false });
+    if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+    if (!orgId) throw new Error('orgId missing');
+    const { data, error } = await sb.from('swap_requests').select('*').eq('ministry_id', ministryId).eq('organization_id', orgId).order('created_at', { ascending: false });
+    if (error) throw error;
     return (data || []).map((s: any) => ({
         id: s.id, ministryId: s.ministry_id, requesterName: s.requester_name, requesterId: s.requester_id, role: s.role, eventIso: s.event_iso, eventTitle: s.event_title, status: s.status, createdAt: s.created_at, takenByName: s.taken_by_name
     }));
@@ -736,7 +754,8 @@ export const fetchSwapRequests = async (ministryId: string, orgId?: string) => {
 
 export const fetchRepertoire = async (ministryId: string, orgId?: string) => {
     const sb = getSupabase();
-    if (!sb || !orgId) return [];
+    if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+    if (!orgId) throw new Error('orgId missing');
     const { data } = await sb.from('repertoire').select('*').eq('ministry_id', ministryId).eq('organization_id', orgId).order('created_at', { ascending: false });
     return (data || []).map((r: any) => ({
         id: r.id, title: r.title, link: r.link, date: r.date_used, observation: r.observation, addedBy: r.added_by, createdAt: r.created_at, content: r.content, key: r.music_key
@@ -745,7 +764,8 @@ export const fetchRepertoire = async (ministryId: string, orgId?: string) => {
 
 export const fetchGlobalSchedules = async (month: string, currentMinistryId: string, orgId?: string) => {
     const sb = getSupabase();
-    if (!sb || !orgId) return {};
+    if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+    if (!orgId) throw new Error('orgId missing');
     const { data } = await sb.from('schedule_assignments').select('event_key, event_date, role, ministry_id, profiles(name)').eq('organization_id', orgId).neq('ministry_id', currentMinistryId);
     const map: any = {};
     data?.forEach((row: any) => {
@@ -761,7 +781,8 @@ export const fetchGlobalSchedules = async (month: string, currentMinistryId: str
 
 export const fetchAuditLogs = async (ministryId: string, orgId?: string) => {
     const sb = getSupabase();
-    if (!sb || !orgId) return [];
+    if (!sb) throw new Error('SUPABASE_UNAVAILABLE');
+    if (!orgId) throw new Error('orgId missing');
     const { data } = await sb.from('audit_logs').select('*').eq('ministry_id', ministryId).eq('organization_id', orgId).order('created_at', { ascending: false }).limit(100);
     return (data || []).map((l: any) => ({ id: l.id, date: l.created_at, action: l.action, details: l.details, author: l.author_name }));
 };
