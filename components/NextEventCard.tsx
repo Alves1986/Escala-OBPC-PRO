@@ -31,9 +31,11 @@ export const NextEventCard: React.FC<Props> = ({ attendance, members, onConfirm,
 
       return event;
     },
-    enabled: Boolean(ministryId && orgId),
+    enabled: !!ministryId && !!orgId && orgId.length > 10,
     refetchOnWindowFocus: false
   });
+
+  console.log('NEXT EVENT CARD DATA', cardData);
 
   const event = cardData?.event;
   const team = cardData?.members || [];
@@ -60,7 +62,7 @@ export const NextEventCard: React.FC<Props> = ({ attendance, members, onConfirm,
     return () => clearInterval(interval);
   }, [event?.id, event?.iso]);
 
-  if (!event) return null;
+  if (!cardData?.event) return null;
 
   const eventIsToday = getLocalDateISOString() === event.iso.split('T')[0];
   const eventTime = event.time;
@@ -130,7 +132,7 @@ export const NextEventCard: React.FC<Props> = ({ attendance, members, onConfirm,
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xl shadow-slate-200/70 dark:shadow-black/30 overflow-hidden animate-slide-up ring-1 ring-black/5">
+    <div key={cardData?.event?.id || (cardData?.event as any)?.event_key} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xl shadow-slate-200/70 dark:shadow-black/30 overflow-hidden animate-slide-up ring-1 ring-black/5">
       <div className="grid grid-cols-1 lg:grid-cols-12">
         <div className="lg:col-span-4 p-8 lg:p-12 bg-slate-950 relative overflow-hidden flex flex-col justify-between text-white">
           <div className="absolute inset-0 bg-gradient-to-br from-emerald-600/20 via-slate-950 to-violet-600/10"></div>
