@@ -89,9 +89,9 @@ const filterRolesBySettings = async (roles: string[], ministryId: string, orgId:
 
     if (!roles || roles.length === 0) return [];
 
-    const { data: settings } = await sb.from('ministry_settings')
+    const { data: settings } = await sb.from('organization_ministries')
         .select('roles')
-        .eq('ministry_id', ministryId)
+        .eq('id', ministryId)
         .eq('organization_id', orgId)
         .maybeSingle();
 
@@ -354,7 +354,7 @@ export const fetchMinistrySettings = async (ministryId: string, orgId?: string):
     if (!sb || !ministryId || !orgId) return null;
 
     const { data: ministryDef, error: defError } = await sb.from('organization_ministries')
-        .select('label, availability_start, availability_end')
+        .select('label, roles, availability_start, availability_end, spotify_client_id, spotify_client_secret')
         .eq('id', ministryId)
         .eq('organization_id', orgId)
         .maybeSingle();
@@ -365,12 +365,12 @@ export const fetchMinistrySettings = async (ministryId: string, orgId?: string):
         id: ministryDef?.id,
         organizationMinistryId: ministryId, 
         displayName: ministryDef?.label || 'Ministério',
-        roles: [],
+        roles: ministryDef?.roles || [],
         availabilityStart: ministryDef?.availability_start,
         availabilityEnd: ministryDef?.availability_end,
         organizationId: orgId,
-        spotifyClientId: undefined,
-        spotifyClientSecret: undefined
+        spotifyClientId: ministryDef?.spotify_client_id,
+        spotifyClientSecret: ministryDef?.spotify_client_secret
     };
 };
 
@@ -894,11 +894,12 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar: 
     }
 };
 
-export const saveMinistrySettings = async (ministryId: string, orgId: string, displayName?: string, roles?: string[], start?: string, end?: string) => {
+export const saveMinistryConfig = async (ministryId: string, orgId: string, displayName?: string, roles?: string[], start?: string, end?: string) => {
     const sb = getSupabase();
     if (!sb) return;
     const updates: any = {};
     if (displayName) updates.label = displayName;
+    if (roles) updates.roles = roles;
     if (start) updates.availability_start = start;
     if (end) updates.availability_end = end;
     console.log("SAVE_MINISTRY_SETTINGS INPUT", {

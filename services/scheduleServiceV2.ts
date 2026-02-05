@@ -124,9 +124,9 @@ export const fetchMinistryRoles = async (
   if (!sb) throw new Error("NO_SUPABASE");
 
   const { data, error } = await sb
-    .from("ministry_settings")
+    .from("organization_ministries")
     .select("roles")
-    .eq("ministry_id", ministryId)
+    .eq("id", ministryId)
     .eq("organization_id", orgId)
     .maybeSingle();
 
