@@ -68,7 +68,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
     return assigned;
   };
 
-  const team = getAssignedMembers();
+  const assignedTeam = getAssignedMembers();
   const eventIsToday = getLocalDateISOString() === event.iso.split('T')[0];
   const eventTime = event.iso.split('T')[1];
 
@@ -177,7 +177,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
                   {(() => {
                       // Usa props para verificação de presença pois o fetch simplificado não traz 'confirmed'
                       // Tenta achar match pelo nome
-                      const myRole = team.find(t => currentUser && t.name === currentUser.name);
+                      const myRole = assignedTeam.find(t => currentUser && t.name === currentUser.name);
                       
                       // Check fallback na prop schedule original se dbTeam não tiver a info completa
                       let isConfirmed = false;
@@ -202,10 +202,10 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
           <div className="lg:col-span-8 p-8 lg:p-12 bg-white dark:bg-slate-900">
               <div className="flex items-center justify-between mb-8">
                   <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.3em]">Equipe Escalada</h3>
-                  <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-full">{team.length} Integrantes</span>
+                  <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-full">{assignedTeam.length} Integrantes</span>
               </div>
 
-              {team.length === 0 ? (
+              {assignedTeam.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-[2.5rem]">
                       <CalendarClock size={48} className="text-slate-200 dark:text-slate-800 mb-4" />
                       <p className="text-slate-400 font-bold text-sm">
@@ -214,7 +214,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
                   </div>
               ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                      {team.map((t, idx) => {
+                      {assignedTeam.map((t, idx) => {
                           const isMe = currentUser && t.name === currentUser.name;
                           const memberProfile = members.find(m => m.name === t.name);
                           
