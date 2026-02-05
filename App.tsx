@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, useMemo } from 'react';
+import React, { useState, useEffect, Suspense, useMemo, useRef } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { useAppStore } from './store/appStore';
@@ -10,6 +10,8 @@ import { useMinistryData } from './hooks/useMinistryData';
 import { useOnlinePresence } from './hooks/useOnlinePresence';
 import { getLocalDateISOString, getMonthName, adjustMonth } from './utils/dateUtils';
 import { generateIndividualPDF, generateFullSchedulePDF } from './utils/pdfGenerator';
+import { fetchEventRules } from './infra/supabase/fetchEventRules';
+import { generateEvents } from './domain/events/generateEvents';
 
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
@@ -164,6 +166,76 @@ const InnerApp = () => {
   } = useMinistryData(ministryId, currentMonth, user);
 
   const onlineUsers = useOnlinePresence(user?.id, user?.name);
+
+  const [dashboardEvent, setDashboardEvent] = useState<any | null>(null);
+  const [dashboardTeam, setDashboardTeam] = useState<{ role: string; name: string; key: string }[]>([]);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const dashboardEventKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+      const run = async () => {
+          if (!ministryId || !orgId) return;
+          setDashboardLoading(true);
+
+          const rules = await fetchEventRules(ministryId, orgId);
+          const today = new Date();
+          const startDate = today.toISOString().slice(0, 10);
+          const endDateObj = new Date(today);
+          endDateObj.setDate(endDateObj.getDate() + 60);
+          const endDate = endDateObj.toISOString().slice(0, 10);
+
+          const generated = generateEvents(rules || [], startDate, endDate);
+          const nextEvent = generated
+              .filter(e => new Date(e.iso) >= today)
+              .sort((a, b) => a.iso.localeCompare(b.iso))[0];
+
+          if (!nextEvent) {
+              setDashboardEvent(null);
+              setDashboardTeam([]);
+              setDashboardLoading(false);
+              return;
+          }
+
+          const currentEventKey = `${nextEvent.ruleId}_${nextEvent.date}`;
+          dashboardEventKeyRef.current = currentEventKey;
+          console.log('DASHBOARD EVENT', currentEventKey);
+
+          const sb = Supabase.getSupabase();
+          if (!sb) {
+              setDashboardLoading(false);
+              return;
+          }
+
+          const { data: assignments } = await sb
+              .from('schedule_assignments')
+              .select('event_key,event_date,role,member_id,profiles(name)')
+              .eq('organization_id', orgId)
+              .eq('ministry_id', ministryId)
+              .eq('event_key', nextEvent.ruleId)
+              .eq('event_date', nextEvent.date);
+
+          if (dashboardEventKeyRef.current !== currentEventKey) return;
+
+          const team = (assignments || []).map((a: any) => ({
+              role: a.role,
+              name: a.profiles?.name || 'Membro',
+              key: `${a.event_key}_${a.event_date}_${a.role}`
+          }));
+
+          setDashboardEvent({
+              id: `${nextEvent.ruleId}_${nextEvent.date}`,
+              ruleId: nextEvent.ruleId,
+              date: nextEvent.date,
+              iso: nextEvent.iso,
+              title: nextEvent.title,
+              dateDisplay: nextEvent.date.split('-').reverse().slice(0, 2).join('/')
+          });
+          setDashboardTeam(team);
+          setDashboardLoading(false);
+      };
+
+      run();
+  }, [ministryId, orgId]);
 
   // Modals & UI State
   const [showInstallBanner, setShowInstallBanner] = useState(false);
@@ -358,7 +430,7 @@ const InnerApp = () => {
                                 return expirationDate > now;
                             }).sort((a, b) => a.iso.localeCompare(b.iso))[0];
 
-                            return <NextEventCard event={upcoming} schedule={schedule} attendance={attendance} roles={roles} members={publicMembers} onConfirm={(payload) => { setConfirmModalData(payload); }} ministryId={ministryId} currentUser={user} />;
+                            return <NextEventCard event={dashboardEvent || upcoming} schedule={schedule} attendance={attendance} roles={roles} members={publicMembers} team={dashboardTeam} loadingTeam={dashboardLoading} onConfirm={(payload) => { setConfirmModalData(payload); }} ministryId={ministryId} currentUser={user} />;
                         })()}
                     </div>
 

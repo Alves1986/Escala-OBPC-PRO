@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { CalendarClock, CheckCircle2, Clock, MapPin, AlertCircle, ShieldCheck, CalendarPlus, Sparkles } from 'lucide-react';
 import { Role, AttendanceMap, User as UserType, TeamMemberProfile } from '../types';
 import { getLocalDateISOString, generateGoogleCalendarUrl } from '../utils/dateUtils';
-import { fetchNextEventTeam } from '../services/scheduleServiceV2';
 
 interface Props {
   event: { iso: string; dateDisplay: string; title: string; ruleId?: string; date?: string } | undefined;
@@ -10,6 +9,8 @@ interface Props {
   attendance: AttendanceMap;
   roles: Role[];
   members: TeamMemberProfile[];
+  team: { role: string; name: string; key: string }[];
+  loadingTeam: boolean;
   onConfirm: (payload: { key: string; memberName: string; eventName: string; date: string; role: string }) => void;
   ministryId: string | null;
   currentUser: UserType | null;
@@ -17,33 +18,9 @@ interface Props {
 
 type TimeStatus = 'early' | 'open' | 'closed';
 
-export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, roles, members, onConfirm, ministryId, currentUser }) => {
+export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, roles, members, team, loadingTeam, onConfirm, ministryId, currentUser }) => {
   const [timeStatus, setTimeStatus] = useState<TimeStatus>('early');
   const [minutesToOpen, setMinutesToOpen] = useState(0);
-  
-  // Estado para armazenar a equipe real vinda do banco
-  const [dbTeam, setDbTeam] = useState<{role: string, memberId: string, memberName: string, eventKey: string, eventDate: string}[]>([]);
-  const [loadingTeam, setLoadingTeam] = useState(true);
-
-  // Busca dados reais do banco
-  useEffect(() => {
-    if (ministryId && currentUser?.organizationId) {
-        setLoadingTeam(true);
-        fetchNextEventTeam(ministryId, currentUser.organizationId, {
-          ruleId: event?.ruleId,
-          date: event?.date
-        })
-            .then(data => {
-                if (data && data.team) {
-                    setDbTeam(data.team);
-                }
-            })
-            .catch(err => console.error("Erro ao buscar equipe do próximo evento", err))
-            .finally(() => setLoadingTeam(false));
-    } else {
-        setLoadingTeam(false);
-    }
-  }, [ministryId, currentUser, event?.ruleId, event?.date]);
 
   const checkTimeWindow = () => {
     if (!event) return;
@@ -71,14 +48,7 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
 
   // Usa dados do banco se disponíveis, senão fallback (que provavelmente estará vazio se o mês virou)
   const getAssignedMembers = () => {
-    // Se temos dados do DB, usamos (Prioridade)
-    if (dbTeam.length > 0) {
-        return dbTeam.map(t => ({
-            role: t.role,
-            name: t.memberName,
-            key: `${t.eventKey}_${t.eventDate}_${t.role}`
-        }));
-    }
+    if (team.length > 0) return team;
 
     // Fallback original (prop schedule)
     const assigned: { role: string; name: string; key: string }[] = [];
@@ -238,7 +208,9 @@ export const NextEventCard: React.FC<Props> = ({ event, schedule, attendance, ro
               {team.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-[2.5rem]">
                       <CalendarClock size={48} className="text-slate-200 dark:text-slate-800 mb-4" />
-                      <p className="text-slate-400 font-bold text-sm">Escala em processamento...</p>
+                      <p className="text-slate-400 font-bold text-sm">
+                        {loadingTeam ? 'Escala em processamento...' : 'Nenhum escalado encontrado.'}
+                      </p>
                   </div>
               ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
