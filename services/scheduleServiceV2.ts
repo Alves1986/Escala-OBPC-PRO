@@ -317,11 +317,9 @@ export interface NextEventCardData {
   event: {
     id: string;
     title: string;
-    iso: string;
-    dateDisplay: string;
     time: string;
-    type?: 'weekly' | 'single';
-  };
+    date: string;
+  } | null;
   members: {
     role: string;
     memberId: string;
@@ -342,12 +340,11 @@ export const fetchNextEventCardData = async (
 
   const { data: nextAssignment, error: nextAssignmentError } = await sb
     .from('schedule_assignments')
-    .select('event_id, event_key, event_date')
+    .select('event_id, event_date')
     .eq('organization_id', orgId)
     .eq('ministry_id', ministryId)
     .gte('event_date', today)
     .order('event_date', { ascending: true })
-    .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle();
 
@@ -357,77 +354,42 @@ export const fetchNextEventCardData = async (
 
   if (!nextAssignment) return null;
 
-  let resolutionMode: 'event_id' | 'fallback' = 'event_id';
-  let ruleId: string | null = nextAssignment.event_id ?? null;
-
-  if (!ruleId) {
-    resolutionMode = 'fallback';
-
-    const { data: fallbackRule, error: fallbackRuleError } = await sb
-      .from('event_rules')
-      .select('id')
-      .eq('organization_id', orgId)
-      .eq('ministry_id', ministryId)
-      .eq('id', nextAssignment.event_key)
-      .eq('date', nextAssignment.event_date)
-      .maybeSingle();
-
-    if (fallbackRuleError) throw fallbackRuleError;
-    ruleId = fallbackRule?.id ?? null;
+  const eventId = nextAssignment.event_id;
+  if (!eventId) {
+    const payload: NextEventCardData = { event: null, members: [] };
+    console.log('NEXT EVENT EVENT_ID USED', null);
+    console.log('NEXT EVENT MEMBERS RAW', 0);
+    console.log('NEXT EVENT FINAL PAYLOAD', payload);
+    return payload;
   }
 
-  console.log('NEXT EVENT RESOLUTION MODE', resolutionMode);
+  console.log('NEXT EVENT EVENT_ID USED', eventId);
 
-  let rule = null as any;
+  const { data: rule, error: ruleError } = await sb
+    .from('event_rules')
+    .select('*')
+    .eq('id', eventId)
+    .maybeSingle();
 
-  if (ruleId) {
-    const { data: resolvedRule, error: resolvedRuleError } = await sb
-      .from('event_rules')
-      .select('id, title, time, type, date, weekday')
-      .eq('organization_id', orgId)
-      .eq('ministry_id', ministryId)
-      .eq('id', ruleId)
-      .maybeSingle();
+  if (ruleError) throw ruleError;
 
-    if (resolvedRuleError) throw resolvedRuleError;
-    rule = resolvedRule;
-  }
-
-  const ruleTime = rule?.time || '00:00';
-  const eventDateIso = nextAssignment.event_date || rule?.date || today;
-  const iso = `${eventDateIso}T${ruleTime}`;
-
-  const eventDate = new Date(iso);
-  const dateDisplay = eventDate.toLocaleDateString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit'
-  });
-
-  let assignmentsQuery = sb
+  const { data: assignments, error: assignmentsError } = await sb
     .from('schedule_assignments')
     .select('event_id, event_key, event_date, role, member_id, confirmed, profiles(name)')
+    .eq('event_id', eventId)
     .eq('organization_id', orgId)
     .eq('ministry_id', ministryId);
 
-  if (nextAssignment.event_id) {
-    assignmentsQuery = assignmentsQuery.eq('event_id', nextAssignment.event_id);
-  } else {
-    assignmentsQuery = assignmentsQuery
-      .eq('event_key', nextAssignment.event_key)
-      .eq('event_date', nextAssignment.event_date);
-  }
-
-  const { data: assignments, error: assignmentsError } = await assignmentsQuery;
-
   if (assignmentsError) throw assignmentsError;
+
+  console.log('NEXT EVENT MEMBERS RAW', assignments?.length ?? 0);
 
   const dedupedMembersMap = new Map<string, any>();
 
   (assignments || []).forEach((a: any) => {
     const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
     const assignmentKey = `${a.event_key}_${a.event_date}_${a.role}`;
-    const dedupeEventId = a.event_id || rule?.id || nextAssignment.event_id || nextAssignment.event_key || 'unknown_event';
-    const dedupeKey = `${dedupeEventId}_${a.role || 'unknown'}_${a.member_id || 'unknown'}`;
+    const dedupeKey = `${a.event_id || eventId}_${a.role || 'unknown'}_${a.member_id || 'unknown'}`;
 
     if (!dedupedMembersMap.has(dedupeKey)) {
       dedupedMembersMap.set(dedupeKey, {
@@ -440,18 +402,16 @@ export const fetchNextEventCardData = async (
     }
   });
 
-  const members = Array.from(dedupedMembersMap.values());
-  console.log('NEXT EVENT MEMBERS COUNT', members.length);
-
-  return {
+  const payload: NextEventCardData = {
     event: {
-      id: rule?.id || nextAssignment.event_id || nextAssignment.event_key || 'unknown_event',
+      id: eventId,
       title: rule?.title || 'Evento',
-      iso,
-      dateDisplay,
-      time: ruleTime,
-      type: rule?.type
+      time: rule?.time || '00:00',
+      date: nextAssignment.event_date || rule?.date || today
     },
-    members
+    members: Array.from(dedupedMembersMap.values())
   };
+
+  console.log('NEXT EVENT FINAL PAYLOAD', payload);
+  return payload;
 };

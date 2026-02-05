@@ -28,38 +28,31 @@ export const NextEventCard: React.FC<Props> = ({ attendance, members, onConfirm,
     queryKey: ['next_event_card', ministryId, orgId],
     queryFn: async () => {
       if (!ministryId || !orgId) return null;
-
-      const event = await fetchNextEventCardData(ministryId, orgId);
-      if (!event) return null;
-
-      return event;
+      return fetchNextEventCardData(ministryId, orgId);
     },
-    enabled,
+    enabled: !!ministryId && !!orgId,
     retry: false,
     refetchOnWindowFocus: false
   });
 
   console.log('NEXT EVENT CARD DATA', cardData);
 
-  const event = cardData?.event;
+  const event = cardData?.event ?? null;
   const team = cardData?.members || [];
+  const eventIso = event ? `${event.date}T${event.time || '00:00'}` : '';
+  const eventDateDisplay = event
+    ? new Date(eventIso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+    : '--/--';
 
   const checkTimeWindow = () => {
     if (!event) return;
     const now = new Date();
-    const eventDate = new Date(event.iso);
+    const eventDate = new Date(eventIso);
     const diffInMinutes = (now.getTime() - eventDate.getTime()) / (1000 * 60);
 
     if (diffInMinutes < -60) {
       setTimeStatus('early');
       setMinutesToOpen(Math.abs(Math.floor(diffInMinutes + 60)));
-      return;
-    }
-
-    if (event.type === 'single') {
-      const endOfDay = new Date(eventDate);
-      endOfDay.setHours(23, 59, 59, 999);
-      setTimeStatus(now > endOfDay ? 'closed' : 'open');
       return;
     }
 
@@ -71,17 +64,15 @@ export const NextEventCard: React.FC<Props> = ({ attendance, members, onConfirm,
     checkTimeWindow();
     const interval = setInterval(checkTimeWindow, 60000);
     return () => clearInterval(interval);
-  }, [event?.id, event?.iso]);
+  }, [event?.id, eventIso]);
 
-  if (!cardData?.event) return null;
-
-  const eventIsToday = getLocalDateISOString() === event.iso.split('T')[0];
-  const eventTime = event.time;
+  const eventIsToday = !!event && getLocalDateISOString() === event.date;
+  const eventTime = event?.time || '--:--';
 
   const renderActionButton = (memberKey: string, isConfirmed: boolean, role: string) => {
     const googleCalUrl = generateGoogleCalendarUrl(
-      `Escala: ${event.title}`,
-      event.iso,
+      `Escala: ${event?.title || 'Evento'}`,
+      eventIso,
       `Você está escalado como: ${role}.\nMinistério: ${ministryId?.toUpperCase()}`
     );
 
@@ -143,7 +134,7 @@ export const NextEventCard: React.FC<Props> = ({ attendance, members, onConfirm,
   };
 
   return (
-    <div key={`${event.id}_${event.iso.split('T')[0]}`} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xl shadow-slate-200/70 dark:shadow-black/30 overflow-hidden animate-slide-up ring-1 ring-black/5">
+    <div key={`${event?.id || 'next-event'}_${event?.date || 'no-date'}`} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xl shadow-slate-200/70 dark:shadow-black/30 overflow-hidden animate-slide-up ring-1 ring-black/5">
       <div className="grid grid-cols-1 lg:grid-cols-12">
         <div className="lg:col-span-4 p-8 lg:p-12 bg-slate-950 relative overflow-hidden flex flex-col justify-between text-white">
           <div className="absolute inset-0 bg-gradient-to-br from-emerald-600/20 via-slate-950 to-violet-600/10"></div>
@@ -161,12 +152,12 @@ export const NextEventCard: React.FC<Props> = ({ attendance, members, onConfirm,
               )}
             </div>
 
-            <h2 className="text-4xl lg:text-5xl font-black text-white leading-[1.1] mb-6 tracking-tighter">{event.title}</h2>
+            <h2 className="text-4xl lg:text-5xl font-black text-white leading-[1.1] mb-6 tracking-tighter">{event?.title || 'Próximo Evento'}</h2>
 
             <div className="space-y-4">
               <div className="flex items-center gap-3 text-emerald-400">
                 <CalendarClock size={20} />
-                <span className="text-lg font-bold tracking-tight">{event.dateDisplay}</span>
+                <span className="text-lg font-bold tracking-tight">{eventDateDisplay}</span>
               </div>
               <div className="flex items-center gap-3 text-slate-300">
                 <Clock size={20} />
@@ -177,6 +168,15 @@ export const NextEventCard: React.FC<Props> = ({ attendance, members, onConfirm,
 
           <div className="mt-12 relative z-10">
             {(() => {
+              if (!event) {
+                return (
+                  <div className="p-5 rounded-[1.5rem] bg-white/5 border border-white/10 backdrop-blur-md text-center">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-1">Status</p>
+                    <p className="text-xs font-bold text-slate-300">Evento sem identidade válida (event_id ausente).</p>
+                  </div>
+                );
+              }
+
               const myRole = team.find(t => currentUser && t.memberName === currentUser.name);
               if (myRole) {
                 const isConfirmed = myRole.confirmed || !!attendance[myRole.assignmentKey];
