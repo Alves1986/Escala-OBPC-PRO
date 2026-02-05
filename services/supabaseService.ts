@@ -81,19 +81,19 @@ const requireOrgId = (orgId: string | null | undefined): string => {
     return effectiveId;
 };
 
-const filterRolesBySettings = async (roles: string[], ministryId: string, orgId: string): Promise<string[]> => {
+const filterRolesByMinistryConfig = async (roles: string[], ministryId: string, orgId: string): Promise<string[]> => {
     const sb = getSupabase();
     if (!sb) return roles;
 
     if (!roles || roles.length === 0) return [];
 
-    const { data: settings } = await sb.from('ministry_settings')
+    const { data: ministry } = await sb.from('organization_ministries')
         .select('roles')
-        .eq('ministry_id', ministryId)
+        .eq('id', ministryId)
         .eq('organization_id', orgId)
         .maybeSingle();
 
-    const dbRoles = settings?.roles;
+    const dbRoles = ministry?.roles;
 
     if (!dbRoles || !Array.isArray(dbRoles) || dbRoles.length === 0) {
         return roles;
@@ -343,7 +343,7 @@ export const fetchMinistrySettings = async (ministryId: string, orgId?: string):
     if (!sb || !ministryId || !orgId) return null;
 
     const { data: ministryDef, error: defError } = await sb.from('organization_ministries')
-        .select('label, availability_start, availability_end')
+        .select('id, label, roles, availability_start, availability_end, spotify_client_id, spotify_client_secret')
         .eq('id', ministryId)
         .eq('organization_id', orgId)
         .maybeSingle();
@@ -352,22 +352,16 @@ export const fetchMinistrySettings = async (ministryId: string, orgId?: string):
 
     console.log('WINDOW READ', ministryDef);
 
-    const { data: settings } = await sb.from('ministry_settings')
-        .select('*')
-        .eq('ministry_id', ministryId)
-        .eq('organization_id', orgId)
-        .maybeSingle();
-    
     return {
-        id: settings?.id,
-        organizationMinistryId: ministryId, 
-        displayName: ministryDef?.label || settings?.display_name || 'Ministério',
-        roles: settings?.roles || [],
+        id: ministryDef?.id,
+        organizationMinistryId: ministryId,
+        displayName: ministryDef?.label || 'Ministério',
+        roles: Array.isArray(ministryDef?.roles) ? ministryDef.roles : [],
         availabilityStart: ministryDef?.availability_start,
         availabilityEnd: ministryDef?.availability_end,
         organizationId: orgId,
-        spotifyClientId: settings?.spotify_client_id,
-        spotifyClientSecret: settings?.spotify_client_secret
+        spotifyClientId: ministryDef?.spotify_client_id,
+        spotifyClientSecret: ministryDef?.spotify_client_secret
     };
 };
 
@@ -883,7 +877,7 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar: 
     if (avatar) updates.avatar_url = avatar;
     await sb.from('profiles').update(updates).eq('id', user.id).eq('organization_id', orgId);
     if (ministryId && functions && orgId) {
-        const sanitizedRoles = await filterRolesBySettings(functions, ministryId, orgId);
+        const sanitizedRoles = await filterRolesByMinistryConfig(functions, ministryId, orgId);
         await sb.from('organization_memberships').update({ functions: sanitizedRoles }).eq('profile_id', user.id).eq('ministry_id', ministryId).eq('organization_id', orgId);
     }
 };
@@ -892,19 +886,9 @@ export const saveMinistrySettings = async (ministryId: string, orgId: string, di
     const sb = getSupabase();
     if (!sb) return;
 
-    const settingsUpdates: any = {};
-    if (displayName) settingsUpdates.display_name = displayName;
-    if (roles) settingsUpdates.roles = roles;
-
-    if (Object.keys(settingsUpdates).length > 0) {
-        await sb
-            .from('ministry_settings')
-            .update(settingsUpdates)
-            .eq('ministry_id', ministryId)
-            .eq('organization_id', orgId);
-    }
-
     const ministryUpdates: any = {};
+    if (displayName) ministryUpdates.label = displayName;
+    if (roles) ministryUpdates.roles = roles;
     if (start) ministryUpdates.availability_start = start;
     if (end) ministryUpdates.availability_end = end;
 
@@ -934,7 +918,7 @@ export const updateMemberData = async (id: string, orgId: string, data: any) => 
     if (!sb) return;
     await sb.from('profiles').update({ name: data.name, whatsapp: data.whatsapp }).eq('id', id).eq('organization_id', orgId);
     if (data.ministryId) {
-        const sanitizedRoles = await filterRolesBySettings(data.roles, data.ministryId, orgId);
+        const sanitizedRoles = await filterRolesByMinistryConfig(data.roles, data.ministryId, orgId);
         await sb.from('organization_memberships').update({ functions: sanitizedRoles }).eq('profile_id', id).eq('ministry_id', data.ministryId).eq('organization_id', orgId);
     }
 };
@@ -956,7 +940,7 @@ export const joinMinistry = async (ministryId: string, orgId: string, roles: str
     if (!sb) return;
     const { data: { user } } = await (sb.auth as any).getUser();
     if (!user) return;
-    const sanitizedRoles = await filterRolesBySettings(roles, ministryId, orgId);
+    const sanitizedRoles = await filterRolesByMinistryConfig(roles, ministryId, orgId);
     await sb.from('organization_memberships').insert({ profile_id: user.id, organization_id: orgId, ministry_id: ministryId, role: 'member', functions: sanitizedRoles });
     const { data: profile } = await sb.from('profiles').select('allowed_ministries').eq('id', user.id).eq('organization_id', orgId).single();
     const current = profile?.allowed_ministries || [];

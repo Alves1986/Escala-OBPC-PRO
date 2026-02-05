@@ -122,9 +122,9 @@ export const fetchMinistryRoles = async (
   if (!sb) throw new Error("NO_SUPABASE");
 
   const { data, error } = await sb
-    .from("ministry_settings")
+    .from("organization_ministries")
     .select("roles")
-    .eq("ministry_id", ministryId)
+    .eq("id", ministryId)
     .eq("organization_id", orgId)
     .maybeSingle();
 
@@ -320,41 +320,61 @@ export const fetchNextEventCardData = async (
   const sb = getSupabase();
   if (!sb) return null;
 
-  const nowIso = new Date().toISOString();
+  const today = new Date().toISOString().split('T')[0];
 
-  const { data: nextEvent, error: nextEventError } = await sb
-    .from('events')
-    .select('id, title, date_time')
+  const { data: nextAssignment, error: nextAssignmentError } = await sb
+    .from('schedule_assignments')
+    .select('event_id, event_key, event_date')
     .eq('organization_id', orgId)
     .eq('ministry_id', ministryId)
-    .gte('date_time', nowIso)
-    .order('date_time', { ascending: true })
+    .gte('event_date', today)
+    .order('event_date', { ascending: true })
+    .order('event_key', { ascending: true })
     .limit(1)
     .maybeSingle();
 
-  if (nextEventError) throw nextEventError;
-  if (!nextEvent?.id || !nextEvent?.date_time) return null;
+  if (nextAssignmentError) throw nextAssignmentError;
+  if (!nextAssignment?.event_key || !nextAssignment?.event_date) return null;
 
-  const eventDate = new Date(nextEvent.date_time);
+  const { data: eventRule } = await sb
+    .from('event_rules')
+    .select('title, time')
+    .eq('id', nextAssignment.event_key)
+    .eq('organization_id', orgId)
+    .eq('ministry_id', ministryId)
+    .maybeSingle();
+
+  const time = eventRule?.time || '00:00';
+  const iso = `${nextAssignment.event_date}T${time}`;
+  const eventDate = new Date(iso);
   const dateDisplay = eventDate.toLocaleDateString('pt-BR', {
     day: '2-digit',
     month: '2-digit'
   });
 
-  const time = eventDate.toISOString().split('T')[1].slice(0, 5);
-
-  const { data: assignments, error: assignmentsError } = await sb
+  let assignmentsQuery = sb
     .from('schedule_assignments')
     .select('event_key, event_date, role, member_id, confirmed, profiles(name)')
     .eq('organization_id', orgId)
-    .eq('ministry_id', ministryId)
-    .eq('event_id', nextEvent.id);
+    .eq('ministry_id', ministryId);
+
+  if (nextAssignment.event_id) {
+    assignmentsQuery = assignmentsQuery.eq('event_id', nextAssignment.event_id);
+  } else {
+    assignmentsQuery = assignmentsQuery
+      .eq('event_key', nextAssignment.event_key)
+      .eq('event_date', nextAssignment.event_date);
+  }
+
+  const { data: assignments, error: assignmentsError } = await assignmentsQuery;
 
   if (assignmentsError) throw assignmentsError;
 
+  const eventId = nextAssignment.event_id || `${nextAssignment.event_key}_${nextAssignment.event_date}`;
+
   const members = (assignments || []).map((a: any) => {
     const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
-    const assignmentKey = `${a.event_key || nextEvent.id}_${a.event_date || eventDate.toISOString().split('T')[0]}_${a.role}`;
+    const assignmentKey = `${a.event_key}_${a.event_date}_${a.role}`;
 
     return {
       role: a.role,
@@ -367,9 +387,9 @@ export const fetchNextEventCardData = async (
 
   return {
     event: {
-      id: nextEvent.id,
-      title: nextEvent.title || 'Evento',
-      iso: nextEvent.date_time,
+      id: eventId,
+      title: eventRule?.title || 'Evento',
+      iso,
       dateDisplay,
       time
     },
