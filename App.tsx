@@ -80,6 +80,7 @@ const InnerApp = () => {
   useEffect(() => {
       const params = new URLSearchParams(window.location.search);
       const token = params.get('invite');
+      console.log("INVITE TOKEN FROM URL", token);
       if (token) setInviteToken(token);
   }, []);
 

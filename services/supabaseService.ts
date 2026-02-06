@@ -844,10 +844,27 @@ export const updateMinistryEvent = async (ministryId: string, orgId: string, old
 export const createInviteToken = async (ministryId: string, orgId: string, label?: string) => {
     const sb = getSupabase();
     if (!sb) return { success: false };
+
+    const { data: { user } } = await sb.auth.getUser();
+
     const token = crypto.randomUUID();
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
-    const { error } = await sb.from('invite_tokens').insert({ token, organization_id: orgId, ministry_id: ministryId, expires_at: expiresAt.toISOString(), ministry_label: label });
+
+    // Payload corrigido para o schema real
+    const payload = { 
+        token, 
+        organization_id: orgId, 
+        ministry_id: ministryId, 
+        created_by: user?.id,
+        expires_at: expiresAt.toISOString(), 
+        used: false
+    };
+
+    const { data, error } = await sb.from('invite_tokens').insert(payload).select();
+    
+    console.log("INVITE INSERT RESULT", { data, error });
+
     if (error) return { success: false, message: error.message };
     const url = `${window.location.origin}?invite=${token}`;
     return { success: true, url };
@@ -856,9 +873,30 @@ export const createInviteToken = async (ministryId: string, orgId: string, label
 export const validateInviteToken = async (token: string) => {
     const sb = getSupabase();
     if (!sb) return { valid: false };
-    const { data, error } = await sb.from('invite_tokens').select('*, organization_ministries(label)').eq('token', token).gt('expires_at', new Date().toISOString()).maybeSingle();
-    if (error || !data) return { valid: false, message: "Convite inválido." };
-    return { valid: true, data: { ministryId: data.ministry_id, orgId: data.organization_id, ministryLabel: data.organization_ministries?.label || data.ministry_label } };
+
+    const { data, error } = await sb
+        .from('invite_tokens')
+        .select('*, organization_ministries(label)')
+        .eq('token', token)
+        .gt('expires_at', new Date().toISOString())
+        .eq('used', false) // Use 'used' boolean instead of 'used_at'
+        .maybeSingle();
+
+    console.log("INVITE VALIDATION RESULT", { data, error });
+
+    if (error || !data) return { valid: false, message: "Convite inválido ou expirado." };
+    
+    // Adapter para compatibilidade UI
+    const ministryLabel = data.organization_ministries?.label || 'Ministério';
+
+    return { 
+        valid: true, 
+        data: { 
+            ministryId: data.ministry_id, 
+            orgId: data.organization_id, 
+            ministryLabel 
+        } 
+    };
 };
 
 export const registerWithInvite = async (token: string, userData: any) => {

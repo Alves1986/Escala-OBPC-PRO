@@ -29,7 +29,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
 
     useEffect(() => {
         // LOG SOLICITADO
-        console.log("🔍 [DEBUG] InviteScreen mounted. Token:", token);
+        console.log("INVITE TOKEN RECEIVED", token);
 
         const check = async () => {
             const res = await validateInviteToken(token);
