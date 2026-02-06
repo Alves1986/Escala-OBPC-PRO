@@ -255,10 +255,16 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
 
     // 2. Fetch ALL Interactions for these announcements (Single Query)
     const announcementIds = announcements.map((a: any) => a.id);
-    const { data: interactions } = await sb.from('announcement_interactions')
+    const { data: interactions, error: intError } = await sb.from('announcement_interactions')
         .select('announcement_id, user_id, interaction_type, created_at, profiles(name)')
         .in('announcement_id', announcementIds)
         .eq('organization_id', orgId);
+
+    if (intError) {
+        console.error("ANN INTERACTIONS FETCH ERROR", intError);
+    } else {
+        console.log("ANN INTERACTIONS RAW", interactions);
+    }
 
     // 3. Map in memory
     return announcements.map((a: any) => {
@@ -292,34 +298,51 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
 
 export const interactAnnouncementSQL = async (id: string, userId: string, userName: string, action: 'read'|'like', orgId: string) => {
     const sb = getSupabase();
-    if (!sb) return;
+    if (!sb) throw new Error("No Supabase client");
 
-    // Ensure profile exists (Constraint safety)
+    // 1. Audit Input
+    console.log("ANN WRITE INPUT", {
+        announcement_id: id,
+        user_id: userId,
+        organization_id: orgId,
+        action
+    });
+
+    // 2. Validate Profile (Ensure FK)
     const { data: profile } = await sb.from('profiles').select('id').eq('id', userId).maybeSingle();
+    
     if (!profile) {
-        await sb.from('profiles').insert({ id: userId, name: userName, organization_id: orgId });
+        console.log("ANN PROFILE AUTO-CREATE", userId);
+        const { error: profileError } = await sb.from('profiles').upsert({ 
+            id: userId, 
+            name: userName, 
+            organization_id: orgId 
+        }, { onConflict: 'id', ignoreDuplicates: true });
+        
+        if (profileError) {
+            console.error("ANN PROFILE CREATE ERROR", profileError);
+            throw profileError;
+        }
     }
 
-    // 1. Fetch Ministry ID from announcement to ensure FK integrity
-    const { data: announcement } = await sb.from('announcements')
+    // 3. Fetch Context (Ministry ID)
+    const { data: announcement, error: annError } = await sb.from('announcements')
         .select('ministry_id')
         .eq('id', id)
         .eq('organization_id', orgId)
-        .maybeSingle();
-    
-    // CORREÇÃO CRÍTICA: Throw error ao invés de return silencioso
-    if (!announcement || !announcement.ministry_id) {
-        console.warn('InteractAnnouncement: Ministry ID not found for announcement', id);
-        throw new Error("ANNOUNCEMENT_OR_MINISTRY_NOT_FOUND");
+        .single();
+
+    if (annError || !announcement) {
+        console.error("ANN FETCH ERROR", annError);
+        throw new Error("Announcement not found");
     }
 
     const ministryId = announcement.ministry_id;
 
-    let rows: any = null;
-
+    // 4. Perform Action
     if (action === 'like') {
-        // TOGGLE Logic for Like
-        const { data: existing } = await sb.from('announcement_interactions')
+        // Check existing
+        const { data: existing, error: checkError } = await sb.from('announcement_interactions')
             .select('id')
             .eq('announcement_id', id)
             .eq('user_id', userId)
@@ -327,36 +350,53 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
             .eq('interaction_type', 'like')
             .maybeSingle();
 
+        if (checkError) {
+             console.error("ANN LIKE CHECK ERROR", checkError);
+             throw checkError;
+        }
+
         if (existing) {
-            // Remove Like
-            const { data } = await sb.from('announcement_interactions').delete().eq('id', existing.id).select();
-            rows = data;
+            // Remove
+            const { error: delError } = await sb.from('announcement_interactions').delete().eq('id', existing.id);
+            if (delError) {
+                console.error("ANN LIKE REMOVE ERROR", delError);
+                throw delError;
+            }
+            console.log("ANN LIKE REMOVED");
         } else {
-            // Add Like (Correct Ministry ID)
-            const { data } = await sb.from('announcement_interactions').insert({
+            // Insert
+            const { error: insertError } = await sb.from('announcement_interactions').insert({
                 announcement_id: id,
                 user_id: userId,
                 organization_id: orgId,
-                ministry_id: ministryId, // FIXED
+                ministry_id: ministryId,
                 interaction_type: 'like'
-            }).select();
-            rows = data;
+            });
+            
+            if (insertError) {
+                console.error("ANN LIKE INSERT ERROR", insertError);
+                throw insertError;
+            }
+            console.log("ANN LIKE INSERTED");
         }
     } else {
-        // UPSERT Logic for Read (Idempotent + Correct OnConflict)
-        const { data } = await sb.from('announcement_interactions').upsert({
+        // Read (Upsert)
+        const { error: upsertError } = await sb.from('announcement_interactions').upsert({
             announcement_id: id,
             user_id: userId,
             organization_id: orgId,
-            ministry_id: ministryId, // FIXED
+            ministry_id: ministryId,
             interaction_type: 'read'
-        }, { 
-            onConflict: 'announcement_id,user_id,organization_id,ministry_id,interaction_type' 
-        }).select();
-        rows = data;
-    }
+        }, {
+            onConflict: 'announcement_id,user_id,organization_id,ministry_id,interaction_type'
+        });
 
-    console.log('ANN WRITE CHECK', rows);
+        if (upsertError) {
+            console.error("ANN READ UPSERT ERROR", upsertError);
+            throw upsertError;
+        }
+        console.log("ANN READ UPSERTED");
+    }
 };
 
 // --- RANKING LOGIC (CORRIGIDA) ---
