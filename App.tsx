@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, useMemo } from 'react';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { useAppStore } from './store/appStore';
 import { useSession, SessionProvider } from './context/SessionContext';
@@ -10,6 +10,7 @@ import { useMinistryData } from './hooks/useMinistryData';
 import { useOnlinePresence } from './hooks/useOnlinePresence';
 import { getLocalDateISOString, getMonthName, adjustMonth } from './utils/dateUtils';
 import { generateIndividualPDF, generateFullSchedulePDF } from './utils/pdfGenerator';
+import { subscribeUserToPush } from './utils/pushUtils';
 
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
@@ -71,6 +72,7 @@ const InnerApp = () => {
       isAppReady
   } = useAppStore();
   const { addToast, confirmAction } = useToast();
+  const queryClient = useQueryClient(); // Correctly placed inside InnerApp
   
   const [currentMonth, setCurrentMonth] = useState(() => getLocalDateISOString().slice(0, 7));
 
@@ -200,6 +202,15 @@ const InnerApp = () => {
         setCurrentUser(null);
         window.location.reload();
     });
+  };
+
+  const handleEnableNotifications = async () => {
+      const sub = await subscribeUserToPush();
+      if (sub) {
+          addToast("Notificações ativadas!", "success");
+      } else {
+          addToast("Não foi possível ativar notificações. Verifique as permissões do navegador.", "error");
+      }
   };
 
   // Define Navigation
@@ -560,7 +571,7 @@ const InnerApp = () => {
                 />
             )}
             {currentTab === 'profile' && <ProfileScreen user={user} onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId, orgId!); refreshData(); }} availableRoles={roles} />}
-            {currentTab === 'settings' && safeEnabledTabs.includes('settings') && <SettingsScreen initialTitle={ministryTitle} ministryId={ministryId} themeMode={themeMode} onSetThemeMode={(m) => useAppStore.getState().setThemeMode(m)} onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, orgId!, newTitle); refreshData(); }} onSaveAvailabilityWindow={async (start, end) => { await Supabase.saveMinistrySettings(ministryId, orgId!, undefined, undefined, start, end); refreshData(); }} availabilityWindow={availabilityWindow} isAdmin={isAdmin} orgId={orgId!} />}
+            {currentTab === 'settings' && safeEnabledTabs.includes('settings') && <SettingsScreen initialTitle={ministryTitle} ministryId={ministryId} themeMode={themeMode} onSetThemeMode={(m) => useAppStore.getState().setThemeMode(m)} onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, orgId!, newTitle); refreshData(); }} onSaveAvailabilityWindow={async (start, end) => { await Supabase.saveMinistrySettings(ministryId, orgId!, undefined, undefined, start, end); refreshData(); }} availabilityWindow={availabilityWindow} isAdmin={isAdmin} orgId={orgId!} onEnableNotifications={handleEnableNotifications} />}
             {currentTab === 'members' && isAdmin && safeEnabledTabs.includes('members') && <MembersScreen members={publicMembers} onlineUsers={onlineUsers} currentUser={user} availableRoles={roles} onToggleAdmin={async (email, currentStatus, name) => { await Supabase.toggleAdminSQL(email, !currentStatus, ministryId, orgId!); refreshData(); }} onRemoveMember={async (id, name) => { await Supabase.deleteMember(ministryId, orgId!, id, name); refreshData(); }} onUpdateMember={async (id, data) => { await Supabase.updateMemberData(id, orgId!, data); refreshData(); }} />}
             {currentTab === 'event-rules' && isAdmin && safeEnabledTabs.includes('event-rules') && <EventsScreen />}
             {currentTab === 'report' && isAdmin && safeEnabledTabs.includes('report') && <AvailabilityReportScreen availability={availability} registeredMembers={publicMembers} membersMap={membersMap} currentMonth={currentMonth} onMonthChange={setCurrentMonth} availableRoles={roles} onRefresh={async () => { await refreshData(); }} />}

@@ -230,7 +230,7 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
   return { memberMap, publicList };
 };
 
-// --- ANNOUNCEMENTS LOGIC (CORRIGIDA - UNIFIED TABLE) ---
+// --- ANNOUNCEMENTS LOGIC (CORRIGIDA) ---
 
 export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) => {
     const sb = getSupabase();
@@ -255,16 +255,15 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
 
     // 2. Fetch ALL Interactions for these announcements (Single Query)
     const announcementIds = announcements.map((a: any) => a.id);
+    
+    // CORREÇÃO: Removido filtro .eq('organization_id', orgId) pois a coluna não existe
     const { data: interactions, error: intError } = await sb.from('announcement_interactions')
         .select('announcement_id, user_id, interaction_type, created_at, profiles(name)')
-        .in('announcement_id', announcementIds)
-        .eq('organization_id', orgId);
+        .in('announcement_id', announcementIds);
 
     if (intError) {
         console.error("ANN INTERACTIONS FETCH ERROR", intError);
-    } else {
-        // console.log("ANN INTERACTIONS RAW", interactions);
-    }
+    } 
 
     // 3. Map in memory
     return announcements.map((a: any) => {
@@ -300,11 +299,10 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
     const sb = getSupabase();
     if (!sb) throw new Error("No Supabase client");
 
-    // 1. Audit Input
+    // 1. Audit Input (Sem orgId nos logs internos para evitar confusão)
     console.log("ANN WRITE INPUT", {
         announcement_id: id,
         user_id: userId,
-        organization_id: orgId,
         action
     });
 
@@ -325,28 +323,13 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
         }
     }
 
-    // 3. Fetch Context (Ministry ID)
-    const { data: announcement, error: annError } = await sb.from('announcements')
-        .select('ministry_id')
-        .eq('id', id)
-        .eq('organization_id', orgId)
-        .single();
-
-    if (annError || !announcement) {
-        console.error("ANN FETCH ERROR", annError);
-        throw new Error("Announcement not found");
-    }
-
-    const ministryId = announcement.ministry_id;
-
-    // 4. Perform Action
+    // 3. Perform Action (CORREÇÃO: Removidos campos organization_id e ministry_id)
     if (action === 'like') {
         // Check existing
         const { data: existing, error: checkError } = await sb.from('announcement_interactions')
             .select('id')
             .eq('announcement_id', id)
             .eq('user_id', userId)
-            .eq('organization_id', orgId)
             .eq('interaction_type', 'like')
             .maybeSingle();
 
@@ -356,26 +339,21 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
         }
 
         if (existing) {
-            // Remove (RLS SAFE DELETE)
+            // Remove
             const { error: delError } = await sb.from('announcement_interactions')
                 .delete()
-                .eq('id', existing.id)
-                .eq('organization_id', orgId)
-                .eq('user_id', userId)
-                .eq('interaction_type', 'like');
+                .eq('id', existing.id);
 
             if (delError) {
                 console.error("ANN LIKE REMOVE ERROR", delError);
                 throw delError;
             }
-            console.log("ANN WRITE RESULT", { action: 'unlike', success: true });
+            console.log("ANN WRITE OK", "unlike");
         } else {
             // Insert
             const { error: insertError } = await sb.from('announcement_interactions').insert({
                 announcement_id: id,
                 user_id: userId,
-                organization_id: orgId,
-                ministry_id: ministryId,
                 interaction_type: 'like'
             });
             
@@ -383,25 +361,23 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
                 console.error("ANN LIKE INSERT ERROR", insertError);
                 throw insertError;
             }
-            console.log("ANN WRITE RESULT", { action: 'like', success: true });
+            console.log("ANN WRITE OK", "like");
         }
     } else {
-        // Read (Upsert)
+        // Read (Upsert Idempotente)
         const { error: upsertError } = await sb.from('announcement_interactions').upsert({
             announcement_id: id,
             user_id: userId,
-            organization_id: orgId,
-            ministry_id: ministryId,
             interaction_type: 'read'
         }, {
-            onConflict: 'announcement_id,user_id,organization_id,ministry_id,interaction_type'
+            onConflict: 'announcement_id,user_id,interaction_type'
         });
 
         if (upsertError) {
             console.error("ANN READ UPSERT ERROR", upsertError);
             throw upsertError;
         }
-        console.log("ANN WRITE RESULT", { action: 'read', success: true });
+        console.log("ANN WRITE OK", "read");
     }
 };
 
@@ -426,12 +402,12 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
         
     const today = new Date().toISOString().slice(0, 10);
 
-    // Fetch unified interactions for ministry
-    // Note: We filter interactions by users in this ministry, as announcements might be global
+    // Fetch unified interactions
+    // CORREÇÃO: announcement_interactions não filtra por orgId/ministryId
     const [assignmentsRes, swapsRes, interactionsRes] = await Promise.all([
         sb.from('schedule_assignments').select('member_id, event_date, role').eq('organization_id', orgId).eq('ministry_id', ministryId).eq('confirmed', true).lte('event_date', today),
         sb.from('swap_requests').select('requester_id, created_at').eq('organization_id', orgId).eq('ministry_id', ministryId),
-        sb.from('announcement_interactions').select('user_id, interaction_type, created_at').eq('organization_id', orgId).in('user_id', userIds)
+        sb.from('announcement_interactions').select('user_id, interaction_type, created_at').in('user_id', userIds)
     ]) as any;
 
     const assignments = assignmentsRes.data || [];

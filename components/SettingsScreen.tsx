@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Settings, Save, Moon, Sun, BellRing, Monitor, Loader2, CalendarClock, Lock, Unlock, BellOff, Check, ShieldCheck, ArrowRight } from 'lucide-react';
 import { useToast } from './Toast';
@@ -18,7 +17,7 @@ interface Props {
   onSaveAvailabilityWindow?: (start: string, end: string) => Promise<void>;
   availabilityWindow?: { start?: string, end?: string };
   isAdmin?: boolean;
-  orgId: string; // FIX: ERRO 1 - Mandatory orgId
+  orgId: string;
 }
 
 export const SettingsScreen: React.FC<Props> = ({ 
@@ -165,15 +164,20 @@ export const SettingsScreen: React.FC<Props> = ({
   const handleNotificationClick = async () => {
       if (!onEnableNotifications) return;
       if (notifPermission === 'denied') {
-          alert("Notificações bloqueadas no navegador.");
+          alert("Notificações bloqueadas no navegador. Por favor, habilite-as nas configurações do site.");
           return;
       }
       setIsNotifLoading(true);
       try {
           await onEnableNotifications();
-          setNotifPermission(Notification.permission);
-      } catch (e) { console.error(e); }
-      finally { setIsNotifLoading(false); }
+          if ('Notification' in window) {
+              setNotifPermission(Notification.permission);
+          }
+      } catch (e) { 
+          console.error(e); 
+      } finally { 
+          setIsNotifLoading(false); 
+      }
   };
 
   return (
