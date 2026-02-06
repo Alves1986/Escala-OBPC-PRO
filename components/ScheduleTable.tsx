@@ -306,16 +306,17 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                 </div>
             </td>
             {columns.map((col: any) => {
+                // CORREÇÃO CRÍTICA: Identidade Única Obrigatória = RuleID + Date + Role
+                // event.id JÁ VEM como "ruleId_date" do useEvents/generateEvents
+                // Então uniqueKey = ruleId_date_role
                 const uniqueKey = `${event.id}_${col.keySuffix}`;
                 
-                // Fallback para Rule ID: Se a assignment foi salva apenas com o Rule ID (global)
-                const ruleId = event.id.split('_')[0];
-                const ruleKey = `${ruleId}_${col.realRole}`;
-
-                const currentValue = schedule[uniqueKey] || schedule[ruleKey] || schedule[`${event.iso}_${col.keySuffix}`] || "";
+                // NUNCA usar fallbacks soltos como schedule[ruleKey] ou schedule[isoKey]
+                // Isso que causava a mistura de cultos do mesmo dia.
+                const currentValue = schedule[uniqueKey] || "";
+                const isConfirmed = attendance[uniqueKey] || false;
                 
                 const roleMembers = members[col.realRole] || [];
-                const isConfirmed = attendance[uniqueKey] || attendance[ruleKey] || attendance[`${event.iso}_${col.keySuffix}`];
                 
                 const hasLocalConflict = currentValue && !checkIsAvailable(availabilityLookup, currentValue, event.iso);
                 
@@ -345,11 +346,8 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                                     <MemberSelector 
                                         value={currentValue} 
                                         onChange={(memberId, memberName) => {
-                                            // garante chave composta ruleUUID_date
-                                            const safeEventId = event.id.includes("_")
-                                                ? event.id
-                                                : `${event.id}_${event.iso.slice(0,10)}`;
-
+                                            // event.id = ruleId_date
+                                            const safeEventId = event.id;
                                             onCellChange(safeEventId, col.keySuffix, memberId, memberName);
                                         }}
                                         options={roleMembers} 
@@ -467,7 +465,7 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
               <tbody>
                 {events.length === 0 ? <tr><td colSpan={columns.length + 1} className="p-12 text-center text-zinc-400">Nenhum evento para este mês.</td></tr> : events.map((event) => (
                     <ScheduleRow 
-                        key={event.id} // UUID Stable Key
+                        key={event.id} // UUID Stable Key (ruleId_date)
                         event={event} 
                         columns={columns} 
                         schedule={schedule} 
@@ -521,15 +519,13 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                   ) : (
                       <div className="p-4 space-y-4">
                           {columns.map(col => {
+                              // CORREÇÃO CRÍTICA MOBILE: Usar chave composta única (RuleID_Date_Role)
                               const uniqueKey = `${event.id}_${col.keySuffix}`;
                               
-                              const ruleId = event.id.split('_')[0];
-                              const ruleKey = `${ruleId}_${col.realRole}`;
-
-                              const currentValue = schedule[uniqueKey] || schedule[ruleKey] || schedule[`${event.iso}_${col.keySuffix}`] || "";
+                              const currentValue = schedule[uniqueKey] || "";
+                              const isConfirmed = attendance[uniqueKey] || false;
                               
                               const roleMembers = members[col.realRole] || [];
-                              const isConfirmed = attendance[uniqueKey] || attendance[ruleKey] || attendance[`${event.iso}_${col.keySuffix}`];
                               
                               const hasLocalConflict = currentValue && !checkIsAvailable(availabilityLookup, currentValue, event.iso);
                               
@@ -552,12 +548,8 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                                                   <MemberSelector 
                                                         value={currentValue} 
                                                         onChange={(memberId, memberName) => {
-                                                            // garante chave composta ruleUUID_date
-                                                            const safeEventId = event.id.includes("_")
-                                                                ? event.id
-                                                                : `${event.id}_${event.iso.slice(0,10)}`;
-
-                                                        onCellChange(safeEventId, col.keySuffix, memberId, memberName);
+                                                            const safeEventId = event.id;
+                                                            onCellChange(safeEventId, col.keySuffix, memberId, memberName);
                                                         }}
 
                                                     options={roleMembers} 

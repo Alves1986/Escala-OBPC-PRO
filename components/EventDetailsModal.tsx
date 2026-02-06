@@ -46,8 +46,13 @@ export const EventDetailsModal: React.FC<Props> = ({
             if(!sb) return;
 
             // Extract Rule ID (Event Key) from the event ID (format: ruleId_date)
-            // If event.id is not present, we fall back to generic date fetch, but this is less safe for multi-service days.
+            // Strict Rule: Must have ruleId to identify the service correctly.
             const ruleId = event.id ? event.id.split('_')[0] : null;
+
+            if (!ruleId) {
+                console.error("EventDetails: Missing ruleId in event ID", event.id);
+                return;
+            }
 
             let query = sb
                 .from('schedule_assignments')
@@ -58,11 +63,8 @@ export const EventDetailsModal: React.FC<Props> = ({
                 `)
                 .eq('organization_id', currentUser.organizationId)
                 .eq('ministry_id', ministryId)
-                .eq('event_date', datePart);
-            
-            if (ruleId) {
-                query = query.eq('event_key', ruleId);
-            }
+                .eq('event_date', datePart)
+                .eq('event_key', ruleId); // CORREÇÃO: Filtragem estrita por RuleID
 
             const { data } = await query;
             
