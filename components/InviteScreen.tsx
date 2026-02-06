@@ -12,8 +12,12 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
     const [inviteData, setInviteData] = useState<any>(null);
     const [errorMsg, setErrorMsg] = useState("");
     
+    // Ministry Data
+    const [ministryName, setMinistryName] = useState("");
+    
     // Roles Data
     const [availableRoles, setAvailableRoles] = useState<string[]>([]);
+    const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
     const [loadingRoles, setLoadingRoles] = useState(false);
 
     // Form Data
@@ -23,7 +27,6 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
     const [confirmPass, setConfirmPass] = useState("");
     const [whatsapp, setWhatsapp] = useState("");
     const [birthDate, setBirthDate] = useState("");
-    const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
     
     const [registering, setRegistering] = useState(false);
 
@@ -33,7 +36,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
 
         const check = async () => {
             const res = await validateInviteToken(token);
-            console.log("INVITE SCREEN DATA", res.data); // Prompt requested this log inside InviteScreen
+            console.log("INVITE SCREEN DATA", res.data); 
             
             if (res.valid) {
                 setInviteData(res.data);
@@ -41,20 +44,27 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
 
                 // --- UX: Limpar URL após validação ---
                 try {
-                    // Mantém o estado no React, mas remove visualmente o token da barra de endereços
                     const cleanUrl = window.location.origin + window.location.pathname;
                     window.history.replaceState({}, document.title, cleanUrl);
                 } catch (e) {
                     console.warn("Não foi possível limpar a URL", e);
                 }
                 
-                // Fetch available roles for this ministry
+                // Fetch available roles and details for this ministry
                 if (res.data?.ministryId && res.data?.orgId) {
                     setLoadingRoles(true);
                     try {
                         const settings = await fetchMinistrySettings(res.data.ministryId, res.data.orgId);
-                        if (settings && settings.roles) {
-                            setAvailableRoles(settings.roles);
+                        
+                        console.log("INVITE MINISTRY SETTINGS", settings);
+                        
+                        if (settings) {
+                            setMinistryName(settings.displayName || res.data.ministryLabel);
+                            setAvailableRoles(settings.roles || []);
+                            console.log("INVITE ROLES LOADED", settings.roles);
+                        } else {
+                            // Fallback se não houver settings específicas, usa o label do token
+                            setMinistryName(res.data.ministryLabel);
                         }
                     } catch (e) {
                         console.error("Failed to load roles", e);
@@ -71,16 +81,20 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
     }, [token]);
 
     const toggleRole = (role: string) => {
+        let newRoles;
         if (selectedRoles.includes(role)) {
-            setSelectedRoles(selectedRoles.filter(r => r !== role));
+            newRoles = selectedRoles.filter(r => r !== role);
         } else {
-            setSelectedRoles([...selectedRoles, role]);
+            newRoles = [...selectedRoles, role];
         }
+        setSelectedRoles(newRoles);
+        console.log("SELECTED ROLES", newRoles);
     };
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
         
+        // Validação Obrigatória
         if (!name.trim() || !email.trim() || !password || !confirmPass || !whatsapp.trim() || !birthDate) {
             setErrorMsg("Todos os campos são obrigatórios.");
             return;
@@ -185,7 +199,9 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                     <div className="bg-zinc-800/50 p-4 rounded-xl border border-zinc-700/50 mb-6 flex flex-col gap-2">
                         <div className="flex items-center gap-2">
                             <Building2 size={16} className="text-teal-500"/>
-                            <span className="text-white text-sm font-bold">Você está entrando em: {inviteData.ministryLabel}</span>
+                            <span className="text-white text-sm font-bold">
+                                Você está entrando em: <span className="text-teal-400">{ministryName || inviteData.ministryLabel}</span>
+                            </span>
                         </div>
                     </div>
                 )}
@@ -248,9 +264,9 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                         </div>
 
                         {/* ROLES SELECTION */}
-                        <div className="md:col-span-2">
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1 mb-2 block flex items-center gap-2">
-                                <Briefcase size={12}/> Selecione suas Funções / Cargos
+                        <div className="md:col-span-2 bg-zinc-900/50 p-4 rounded-xl border border-zinc-800">
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1 mb-3 block flex items-center gap-2">
+                                <Briefcase size={12}/> Selecione suas Funções / Cargos *
                             </label>
                             
                             {loadingRoles ? (
@@ -267,7 +283,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                                                 className={`px-3 py-2 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5 ${
                                                     isSelected 
                                                     ? 'bg-teal-600 text-white border-teal-500 shadow-md ring-1 ring-teal-500/50' 
-                                                    : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:border-zinc-600'
+                                                    : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:border-zinc-600 hover:bg-zinc-800'
                                                 }`}
                                             >
                                                 {role}
@@ -277,8 +293,22 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                                     })}
                                 </div>
                             ) : (
-                                <p className="text-xs text-zinc-500 italic">Nenhuma função específica disponível. Você entrará como membro padrão.</p>
+                                <div className="text-center p-4">
+                                    <p className="text-xs text-zinc-500 italic mb-2">Nenhuma função específica disponível.</p>
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleRole("Membro")}
+                                        className={`px-3 py-2 rounded-lg text-xs font-bold transition-all border inline-flex items-center gap-1.5 ${
+                                            selectedRoles.includes("Membro")
+                                            ? 'bg-teal-600 text-white border-teal-500' 
+                                            : 'bg-zinc-950 text-zinc-400 border-zinc-800'
+                                        }`}
+                                    >
+                                        Entrar como Membro {selectedRoles.includes("Membro") && <Check size={12} />}
+                                    </button>
+                                </div>
                             )}
+                            {selectedRoles.length === 0 && <p className="text-[10px] text-red-400 mt-2 ml-1">* Selecione pelo menos uma função.</p>}
                         </div>
 
                         <div>
