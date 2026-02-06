@@ -33,6 +33,8 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
 
         const check = async () => {
             const res = await validateInviteToken(token);
+            console.log("INVITE SCREEN DATA", res.data); // Prompt requested this log inside InviteScreen
+            
             if (res.valid) {
                 setInviteData(res.data);
                 setStatus('valid');

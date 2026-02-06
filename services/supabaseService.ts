@@ -861,10 +861,10 @@ export const createInviteToken = async (ministryId: string, orgId: string, label
         used: false
     };
 
+    console.log("INVITE INSERT PAYLOAD", payload);
+
     const { data, error } = await sb.from('invite_tokens').insert(payload).select();
     
-    console.log("INVITE INSERT RESULT", { data, error });
-
     if (error) return { success: false, message: error.message };
     const url = `${window.location.origin}?invite=${token}`;
     return { success: true, url };
@@ -874,28 +874,38 @@ export const validateInviteToken = async (token: string) => {
     const sb = getSupabase();
     if (!sb) return { valid: false };
 
+    const now = new Date().toISOString();
+
+    // Query 1: Debug (Requested)
+    const debug = await sb
+        .from('invite_tokens')
+        .select('token, used, expires_at')
+        .eq('token', token);
+    console.log("INVITE DEBUG ROW", debug.data);
+
+    // Query 2: Validation (Requested)
     const { data, error } = await sb
         .from('invite_tokens')
-        .select('*, organization_ministries(label)')
+        .select('*')
         .eq('token', token)
-        .gt('expires_at', new Date().toISOString())
-        .eq('used', false) // Use 'used' boolean instead of 'used_at'
+        .eq('used', false)
+        .gt('expires_at', now)
         .maybeSingle();
 
     console.log("INVITE VALIDATION RESULT", { data, error });
 
-    if (error || !data) return { valid: false, message: "Convite inválido ou expirado." };
-    
-    // Adapter para compatibilidade UI
-    const ministryLabel = data.organization_ministries?.label || 'Ministério';
+    if (error || !data) {
+        return { valid: false, message: "Convite inválido ou expirado." };
+    }
 
-    return { 
-        valid: true, 
-        data: { 
-            ministryId: data.ministry_id, 
-            orgId: data.organization_id, 
-            ministryLabel 
-        } 
+    // Return structure expected by InviteScreen
+    return {
+        valid: true,
+        data: {
+            ministryId: data.ministry_id,
+            orgId: data.organization_id,
+            ministryLabel: "Ministério" // Fallback since we can't join or read column
+        }
     };
 };
 
