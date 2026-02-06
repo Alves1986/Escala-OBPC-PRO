@@ -843,19 +843,23 @@ export const updateMinistryEvent = async (ministryId: string, orgId: string, old
     }
 };
 
-export const createInviteToken = async (ministryId: string, orgId: string, label?: string) => {
+export const createInviteToken = async (ministryId: string, orgId: string) => {
     const sb = getSupabase();
     if (!sb) return { success: false };
+    const { data: { user } } = await (sb.auth as any).getUser();
+    if (!user?.id) return { success: false, message: "Usuário não autenticado" };
     const token = crypto.randomUUID();
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
-    // NOTE: label kept in signature for backward compatibility, but invite_tokens does not store ministry_label.
-    const { error } = await sb.from('invite_tokens').insert({
+    const payload = {
         token,
         organization_id: orgId,
         ministry_id: ministryId,
+        created_by: user.id,
         expires_at: expiresAt.toISOString()
-    });
+    };
+    console.log("INVITE TOKEN INSERT PAYLOAD", payload);
+    const { error } = await sb.from('invite_tokens').insert(payload);
     if (error) return { success: false, message: error.message };
     const url = `${window.location.origin}?invite=${token}`;
     return { success: true, url };
@@ -864,20 +868,41 @@ export const createInviteToken = async (ministryId: string, orgId: string, label
 export const validateInviteToken = async (token: string) => {
     const sb = getSupabase();
     if (!sb) return { valid: false };
+    const now = new Date().toISOString();
+    console.log("INVITE TOKEN READ", { token });
     const { data, error } = await sb.from('invite_tokens')
-        .select('id, token, organization_id, ministry_id, created_at, expires_at, created_by, organization_ministries(label)')
+        .select('*')
         .eq('token', token)
-        .gt('expires_at', new Date().toISOString())
+        .is('used_at', null)
+        .gt('expires_at', now)
         .maybeSingle();
-    if (error || !data) return { valid: false, message: "Convite inválido." };
-    return { valid: true, data: { ministryId: data.ministry_id, orgId: data.organization_id, ministryLabel: data.organization_ministries?.label || 'Ministério' } };
+    if (error || !data) {
+        console.log("INVITE VALIDATION RESULT", { valid: false, reason: error?.message || "Convite inválido." });
+        return { valid: false, message: "Convite inválido." };
+    }
+
+    const { data: ministry } = await sb.from('organization_ministries')
+        .select('id, label')
+        .eq('id', data.ministry_id)
+        .maybeSingle();
+    console.log("INVITE MINISTRY RESOLVE", { ministryId: data.ministry_id, ministry });
+    const result = {
+        valid: true,
+        data: {
+            ministryId: data.ministry_id,
+            orgId: data.organization_id,
+            ministryLabel: ministry?.label || 'Ministério'
+        }
+    };
+    console.log("INVITE VALIDATION RESULT", result);
+    return result;
 };
 
 export const registerWithInvite = async (token: string, userData: any) => {
     const sb = getSupabase();
     if (!sb) return { success: false };
     const { data: invite } = await sb.from('invite_tokens')
-        .select('id, token, organization_id, ministry_id, created_at, expires_at, created_by')
+        .select('id, token, organization_id, ministry_id, created_by, expires_at, used_at, created_at')
         .eq('token', token)
         .single();
     if (!invite) return { success: false, message: "Convite inválido" };
