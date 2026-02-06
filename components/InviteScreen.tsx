@@ -55,7 +55,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                     try {
                         const sb = getSupabase();
                         if (sb) {
-                            const { data: ministry, error } = await sb
+                            const { data: ministry } = await sb
                                 .from('organization_ministries')
                                 .select('id, label, roles')
                                 .eq('id', res.data.ministryId)
@@ -300,21 +300,11 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                                 </div>
                             ) : (
                                 <div className="text-center p-4">
-                                    <p className="text-xs text-zinc-500 italic mb-2">Nenhuma função específica disponível neste ministério.</p>
-                                    <button
-                                        type="button"
-                                        onClick={() => toggleRole("Membro")}
-                                        className={`px-3 py-2 rounded-lg text-xs font-bold transition-all border inline-flex items-center gap-1.5 ${
-                                            selectedRoles.includes("Membro")
-                                            ? 'bg-teal-600 text-white border-teal-500' 
-                                            : 'bg-zinc-950 text-zinc-400 border-zinc-800'
-                                        }`}
-                                    >
-                                        Entrar como Membro {selectedRoles.includes("Membro") && <Check size={12} />}
-                                    </button>
+                                    <p className="text-xs text-red-400 italic mb-2">Este ministério não possui funções cadastradas.</p>
+                                    <p className="text-[10px] text-zinc-500">Contate o administrador para configurar as funções antes de se cadastrar.</p>
                                 </div>
                             )}
-                            {selectedRoles.length === 0 && <p className="text-[10px] text-red-400 mt-2 ml-1">* Selecione pelo menos uma função.</p>}
+                            {selectedRoles.length === 0 && availableRoles.length > 0 && <p className="text-[10px] text-red-400 mt-2 ml-1">* Selecione pelo menos uma função.</p>}
                         </div>
 
                         <div>

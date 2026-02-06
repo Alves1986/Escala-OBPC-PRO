@@ -926,7 +926,7 @@ export const registerWithInvite = async (token: string, userData: any) => {
     const userId = authData.user?.id;
     if (!userId) return { success: false, message: "Erro ao criar usuário" };
 
-    // Atualiza Profile
+    // Atualiza Profile (Forçar membro não-admin)
     await sb.from('profiles').update({ 
         name: userData.name, 
         whatsapp: userData.whatsapp, 
