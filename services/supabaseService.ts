@@ -923,5 +923,15 @@ export const registerWithInvite = async (token: string, userData: any) => {
     await sb.from('organization_memberships').insert({
         organization_id: invite.organization_id, profile_id: userId, ministry_id: invite.ministry_id, role: 'member', functions: userData.roles
     });
+
+    if (Array.isArray(userData.roles) && userData.roles.length > 0) {
+        await sb.from('member_roles').insert(
+            userData.roles.map((role: string) => ({
+                user_id: userId,
+                ministry_id: invite.ministry_id,
+                role
+            }))
+        );
+    }
     return { success: true };
 };

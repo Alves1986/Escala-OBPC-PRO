@@ -1,11 +1,32 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowRight, CheckCircle2, UserPlus, AlertOctagon, Loader2, Mail, Lock, Phone, User, Calendar, Briefcase, Building2, Check } from 'lucide-react';
-import { validateInviteToken, registerWithInvite, fetchMinistrySettings } from '../services/supabaseService';
+import { getSupabase, validateInviteToken, registerWithInvite } from '../services/supabaseService';
 
 interface Props {
     token: string;
     onClear: () => void;
 }
+
+interface RoleCheckboxProps {
+    label: string;
+    checked: boolean;
+    onChange: () => void;
+}
+
+const RoleCheckbox: React.FC<RoleCheckboxProps> = ({ label, checked, onChange }) => (
+    <button
+        type="button"
+        onClick={onChange}
+        className={`px-3 py-2 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5 ${
+            checked
+            ? 'bg-teal-600 text-white border-teal-500 shadow-md ring-1 ring-teal-500/50'
+            : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:border-zinc-600'
+        }`}
+    >
+        {label}
+        {checked && <Check size={12} />}
+    </button>
+);
 
 export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
     const [status, setStatus] = useState<'loading' | 'valid' | 'invalid' | 'success'>('loading');
@@ -24,6 +45,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
     const [whatsapp, setWhatsapp] = useState("");
     const [birthDate, setBirthDate] = useState("");
     const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+    const [rolesTouched, setRolesTouched] = useState(false);
     
     const [registering, setRegistering] = useState(false);
 
@@ -47,13 +69,23 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                 }
                 
                 // Fetch available roles for this ministry
-                if (res.data?.ministryId && res.data?.orgId) {
+                if (res.data?.ministryId) {
                     setLoadingRoles(true);
                     try {
-                        const settings = await fetchMinistrySettings(res.data.ministryId, res.data.orgId);
-                        if (settings && settings.roles) {
-                            setAvailableRoles(settings.roles);
-                        }
+                        const sb = getSupabase();
+                        if (!sb) throw new Error("NO_SUPABASE");
+                        const { data: ministry, error } = await sb
+                            .from('organization_ministries')
+                            .select('id, label, roles')
+                            .eq('id', res.data.ministryId)
+                            .maybeSingle();
+                        if (error) throw error;
+                        console.log('INVITE MINISTRY RAW', ministry);
+                        const ministryRoles = Array.isArray(ministry?.roles)
+                            ? ministry.roles
+                            : [];
+                        console.log('INVITE ROLES LOADED', ministryRoles);
+                        setAvailableRoles(ministryRoles);
                     } catch (e) {
                         console.error("Failed to load roles", e);
                     } finally {
@@ -68,7 +100,12 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
         check();
     }, [token]);
 
+    useEffect(() => {
+        console.log('INVITE ROLES SELECTED', selectedRoles);
+    }, [selectedRoles]);
+
     const toggleRole = (role: string) => {
+        setRolesTouched(true);
         if (selectedRoles.includes(role)) {
             setSelectedRoles(selectedRoles.filter(r => r !== role));
         } else {
@@ -76,27 +113,35 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
         }
     };
 
+    const isValid =
+        name.trim() &&
+        email.trim() &&
+        whatsapp.trim() &&
+        birthDate &&
+        password.length >= 6 &&
+        password === confirmPass &&
+        selectedRoles.length > 0;
+
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
-        
-        if (!name.trim() || !email.trim() || !password || !confirmPass || !whatsapp.trim() || !birthDate) {
-            setErrorMsg("Todos os campos são obrigatórios.");
-            return;
-        }
-
-        if (selectedRoles.length === 0) {
-            setErrorMsg("Selecione pelo menos uma função/cargo.");
-            return;
-        }
-        
-        if (password !== confirmPass) {
-            setErrorMsg("As senhas não coincidem.");
-            return;
-        }
-        
-        if (password.length < 6) {
-            setErrorMsg("A senha deve ter no mínimo 6 caracteres.");
-            return;
+        setRolesTouched(true);
+        if (!isValid) {
+            if (!name.trim() || !email.trim() || !password || !confirmPass || !whatsapp.trim() || !birthDate) {
+                setErrorMsg("Todos os campos são obrigatórios.");
+                return;
+            }
+            if (selectedRoles.length === 0) {
+                setErrorMsg("Selecione pelo menos uma função/cargo.");
+                return;
+            }
+            if (password !== confirmPass) {
+                setErrorMsg("As senhas não coincidem.");
+                return;
+            }
+            if (password.length < 6) {
+                setErrorMsg("A senha deve ter no mínimo 6 caracteres.");
+                return;
+            }
         }
 
         setRegistering(true);
@@ -255,27 +300,20 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                                 <div className="text-center py-4"><Loader2 className="animate-spin text-zinc-500 mx-auto" size={20}/></div>
                             ) : availableRoles.length > 0 ? (
                                 <div className="flex flex-wrap gap-2">
-                                    {availableRoles.map(role => {
-                                        const isSelected = selectedRoles.includes(role);
-                                        return (
-                                            <button
-                                                key={role}
-                                                type="button"
-                                                onClick={() => toggleRole(role)}
-                                                className={`px-3 py-2 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5 ${
-                                                    isSelected 
-                                                    ? 'bg-teal-600 text-white border-teal-500 shadow-md ring-1 ring-teal-500/50' 
-                                                    : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:border-zinc-600'
-                                                }`}
-                                            >
-                                                {role}
-                                                {isSelected && <Check size={12} />}
-                                            </button>
-                                        );
-                                    })}
+                                    {availableRoles.map(role => (
+                                        <RoleCheckbox
+                                            key={role}
+                                            label={role}
+                                            checked={selectedRoles.includes(role)}
+                                            onChange={() => toggleRole(role)}
+                                        />
+                                    ))}
                                 </div>
                             ) : (
-                                <p className="text-xs text-zinc-500 italic">Nenhuma função específica disponível. Você entrará como membro padrão.</p>
+                                <div className="text-xs text-zinc-500 italic">Nenhuma função cadastrada neste ministério.</div>
+                            )}
+                            {selectedRoles.length === 0 && rolesTouched && (
+                                <span className="text-xs text-red-400 mt-2 block">* Selecione pelo menos uma função</span>
                             )}
                         </div>
 
@@ -312,7 +350,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
 
                     <button 
                         type="submit" 
-                        disabled={registering}
+                        disabled={registering || !isValid}
                         className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-teal-600/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 mt-2"
                     >
                         {registering ? <Loader2 className="animate-spin" size={18}/> : <span className="flex items-center gap-2">Finalizar Cadastro <ArrowRight size={16}/></span>}
