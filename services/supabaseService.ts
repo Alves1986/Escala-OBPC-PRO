@@ -849,7 +849,13 @@ export const createInviteToken = async (ministryId: string, orgId: string, label
     const token = crypto.randomUUID();
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
-    const { error } = await sb.from('invite_tokens').insert({ token, organization_id: orgId, ministry_id: ministryId, expires_at: expiresAt.toISOString(), ministry_label: label });
+    // NOTE: label kept in signature for backward compatibility, but invite_tokens does not store ministry_label.
+    const { error } = await sb.from('invite_tokens').insert({
+        token,
+        organization_id: orgId,
+        ministry_id: ministryId,
+        expires_at: expiresAt.toISOString()
+    });
     if (error) return { success: false, message: error.message };
     const url = `${window.location.origin}?invite=${token}`;
     return { success: true, url };
@@ -858,15 +864,22 @@ export const createInviteToken = async (ministryId: string, orgId: string, label
 export const validateInviteToken = async (token: string) => {
     const sb = getSupabase();
     if (!sb) return { valid: false };
-    const { data, error } = await sb.from('invite_tokens').select('*, organization_ministries(label)').eq('token', token).gt('expires_at', new Date().toISOString()).maybeSingle();
+    const { data, error } = await sb.from('invite_tokens')
+        .select('id, token, organization_id, ministry_id, created_at, expires_at, created_by, organization_ministries(label)')
+        .eq('token', token)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
     if (error || !data) return { valid: false, message: "Convite inválido." };
-    return { valid: true, data: { ministryId: data.ministry_id, orgId: data.organization_id, ministryLabel: data.organization_ministries?.label || data.ministry_label } };
+    return { valid: true, data: { ministryId: data.ministry_id, orgId: data.organization_id, ministryLabel: data.organization_ministries?.label || 'Ministério' } };
 };
 
 export const registerWithInvite = async (token: string, userData: any) => {
     const sb = getSupabase();
     if (!sb) return { success: false };
-    const { data: invite } = await sb.from('invite_tokens').select('*').eq('token', token).single();
+    const { data: invite } = await sb.from('invite_tokens')
+        .select('id, token, organization_id, ministry_id, created_at, expires_at, created_by')
+        .eq('token', token)
+        .single();
     if (!invite) return { success: false, message: "Convite inválido" };
     
     const { data: authData, error: authError } = await (sb.auth as any).signUp({
