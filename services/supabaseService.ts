@@ -263,7 +263,7 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
     if (intError) {
         console.error("ANN INTERACTIONS FETCH ERROR", intError);
     } else {
-        console.log("ANN INTERACTIONS RAW", interactions);
+        // console.log("ANN INTERACTIONS RAW", interactions);
     }
 
     // 3. Map in memory
@@ -356,13 +356,19 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
         }
 
         if (existing) {
-            // Remove
-            const { error: delError } = await sb.from('announcement_interactions').delete().eq('id', existing.id);
+            // Remove (RLS SAFE DELETE)
+            const { error: delError } = await sb.from('announcement_interactions')
+                .delete()
+                .eq('id', existing.id)
+                .eq('organization_id', orgId)
+                .eq('user_id', userId)
+                .eq('interaction_type', 'like');
+
             if (delError) {
                 console.error("ANN LIKE REMOVE ERROR", delError);
                 throw delError;
             }
-            console.log("ANN LIKE REMOVED");
+            console.log("ANN WRITE RESULT", { action: 'unlike', success: true });
         } else {
             // Insert
             const { error: insertError } = await sb.from('announcement_interactions').insert({
@@ -377,7 +383,7 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
                 console.error("ANN LIKE INSERT ERROR", insertError);
                 throw insertError;
             }
-            console.log("ANN LIKE INSERTED");
+            console.log("ANN WRITE RESULT", { action: 'like', success: true });
         }
     } else {
         // Read (Upsert)
@@ -395,7 +401,7 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
             console.error("ANN READ UPSERT ERROR", upsertError);
             throw upsertError;
         }
-        console.log("ANN READ UPSERTED");
+        console.log("ANN WRITE RESULT", { action: 'read', success: true });
     }
 };
 

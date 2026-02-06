@@ -498,7 +498,7 @@ const InnerApp = () => {
                                 await refreshData(); 
                             } catch (error: any) {
                                 const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
-                                console.error("Erro ao persistir escala:", errorMsg);
+                                console.error("Erro ao salvar escala:", errorMsg);
                                 addToast("Erro ao salvar: " + errorMsg, "error");
                             }
                         }} 
@@ -543,7 +543,22 @@ const InnerApp = () => {
             {(currentTab === 'repertoire' && safeEnabledTabs.includes('repertoire')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={user} mode="view" ministryId={ministryId} />}
             {(currentTab === 'repertoire-manager' && isAdmin && safeEnabledTabs.includes('repertoire-manager')) && <RepertoireScreen repertoire={repertoire} setRepertoire={async () => { refreshData(); }} currentUser={user} mode="manage" ministryId={ministryId} />}
             
-            {currentTab === 'announcements' && safeEnabledTabs.includes('announcements') && <AnnouncementsScreen announcements={announcements} currentUser={user} onMarkRead={(id) => Supabase.interactAnnouncementSQL(id, user.id!, user.name, 'read', orgId!).then(refreshData)} onToggleLike={(id) => Supabase.interactAnnouncementSQL(id, user.id!, user.name, 'like', orgId!).then(refreshData)} />}
+            {currentTab === 'announcements' && safeEnabledTabs.includes('announcements') && (
+                <AnnouncementsScreen 
+                    announcements={announcements} 
+                    currentUser={user} 
+                    onMarkRead={async (id) => {
+                        await Supabase.interactAnnouncementSQL(id, user.id!, user.name, 'read', orgId!);
+                        await queryClient.invalidateQueries({ queryKey: ['announcements'] });
+                        await refreshData();
+                    }} 
+                    onToggleLike={async (id) => {
+                        await Supabase.interactAnnouncementSQL(id, user.id!, user.name, 'like', orgId!);
+                        await queryClient.invalidateQueries({ queryKey: ['announcements'] });
+                        await refreshData();
+                    }} 
+                />
+            )}
             {currentTab === 'profile' && <ProfileScreen user={user} onUpdateProfile={async (name, whatsapp, avatar, funcs, bdate) => { await Supabase.updateUserProfile(name, whatsapp, avatar, funcs, bdate, ministryId, orgId!); refreshData(); }} availableRoles={roles} />}
             {currentTab === 'settings' && safeEnabledTabs.includes('settings') && <SettingsScreen initialTitle={ministryTitle} ministryId={ministryId} themeMode={themeMode} onSetThemeMode={(m) => useAppStore.getState().setThemeMode(m)} onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, orgId!, newTitle); refreshData(); }} onSaveAvailabilityWindow={async (start, end) => { await Supabase.saveMinistrySettings(ministryId, orgId!, undefined, undefined, start, end); refreshData(); }} availabilityWindow={availabilityWindow} isAdmin={isAdmin} orgId={orgId!} />}
             {currentTab === 'members' && isAdmin && safeEnabledTabs.includes('members') && <MembersScreen members={publicMembers} onlineUsers={onlineUsers} currentUser={user} availableRoles={roles} onToggleAdmin={async (email, currentStatus, name) => { await Supabase.toggleAdminSQL(email, !currentStatus, ministryId, orgId!); refreshData(); }} onRemoveMember={async (id, name) => { await Supabase.deleteMember(ministryId, orgId!, id, name); refreshData(); }} onUpdateMember={async (id, data) => { await Supabase.updateMemberData(id, orgId!, data); refreshData(); }} />}
