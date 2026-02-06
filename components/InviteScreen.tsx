@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowRight, CheckCircle2, UserPlus, AlertOctagon, Loader2, Mail, Lock, Phone, User, Calendar, Briefcase, Building2, Check } from 'lucide-react';
-import { validateInviteToken, registerWithInvite, fetchMinistrySettings } from '../services/supabaseService';
+import { validateInviteToken, registerWithInvite, getSupabase } from '../services/supabaseService';
 
 interface Props {
     token: string;
@@ -49,19 +49,30 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                     console.warn("Não foi possível limpar a URL", e);
                 }
                 
-                // Buscar dados do Ministério e Funções
-                if (res.data?.ministryId && res.data?.orgId) {
+                // CORREÇÃO 1: Buscar dados do Ministério e Funções diretamente da tabela correta
+                if (res.data?.ministryId) {
                     setLoadingRoles(true);
                     try {
-                        const settings = await fetchMinistrySettings(res.data.ministryId, res.data.orgId);
-                        
-                        console.log("INVITE MINISTRY SETTINGS", settings);
-                        
-                        if (settings) {
-                            setMinistryName(settings.displayName || "Ministério");
-                            setAvailableRoles(settings.roles || []);
-                        } else {
-                            setMinistryName("Ministério");
+                        const sb = getSupabase();
+                        if (sb) {
+                            const { data: ministry, error } = await sb
+                                .from('organization_ministries')
+                                .select('id, label, roles')
+                                .eq('id', res.data.ministryId)
+                                .maybeSingle();
+
+                            console.log('INVITE MINISTRY RAW', ministry);
+
+                            if (ministry) {
+                                setMinistryName(ministry.label);
+                                
+                                // CORREÇÃO 2: Tratamento defensivo do campo roles (JSONB)
+                                const roles = Array.isArray(ministry.roles) ? ministry.roles : [];
+                                console.log('INVITE ROLES LOADED', roles);
+                                setAvailableRoles(roles);
+                            } else {
+                                setMinistryName("Ministério");
+                            }
                         }
                     } catch (e) {
                         console.error("Failed to load roles", e);
@@ -85,8 +96,10 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
             newRoles = [...selectedRoles, role];
         }
         setSelectedRoles(newRoles);
+        console.log('INVITE ROLES SELECTED', newRoles);
     };
 
+    // CORREÇÃO 4: Validação Obrigatória
     const isFormValid = 
         name.trim().length > 0 &&
         email.trim().length > 0 &&
@@ -287,7 +300,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                                 </div>
                             ) : (
                                 <div className="text-center p-4">
-                                    <p className="text-xs text-zinc-500 italic mb-2">Nenhuma função específica disponível.</p>
+                                    <p className="text-xs text-zinc-500 italic mb-2">Nenhuma função específica disponível neste ministério.</p>
                                     <button
                                         type="button"
                                         onClick={() => toggleRole("Membro")}
