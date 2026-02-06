@@ -865,6 +865,8 @@ export const createInviteToken = async (ministryId: string, orgId: string, label
 
     const { data, error } = await sb.from('invite_tokens').insert(payload).select();
     
+    console.log("INVITE INSERT RESULT", { data, error });
+
     if (error) return { success: false, message: error.message };
     const url = `${window.location.origin}?invite=${token}`;
     return { success: true, url };
@@ -876,14 +878,7 @@ export const validateInviteToken = async (token: string) => {
 
     const now = new Date().toISOString();
 
-    // Query 1: Debug (Requested)
-    const debug = await sb
-        .from('invite_tokens')
-        .select('token, used, expires_at')
-        .eq('token', token);
-    console.log("INVITE DEBUG ROW", debug.data);
-
-    // Query 2: Validation (Requested)
+    // Query de validação corrigida
     const { data, error } = await sb
         .from('invite_tokens')
         .select('*')
@@ -895,41 +890,65 @@ export const validateInviteToken = async (token: string) => {
     console.log("INVITE VALIDATION RESULT", { data, error });
 
     if (error || !data) {
-        return { valid: false, message: "Convite inválido ou expirado." };
+        return { valid: false, message: "Convite inválido, expirado ou já utilizado." };
     }
 
-    // Return structure expected by InviteScreen
-    return {
-        valid: true,
-        data: {
-            ministryId: data.ministry_id,
-            orgId: data.organization_id,
-            ministryLabel: "Ministério" // Fallback since we can't join or read column
-        }
+    return { 
+        valid: true, 
+        data: { 
+            ministryId: data.ministry_id, 
+            orgId: data.organization_id, 
+            token: data.token
+        } 
     };
 };
 
 export const registerWithInvite = async (token: string, userData: any) => {
     const sb = getSupabase();
     if (!sb) return { success: false };
-    const { data: invite } = await sb.from('invite_tokens').select('*').eq('token', token).single();
-    if (!invite) return { success: false, message: "Convite inválido" };
     
+    // Valida novamente antes de criar
+    const { data: invite } = await sb.from('invite_tokens')
+        .select('*')
+        .eq('token', token)
+        .eq('used', false)
+        .single();
+
+    if (!invite) return { success: false, message: "Convite inválido ou já usado" };
+    
+    // Cria o usuário
     const { data: authData, error: authError } = await (sb.auth as any).signUp({
         email: userData.email, password: userData.password,
         options: { data: { full_name: userData.name, ministry_id: invite.ministry_id, organization_id: invite.organization_id } }
     });
+
     if (authError) return { success: false, message: authError.message };
     const userId = authData.user?.id;
-    if (!userId) return { success: false, message: "Erro user" };
+    if (!userId) return { success: false, message: "Erro ao criar usuário" };
 
+    // Atualiza Profile
     await sb.from('profiles').update({ 
-        name: userData.name, whatsapp: userData.whatsapp, birth_date: userData.birthDate,
-        organization_id: invite.organization_id, ministry_id: invite.ministry_id, allowed_ministries: [invite.ministry_id] 
+        name: userData.name, 
+        whatsapp: userData.whatsapp, 
+        birth_date: userData.birthDate,
+        organization_id: invite.organization_id, 
+        ministry_id: invite.ministry_id, 
+        allowed_ministries: [invite.ministry_id],
+        is_admin: false, // Garante que não é admin
+        is_super_admin: false
     }).eq('id', userId);
 
+    // Cria Membership com Role 'member' e Funções selecionadas
     await sb.from('organization_memberships').insert({
-        organization_id: invite.organization_id, profile_id: userId, ministry_id: invite.ministry_id, role: 'member', functions: userData.roles
+        organization_id: invite.organization_id, 
+        profile_id: userId, 
+        ministry_id: invite.ministry_id, 
+        role: 'member', // Garante role member
+        functions: userData.roles || []
     });
+
+    // Marca o token como usado
+    await sb.from('invite_tokens').update({ used: true }).eq('token', token);
+
     return { success: true };
 };

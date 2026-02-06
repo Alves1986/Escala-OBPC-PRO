@@ -31,7 +31,6 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
     const [registering, setRegistering] = useState(false);
 
     useEffect(() => {
-        // LOG SOLICITADO
         console.log("INVITE TOKEN RECEIVED", token);
 
         const check = async () => {
@@ -50,7 +49,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                     console.warn("Não foi possível limpar a URL", e);
                 }
                 
-                // Fetch available roles and details for this ministry
+                // Buscar dados do Ministério e Funções
                 if (res.data?.ministryId && res.data?.orgId) {
                     setLoadingRoles(true);
                     try {
@@ -59,12 +58,10 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                         console.log("INVITE MINISTRY SETTINGS", settings);
                         
                         if (settings) {
-                            setMinistryName(settings.displayName || res.data.ministryLabel);
+                            setMinistryName(settings.displayName || "Ministério");
                             setAvailableRoles(settings.roles || []);
-                            console.log("INVITE ROLES LOADED", settings.roles);
                         } else {
-                            // Fallback se não houver settings específicas, usa o label do token
-                            setMinistryName(res.data.ministryLabel);
+                            setMinistryName("Ministério");
                         }
                     } catch (e) {
                         console.error("Failed to load roles", e);
@@ -88,30 +85,22 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
             newRoles = [...selectedRoles, role];
         }
         setSelectedRoles(newRoles);
-        console.log("SELECTED ROLES", newRoles);
     };
+
+    const isFormValid = 
+        name.trim().length > 0 &&
+        email.trim().length > 0 &&
+        password.length >= 6 &&
+        password === confirmPass &&
+        whatsapp.trim().length > 0 &&
+        birthDate.length > 0 &&
+        selectedRoles.length > 0;
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
         
-        // Validação Obrigatória
-        if (!name.trim() || !email.trim() || !password || !confirmPass || !whatsapp.trim() || !birthDate) {
-            setErrorMsg("Todos os campos são obrigatórios.");
-            return;
-        }
-
-        if (selectedRoles.length === 0) {
-            setErrorMsg("Selecione pelo menos uma função/cargo.");
-            return;
-        }
-        
-        if (password !== confirmPass) {
-            setErrorMsg("As senhas não coincidem.");
-            return;
-        }
-        
-        if (password.length < 6) {
-            setErrorMsg("A senha deve ter no mínimo 6 caracteres.");
+        if (!isFormValid) {
+            setErrorMsg("Preencha todos os campos e selecione ao menos uma função.");
             return;
         }
 
@@ -200,7 +189,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                         <div className="flex items-center gap-2">
                             <Building2 size={16} className="text-teal-500"/>
                             <span className="text-white text-sm font-bold">
-                                Você está entrando em: <span className="text-teal-400">{ministryName || inviteData.ministryLabel}</span>
+                                Você está entrando em: <span className="text-teal-400">{ministryName}</span>
                             </span>
                         </div>
                     </div>
@@ -209,7 +198,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                 <form onSubmit={handleRegister} className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="md:col-span-2">
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1 mb-1 block">Nome Completo</label>
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1 mb-1 block">Nome Completo *</label>
                             <div className="relative">
                                 <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"/>
                                 <input 
@@ -218,12 +207,13 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                                     onChange={e => setName(e.target.value)} 
                                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-4 py-3 text-white outline-none focus:ring-1 focus:ring-teal-500 text-sm" 
                                     placeholder="Seu nome"
+                                    required
                                 />
                             </div>
                         </div>
 
                         <div className="md:col-span-2">
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1 mb-1 block">E-mail (Login)</label>
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1 mb-1 block">E-mail (Login) *</label>
                             <div className="relative">
                                 <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"/>
                                 <input 
@@ -232,12 +222,13 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                                     onChange={e => setEmail(e.target.value)} 
                                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-4 py-3 text-white outline-none focus:ring-1 focus:ring-teal-500 text-sm" 
                                     placeholder="seu@email.com"
+                                    required
                                 />
                             </div>
                         </div>
 
                         <div>
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1 mb-1 block">WhatsApp</label>
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1 mb-1 block">WhatsApp *</label>
                             <div className="relative">
                                 <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"/>
                                 <input 
@@ -246,12 +237,13 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                                     onChange={e => setWhatsapp(e.target.value)} 
                                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-4 py-3 text-white outline-none focus:ring-1 focus:ring-teal-500 text-sm" 
                                     placeholder="(00) 00000-0000"
+                                    required
                                 />
                             </div>
                         </div>
 
                         <div>
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1 mb-1 block">Nascimento</label>
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1 mb-1 block">Nascimento *</label>
                             <div className="relative">
                                 <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"/>
                                 <input 
@@ -259,6 +251,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                                     value={birthDate} 
                                     onChange={e => setBirthDate(e.target.value)} 
                                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-4 py-3 text-white outline-none focus:ring-1 focus:ring-teal-500 text-sm" 
+                                    required
                                 />
                             </div>
                         </div>
@@ -312,7 +305,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                         </div>
 
                         <div>
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1 mb-1 block">Criar Senha</label>
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1 mb-1 block">Criar Senha *</label>
                             <div className="relative">
                                 <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"/>
                                 <input 
@@ -320,13 +313,14 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                                     value={password} 
                                     onChange={e => setPassword(e.target.value)} 
                                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-4 py-3 text-white outline-none focus:ring-1 focus:ring-teal-500 text-sm" 
-                                    placeholder="••••••••"
+                                    placeholder="Mínimo 6 caracteres"
+                                    required
                                 />
                             </div>
                         </div>
 
                         <div>
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1 mb-1 block">Confirmar Senha</label>
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1 mb-1 block">Confirmar Senha *</label>
                             <div className="relative">
                                 <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"/>
                                 <input 
@@ -334,7 +328,8 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                                     value={confirmPass} 
                                     onChange={e => setConfirmPass(e.target.value)} 
                                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-4 py-3 text-white outline-none focus:ring-1 focus:ring-teal-500 text-sm" 
-                                    placeholder="••••••••"
+                                    placeholder="Repita a senha"
+                                    required
                                 />
                             </div>
                         </div>
@@ -344,8 +339,8 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
 
                     <button 
                         type="submit" 
-                        disabled={registering}
-                        className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-teal-600/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 mt-2"
+                        disabled={registering || !isFormValid}
+                        className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-teal-600/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
                     >
                         {registering ? <Loader2 className="animate-spin" size={18}/> : <span className="flex items-center gap-2">Finalizar Cadastro <ArrowRight size={16}/></span>}
                     </button>
