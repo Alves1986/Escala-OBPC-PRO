@@ -307,10 +307,12 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
         .eq('organization_id', orgId)
         .maybeSingle();
     
-    // CORREÇÃO CRÍTICA: Throw error ao invés de return silencioso
-    if (!announcement || !announcement.ministry_id) {
-        console.warn('InteractAnnouncement: Ministry ID not found for announcement', id);
-        throw new Error("ANNOUNCEMENT_OR_MINISTRY_NOT_FOUND");
+    if (!announcement) {
+        throw new Error("ANNOUNCEMENT_NOT_FOUND");
+    }
+
+    if (!announcement.ministry_id) {
+        throw new Error("ANNOUNCEMENT_MINISTRY_NOT_FOUND");
     }
 
     const ministryId = announcement.ministry_id;

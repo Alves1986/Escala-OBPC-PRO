@@ -7,7 +7,7 @@ import { getSupabase } from '../services/supabaseService';
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  event: { id?: string; iso: string; title: string; dateDisplay: string } | null;
+  event: { id: string; iso: string; title: string; dateDisplay: string; event_key: string; event_date: string } | null;
   schedule: ScheduleMap;
   roles: Role[];
   allMembers?: TeamMemberProfile[]; // Added to lookup avatars
@@ -41,20 +41,10 @@ export const EventDetailsModal: React.FC<Props> = ({
   useEffect(() => {
     if (isOpen && event && ministryId && currentUser?.organizationId) {
         const fetchAssignments = async () => {
-            const datePart = event.iso.split('T')[0];
             const sb = getSupabase();
             if(!sb) return;
 
-            // Extract Rule ID (Event Key) from the event ID (format: ruleId_date)
-            // Strict Rule: Must have ruleId to identify the service correctly.
-            const ruleId = event.id ? event.id.split('_')[0] : null;
-
-            if (!ruleId) {
-                console.error("EventDetails: Missing ruleId in event ID", event.id);
-                return;
-            }
-
-            let query = sb
+            const { data } = await sb
                 .from('schedule_assignments')
                 .select(`
                     role,
@@ -63,10 +53,8 @@ export const EventDetailsModal: React.FC<Props> = ({
                 `)
                 .eq('organization_id', currentUser.organizationId)
                 .eq('ministry_id', ministryId)
-                .eq('event_date', datePart)
-                .eq('event_key', ruleId); // CORREÇÃO: Filtragem estrita por RuleID
-
-            const { data } = await query;
+                .eq('event_date', event.event_date)
+                .eq('event_key', event.event_key);
             
             const grouped: Record<string, any[]> = {};
             if (data) {

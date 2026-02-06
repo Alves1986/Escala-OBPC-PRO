@@ -83,6 +83,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
           query.queryKey[0] === 'assignments' ||
           query.queryKey[0] === 'rules' ||
           query.queryKey[0] === 'availability' ||
+          query.queryKey[0] === 'announcements' ||
           query.queryKey[0] === 'nextEvent'
       });
   };

@@ -19,7 +19,7 @@ interface Props {
   onCellChange: (eventId: string, role: string, memberId: string | null, memberName?: string) => void;
   onAttendanceToggle: (key: string) => void;
   onDeleteEvent: (iso: string, title: string) => void;
-  onEditEvent: (event: { iso: string; title: string; dateDisplay: string }) => void; 
+  onEditEvent: (event: { id: string; iso: string; title: string; dateDisplay: string; event_key: string; event_date: string }) => void; 
   memberStats: Record<string, number>;
   ministryId: string | null;
   readOnly?: boolean; 
@@ -34,6 +34,12 @@ const checkIsAvailable = (lookupSet: Set<string>, member: string, eventIso: stri
     if (isMorning && lookupSet.has(`${member}_${datePart}_M`)) return true;
     if (!isMorning && lookupSet.has(`${member}_${datePart}_N`)) return true;
     return false;
+};
+
+const getEventIdentity = (event: { id: string; iso: string }) => {
+    const eventDate = event.iso.slice(0, 10);
+    const eventKey = event.id.includes('_') ? event.id.split('_')[0] : event.id;
+    return { eventDate, eventKey };
 };
 
 // Componente isolado para a lista do dropdown (Renderizado apenas quando aberto)
@@ -299,7 +305,7 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                     </div>
                     {!readOnly && (
                         <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button type="button" onClick={() => onEditEvent(event)} className="text-zinc-400 hover:text-blue-500 p-1"><Edit size={14} /></button>
+                            <button type="button" onClick={() => { const { eventDate, eventKey } = getEventIdentity(event); onEditEvent({ ...event, event_key: eventKey, event_date: eventDate }); }} className="text-zinc-400 hover:text-blue-500 p-1"><Edit size={14} /></button>
                             <button type="button" onClick={() => onDeleteEvent(event.iso, event.title)} className="text-zinc-400 hover:text-red-500 p-1"><Trash2 size={14} /></button>
                         </div>
                     )}
@@ -505,7 +511,7 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                               <span className="flex items-center gap-1"><Clock size={12}/> {event.iso.split('T')[1]}</span>
                           </div>
                       </div>
-                      {!readOnly && <div className="flex gap-1 ml-2"><button type="button" onClick={() => onEditEvent(event)} className="p-2 text-zinc-400 hover:text-blue-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"><Edit size={16}/></button><button type="button" onClick={() => onDeleteEvent(event.iso, event.title)} className="p-2 text-zinc-400 hover:text-red-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"><Trash2 size={16}/></button></div>}
+                      {!readOnly && <div className="flex gap-1 ml-2"><button type="button" onClick={() => { const { eventDate, eventKey } = getEventIdentity(event); onEditEvent({ ...event, event_key: eventKey, event_date: eventDate }); }} className="p-2 text-zinc-400 hover:text-blue-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"><Edit size={16}/></button><button type="button" onClick={() => onDeleteEvent(event.iso, event.title)} className="p-2 text-zinc-400 hover:text-red-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"><Trash2 size={16}/></button></div>}
                   </div>
                   
                   {columns.length === 0 ? (
