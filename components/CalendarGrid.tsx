@@ -1,14 +1,13 @@
-
 import React from 'react';
 import { ScheduleMap, Role } from '../types';
 import { getLocalDateISOString } from '../utils/dateUtils';
 
 interface Props {
   currentMonth: string;
-  events: { iso: string; dateDisplay: string; title: string }[];
+  events: { id: string; iso: string; dateDisplay: string; title: string }[];
   schedule: ScheduleMap;
   roles: Role[];
-  onEventClick?: (event: { iso: string; title: string; dateDisplay: string }) => void;
+  onEventClick?: (event: { id: string; iso: string; title: string; dateDisplay: string }) => void;
 }
 
 export const CalendarGrid: React.FC<Props> = ({ currentMonth, events, schedule, roles, onEventClick }) => {
@@ -24,10 +23,13 @@ export const CalendarGrid: React.FC<Props> = ({ currentMonth, events, schedule, 
     return events.filter(e => e.iso.startsWith(dateStr)).sort((a, b) => a.iso.localeCompare(b.iso));
   };
 
-  const getAssignedStats = (eventIso: string) => {
+  const getAssignedStats = (event: { id: string }) => {
       let assignedCount = 0;
       roles.forEach(r => {
-          if (schedule[`${eventIso}_${r}`]) assignedCount++;
+          // CORREÇÃO CRÍTICA: Usar event.id (ruleId_date) para lookup no schedule
+          // Chave: ruleId_date_role
+          const key = `${event.id}_${r}`;
+          if (schedule[key]) assignedCount++;
       });
       return { 
           count: assignedCount, 
@@ -78,7 +80,7 @@ export const CalendarGrid: React.FC<Props> = ({ currentMonth, events, schedule, 
                 {/* Events Container */}
                 <div className="flex-1 flex flex-col gap-1 overflow-hidden">
                   {dayEvents.map(evt => {
-                    const stats = getAssignedStats(evt.iso);
+                    const stats = getAssignedStats(evt);
                     const time = evt.iso.split('T')[1].slice(0, 5);
                     const statusColor = stats.isFull 
                         ? 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800' 
@@ -88,8 +90,8 @@ export const CalendarGrid: React.FC<Props> = ({ currentMonth, events, schedule, 
 
                     return (
                         <button 
-                            key={evt.iso} 
-                            onClick={() => onEventClick && onEventClick({ iso: evt.iso, title: evt.title, dateDisplay: evt.dateDisplay })}
+                            key={evt.id} // UUID Stable Key (ruleId_date)
+                            onClick={() => onEventClick && onEventClick(evt)}
                             className={`w-full text-left rounded md:rounded-lg p-1 md:px-2 md:py-1.5 border transition-all active:scale-95 group overflow-hidden ${statusColor}`}
                         >
                            {/* Mobile View: Tiny Dot */}

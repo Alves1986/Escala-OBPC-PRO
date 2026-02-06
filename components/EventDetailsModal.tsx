@@ -101,8 +101,9 @@ export const EventDetailsModal: React.FC<Props> = ({
   if (!isOpen || !event) return null;
 
   // Determine if user is scheduled for this event (Legacy check + New DB Check)
-  // Fallback to schedule map if DB fetch not ready or for legacy compat, but UI prefers DB
-  const userAssignment = currentUser ? expandedRoles.find(r => schedule[`${event.iso}_${r.keySuffix}`] === currentUser.name) : null;
+  // Fallback to schedule map uses correct canonical key: ruleId_date_role
+  // event.id IS ruleId_date
+  const userAssignment = currentUser ? expandedRoles.find(r => schedule[`${event.id}_${r.keySuffix}`] === currentUser.name) : null;
 
   const googleCalUrl = generateGoogleCalendarUrl(
       `Escala: ${title}`,
@@ -228,7 +229,9 @@ export const EventDetailsModal: React.FC<Props> = ({
                             const memberAvatar = dbAssignment?.profiles?.avatar_url;
                             
                             // Fallback para Schedule prop se não houver dados no banco (caso de delay ou cache antigo)
-                            const legacyName = schedule[`${event.iso}_${roleObj.keySuffix}`];
+                            // CORREÇÃO CRÍTICA: Fallback usa a chave composta ruleId_date_role
+                            // event.id JÁ É ruleId_date
+                            const legacyName = schedule[`${event.id}_${roleObj.keySuffix}`];
                             const legacyProfile = allMembers.find(m => m.name === legacyName);
 
                             const finalName = memberName || legacyName;
