@@ -836,10 +836,22 @@ export const fetchMinistryAvailability = async (ministryId: string, orgId: strin
     const notes: any = {};
     
     data.forEach((row: any) => {
+        console.log("AVAIL ROW RAW", row.profile_id, row.dates, typeof row.dates);
         const profileId = row.profile_id ?? row.user_id;
         const name = row.profile_name || profileMap.get(profileId);
         if (name) {
-            const rowDates = Array.isArray(row.dates) ? row.dates : [];
+            let rowDates: any[] = [];
+            if (Array.isArray(row.dates)) {
+                rowDates = row.dates;
+            } else if (typeof row.dates === 'string') {
+                try {
+                    const parsed = JSON.parse(row.dates);
+                    rowDates = Array.isArray(parsed) ? parsed : [];
+                } catch (parseError) {
+                    console.error("AVAIL DATES PARSE ERROR", parseError);
+                    rowDates = [];
+                }
+            }
             if (rowDates.length === 0 && row.date) {
                 const period = row.period ? String(row.period) : '';
                 rowDates.push(period && period !== 'FULL' ? `${row.date}_${period}` : row.date);
@@ -853,6 +865,8 @@ export const fetchMinistryAvailability = async (ministryId: string, orgId: strin
                     notes[`${name}_${k}`] = v;
                 });
             }
+        } else {
+            console.warn("AVAIL NAME MISSING FOR PROFILE", profileId);
         }
     });
     
