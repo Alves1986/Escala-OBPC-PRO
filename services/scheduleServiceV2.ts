@@ -199,6 +199,12 @@ export const generateOccurrencesV2 = (
   month: number
 ): OccurrenceV2[] => {
   const occurrences: OccurrenceV2[] = [];
+  const localDateString = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
   const start = new Date(year, month - 1, 1);
   const end = new Date(year, month, 0);
 
@@ -220,7 +226,8 @@ export const generateOccurrencesV2 = (
       const cur = new Date(start);
       while (cur <= end) {
         if (cur.getDay() === rule.weekday) {
-          const dateStr = cur.toISOString().split("T")[0];
+          const dateStr = localDateString(cur);
+          console.log("OCCURRENCE DATE LOCAL", { ruleId: rule.id, cur, dateStr });
           occurrences.push({
             ruleId: rule.id,
             date: dateStr,
