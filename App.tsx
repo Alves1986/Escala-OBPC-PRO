@@ -49,6 +49,7 @@ import { AlertsManager } from './components/AlertsManager';
 import { InstallBanner } from './components/InstallBanner';
 import { InstallModal } from './components/InstallModal';
 import { JoinMinistryModal } from './components/JoinMinistryModal';
+import { Analytics } from '@vercel/analytics/react';
 import { EventsModal, AvailabilityModal, RolesModal, AuditModal } from './components/ManagementModals';
 import { EventDetailsModal } from './components/EventDetailsModal';
 import { StatsModal } from './components/StatsModal';
@@ -590,6 +591,7 @@ const App = () => {
       <SessionProvider>
         <ToastProvider>
           <InnerApp />
+          <Analytics />
         </ToastProvider>
       </SessionProvider>
     </QueryClientProvider>
