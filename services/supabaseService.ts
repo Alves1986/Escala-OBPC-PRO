@@ -272,7 +272,12 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
         .in('announcement_id', announcementIds)
         .eq('organization_id', orgId);
 
-    if (intError) console.error("ANN INTERACTIONS FETCH ERROR", intError);
+    if (intError) {
+        console.log('ANN FETCH INTERACTIONS', 0);
+        throw intError;
+    }
+
+    console.log('ANN FETCH INTERACTIONS', interactions?.length ?? 0);
 
     return announcements.map((a: any) => {
         const myInteractions = interactions ? interactions.filter((i: any) => i.announcement_id === a.id) : [];
@@ -339,12 +344,29 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
         if (checkError) throw checkError;
 
         if (existing) {
+            console.log('ANN LIKE WRITE', {
+                announcement_id: id,
+                user_id: userId,
+                organization_id: orgId,
+                interaction_type: 'like',
+                action: 'delete'
+            });
             const { error: delError } = await sb.from('announcement_interactions')
                 .delete()
-                .eq('id', existing.id)
-                .eq('organization_id', orgId); // Enforce tenant isolation
+                .eq('announcement_id', id)
+                .eq('user_id', userId)
+                .eq('organization_id', orgId)
+                .eq('interaction_type', 'like');
             if (delError) throw delError;
         } else {
+            console.log('ANN LIKE WRITE', {
+                announcement_id: id,
+                user_id: userId,
+                organization_id: orgId,
+                ministry_id: ministryId,
+                interaction_type: 'like',
+                action: 'insert'
+            });
             const { error: insertError } = await sb.from('announcement_interactions').insert({
                 announcement_id: id,
                 user_id: userId,
@@ -355,6 +377,13 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
             if (insertError) throw insertError;
         }
     } else {
+        console.log('ANN READ WRITE', {
+            announcement_id: id,
+            user_id: userId,
+            organization_id: orgId,
+            ministry_id: ministryId,
+            interaction_type: 'read'
+        });
         const { error: upsertError } = await sb.from('announcement_interactions').upsert({
             announcement_id: id,
             user_id: userId,
@@ -362,7 +391,7 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
             ministry_id: ministryId,
             interaction_type: 'read'
         }, {
-            onConflict: 'announcement_id,user_id,interaction_type'
+            onConflict: 'announcement_id,user_id,organization_id,interaction_type'
         });
         if (upsertError) throw upsertError;
     }
