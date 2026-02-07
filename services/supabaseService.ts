@@ -1168,14 +1168,3 @@ export const fetchAuditLogs = async (ministryId: string, orgId: string) => {
         organizationId: l.organization_id
     }));
 };
-
-export { 
-    createEventRule, deleteEventRule, updateMinistryEvent, createMinistryEvent, 
-    deleteMinistryEvent, saveScheduleAssignment, removeScheduleAssignment, toggleAssignmentConfirmation,
-    saveMemberAvailability, createSwapRequestSQL, performSwapSQL, cancelSwapRequestSQL, 
-    updateUserProfile, saveMinistrySettings, toggleAdminSQL, deleteMember, updateMemberData,
-    sendNotificationSQL, createAnnouncementSQL, joinMinistry, markNotificationsReadSQL, clearAllNotificationsSQL,
-    addToRepertoire, deleteFromRepertoire, updateRepertoireItem, updateProfileMinistry, clearScheduleForMonth,
-    fetchMinistryAvailability, fetchNotificationsSQL, fetchSwapRequests, fetchRepertoire,
-    fetchGlobalSchedules, fetchAuditLogs
-};
