@@ -193,7 +193,7 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
         if (ruleId && dateStr) {
             const key = `${ruleId}_${dateStr}_${a.role}`;
             const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
-            const name = profile?.name || a.member_name;
+            const name = profile?.name;
 
             if (name) schedule[key] = name;
             if (a.confirmed) attendance[key] = true;
@@ -740,7 +740,6 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
         event_date: dateStr,
         role: role,
         member_id: memberId,
-        member_name: memberName,
         confirmed: false
     }, { onConflict: 'organization_id,ministry_id,event_key,event_date,role' });
     
@@ -927,7 +926,6 @@ export const performSwapSQL = async (ministryId: string, orgId: string, reqId: s
     if (assignment) {
         await sb.from('schedule_assignments').update({
             member_id: takenById,
-            member_name: takenByName,
             confirmed: false
         }).eq('id', assignment.id);
         
@@ -1188,14 +1186,15 @@ export const fetchGlobalSchedules = async (month: string, ministryId: string, or
     if (!sb) return {};
     
     const { data } = await sb.from('schedule_assignments')
-        .select('ministry_id, event_date, role, member_name')
+        .select('ministry_id, event_date, role, member_id, profiles(name)')
         .eq('organization_id', orgId)
         .neq('ministry_id', ministryId)
         .ilike('event_date', `${month}%`);
         
     const conflicts: any = {};
     data?.forEach((row: any) => {
-        const name = row.member_name?.trim().toLowerCase();
+        const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+        const name = profile?.name?.trim().toLowerCase();
         if (name) {
             if (!conflicts[name]) conflicts[name] = [];
             conflicts[name].push({
