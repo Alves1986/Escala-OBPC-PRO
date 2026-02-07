@@ -810,20 +810,45 @@ export const fetchMinistryAvailability = async (ministryId: string, orgId: strin
     if (!sb) return { availability: {}, notes: {} };
     
     const { data, error } = await sb.from('member_availability')
-        .select('user_id, dates, notes, profiles(name)')
-        .eq('organization_id', orgId);
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('ministry_id', ministryId);
+
+    console.log('AVAIL FETCH org/min rows', orgId, ministryId, data?.length);
         
     if (error) {
         return { availability: {}, notes: {} };
     }
+
+    const profileIds = (data || [])
+        .map((row: any) => row.profile_id ?? row.user_id)
+        .filter(Boolean);
+
+    const { data: profiles } = profileIds.length > 0
+        ? await sb.from('profiles')
+            .select('id, name')
+            .eq('organization_id', orgId)
+            .in('id', profileIds)
+        : { data: [] as any[] };
+
+    const profileMap = new Map((profiles || []).map((p: any) => [p.id, p.name]));
     
     const availability: any = {};
     const notes: any = {};
     
     data.forEach((row: any) => {
-        const name = row.profiles?.name;
+        const profileId = row.profile_id ?? row.user_id;
+        const name = row.profile_name || profileMap.get(profileId);
         if (name) {
-            availability[name] = row.dates || [];
+            const rowDates = Array.isArray(row.dates) ? row.dates : [];
+            if (rowDates.length === 0 && row.date) {
+                const period = row.period ? String(row.period) : '';
+                rowDates.push(period && period !== 'FULL' ? `${row.date}_${period}` : row.date);
+            }
+
+            availability[name] = availability[name]
+                ? Array.from(new Set([...availability[name], ...rowDates]))
+                : rowDates;
             if (row.notes) {
                 Object.entries(row.notes).forEach(([k, v]) => {
                     notes[`${name}_${k}`] = v;
@@ -842,12 +867,17 @@ export const saveMemberAvailability = async (ministryId: string, orgId: string, 
     const { data: profile } = await sb.from('profiles').select('id').eq('organization_id', orgId).eq('name', memberName).single();
     if (!profile) return;
     
-    await sb.from('member_availability').upsert({
+    const payload = {
         organization_id: orgId,
-        user_id: profile.id,
+        ministry_id: ministryId,
+        profile_id: profile.id,
         dates: dates,
         notes: notes
-    }, { onConflict: 'organization_id, user_id' });
+    };
+
+    console.log('AVAIL WRITE payload', payload);
+
+    await sb.from('member_availability').upsert(payload, { onConflict: 'organization_id, ministry_id, profile_id' });
 };
 
 export const fetchSwapRequests = async (ministryId: string, orgId: string) => {

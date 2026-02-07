@@ -27,6 +27,11 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
   const [selectedRole, setSelectedRole] = useState("Todos");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  useEffect(() => {
+    const availabilityCount = Array.isArray(availability) ? availability.length : Object.keys(availability).length;
+    console.log('AVAIL REPORT input', availabilityCount);
+  }, [availability]);
+
   const handleManualRefresh = async () => {
       if (onRefresh) {
           setIsRefreshing(true);
