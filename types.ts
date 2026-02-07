@@ -12,6 +12,12 @@ export interface Organization {
   userCount?: number;
   ministryCount?: number;
   ministries?: MinistryDef[];
+  // Billing & Access Control
+  plan_type?: 'trial' | 'pro' | 'enterprise';
+  billing_status?: 'active' | 'past_due' | 'canceled' | 'trial';
+  trial_ends_at?: string;
+  checkout_url?: string;
+  access_locked?: boolean;
 }
 
 export interface MinistryDef {

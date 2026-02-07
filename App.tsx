@@ -22,7 +22,8 @@ import {
 
 import { LoadingScreen } from './components/LoadingScreen';
 import { LoginScreen } from './components/LoginScreen';
-import { InviteScreen } from './components/InviteScreen'; // Importado
+import { InviteScreen } from './components/InviteScreen'; 
+import { BillingLockScreen, OrganizationInactiveScreen } from './components/LockScreens';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { DashboardLayout } from './components/DashboardLayout';
 import { WeatherWidget } from './components/WeatherWidget';
@@ -60,7 +61,7 @@ const LoadingFallback = () => (
 );
 
 const InnerApp = () => {
-  const { user, status, error: sessionError } = useSession();
+  const { user, status, error: sessionError, organization } = useSession();
   const { 
       setCurrentUser, 
       setMinistryId, 
@@ -72,11 +73,10 @@ const InnerApp = () => {
       isAppReady
   } = useAppStore();
   const { addToast, confirmAction } = useToast();
-  const queryClient = useQueryClient(); // Correctly placed inside InnerApp
+  const queryClient = useQueryClient();
   
   const [currentMonth, setCurrentMonth] = useState(() => getLocalDateISOString().slice(0, 7));
 
-  // --- NEW: Invite Flow Interception ---
   const [inviteToken, setInviteToken] = useState<string | null>(null);
   
   useEffect(() => {
@@ -86,7 +86,6 @@ const InnerApp = () => {
       if (token) setInviteToken(token);
   }, []);
 
-  // --- 1. Session & Global Sync ---
   useEffect(() => {
       if (status === 'ready' && user) {
           setCurrentUser(user);
@@ -111,7 +110,6 @@ const InnerApp = () => {
       }
   }, [status, user]);
 
-  // --- 2. Theme Management ---
   useEffect(() => {
     const root = window.document.documentElement;
     if (themeMode === 'dark' || (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -121,7 +119,6 @@ const InnerApp = () => {
     }
   }, [themeMode]);
 
-  // --- 3. Navigation State ---
   const [currentTab, setCurrentTab] = useState(() => {
       if (typeof window !== 'undefined') {
           const params = new URLSearchParams(window.location.search);
@@ -140,12 +137,10 @@ const InnerApp = () => {
       }
   }, [currentTab]);
 
-  // --- 4. Main App Logic Hooks (Always called) ---
   const ministryId = storeMinistryId || user?.ministryId || '';
   const isAdmin = user?.role === 'admin';
   const orgId = user?.organizationId; 
 
-  // Resolve Ministry Config (Memoized to prevent render loop)
   const ministryConfig = useMemo(() => {
       return availableMinistries.find(m => m.id === ministryId) || { 
           id: ministryId, 
@@ -155,20 +150,18 @@ const InnerApp = () => {
       };
   }, [availableMinistries, ministryId]);
 
-  // Hooks using Data
   const { 
     events, schedule, attendance,
     membersMap, publicMembers, availability,
     availabilityNotes, notifications, announcements, 
     repertoire, swapRequests, globalConflicts, auditLogs, roles, 
-    ministryTitle, availabilityWindow, eventRules, nextEvent, // USE nextEvent
+    ministryTitle, availabilityWindow, eventRules, nextEvent, 
     refreshData, isLoading: loadingData,
     setAvailability, setNotifications 
   } = useMinistryData(ministryId, currentMonth, user);
 
   const onlineUsers = useOnlinePresence(user?.id, user?.name);
 
-  // Modals & UI State
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
@@ -186,7 +179,6 @@ const InnerApp = () => {
       return () => window.removeEventListener('pwa-ready', handlePwaReady);
   }, []);
 
-  // Validate current tab existence
   useEffect(() => {
       const safeEnabledTabs = ministryConfig.enabledTabs || DEFAULT_TABS;
       const isKnownTab = ALL_TABS.includes(currentTab) || currentTab === 'profile';
@@ -197,11 +189,19 @@ const InnerApp = () => {
   }, [currentTab, ministryConfig]);
 
   const handleLogout = () => {
-    confirmAction("Sair", "Deseja realmente sair do sistema?", async () => {
-        await Supabase.logout();
-        setCurrentUser(null);
-        window.location.reload();
-    });
+    // Only confirm if user is actually logged in and active
+    if (status === 'ready') {
+        confirmAction("Sair", "Deseja realmente sair do sistema?", async () => {
+            await Supabase.logout();
+            setCurrentUser(null);
+            window.location.reload();
+        });
+    } else {
+        Supabase.logout().then(() => {
+            setCurrentUser(null);
+            window.location.reload();
+        });
+    }
   };
 
   const handleEnableNotifications = async () => {
@@ -213,7 +213,6 @@ const InnerApp = () => {
       }
   };
 
-  // Define Navigation
   const RAW_MAIN_NAV = [
     { id: 'dashboard', label: 'Início', icon: <LayoutDashboard size={20}/> },
     { id: 'announcements', label: 'Avisos', icon: <Megaphone size={20}/> },
@@ -248,16 +247,14 @@ const InnerApp = () => {
   const MANAGEMENT_NAV = RAW_MANAGEMENT_NAV.filter(item => safeEnabledTabs.includes(item.id));
   const QUICK_ACTIONS = RAW_QUICK_ACTIONS.filter(item => safeEnabledTabs.includes(item.id));
 
-  // --- 5. Conditional Rendering ---
+  // --- Conditional Rendering ---
 
-  // Handle Invite Flow
   if (inviteToken) {
       return (
           <InviteScreen 
               token={inviteToken} 
               onClear={() => {
                   setInviteToken(null);
-                  // Clean URL
                   const url = new URL(window.location.href);
                   url.searchParams.delete('invite');
                   window.history.replaceState({}, '', url.toString());
@@ -266,17 +263,22 @@ const InnerApp = () => {
       );
   }
 
-  // Handle Loading
   if (status === 'authenticating' || status === 'contextualizing' || status === 'idle') {
       return <LoadingScreen />;
   }
 
-  // Handle Unauthenticated
+  if (status === 'locked_inactive') {
+      return <OrganizationInactiveScreen onLogout={handleLogout} />;
+  }
+
+  if (status === 'locked_billing') {
+      return <BillingLockScreen checkoutUrl={organization?.checkout_url} onLogout={handleLogout} />;
+  }
+
   if (status === 'unauthenticated') {
       return <LoginScreen />;
   }
 
-  // Handle Generic Session Errors
   if (status === 'error') {
       return (
           <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950 p-6 text-center animate-fade-in">
@@ -305,7 +307,6 @@ const InnerApp = () => {
       );
   }
 
-  // Ensure user is populated before rendering app
   if (!user || !isAppReady) {
       return <LoadingScreen />;
   }
@@ -360,10 +361,6 @@ const InnerApp = () => {
                     </div>
 
                     <div className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
-                        {/* 
-                           UPDATE: Agora passamos o nextEvent (do banco) diretamente.
-                           Se nextEvent for nulo (sem eventos futuros), o componente tratará.
-                        */}
                         <NextEventCard 
                             event={nextEvent} 
                             schedule={schedule} 
@@ -371,8 +368,6 @@ const InnerApp = () => {
                             roles={roles} 
                             members={publicMembers} 
                             onConfirm={async (key) => {
-                                // key aqui vem como "eventIso_role", precisamos extrair para confirmação
-                                // O ideal seria ter o ID da assignment, mas o fluxo atual usa chave composta
                                 const assignment = Object.entries(schedule).find(([k, v]) => k === key); 
                                 if (nextEvent && nextEvent.event) {
                                     const role = key.split('_').pop() || '';
@@ -489,8 +484,6 @@ const InnerApp = () => {
                         scheduleIssues={{}} 
                         globalConflicts={globalConflicts} 
                         onCellChange={async (cellKey, role, memberId, memberName) => { 
-                            // cellKey IS 'ruleUUID_date' (e.g., '123e4567-e89b..._2023-10-25')
-                            // Check reverse lookup
                             const eventObj = events.find(e => e.id === cellKey);
                             if (!eventObj) {
                                 console.error("[onCellChange] Event not found:", cellKey);
@@ -499,10 +492,8 @@ const InnerApp = () => {
 
                             try {
                                 if (memberId) {
-                                    // Save: Pass full key (RuleUUID_Date)
                                     await Supabase.saveScheduleAssignment(ministryId, orgId!, cellKey, role, memberId, memberName || "");
                                 } else {
-                                    // Remove: construct composite key for removal logic
                                     const logicalKey = `${cellKey}_${role}`;
                                     await Supabase.removeScheduleAssignment(ministryId, orgId!, logicalKey);
                                 }
@@ -538,9 +529,7 @@ const InnerApp = () => {
                     onMonthChange={setCurrentMonth} 
                     currentUser={user} 
                     onSaveAvailability={async (mid, m, d, n, t) => { 
-                        // WRITE
                         await Supabase.saveMemberAvailability(mid, orgId!, m, d, n, t); 
-                        // READ (Sync mandatory)
                         await refreshData(); 
                     }} 
                     availabilityWindow={availabilityWindow} 

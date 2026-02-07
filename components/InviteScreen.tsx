@@ -31,17 +31,13 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
     const [registering, setRegistering] = useState(false);
 
     useEffect(() => {
-        console.log("INVITE TOKEN RECEIVED", token);
-
         const check = async () => {
             const res = await validateInviteToken(token);
-            console.log("INVITE SCREEN DATA", res.data); 
             
             if (res.valid) {
                 setInviteData(res.data);
                 setStatus('valid');
 
-                // --- UX: Limpar URL após validação ---
                 try {
                     const cleanUrl = window.location.origin + window.location.pathname;
                     window.history.replaceState({}, document.title, cleanUrl);
@@ -49,29 +45,39 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                     console.warn("Não foi possível limpar a URL", e);
                 }
                 
-                // CORREÇÃO 1: Buscar dados do Ministério e Funções diretamente da tabela correta
                 if (res.data?.ministryId) {
                     setLoadingRoles(true);
                     try {
                         const sb = getSupabase();
                         if (sb) {
+                            // Get Ministry Details
                             const { data: ministry } = await sb
                                 .from('organization_ministries')
-                                .select('id, label, roles')
+                                .select('id, label')
                                 .eq('id', res.data.ministryId)
                                 .maybeSingle();
 
-                            console.log('INVITE MINISTRY RAW', ministry);
+                            if (ministry) setMinistryName(ministry.label);
+                            else setMinistryName("Ministério");
 
-                            if (ministry) {
-                                setMinistryName(ministry.label);
-                                
-                                // CORREÇÃO 2: Tratamento defensivo do campo roles (JSONB)
-                                const roles = Array.isArray(ministry.roles) ? ministry.roles : [];
-                                console.log('INVITE ROLES LOADED', roles);
-                                setAvailableRoles(roles);
+                            // Get Roles from Settings
+                            const { data: settings } = await sb
+                                .from('ministry_settings')
+                                .select('roles')
+                                .eq('ministry_id', res.data.ministryId)
+                                .eq('organization_id', res.data.orgId)
+                                .maybeSingle();
+
+                            if (settings?.roles && Array.isArray(settings.roles)) {
+                                setAvailableRoles(settings.roles);
                             } else {
-                                setMinistryName("Ministério");
+                                // Fallback to org definition if settings missing
+                                const { data: minDef } = await sb
+                                    .from('organization_ministries')
+                                    .select('roles') // Assuming roles might be here too in some schemas
+                                    .eq('id', res.data.ministryId)
+                                    .maybeSingle();
+                                if (minDef?.roles) setAvailableRoles(minDef.roles);
                             }
                         }
                     } catch (e) {
@@ -96,10 +102,8 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
             newRoles = [...selectedRoles, role];
         }
         setSelectedRoles(newRoles);
-        console.log('INVITE ROLES SELECTED', newRoles);
     };
 
-    // CORREÇÃO 4: Validação Obrigatória
     const isFormValid = 
         name.trim().length > 0 &&
         email.trim().length > 0 &&
@@ -133,7 +137,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
             if (res.success) {
                 setStatus('success');
                 setTimeout(() => {
-                    window.location.href = '/'; // Reload to clear params and init auth
+                    window.location.href = '/'; 
                 }, 2000);
             } else {
                 setErrorMsg(res.message || "Erro ao registrar.");
@@ -301,7 +305,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                             ) : (
                                 <div className="text-center p-4">
                                     <p className="text-xs text-red-400 italic mb-2">Este ministério não possui funções cadastradas.</p>
-                                    <p className="text-[10px] text-zinc-500">Contate o administrador para configurar as funções antes de se cadastrar.</p>
+                                    <p className="text-[10px] text-zinc-500">Contate o administrador para configurar as funções.</p>
                                 </div>
                             )}
                             {selectedRoles.length === 0 && availableRoles.length > 0 && <p className="text-[10px] text-red-400 mt-2 ml-1">* Selecione pelo menos uma função.</p>}

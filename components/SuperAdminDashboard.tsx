@@ -1,10 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
     Building2, Users, Layers, Activity, Plus, Edit2, 
-    ToggleLeft, ToggleRight, Search, Loader2, CheckCircle2, Trash2 
+    ToggleLeft, ToggleRight, Search, Loader2, Trash2, CreditCard, Lock
 } from 'lucide-react';
-import { Organization, MinistryDef } from '../types';
+import { Organization } from '../types';
 import { fetchOrganizationsWithStats, saveOrganization, toggleOrganizationStatus, saveOrganizationMinistry, deleteOrganizationMinistry } from '../services/supabaseService';
 import { useToast } from './Toast';
 
@@ -13,13 +12,11 @@ export const SuperAdminDashboard: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     
-    // Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
-    const [formData, setFormData] = useState({ name: "", slug: "" });
+    const [formData, setFormData] = useState<any>({ name: "", slug: "" });
     const [saving, setSaving] = useState(false);
 
-    // Ministry Management State
     const [newMinistryCode, setNewMinistryCode] = useState("");
     const [newMinistryLabel, setNewMinistryLabel] = useState("");
     const [ministrySaving, setMinistrySaving] = useState(false);
@@ -39,7 +36,15 @@ export const SuperAdminDashboard: React.FC = () => {
 
     const handleEdit = (org: Organization) => {
         setEditingOrg(org);
-        setFormData({ name: org.name, slug: org.slug || "" });
+        setFormData({ 
+            name: org.name, 
+            slug: org.slug || "",
+            plan_type: org.plan_type || 'trial',
+            billing_status: org.billing_status || 'active',
+            trial_ends_at: org.trial_ends_at || '',
+            checkout_url: org.checkout_url || '',
+            access_locked: org.access_locked || false
+        });
         setNewMinistryCode("");
         setNewMinistryLabel("");
         setIsModalOpen(true);
@@ -47,7 +52,7 @@ export const SuperAdminDashboard: React.FC = () => {
 
     const handleCreate = () => {
         setEditingOrg(null);
-        setFormData({ name: "", slug: "" });
+        setFormData({ name: "", slug: "", plan_type: 'trial', billing_status: 'trial' });
         setIsModalOpen(true);
     };
 
@@ -56,11 +61,11 @@ export const SuperAdminDashboard: React.FC = () => {
         if (!formData.name) return addToast("Nome é obrigatório", "error");
 
         setSaving(true);
-        const res = await saveOrganization(editingOrg?.id || null, formData.name, formData.slug);
+        const res = await saveOrganization(editingOrg?.id || null, formData.name, formData.slug, formData);
         
         if (res.success) {
             addToast(res.message, "success");
-            if(!editingOrg) setIsModalOpen(false); // Only close if creating new, stay open to manage ministries if editing
+            if(!editingOrg) setIsModalOpen(false); 
             loadData();
         } else {
             addToast(res.message, "error");
@@ -78,10 +83,8 @@ export const SuperAdminDashboard: React.FC = () => {
             addToast(res.message, "success");
             setNewMinistryCode("");
             setNewMinistryLabel("");
-            // Reload orgs to update list inside modal
             const data = await fetchOrganizationsWithStats();
             setOrganizations(data);
-            // Update current editingOrg reference
             const updatedOrg = data.find(o => o.id === editingOrg.id);
             if (updatedOrg) setEditingOrg(updatedOrg);
         } else {
@@ -108,13 +111,12 @@ export const SuperAdminDashboard: React.FC = () => {
 
     const handleToggleStatus = async (org: Organization) => {
         const newStatus = !org.active;
-        // Optimistic update
         setOrganizations(prev => prev.map(o => o.id === org.id ? { ...o, active: newStatus } : o));
         
-        const success = await toggleOrganizationStatus(org.id, org.active || false);
+        const success = await toggleOrganizationStatus(org.id, newStatus);
         if (!success) {
             addToast("Erro ao atualizar status", "error");
-            loadData(); // Revert
+            loadData();
         }
     };
 
@@ -140,7 +142,6 @@ export const SuperAdminDashboard: React.FC = () => {
                 </button>
             </div>
 
-            {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex items-center gap-4">
                     <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg text-purple-600">
@@ -175,7 +176,6 @@ export const SuperAdminDashboard: React.FC = () => {
                 </div>
             </div>
 
-            {/* List */}
             <div className="bg-white dark:bg-zinc-800 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-sm overflow-hidden">
                 <div className="p-4 border-b border-zinc-100 dark:border-zinc-700 flex gap-3">
                     <div className="relative flex-1">
@@ -203,9 +203,9 @@ export const SuperAdminDashboard: React.FC = () => {
                                 <tr>
                                     <th className="px-6 py-3">Nome / Slug</th>
                                     <th className="px-6 py-3 text-center">Status</th>
+                                    <th className="px-6 py-3 text-center">Plano</th>
                                     <th className="px-6 py-3 text-center">Usuários</th>
                                     <th className="px-6 py-3 text-center">Ministérios</th>
-                                    <th className="px-6 py-3 text-center">Criado em</th>
                                     <th className="px-6 py-3 text-right">Ações</th>
                                 </tr>
                             </thead>
@@ -223,6 +223,11 @@ export const SuperAdminDashboard: React.FC = () => {
                                             </button>
                                         </td>
                                         <td className="px-6 py-4 text-center">
+                                            <span className={`text-[10px] font-black uppercase px-2 py-1 rounded ${org.plan_type === 'pro' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'}`}>
+                                                {org.plan_type || 'Trial'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
                                             <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-2 py-1 rounded text-xs font-bold flex items-center justify-center gap-1 w-fit mx-auto">
                                                 <Users size={12}/> {org.userCount || 0}
                                             </span>
@@ -231,9 +236,6 @@ export const SuperAdminDashboard: React.FC = () => {
                                             <span className="bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 px-2 py-1 rounded text-xs font-bold flex items-center justify-center gap-1 w-fit mx-auto">
                                                 <Layers size={12}/> {org.ministryCount || 0}
                                             </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-center text-zinc-500 text-xs">
-                                            {org.createdAt ? new Date(org.createdAt).toLocaleDateString() : '-'}
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <button 
@@ -251,7 +253,6 @@ export const SuperAdminDashboard: React.FC = () => {
                 )}
             </div>
 
-            {/* Edit / Create Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
                     <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-2xl w-full max-w-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden flex flex-col max-h-[90vh]">
@@ -263,7 +264,6 @@ export const SuperAdminDashboard: React.FC = () => {
                         </div>
                         
                         <div className="p-6 overflow-y-auto custom-scrollbar space-y-6">
-                            {/* Org Form */}
                             <form onSubmit={handleSave} className="space-y-4">
                                 <div>
                                     <label className="text-xs font-bold text-zinc-500 uppercase block mb-1">Nome da Organização</label>
@@ -275,15 +275,85 @@ export const SuperAdminDashboard: React.FC = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-1">Slug (URL amigável)</label>
+                                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-1">Slug</label>
                                     <input 
                                         value={formData.slug}
                                         onChange={e => setFormData({...formData, slug: e.target.value.toLowerCase().replace(/\s+/g, '-')})}
                                         className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 outline-none focus:ring-2 focus:ring-purple-500 text-zinc-800 dark:text-white"
-                                        placeholder="ex: igreja-central"
                                     />
                                 </div>
-                                <div className="flex justify-end">
+
+                                <div className="border-t border-zinc-200 dark:border-zinc-700 pt-4">
+                                    <h4 className="font-bold text-zinc-800 dark:text-white mb-4 flex items-center gap-2 text-sm uppercase">
+                                        <CreditCard size={14}/> Assinatura & Controle
+                                    </h4>
+                                    
+                                    <div className="grid grid-cols-2 gap-4 mb-4">
+                                        <div>
+                                            <label className="text-[10px] font-bold text-zinc-500 uppercase block mb-1">Plano</label>
+                                            <select 
+                                                value={formData.plan_type}
+                                                onChange={e => setFormData({...formData, plan_type: e.target.value})}
+                                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm outline-none"
+                                            >
+                                                <option value="trial">Trial</option>
+                                                <option value="pro">Pro</option>
+                                                <option value="enterprise">Enterprise</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-zinc-500 uppercase block mb-1">Status Pagamento</label>
+                                            <select 
+                                                value={formData.billing_status}
+                                                onChange={e => setFormData({...formData, billing_status: e.target.value})}
+                                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm outline-none"
+                                            >
+                                                <option value="active">Ativo</option>
+                                                <option value="trial">Em Teste</option>
+                                                <option value="past_due">Atrasado</option>
+                                                <option value="canceled">Cancelado</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="mb-4">
+                                        <label className="text-[10px] font-bold text-zinc-500 uppercase block mb-1">Fim do Trial (Data)</label>
+                                        <input 
+                                            type="datetime-local"
+                                            value={formData.trial_ends_at ? new Date(formData.trial_ends_at).toISOString().slice(0, 16) : ''}
+                                            onChange={e => setFormData({...formData, trial_ends_at: new Date(e.target.value).toISOString()})}
+                                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm outline-none"
+                                        />
+                                    </div>
+
+                                    <div className="mb-4">
+                                        <label className="text-[10px] font-bold text-zinc-500 uppercase block mb-1">Checkout URL (Link Pagamento)</label>
+                                        <input 
+                                            value={formData.checkout_url}
+                                            onChange={e => setFormData({...formData, checkout_url: e.target.value})}
+                                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm outline-none"
+                                            placeholder="https://stripe..."
+                                        />
+                                    </div>
+
+                                    <div 
+                                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${formData.access_locked ? 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-900' : 'bg-zinc-50 border-zinc-200 dark:bg-zinc-900 dark:border-zinc-700'}`}
+                                        onClick={() => setFormData({...formData, access_locked: !formData.access_locked})}
+                                    >
+                                        <div className={formData.access_locked ? 'text-red-500' : 'text-zinc-400'}>
+                                            <Lock size={18}/>
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-sm text-zinc-800 dark:text-zinc-200">Bloquear Acesso</p>
+                                            <p className="text-xs text-zinc-500">Impede login de todos os membros.</p>
+                                        </div>
+                                        <div className="ml-auto">
+                                            {formData.access_locked ? <ToggleRight className="text-red-500" size={20}/> : <ToggleLeft className="text-zinc-400" size={20}/>}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-end pt-4">
                                     <button 
                                         type="submit" 
                                         disabled={saving}
@@ -295,7 +365,6 @@ export const SuperAdminDashboard: React.FC = () => {
                                 </div>
                             </form>
 
-                            {/* Ministry Manager Section (Only for existing Orgs) */}
                             {editingOrg && (
                                 <div className="border-t border-zinc-200 dark:border-zinc-700 pt-6">
                                     <h4 className="font-bold text-zinc-800 dark:text-white mb-4 flex items-center gap-2">

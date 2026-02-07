@@ -4,9 +4,10 @@ import {
     setServiceOrgContext, 
     clearServiceOrgContext,
     fetchUserAllowedMinistries, 
-    fetchUserFunctions 
+    fetchUserFunctions,
+    fetchOrganizationDetails
 } from '../services/supabaseService';
-import { User } from '../types';
+import { User, Organization } from '../types';
 
 type SessionStatus = 
     | 'idle' 
@@ -14,12 +15,15 @@ type SessionStatus =
     | 'contextualizing' 
     | 'ready' 
     | 'unauthenticated' 
-    | 'error';
+    | 'error'
+    | 'locked_inactive'
+    | 'locked_billing';
 
 interface SessionContextValue {
     status: SessionStatus;
     user: User | null;
     error: Error | null;
+    organization: Organization | null;
 }
 
 const SessionContext = createContext<SessionContextValue | undefined>(undefined);
@@ -41,12 +45,10 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) => {
     const [status, setStatus] = useState<SessionStatus>('idle');
     const [user, setUser] = useState<User | null>(null);
+    const [organization, setOrganization] = useState<Organization | null>(null);
     const [error, setError] = useState<Error | null>(null);
     
-    // Guard de execução única para evitar múltiplos bootstraps
     const bootstrappedRef = useRef(false);
-    
-    // Ref para rastrear usuário atual dentro do closure do useEffect
     const userRef = useRef<User | null>(null);
 
     useEffect(() => {
@@ -54,15 +56,12 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
     }, [user]);
 
     useEffect(() => {
-        // 2. Guard: Impede execução duplicada (React 18 Strict Mode)
         if (bootstrappedRef.current) return;
         bootstrappedRef.current = true;
 
         let mounted = true;
         const sb = getSupabase();
 
-        // Alteração: Se não houver cliente, não bloqueia com erro. 
-        // Permite que o App.tsx renderize a LoginScreen (estado 'unauthenticated').
         if (!sb) {
             if (mounted) {
                 console.warn("[SessionProvider] Supabase client missing. Defaulting to unauthenticated to show Login.");
@@ -73,11 +72,7 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
 
         const processSession = async (sessionUser: any) => {
             if (!mounted) return;
-            
-            // Se já estiver em erro, não tentamos processar novamente automaticamente
             if (status === 'error') return;
-
-            // 4. Não permitir múltiplos fetchProfile concorrentes (Checagem de estado)
             if (status === 'contextualizing') return;
 
             const isSameUser = userRef.current?.id === sessionUser.id;
@@ -113,33 +108,78 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                 }
 
                 const orgId = profile.organization_id || '';
-                if (orgId) {
-                    setServiceOrgContext(orgId);
+                if (!orgId) {
+                    throw new Error('ORGANIZATION_ID_MISSING');
                 }
+
+                setServiceOrgContext(orgId);
+
+                // --- ORGANIZATION GUARD CHECK ---
+                const orgDetails = await fetchOrganizationDetails(orgId);
+                setOrganization(orgDetails);
+
+                if (orgDetails) {
+                    // 1. Inactive Check
+                    if (orgDetails.active === false) {
+                        if (mounted) {
+                            setUser({
+                                id: profile.id,
+                                name: profile.name,
+                                email: profile.email,
+                                role: 'member',
+                                organizationId: orgId
+                            } as User);
+                            setStatus('locked_inactive');
+                        }
+                        return;
+                    }
+
+                    // 2. Billing Check
+                    // Super Admins bypass locks to fix billing
+                    if (!profile.is_super_admin) {
+                        const isTrial = orgDetails.plan_type === 'trial';
+                        const trialExpired = isTrial && orgDetails.trial_ends_at && new Date() > new Date(orgDetails.trial_ends_at);
+                        const isLocked = orgDetails.access_locked;
+                        const badStatus = orgDetails.billing_status && !['active', 'trial'].includes(orgDetails.billing_status);
+
+                        if (isLocked || trialExpired || badStatus) {
+                            if (mounted) {
+                                setUser({
+                                    id: profile.id,
+                                    name: profile.name,
+                                    email: profile.email,
+                                    role: 'member',
+                                    organizationId: orgId
+                                } as User);
+                                setStatus('locked_billing');
+                            }
+                            return;
+                        }
+                    }
+                }
+                // --- END GUARD ---
 
                 let allowedMinistries: string[] = [];
                 let functions: string[] = [];
                 let activeMinistry = '';
 
-                if (orgId) {
-                    try {
-                        allowedMinistries = await fetchUserAllowedMinistries(profile.id, orgId);
+                try {
+                    allowedMinistries = await fetchUserAllowedMinistries(profile.id, orgId);
 
-                        const localStored = localStorage.getItem('ministry_id');
-                        if (localStored && UUID_REGEX.test(localStored) && allowedMinistries.includes(localStored)) {
-                            activeMinistry = localStored;
-                        } else if (profile.ministry_id && UUID_REGEX.test(profile.ministry_id) && allowedMinistries.includes(profile.ministry_id)) {
-                            activeMinistry = profile.ministry_id;
-                        } else if (allowedMinistries.length > 0) {
-                            activeMinistry = allowedMinistries[0];
-                        }
-
-                        if (activeMinistry) {
-                            functions = await fetchUserFunctions(profile.id, activeMinistry, orgId);
-                        }
-                    } catch (e) {
-                        console.error("[SessionProvider] Error fetching details (non-critical):", e);
+                    const localStored = localStorage.getItem('ministry_id');
+                    if (localStored && UUID_REGEX.test(localStored) && allowedMinistries.includes(localStored)) {
+                        activeMinistry = localStored;
+                    } else if (profile.ministry_id && UUID_REGEX.test(profile.ministry_id) && allowedMinistries.includes(profile.ministry_id)) {
+                        activeMinistry = profile.ministry_id;
+                    } else if (allowedMinistries.length > 0) {
+                        activeMinistry = allowedMinistries[0];
                     }
+
+                    if (activeMinistry) {
+                        functions = await fetchUserFunctions(profile.id, activeMinistry, orgId);
+                    }
+                } catch (e) {
+                    console.error("[SessionProvider] Error fetching details (non-critical):", e);
                 }
 
                 const authenticatedUser: User = {
@@ -187,7 +227,7 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
             if (sessionError) {
                 if (mounted) {
                     setError(sessionError);
-                    setStatus('error'); // 3. Garantir fluxo de erro
+                    setStatus('error'); 
                 }
                 return;
             }
@@ -227,7 +267,7 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
         };
     }, []);
 
-    const contextValue: SessionContextValue = { status, user, error };
+    const contextValue: SessionContextValue = { status, user, error, organization };
 
     return (
         <SessionContext.Provider value={contextValue}>

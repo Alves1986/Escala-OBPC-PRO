@@ -146,15 +146,13 @@ export const saveAssignmentV2 = async (
   const sb = getSupabase();
   if (!sb) throw new Error("NO_SUPABASE");
 
-  // Garantir que event_key (Rule ID) está sendo usado como identificador
-  
   const { data, error } = await sb
     .from("schedule_assignments")
     .upsert(
       {
         organization_id: orgId,
         ministry_id: ministryId,
-        event_key: payload.event_key, // CRÍTICO: Identifica QUAL culto do dia
+        event_key: payload.event_key,
         event_date: payload.event_date,
         role: payload.role,
         member_id: payload.member_id,
@@ -186,11 +184,19 @@ export const removeAssignmentV2 = async (
     .delete()
     .eq("organization_id", orgId)
     .eq("ministry_id", ministryId)
-    .eq("event_key", key.event_key) // CRÍTICO: Remove apenas deste culto específico
+    .eq("event_key", key.event_key)
     .eq("event_date", key.event_date)
     .eq("role", key.role);
 
   if (error) throw error;
+};
+
+// Helper Local Date (YYYY-MM-DD) sem UTC shift
+const localDateString = (d: Date) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 };
 
 export const generateOccurrencesV2 = (
@@ -199,8 +205,10 @@ export const generateOccurrencesV2 = (
   month: number
 ): OccurrenceV2[] => {
   const occurrences: OccurrenceV2[] = [];
-  const start = new Date(year, month - 1, 1);
-  const end = new Date(year, month, 0);
+  
+  // Noon strategy to avoid DST issues
+  const start = new Date(year, month - 1, 1, 12, 0, 0);
+  const end = new Date(year, month, 0, 12, 0, 0);
 
   for (const rule of rules) {
     if (rule.type === "single" && rule.date) {
@@ -218,9 +226,12 @@ export const generateOccurrencesV2 = (
 
     if (rule.type === "weekly") {
       const cur = new Date(start);
+      // Loop
       while (cur <= end) {
+        // getDay() is local
         if (cur.getDay() === rule.weekday) {
-          const dateStr = cur.toISOString().split("T")[0];
+          const dateStr = localDateString(cur);
+          
           occurrences.push({
             ruleId: rule.id,
             date: dateStr,
@@ -242,26 +253,22 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
   if (!sb) return null;
 
   const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = localDateString(today); 
 
-  // 1. Buscar assignments futuros sem limit 1, para podermos calcular a hora correta
-  // Precisamos de todas as assignments futuras para encontrar a REALMENTE próxima com base na hora da regra
   const { data: assignments, error: assignError } = await sb
       .from('schedule_assignments')
       .select('event_key, event_date')
       .eq('organization_id', orgId)
       .eq('ministry_id', ministryId)
       .gte('event_date', todayStr)
-      .order('event_date', { ascending: true }); // Ordena por data (hora ainda desconhecida)
+      .order('event_date', { ascending: true });
 
   if (assignError || !assignments || assignments.length === 0) {
       return null;
   }
 
-  // 2. Extrair IDs de regras únicos para buscar horários
   const ruleIds = [...new Set(assignments.map((a: any) => a.event_key))];
 
-  // 3. Buscar Regras para obter horários e títulos
   const { data: rules } = await sb
       .from('event_rules')
       .select('id, title, time, type')
@@ -269,10 +276,9 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
 
   const rulesMap = new Map(rules?.map((r: any) => [r.id, r]));
 
-  // 4. Montar objetos completos com DataHora real
   const candidates = assignments.map((a: any) => {
       const rule = rulesMap.get(a.event_key) as any;
-      if (!rule) return null; // Regra deletada ou órfã
+      if (!rule) return null; 
 
       const dateTimeStr = `${a.event_date}T${rule.time}`;
       const eventDateObj = new Date(dateTimeStr);
@@ -285,18 +291,13 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
       };
   })
   .filter((c: any) => c !== null)
-  // Filtra eventos que já passaram HOJE (com tolerância de 2h após início)
   .filter((c: any) => c.dateObj >= new Date(Date.now() - 2 * 60 * 60 * 1000))
-  // Ordena cronologicamente (Data + Hora)
   .sort((a: any, b: any) => a.dateObj.getTime() - b.dateObj.getTime());
 
   if (candidates.length === 0) return null;
 
-  // 5. Selecionar o vencedor (o mais próximo)
   const nextEvent = candidates[0];
 
-  // 6. Buscar Membros DESTE evento específico (RuleID + Date)
-  // ISSO EVITA MISTURAR CULTOS DO MESMO DIA
   const { data: membersData } = await sb
       .from('schedule_assignments')
       .select(`
@@ -307,7 +308,7 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
       `)
       .eq('organization_id', orgId)
       .eq('ministry_id', ministryId)
-      .eq('event_key', nextEvent.assignment.event_key) // Chave do culto específico (Manhã vs Noite)
+      .eq('event_key', nextEvent.assignment.event_key)
       .eq('event_date', nextEvent.assignment.event_date);
 
   const members = (membersData || []).map((m: any) => ({
@@ -316,7 +317,7 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
       name: m.profiles?.name || 'Membro',
       avatarUrl: m.profiles?.avatar_url,
       confirmed: m.confirmed,
-      key: `${nextEvent.iso}_${m.role}` // Chave composta para UI
+      key: `${nextEvent.iso}_${m.role}`
   }));
 
   return {
