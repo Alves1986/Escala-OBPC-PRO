@@ -23,11 +23,20 @@ export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, o
   const likes = announcement.likedBy || [];
   const hasLiked = likes.some(l => l.userId === currentUser.id);
   const likeCount = likes.length;
+  const canToggleLike = typeof onToggleLike === 'function';
 
   const handleRead = async () => {
       setIsReading(true);
       await onMarkRead(announcement.id);
       setIsReading(false);
+  };
+
+  const handleToggleLike = () => {
+      if (!canToggleLike) {
+          console.error('AnnouncementCard: onToggleLike handler ausente.');
+          return;
+      }
+      onToggleLike(announcement.id);
   };
 
   const getTheme = (type: string) => {
@@ -97,7 +106,8 @@ export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, o
                         {/* Botão de Like (Visível para todos) */}
                         <div className="flex items-center gap-1 mr-2">
                             <button
-                                onClick={() => onToggleLike && onToggleLike(announcement.id)}
+                                onClick={handleToggleLike}
+                                disabled={!canToggleLike}
                                 className={`p-2 rounded-full transition-all active:scale-95 flex items-center gap-1 ${
                                     hasLiked 
                                     ? 'text-red-500 bg-red-100 dark:bg-red-900/20' 

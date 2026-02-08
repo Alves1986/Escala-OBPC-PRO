@@ -212,14 +212,16 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       return (rulesQuery.data || []).filter(r => r.type === 'weekly');
   }, [rulesQuery.data]);
 
+  const availabilityData = availabilityQuery.data;
+
   return {
     events,
     schedule: assignmentsQuery.data?.schedule || {}, 
     attendance: assignmentsQuery.data?.attendance || {}, 
     membersMap: membersQuery.data?.memberMap || {},
     publicMembers: membersQuery.data?.publicList || [],
-    availability: availabilityQuery.data?.availability || {},
-    availabilityNotes: availabilityQuery.data?.notes || {},
+    availability: availabilityData?.availability ?? availabilityData ?? {},
+    availabilityNotes: availabilityData?.notes || {},
     notifications: notificationsQuery.data || [],
     announcements: announcementsQuery.data || [],
     repertoire: repertoireQuery.data || [],

@@ -193,7 +193,7 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
         if (ruleId && dateStr) {
             const key = `${ruleId}_${dateStr}_${a.role}`;
             const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
-            const name = profile?.name || a.member_name;
+            const name = profile?.name;
 
             if (name) schedule[key] = name;
             if (a.confirmed) attendance[key] = true;
@@ -272,7 +272,12 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
         .in('announcement_id', announcementIds)
         .eq('organization_id', orgId);
 
-    if (intError) console.error("ANN INTERACTIONS FETCH ERROR", intError);
+    if (intError) {
+        console.log('ANN FETCH INTERACTIONS', 0);
+        throw intError;
+    }
+
+    console.log('ANN FETCH INTERACTIONS', interactions?.length ?? 0);
 
     return announcements.map((a: any) => {
         const myInteractions = interactions ? interactions.filter((i: any) => i.announcement_id === a.id) : [];
@@ -339,12 +344,29 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
         if (checkError) throw checkError;
 
         if (existing) {
+            console.log('ANN LIKE WRITE', {
+                announcement_id: id,
+                user_id: userId,
+                organization_id: orgId,
+                interaction_type: 'like',
+                action: 'delete'
+            });
             const { error: delError } = await sb.from('announcement_interactions')
                 .delete()
-                .eq('id', existing.id)
-                .eq('organization_id', orgId); // Enforce tenant isolation
+                .eq('announcement_id', id)
+                .eq('user_id', userId)
+                .eq('organization_id', orgId)
+                .eq('interaction_type', 'like');
             if (delError) throw delError;
         } else {
+            console.log('ANN LIKE WRITE', {
+                announcement_id: id,
+                user_id: userId,
+                organization_id: orgId,
+                ministry_id: ministryId,
+                interaction_type: 'like',
+                action: 'insert'
+            });
             const { error: insertError } = await sb.from('announcement_interactions').insert({
                 announcement_id: id,
                 user_id: userId,
@@ -355,6 +377,13 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
             if (insertError) throw insertError;
         }
     } else {
+        console.log('ANN READ WRITE', {
+            announcement_id: id,
+            user_id: userId,
+            organization_id: orgId,
+            ministry_id: ministryId,
+            interaction_type: 'read'
+        });
         const { error: upsertError } = await sb.from('announcement_interactions').upsert({
             announcement_id: id,
             user_id: userId,
@@ -362,7 +391,7 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
             ministry_id: ministryId,
             interaction_type: 'read'
         }, {
-            onConflict: 'announcement_id,user_id,interaction_type'
+            onConflict: 'announcement_id,user_id,organization_id,interaction_type'
         });
         if (upsertError) throw upsertError;
     }
@@ -711,7 +740,6 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
         event_date: dateStr,
         role: role,
         member_id: memberId,
-        member_name: memberName,
         confirmed: false
     }, { onConflict: 'organization_id,ministry_id,event_key,event_date,role' });
     
@@ -780,26 +808,65 @@ export const fetchMinistryAvailability = async (ministryId: string, orgId: strin
     const sb = getSupabase();
     if (!sb) return { availability: {}, notes: {} };
     
-    const { data, error } = await sb.from('member_availability')
-        .select('user_id, dates, notes, profiles(name)')
-        .eq('organization_id', orgId);
+    const { data, error } = await sb.from('availability')
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('ministry_id', ministryId);
+
+    console.log('AVAIL FETCH org/min rows', orgId, ministryId, data?.length);
         
     if (error) {
         return { availability: {}, notes: {} };
     }
+
+    const profileIds = (data || [])
+        .map((row: any) => row.profile_id ?? row.user_id)
+        .filter(Boolean);
+
+    const { data: profiles } = profileIds.length > 0
+        ? await sb.from('profiles')
+            .select('id, name')
+            .eq('organization_id', orgId)
+            .in('id', profileIds)
+        : { data: [] as any[] };
+
+    const profileMap = new Map((profiles || []).map((p: any) => [p.id, p.name]));
     
     const availability: any = {};
     const notes: any = {};
     
     data.forEach((row: any) => {
-        const name = row.profiles?.name;
+        console.log("AVAIL ROW RAW", row.profile_id, row.dates, typeof row.dates);
+        const profileId = row.profile_id ?? row.user_id;
+        const name = row.profile_name || profileMap.get(profileId);
         if (name) {
-            availability[name] = row.dates || [];
+            let rowDates: any[] = [];
+            if (Array.isArray(row.dates)) {
+                rowDates = row.dates;
+            } else if (typeof row.dates === 'string') {
+                try {
+                    const parsed = JSON.parse(row.dates);
+                    rowDates = Array.isArray(parsed) ? parsed : [];
+                } catch (parseError) {
+                    console.error("AVAIL DATES PARSE ERROR", parseError);
+                    rowDates = [];
+                }
+            }
+            if (rowDates.length === 0 && row.date) {
+                const period = row.period ? String(row.period) : '';
+                rowDates.push(period && period !== 'FULL' ? `${row.date}_${period}` : row.date);
+            }
+
+            availability[name] = availability[name]
+                ? Array.from(new Set([...availability[name], ...rowDates]))
+                : rowDates;
             if (row.notes) {
                 Object.entries(row.notes).forEach(([k, v]) => {
                     notes[`${name}_${k}`] = v;
                 });
             }
+        } else {
+            console.warn("AVAIL NAME MISSING FOR PROFILE", profileId);
         }
     });
     
@@ -813,12 +880,17 @@ export const saveMemberAvailability = async (ministryId: string, orgId: string, 
     const { data: profile } = await sb.from('profiles').select('id').eq('organization_id', orgId).eq('name', memberName).single();
     if (!profile) return;
     
-    await sb.from('member_availability').upsert({
+    const payload = {
         organization_id: orgId,
-        user_id: profile.id,
+        ministry_id: ministryId,
+        profile_id: profile.id,
         dates: dates,
         notes: notes
-    }, { onConflict: 'organization_id, user_id' });
+    };
+
+    console.log('AVAIL WRITE payload', payload);
+
+    await sb.from('availability').upsert(payload, { onConflict: 'organization_id, ministry_id, profile_id' });
 };
 
 export const fetchSwapRequests = async (ministryId: string, orgId: string) => {
@@ -868,7 +940,6 @@ export const performSwapSQL = async (ministryId: string, orgId: string, reqId: s
     if (assignment) {
         await sb.from('schedule_assignments').update({
             member_id: takenById,
-            member_name: takenByName,
             confirmed: false
         }).eq('id', assignment.id);
         
@@ -1129,14 +1200,15 @@ export const fetchGlobalSchedules = async (month: string, ministryId: string, or
     if (!sb) return {};
     
     const { data } = await sb.from('schedule_assignments')
-        .select('ministry_id, event_date, role, member_name')
+        .select('ministry_id, event_date, role, member_id, profiles(name)')
         .eq('organization_id', orgId)
         .neq('ministry_id', ministryId)
         .ilike('event_date', `${month}%`);
         
     const conflicts: any = {};
     data?.forEach((row: any) => {
-        const name = row.member_name?.trim().toLowerCase();
+        const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+        const name = profile?.name?.trim().toLowerCase();
         if (name) {
             if (!conflicts[name]) conflicts[name] = [];
             conflicts[name].push({

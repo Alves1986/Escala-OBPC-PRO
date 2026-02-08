@@ -87,7 +87,11 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
     const storedDates = availability[selectedMember] || [];
     const monthDates = storedDates.filter(d => d.startsWith(currentMonth));
-    setTempDates(monthDates);
+    const hasRealDates = monthDates.some(d => !d.includes('BLK') && !d.includes('BLOCKED'));
+    const normalizedDates = hasRealDates
+      ? monthDates.filter(d => !d.includes('BLK') && !d.includes('BLOCKED'))
+      : monthDates;
+    setTempDates(normalizedDates);
     
     const noteKey = `${selectedMember}_${currentMonth}-00`;
     setGeneralNote(availabilityNotes?.[noteKey] || "");

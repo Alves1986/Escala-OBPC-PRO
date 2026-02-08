@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { 
   FileText, TrendingUp, AlertCircle, CheckCircle2, 
   ArrowUpRight, ArrowDownRight, User, Download, 
@@ -24,6 +24,10 @@ export const MonthlyReportScreen: React.FC<Props> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState<'name' | 'rate' | 'scheduled'>('name');
+
+  useEffect(() => {
+    console.log('MONTH REPORT assignments size', Object.keys(schedule).length);
+  }, [schedule]);
 
   // Cálculo das Métricas
   const reportData = useMemo(() => {

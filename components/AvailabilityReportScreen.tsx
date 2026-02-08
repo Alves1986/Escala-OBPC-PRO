@@ -27,6 +27,11 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
   const [selectedRole, setSelectedRole] = useState("Todos");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  useEffect(() => {
+    const availabilityCount = Array.isArray(availability) ? availability.length : Object.keys(availability).length;
+    console.log('AVAIL REPORT input', availabilityCount);
+  }, [availability]);
+
   const handleManualRefresh = async () => {
       if (onRefresh) {
           setIsRefreshing(true);
@@ -55,10 +60,11 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
       }
 
       const dates = availability[profile.name] || [];
-      const isBlocked = dates.some(d => d.startsWith(currentMonth) && (d.includes('BLK') || d.includes('BLOCKED')));
+      const hasMonthDates = dates.some(d => d.startsWith(currentMonth) && !d.includes('BLK') && !d.includes('BLOCKED'));
+      const isBlocked = !hasMonthDates && dates.some(d => d.startsWith(currentMonth) && (d.includes('BLK') || d.includes('BLOCKED')));
 
       const monthDates = dates
-        .filter(d => d.startsWith(currentMonth) && !d.includes('BLK'))
+        .filter(d => d.startsWith(currentMonth) && !d.includes('BLK') && !d.includes('BLOCKED'))
         .map(d => {
             const parts = d.split('_');
             const dayNum = parseInt(d.split('-')[2]);
