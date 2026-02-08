@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { User, Role, DEFAULT_ROLES } from '../types';
 import { useMinistryQueries, keys } from './useMinistryQueries';
 import { useQueryClient } from '@tanstack/react-query';
-import { getSupabase } from '../services/supabaseService';
+import { getSupabase, fetchMemberAvailabilityV2 } from '../services/supabaseService';
 import { useAppStore } from '../store/appStore';
 import { useEvents } from '../application/useEvents';
 
@@ -10,11 +10,18 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   const mid = ministryId || ''; 
   const orgId = currentUser?.organizationId || '';
   
+  // Custom Availability Query using V2 (ID-Based)
+  const queryClient = useQueryClient();
+  const availabilityQueryKey = keys.availability(mid, orgId);
+  const availabilityQueryData = queryClient.getQueryData(availabilityQueryKey);
+
+  // We explicitly use V2 service here instead of the generic hook to ensure transformation
+  const [availabilityV2, setAvailabilityV2] = useState<{ availability: Record<string, string[]>, notes: Record<string, string> }>({ availability: {}, notes: {} });
+
   const {
     settingsQuery,
     assignmentsQuery,
     membersQuery,
-    availabilityQuery,
     notificationsQuery,
     announcementsQuery,
     swapsQuery,
@@ -25,6 +32,49 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     nextEventQuery,
     isLoading: isLoadingQueries
   } = useMinistryQueries(mid, currentMonth, currentUser);
+
+  // Manual fetching/syncing for Availability V2 to integrate it
+  useEffect(() => {
+      if (mid && orgId) {
+          fetchMemberAvailabilityV2(mid, orgId).then(data => setAvailabilityV2(data)).catch(console.error);
+      }
+  }, [mid, orgId]);
+
+  // Transform ID-based availability to Name-based for legacy components
+  const availabilityByName = useMemo(() => {
+      const map: Record<string, string[]> = {};
+      const membersList = membersQuery.data?.publicList || [];
+      
+      Object.entries(availabilityV2.availability).forEach(([userId, dates]) => {
+          const member = membersList.find(m => m.id === userId);
+          if (member) {
+              map[member.name] = dates;
+          }
+      });
+      return map;
+  }, [availabilityV2, membersQuery.data]);
+
+  // Note: availabilityNotes uses "UserID_Month" key. We need to map it to "Name_Month" for legacy if needed, 
+  // but AvailabilityScreen now uses IDs, so legacy mapping might only be needed if ScheduleTable uses notes by name.
+  // ScheduleTable logic currently uses `getMemberNote` via name.
+  const notesByName = useMemo(() => {
+      const map: Record<string, string> = {};
+      const membersList = membersQuery.data?.publicList || [];
+      
+      Object.entries(availabilityV2.notes).forEach(([key, value]) => {
+          // Key format: UserID_YYYY-MM-00
+          const parts = key.split('_');
+          const userId = parts[0];
+          const datePart = parts.slice(1).join('_');
+          
+          const member = membersList.find(m => m.id === userId);
+          if (member) {
+              map[`${member.name}_${datePart}`] = value;
+          }
+      });
+      return map;
+  }, [availabilityV2, membersQuery.data]);
+
 
   // CÁLCULO DE DATAS PARA O USEEVENTS (Regras de projeção)
   const [yearStr, monthStr] = currentMonth.split('-');
@@ -41,7 +91,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       endDate
   });
 
-  const queryClient = useQueryClient();
   const { setMinistryId, availableMinistries } = useAppStore();
 
   useEffect(() => {
@@ -74,6 +123,11 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   }), [settingsQuery.data]);
 
   const refreshData = async () => {
+      // Also refresh manual V2 fetch
+      if (mid && orgId) {
+          fetchMemberAvailabilityV2(mid, orgId).then(data => setAvailabilityV2(data)).catch(console.error);
+      }
+
       await queryClient.invalidateQueries({ predicate: (query) => 
           query.queryKey[0] === 'event_rules' || 
           query.queryKey[0] === 'settings' || 
@@ -82,7 +136,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
           query.queryKey[0] === 'conflicts' ||
           query.queryKey[0] === 'assignments' ||
           query.queryKey[0] === 'rules' ||
-          query.queryKey[0] === 'availability' ||
+          // query.queryKey[0] === 'availability' || // Handled manually above
           query.queryKey[0] === 'nextEvent' ||
           query.queryKey[0] === 'announcements'
       });
@@ -115,6 +169,16 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
         )
         .on(
             'postgres_changes', 
+            { event: '*', schema: 'public', table: 'member_availability', filter: `ministry_id=eq.${mid}` }, 
+            () => {
+                // Refresh Availability V2
+                if (mid && orgId) {
+                    fetchMemberAvailabilityV2(mid, orgId).then(data => setAvailabilityV2(data)).catch(console.error);
+                }
+            }
+        )
+        .on(
+            'postgres_changes', 
             { event: 'INSERT', schema: 'public', table: 'notifications', filter: `ministry_id=eq.${mid}` }, 
             () => {
                 queryClient.invalidateQueries({ queryKey: ['notifications'] });
@@ -142,15 +206,10 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   }, [mid, currentMonth, queryClient, orgId]);
 
   // ADAPTADOR CORRIGIDO (PARTE 2)
-  // O Calendário deve refletir APENAS o que está em schedule_assignments para renderizar blocos distintos.
-  // Combina generatedEvents (regras) com assignments reais para preencher lacunas, mas usa assignments como autoridade de tempo/ID.
   const events = useMemo(() => {
-      // 1. Extrair Assignments únicos (EventKey + Date)
       const assignmentKeys = new Set<string>();
       const assignments = assignmentsQuery.data?.schedule || {};
       
-      // Reconstrói lista de eventos baseada nas assignments existentes
-      // keys em assignments são: ruleId_date_role
       const assignmentBasedEvents: any[] = [];
       const processedEventKeys = new Set<string>();
 
@@ -162,8 +221,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
               const uniqueEventKey = `${ruleId}_${date}`;
 
               if (!processedEventKeys.has(uniqueEventKey)) {
-                  // Precisamos achar a regra para saber o título e horário
-                  // Tenta achar em generatedEvents primeiro
                   const ruleEvent = generatedEvents.find(e => e.id === uniqueEventKey);
                   
                   if (ruleEvent) {
@@ -174,11 +231,9 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
                           dateDisplay: ruleEvent.date.split('-').reverse().slice(0, 2).join('/')
                       });
                   } else {
-                      // Se não achou na projeção (talvez regra deletada mas escala existe),
-                      // cria um placeholder. 
                       assignmentBasedEvents.push({
                           id: uniqueEventKey,
-                          iso: `${date}T00:00`, // Horário desconhecido se regra sumiu
+                          iso: `${date}T00:00`, 
                           title: 'Evento (Regra Removida)',
                           dateDisplay: date.split('-').reverse().slice(0, 2).join('/')
                       });
@@ -188,8 +243,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
           }
       });
 
-      // 2. Merge com Generated Events (para mostrar slots vazios de regras ativas)
-      // Se já processamos via assignment, não duplica.
       const finalEvents = [...assignmentBasedEvents];
       
       generatedEvents.forEach(gen => {
@@ -203,11 +256,9 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
           }
       });
 
-      // Ordena por data/hora
       return finalEvents.sort((a, b) => a.iso.localeCompare(b.iso));
   }, [generatedEvents, assignmentsQuery.data]);
 
-  // Filtra regras semanais para a UI de "Eventos Padrão"
   const eventRules = useMemo(() => {
       return (rulesQuery.data || []).filter(r => r.type === 'weekly');
   }, [rulesQuery.data]);
@@ -218,8 +269,10 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     attendance: assignmentsQuery.data?.attendance || {}, 
     membersMap: membersQuery.data?.memberMap || {},
     publicMembers: membersQuery.data?.publicList || [],
-    availability: availabilityQuery.data?.availability || {},
-    availabilityNotes: availabilityQuery.data?.notes || {},
+    availability: availabilityV2.availability, // ID-Based
+    availabilityNotes: availabilityV2.notes, // ID-Based
+    availabilityByName, // LEGACY Support Name-Based
+    notesByName, // LEGACY Support Name-Based
     notifications: notificationsQuery.data || [],
     announcements: announcementsQuery.data || [],
     repertoire: repertoireQuery.data || [],
@@ -227,7 +280,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     globalConflicts: conflictsQuery.data || {}, 
     auditLogs: auditLogsQuery.data || [], 
     eventRules, 
-    nextEvent: nextEventQuery.data || null, // NEW
+    nextEvent: nextEventQuery.data || null,
     roles,
     ministryTitle,
     availabilityWindow,

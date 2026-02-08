@@ -5,14 +5,14 @@ import { ChevronLeft, ChevronRight, Save, CheckCircle2, Moon, Sun, Lock, FileTex
 import { useToast } from './Toast';
 
 interface Props {
-  availability: AvailabilityMap;
-  availabilityNotes: AvailabilityNotesMap;
+  availability: AvailabilityMap; // Now keyed by User ID
+  availabilityNotes: AvailabilityNotesMap; // Keyed by UserID_Month
   setAvailability: React.Dispatch<React.SetStateAction<AvailabilityMap>>;
-  members: TeamMemberProfile[]; // Changed from string[] to TeamMemberProfile[]
+  members: TeamMemberProfile[]; 
   currentMonth: string;
   onMonthChange: (newMonth: string) => void;
   currentUser: User | null;
-  onSaveAvailability: (ministryId: string, userId: string, dates: string[], notes: Record<string, string>, targetMonth: string) => Promise<void>; // Updated signature
+  onSaveAvailability: (ministryId: string, userId: string, dates: string[], notes: Record<string, string>, targetMonth: string) => Promise<void>; 
   availabilityWindow?: { start?: string, end?: string };
   ministryId: string;
 }
@@ -33,7 +33,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const { addToast } = useToast();
   
   // States
-  const [selectedMemberId, setSelectedMemberId] = useState<string>(""); // Now stores ID
+  const [selectedMemberId, setSelectedMemberId] = useState<string>(""); 
   const [tempDates, setTempDates] = useState<string[]>([]); 
   const [generalNote, setGeneralNote] = useState("");
   
@@ -52,12 +52,6 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const firstDayOfWeek = new Date(year, month - 1, 1).getDay();
   const blanks = Array.from({ length: firstDayOfWeek });
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-
-  // Helper to find member name from ID
-  const getSelectedMemberName = () => {
-      const m = members.find(m => m.id === selectedMemberId);
-      return m ? m.name : "";
-  };
 
   // Check Window Status
   const isWindowOpenForMembers = React.useMemo(() => {
@@ -93,15 +87,13 @@ export const AvailabilityScreen: React.FC<Props> = ({
   useEffect(() => {
     if (!selectedMemberId) return;
 
-    const memberName = getSelectedMemberName();
-    if (!memberName) return;
-
-    // Availability map is keyed by NAME (from fetchMinistryAvailability)
-    const storedDates = availability[memberName] || [];
+    // Availability map is keyed by User ID now
+    const storedDates = availability[selectedMemberId] || [];
     const monthDates = storedDates.filter(d => d.startsWith(currentMonth));
     setTempDates(monthDates);
     
-    const noteKey = `${memberName}_${currentMonth}-00`;
+    // Note key format: ID_YYYY-MM-00
+    const noteKey = `${selectedMemberId}_${currentMonth}-00`;
     setGeneralNote(availabilityNotes?.[noteKey] || "");
     
     // IMPORTANTE: Se o estado for 'saved' ou 'saving', NÃO resetamos para 'idle'.
@@ -181,14 +173,11 @@ export const AvailabilityScreen: React.FC<Props> = ({
       // Previne duplo clique ou salvamento durante sucesso
       if (isSaveLocked) return; 
 
-      const memberName = getSelectedMemberName();
-      if (!memberName) return;
-
       setSaveState('saving');
 
       try {
           // --- 1. MERGE DE DATAS ---
-          const existingDates = availability[memberName] || [];
+          const existingDates = availability[selectedMemberId] || [];
           const otherMonthDates = existingDates.filter(
               date => !date.startsWith(currentMonth)
           );
@@ -196,7 +185,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
           // --- 2. MERGE DE NOTAS ---
           const consolidatedNotes: Record<string, string> = {};
-          const prefix = `${memberName}_`;
+          const prefix = `${selectedMemberId}_`;
           const currentNoteKey = `${currentMonth}-00`;
 
           Object.entries(availabilityNotes).forEach(([key, value]) => {

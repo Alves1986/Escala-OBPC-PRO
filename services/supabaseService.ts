@@ -15,27 +15,46 @@ import {
 
 // --- INITIALIZATION ---
 
+// Declare globals defined in vite.config.ts
+declare const __SUPABASE_URL__: string;
+declare const __SUPABASE_KEY__: string;
+
 let serviceOrgId: string | null = null;
 
 let envUrl = "";
 let envKey = "";
 
+// 1. Try Vite Global Defines (Most reliable in build)
 try {
-  // @ts-ignore
-  if (typeof import.meta !== 'undefined' && import.meta.env) {
-    envUrl = import.meta.env.VITE_SUPABASE_URL || "";
-    envKey = import.meta.env.VITE_SUPABASE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+  if (typeof __SUPABASE_URL__ !== 'undefined' && __SUPABASE_URL__) {
+    envUrl = __SUPABASE_URL__;
   }
-} catch (e) {
-  console.warn("[SupabaseService] Falha ao ler import.meta.env. Usando fallback se disponível.");
+  if (typeof __SUPABASE_KEY__ !== 'undefined' && __SUPABASE_KEY__) {
+    envKey = __SUPABASE_KEY__;
+  }
+} catch (e) {}
+
+// 2. Try import.meta.env (Standard Vite Dev)
+if (!envUrl || !envKey) {
+  try {
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      envUrl = import.meta.env.VITE_SUPABASE_URL || envUrl;
+      envKey = import.meta.env.VITE_SUPABASE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || envKey;
+    }
+  } catch (e) {
+    console.warn("[SupabaseService] Falha ao ler import.meta.env.");
+  }
 }
 
-if (!envUrl && typeof process !== 'undefined' && process.env) {
-    envUrl = process.env.VITE_SUPABASE_URL || "";
-    envKey = process.env.VITE_SUPABASE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+// 3. Fallback to process.env (Legacy/Node compat)
+if ((!envUrl || !envKey) && typeof process !== 'undefined' && process.env) {
+    envUrl = process.env.VITE_SUPABASE_URL || envUrl;
+    envKey = process.env.VITE_SUPABASE_KEY || process.env.VITE_SUPABASE_ANON_KEY || envKey;
 }
 
-const supabase = (envUrl && envKey) 
+// Inicializa o cliente APENAS se as chaves existirem
+const supabase = (envUrl && envKey && envUrl !== 'undefined' && envKey !== 'undefined') 
   ? createClient(envUrl, envKey, {
       auth: {
           persistSession: true,
@@ -46,7 +65,8 @@ const supabase = (envUrl && envKey)
   : null;
 
 if (!supabase) {
-    console.error("[SupabaseService] CRITICAL: Client não inicializado. Verifique VITE_SUPABASE_URL e VITE_SUPABASE_KEY.");
+    // Warn instead of Critical Error to allow Setup Screen flow
+    console.warn("[SupabaseService] Client não inicializado. Aguardando configuração manual ou verifique VITE_SUPABASE_URL.");
 }
 
 export const getSupabase = () => supabase;
@@ -76,8 +96,25 @@ const filterRolesBySettings = async (roles: string[], ministryId: string, orgId:
 
 export const setServiceOrgContext = (id: string) => { serviceOrgId = id; };
 export const clearServiceOrgContext = () => { serviceOrgId = null; };
-export const configureSupabaseManual = (url: string, key: string) => { console.warn("Manual config disabled."); };
-export const validateConnection = async (url: string, key: string) => { return false; };
+export const configureSupabaseManual = (url: string, key: string) => { 
+    // Em uma implementação real com recarregamento a quente, isso re-instanciaria o cliente.
+    // Como usamos o padrão de módulo singleton, a recarga da página (window.location.reload) feita no SetupScreen é o método correto.
+    console.log("Configuração manual recebida. Recarregando...");
+};
+
+export const validateConnection = async (url: string, key: string) => { 
+    try {
+        const tempClient = createClient(url, key);
+        const { error } = await tempClient.from('organizations').select('count', { count: 'exact', head: true });
+        // Se der erro de conexão/auth, retorna false. Se der erro de permissão (403) mas conectou, retorna true.
+        if (error && error.code && (error.code === 'PGRST301' || error.message.includes('fetch'))) {
+            return false;
+        }
+        return true;
+    } catch (e) {
+        return false;
+    }
+};
 
 // --- CORE FUNCTIONS ---
 
@@ -776,51 +813,85 @@ export const clearScheduleForMonth = async (ministryId: string, orgId: string, m
         .ilike('event_date', `${month}%`);
 };
 
-export const fetchMinistryAvailability = async (ministryId: string, orgId: string) => {
+// --- AVAILABILITY V2 (NEW MEMBER_AVAILABILITY TABLE) ---
+
+// Deprecated V1 (Keep empty/stub if needed or replace entirely)
+// We are replacing the logic, so we introduce V2 functions
+
+export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: string) => {
     const sb = getSupabase();
     if (!sb) throw new Error("Supabase client not initialized");
-    
-    const { data, error } = await sb.from('member_availability')
-        .select('user_id, dates, notes, profiles(name)')
+
+    const { data, error } = await sb
+        .from('member_availability')
+        .select('user_id, available_date, note')
         .eq('organization_id', orgId)
         .eq('ministry_id', ministryId);
-        
-    if (error) {
-        throw error;
-    }
-    
-    const availability: any = {};
-    const notes: any = {};
-    
-    data.forEach((row: any) => {
-        const name = row.profiles?.name;
-        if (name) {
-            availability[name] = row.dates || [];
-            if (row.notes) {
-                Object.entries(row.notes).forEach(([k, v]) => {
-                    notes[`${name}_${k}`] = v;
-                });
-            }
-        }
-    });
-    
-    return { availability, notes };
-};
-
-export const saveMemberAvailability = async (ministryId: string, orgId: string, userId: string, dates: string[], notes: any, monthTarget?: string) => {
-    const sb = getSupabase();
-    if (!sb) throw new Error("Supabase client not initialized");
-    
-    const { error } = await sb.from('member_availability').upsert({
-        organization_id: orgId,
-        ministry_id: ministryId,
-        user_id: userId,
-        dates: dates,
-        notes: notes
-    }, { onConflict: 'organization_id, ministry_id, user_id' });
 
     if (error) throw error;
+
+    const map: Record<string, string[]> = {};
+    const notes: Record<string, string> = {};
+
+    data?.forEach((row: any) => {
+        if (!map[row.user_id]) map[row.user_id] = [];
+        map[row.user_id].push(row.available_date);
+        
+        if (row.note) {
+            // Note key format: ID_YYYY-MM-00
+            // Notes are stored per day, but UI displays one per month generally.
+            // We'll key it by month for the UI to consume.
+            const monthKey = row.available_date.substring(0, 7) + '-00';
+            notes[`${row.user_id}_${monthKey}`] = row.note;
+        }
+    });
+
+    return { availability: map, notes };
 };
+
+export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string, userId: string, dates: string[], notes: any, targetMonth: string) => {
+    const sb = getSupabase();
+    if (!sb) throw new Error("Supabase client not initialized");
+
+    // 1. Delete existing for month
+    // We filter deletion by the target month to allow full replacement of that month's state
+    const { error: delError } = await sb
+        .from('member_availability')
+        .delete()
+        .eq('organization_id', orgId)
+        .eq('ministry_id', ministryId)
+        .eq('user_id', userId)
+        .ilike('available_date', `${targetMonth}%`);
+
+    if (delError) throw delError;
+
+    // 2. Prepare inserts
+    // Filter dates to ensure they belong to targetMonth (safety check)
+    const uniqueDates = [...new Set(dates.filter(d => d.startsWith(targetMonth)))];
+
+    if (uniqueDates.length > 0) {
+        const rows = uniqueDates.map(date => ({
+            organization_id: orgId,
+            ministry_id: ministryId,
+            user_id: userId,
+            available_date: date,
+            // Attach the general month note to each day record for simplicity in this schema
+            note: notes[`${userId}_${targetMonth}-00`] || null
+        }));
+
+        const { error: insError } = await sb
+            .from('member_availability')
+            .insert(rows);
+
+        if (insError) throw insError;
+    }
+};
+
+// Backwards compatibility alias (if needed by other files not yet updated, though we update App.tsx)
+export const fetchMinistryAvailability = fetchMemberAvailabilityV2;
+export const saveMemberAvailability = saveMemberAvailabilityV2;
+
+// ----------------------------------------------------
 
 export const fetchSwapRequests = async (ministryId: string, orgId: string) => {
     const sb = getSupabase();
