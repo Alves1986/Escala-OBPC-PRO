@@ -524,12 +524,12 @@ const InnerApp = () => {
                     availability={availability} 
                     availabilityNotes={availabilityNotes} 
                     setAvailability={setAvailability} 
-                    allMembersList={publicMembers.map(m => m.name)} 
+                    members={publicMembers} // Updated Prop
                     currentMonth={currentMonth} 
                     onMonthChange={setCurrentMonth} 
                     currentUser={user} 
-                    onSaveAvailability={async (mid, m, d, n, t) => { 
-                        await Supabase.saveMemberAvailability(mid, orgId!, m, d, n, t); 
+                    onSaveAvailability={async (mid, userId, d, n, t) => { // Updated Callback
+                        await Supabase.saveMemberAvailability(mid, orgId!, userId, d, n, t); 
                         await refreshData(); 
                     }} 
                     availabilityWindow={availabilityWindow} 
@@ -573,7 +573,23 @@ const InnerApp = () => {
         <InstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />
         <JoinMinistryModal isOpen={showJoinModal} onClose={() => setShowJoinModal(false)} onJoin={async (id, r) => { await Supabase.joinMinistry(id, orgId!, r); window.location.reload(); }} alreadyJoined={user.allowedMinistries || []} />
         <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ id: e.iso, title: e.title, iso: e.iso, date: e.iso.split('T')[0], time: e.iso.split('T')[1] }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, orgId!, e); refreshData(); }} onRemove={async (id) => { await Supabase.deleteMinistryEvent(ministryId, orgId!, id); refreshData(); }} />
-        <AvailabilityModal isOpen={isAvailModalOpen} onClose={() => setAvailModalOpen(false)} members={publicMembers.map(m => m.name)} availability={availability} onUpdate={async (m, d) => { await Supabase.saveMemberAvailability(ministryId, orgId!, m, d, {}, currentMonth); refreshData(); }} currentMonth={currentMonth} />
+        <AvailabilityModal isOpen={isAvailModalOpen} onClose={() => setAvailModalOpen(false)} members={publicMembers.map(m => m.name)} availability={availability} onUpdate={async (m, d) => { 
+            // This modal still uses names for display, but could be refactored similarly.
+            // For now, retaining name-based update if it uses saveMemberAvailability which requires ID now.
+            // WARNING: This specific modal might break if not updated.
+            // Assuming AvailabilityModal is less used or will be updated separately or uses name->ID lookup internally.
+            // But the request focused on AvailabilityScreen.
+            // To be safe, we should fix the call here if possible, but AvailabilityModal logic uses names.
+            // Since the prompt explicitly mentioned AvailabilityScreen and services, I will leave this one as is 
+            // unless it breaks build (it won't break build as long as signature matches what is passed).
+            // Actually, `saveMemberAvailability` now expects userId. So this WILL break.
+            // Fixing it minimally by finding ID from name.
+            const memberObj = publicMembers.find(pm => pm.name === m);
+            if (memberObj) {
+                await Supabase.saveMemberAvailability(ministryId, orgId!, memberObj.id, d, {}, currentMonth); 
+                refreshData(); 
+            }
+        }} currentMonth={currentMonth} />
         <RolesModal isOpen={isRolesModalOpen} onClose={() => setRolesModalOpen(false)} roles={roles} onUpdate={async (r) => { await Supabase.saveMinistrySettings(ministryId, orgId!, undefined, r); refreshData(); }} />
         <AuditModal isOpen={isAuditModalOpen} onClose={() => setAuditModalOpen(false)} logs={auditLogs} />
         

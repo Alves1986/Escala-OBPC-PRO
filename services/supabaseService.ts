@@ -778,14 +778,15 @@ export const clearScheduleForMonth = async (ministryId: string, orgId: string, m
 
 export const fetchMinistryAvailability = async (ministryId: string, orgId: string) => {
     const sb = getSupabase();
-    if (!sb) return { availability: {}, notes: {} };
+    if (!sb) throw new Error("Supabase client not initialized");
     
     const { data, error } = await sb.from('member_availability')
         .select('user_id, dates, notes, profiles(name)')
-        .eq('organization_id', orgId);
+        .eq('organization_id', orgId)
+        .eq('ministry_id', ministryId);
         
     if (error) {
-        return { availability: {}, notes: {} };
+        throw error;
     }
     
     const availability: any = {};
@@ -806,19 +807,19 @@ export const fetchMinistryAvailability = async (ministryId: string, orgId: strin
     return { availability, notes };
 };
 
-export const saveMemberAvailability = async (ministryId: string, orgId: string, memberName: string, dates: string[], notes: any, monthTarget?: string) => {
+export const saveMemberAvailability = async (ministryId: string, orgId: string, userId: string, dates: string[], notes: any, monthTarget?: string) => {
     const sb = getSupabase();
-    if (!sb) return;
+    if (!sb) throw new Error("Supabase client not initialized");
     
-    const { data: profile } = await sb.from('profiles').select('id').eq('organization_id', orgId).eq('name', memberName).single();
-    if (!profile) return;
-    
-    await sb.from('member_availability').upsert({
+    const { error } = await sb.from('member_availability').upsert({
         organization_id: orgId,
-        user_id: profile.id,
+        ministry_id: ministryId,
+        user_id: userId,
         dates: dates,
         notes: notes
-    }, { onConflict: 'organization_id, user_id' });
+    }, { onConflict: 'organization_id, ministry_id, user_id' });
+
+    if (error) throw error;
 };
 
 export const fetchSwapRequests = async (ministryId: string, orgId: string) => {

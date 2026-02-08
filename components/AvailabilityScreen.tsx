@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AvailabilityMap, AvailabilityNotesMap, User } from '../types';
+import { AvailabilityMap, AvailabilityNotesMap, User, TeamMemberProfile } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
 import { ChevronLeft, ChevronRight, Save, CheckCircle2, Moon, Sun, Lock, FileText, Ban, RefreshCw, Check, ShieldAlert } from 'lucide-react';
 import { useToast } from './Toast';
@@ -8,11 +8,11 @@ interface Props {
   availability: AvailabilityMap;
   availabilityNotes: AvailabilityNotesMap;
   setAvailability: React.Dispatch<React.SetStateAction<AvailabilityMap>>;
-  allMembersList: string[];
+  members: TeamMemberProfile[]; // Changed from string[] to TeamMemberProfile[]
   currentMonth: string;
   onMonthChange: (newMonth: string) => void;
   currentUser: User | null;
-  onSaveAvailability: (ministryId: string, member: string, dates: string[], notes: Record<string, string>, targetMonth: string) => Promise<void>;
+  onSaveAvailability: (ministryId: string, userId: string, dates: string[], notes: Record<string, string>, targetMonth: string) => Promise<void>; // Updated signature
   availabilityWindow?: { start?: string, end?: string };
   ministryId: string;
 }
@@ -22,7 +22,7 @@ type SaveState = 'idle' | 'dirty' | 'saving' | 'saved';
 export const AvailabilityScreen: React.FC<Props> = ({
   availability,
   availabilityNotes,
-  allMembersList,
+  members,
   currentMonth,
   onMonthChange,
   currentUser,
@@ -33,7 +33,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const { addToast } = useToast();
   
   // States
-  const [selectedMember, setSelectedMember] = useState<string>("");
+  const [selectedMemberId, setSelectedMemberId] = useState<string>(""); // Now stores ID
   const [tempDates, setTempDates] = useState<string[]>([]); 
   const [generalNote, setGeneralNote] = useState("");
   
@@ -52,6 +52,12 @@ export const AvailabilityScreen: React.FC<Props> = ({
   const firstDayOfWeek = new Date(year, month - 1, 1).getDay();
   const blanks = Array.from({ length: firstDayOfWeek });
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+  // Helper to find member name from ID
+  const getSelectedMemberName = () => {
+      const m = members.find(m => m.id === selectedMemberId);
+      return m ? m.name : "";
+  };
 
   // Check Window Status
   const isWindowOpenForMembers = React.useMemo(() => {
@@ -72,30 +78,36 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   // Init Member Selection
   useEffect(() => {
-    if (currentUser && !selectedMember) {
-      if (allMembersList.includes(currentUser.name)) {
-        setSelectedMember(currentUser.name);
-      } else if (allMembersList.length > 0) {
-        setSelectedMember(allMembersList[0]);
+    if (currentUser && !selectedMemberId && members.length > 0) {
+      // Find current user's profile in members list
+      const me = members.find(m => m.id === currentUser.id);
+      if (me) {
+        setSelectedMemberId(me.id);
+      } else {
+        setSelectedMemberId(members[0].id);
       }
     }
-  }, [currentUser, allMembersList]);
+  }, [currentUser, members]);
 
   // Load Data on Mount or Change (Sync with Backend Truth)
   useEffect(() => {
-    if (!selectedMember) return;
+    if (!selectedMemberId) return;
 
-    const storedDates = availability[selectedMember] || [];
+    const memberName = getSelectedMemberName();
+    if (!memberName) return;
+
+    // Availability map is keyed by NAME (from fetchMinistryAvailability)
+    const storedDates = availability[memberName] || [];
     const monthDates = storedDates.filter(d => d.startsWith(currentMonth));
     setTempDates(monthDates);
     
-    const noteKey = `${selectedMember}_${currentMonth}-00`;
+    const noteKey = `${memberName}_${currentMonth}-00`;
     setGeneralNote(availabilityNotes?.[noteKey] || "");
     
     // IMPORTANTE: Se o estado for 'saved' ou 'saving', NÃO resetamos para 'idle'.
     // Isso garante que o refresh dos dados (que acontece após salvar) não "apague" o card de sucesso.
     setSaveState(prev => (prev === 'saved' || prev === 'saving' ? prev : 'idle'));
-  }, [selectedMember, currentMonth, availability, availabilityNotes]);
+  }, [selectedMemberId, currentMonth, availability, availabilityNotes, members]);
 
   // Auto-dismiss do estado 'saved'
   useEffect(() => {
@@ -165,15 +177,18 @@ export const AvailabilityScreen: React.FC<Props> = ({
   };
 
   const handleSave = async () => {
-      if (!selectedMember) return;
+      if (!selectedMemberId) return;
       // Previne duplo clique ou salvamento durante sucesso
       if (isSaveLocked) return; 
+
+      const memberName = getSelectedMemberName();
+      if (!memberName) return;
 
       setSaveState('saving');
 
       try {
           // --- 1. MERGE DE DATAS ---
-          const existingDates = availability[selectedMember] || [];
+          const existingDates = availability[memberName] || [];
           const otherMonthDates = existingDates.filter(
               date => !date.startsWith(currentMonth)
           );
@@ -181,7 +196,7 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
           // --- 2. MERGE DE NOTAS ---
           const consolidatedNotes: Record<string, string> = {};
-          const prefix = `${selectedMember}_`;
+          const prefix = `${memberName}_`;
           const currentNoteKey = `${currentMonth}-00`;
 
           Object.entries(availabilityNotes).forEach(([key, value]) => {
@@ -197,10 +212,10 @@ export const AvailabilityScreen: React.FC<Props> = ({
               consolidatedNotes[currentNoteKey] = generalNote.trim();
           }
 
-          // 4. Envia payload consolidado
+          // 4. Envia payload consolidado (USANDO ID)
           await onSaveAvailability(
               ministryId, 
-              selectedMember, 
+              selectedMemberId, 
               consolidatedDates, 
               consolidatedNotes, 
               currentMonth
@@ -250,14 +265,14 @@ export const AvailabilityScreen: React.FC<Props> = ({
             <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end bg-zinc-50 dark:bg-zinc-900/50 p-1.5 rounded-xl border border-zinc-100 dark:border-zinc-800">
                 {isAdmin && (
                     <select 
-                        value={selectedMember} 
+                        value={selectedMemberId} 
                         onChange={(e) => {
                             if(saveState === 'dirty' && !confirm("Descartar alterações?")) return;
-                            setSelectedMember(e.target.value);
+                            setSelectedMemberId(e.target.value);
                         }}
                         className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg py-1.5 px-3 text-xs md:text-sm text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-blue-500 outline-none max-w-[140px]"
                     >
-                        {allMembersList.map(m => <option key={m} value={m}>{m}</option>)}
+                        {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                     </select>
                 )}
                 
