@@ -808,7 +808,7 @@ export const fetchMinistryAvailability = async (ministryId: string, orgId: strin
     const sb = getSupabase();
     if (!sb) return { availability: {}, notes: {} };
     
-    const { data, error } = await sb.from('member_availability')
+    const { data, error } = await sb.from('availability')
         .select('*')
         .eq('organization_id', orgId)
         .eq('ministry_id', ministryId);
@@ -890,7 +890,7 @@ export const saveMemberAvailability = async (ministryId: string, orgId: string, 
 
     console.log('AVAIL WRITE payload', payload);
 
-    await sb.from('member_availability').upsert(payload, { onConflict: 'organization_id, ministry_id, profile_id' });
+    await sb.from('availability').upsert(payload, { onConflict: 'organization_id, ministry_id, profile_id' });
 };
 
 export const fetchSwapRequests = async (ministryId: string, orgId: string) => {
