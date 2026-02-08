@@ -780,21 +780,37 @@ export const fetchMinistryAvailability = async (ministryId: string, orgId: strin
     const sb = getSupabase();
     if (!sb) return { availability: {}, notes: {} };
     
-    const { data, error } = await sb.from('member_availability')
+    const query = sb.from('availability')
         .select('user_id, dates, notes, profiles(name)')
         .eq('organization_id', orgId);
+    if (ministryId) {
+        query.eq('ministry_id', ministryId);
+    }
+    const { data, error } = await query;
         
     if (error) {
         return { availability: {}, notes: {} };
     }
     
+    console.log('AVAIL FETCH RAW', data);
+
     const availability: any = {};
     const notes: any = {};
     
     data.forEach((row: any) => {
         const name = row.profiles?.name;
         if (name) {
-            availability[name] = row.dates || [];
+            let rowDates: any[] = [];
+            if (Array.isArray(row.dates)) {
+                rowDates = row.dates;
+            } else if (typeof row.dates === 'string') {
+                try {
+                    rowDates = JSON.parse(row.dates);
+                } catch {
+                    rowDates = [];
+                }
+            }
+            availability[name] = rowDates;
             if (row.notes) {
                 Object.entries(row.notes).forEach(([k, v]) => {
                     notes[`${name}_${k}`] = v;
@@ -803,6 +819,8 @@ export const fetchMinistryAvailability = async (ministryId: string, orgId: strin
         }
     });
     
+    console.log('AVAIL PARSED', availability);
+
     return { availability, notes };
 };
 
@@ -813,10 +831,12 @@ export const saveMemberAvailability = async (ministryId: string, orgId: string, 
     const { data: profile } = await sb.from('profiles').select('id').eq('organization_id', orgId).eq('name', memberName).single();
     if (!profile) return;
     
-    await sb.from('member_availability').upsert({
+    const safeDates = Array.isArray(dates) ? dates : [];
+
+    await sb.from('availability').upsert({
         organization_id: orgId,
         user_id: profile.id,
-        dates: dates,
+        dates: JSON.stringify(safeDates),
         notes: notes
     }, { onConflict: 'organization_id, user_id' });
 };
