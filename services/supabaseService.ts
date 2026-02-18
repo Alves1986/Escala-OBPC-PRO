@@ -906,7 +906,7 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
     const updates: any = { name, whatsapp, birth_date: birthDate };
     if (avatar_url) updates.avatar_url = avatar_url;
     
-    await sb.from('profiles').update(updates).eq('id', user.id);
+    await sb.from('profiles').update(updates).eq('id', user.id).eq('organization_id', orgId); // CORREÇÃO: Isolamento multi-tenant
     
     if (functions && ministryId) {
         await sb.from('organization_memberships')
@@ -926,7 +926,7 @@ export const updateMemberData = async (memberId: string, orgId: string, data: an
     if (data.whatsapp) profileUpdates.whatsapp = data.whatsapp;
     
     if (Object.keys(profileUpdates).length > 0) {
-        await sb.from('profiles').update(profileUpdates).eq('id', memberId);
+        await sb.from('profiles').update(profileUpdates).eq('id', memberId).eq('organization_id', orgId); // CORREÇÃO: Isolamento multi-tenant
     }
     
     if (data.roles && data.ministryId) {
@@ -1155,8 +1155,8 @@ export const fetchGlobalSchedules = async (month: string, ministryId: string, or
         
     const conflicts: any = {};
     data?.forEach((row: any) => {
-        const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
-        const name = profile?.name?.trim().toLowerCase();
+        // CORREÇÃO: Extração direta do nome sem assumir array
+        const name = row.profiles?.name?.trim().toLowerCase();
         if (name) {
             if (!conflicts[name]) conflicts[name] = [];
             conflicts[name].push({

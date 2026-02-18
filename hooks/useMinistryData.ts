@@ -207,7 +207,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
 
   // ADAPTADOR CORRIGIDO (PARTE 2)
   const events = useMemo(() => {
-      const assignmentKeys = new Set<string>();
       const assignments = assignmentsQuery.data?.schedule || {};
       
       const assignmentBasedEvents: any[] = [];
@@ -218,7 +217,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
           if (parts.length >= 3) {
               const ruleId = parts[0];
               const date = parts[1];
-              const uniqueEventKey = `${ruleId}_${date}`;
+              const uniqueEventKey = `${ruleId}_${date}`; // CORREÇÃO: Chave única utilizando RuleID e Data
 
               if (!processedEventKeys.has(uniqueEventKey)) {
                   const ruleEvent = generatedEvents.find(e => e.id === uniqueEventKey);

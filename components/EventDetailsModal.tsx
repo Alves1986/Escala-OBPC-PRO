@@ -64,7 +64,7 @@ export const EventDetailsModal: React.FC<Props> = ({
                 .eq('organization_id', currentUser.organizationId)
                 .eq('ministry_id', ministryId)
                 .eq('event_date', datePart)
-                .eq('event_key', ruleId); // CORREÇÃO: Filtragem estrita por RuleID
+                .eq('event_rule_id', ruleId); // CORREÇÃO: Utilizando event_rule_id
 
             const { data } = await query;
             

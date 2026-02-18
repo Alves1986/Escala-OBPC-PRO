@@ -70,7 +70,7 @@ export const fetchAssignmentsV2 = async (
 
   const { data, error } = await sb
     .from("schedule_assignments")
-    .select('id,event_rule_id,event_date,role,member_id,confirmed')
+    .select('id,event_rule_id,event_date,role,member_id,confirmed,profiles(name)') // CORREÇÃO: Select atualizado
     .eq("ministry_id", ministryId)
     .eq("organization_id", orgId)
     .like("event_date", `${monthStr}%`);
@@ -84,7 +84,7 @@ export const fetchAssignmentsV2 = async (
     role: a.role,
     member_id: a.member_id,
     confirmed: a.confirmed,
-    event_key: a.event_rule_id // Corrected mapping
+    event_key: a.event_rule_id // Mapeamento para compatibilidade de UI
   }));
 };
 
