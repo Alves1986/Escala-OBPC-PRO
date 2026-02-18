@@ -110,12 +110,6 @@ const ScheduleCell: React.FC<ScheduleCellProps> = ({
     // CORREÇÃO PRINCIPAL: 
     // Usar a lógica de seleção diretamente sem depender apenas do onClick padrão
     const handleSelect = (memberId: string) => {
-        console.log("SELECT MEMBER CLICK", {
-            occurrenceDate: occurrence.date,
-            role,
-            memberId,
-            ruleId: occurrence.ruleId
-        });
         onAssign(occurrence.date, role, memberId, occurrence.ruleId);
         setIsOpen(false);
     };
@@ -253,7 +247,6 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
     const loadData = async () => {
         setLoading(true);
         try {
-            // FIX: Ordem correta dos parâmetros (ministryId, orgId)
             const [rolesData, membersData, rules] = await Promise.all([
                 fetchMinistryRoles(ministryId, orgId),
                 fetchMembersV2(ministryId, orgId),
@@ -267,16 +260,13 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth() + 1;
             
-            // FIX: Ordem correta (rules, year, month)
             const generatedOccurrences = generateOccurrencesV2(rules, year, month);
             setOccurrences(generatedOccurrences);
 
             // Buscar escalas existentes (Passa YYYY-MM como string)
             const monthStr = `${year}-${String(month).padStart(2, '0')}`;
             
-            // FIX: Ordem correta e parâmetro de mês (ministryId, orgId, monthStr)
             const existingAssignments = await fetchAssignmentsV2(ministryId, orgId, monthStr);
-            console.log("ASSIGNMENTS FROM DB", existingAssignments);
             setAssignments(existingAssignments);
 
         } catch (error) {
@@ -301,37 +291,32 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
     };
 
     const handleAssignmentChange = async (date: string, role: string, memberId: string | null, ruleId: string) => {
-        console.log("ASSIGNMENT CHANGE START", { date, role, memberId, ruleId });
         setProcessing(true);
         
-        // ID temporário para Optimistic UI
         const tempId = `temp-${Date.now()}`;
         const previousAssignments = [...assignments];
         
-        // Atualização Otimista (feedback instantâneo)
+        // Atualização Otimista
         setAssignments(prev => {
-            // FIX: Usar event_key + event_date + role ao filtrar
-            const filtered = prev.filter(a => !(a.event_date === date && a.role === role && a.event_key === ruleId));
+            const filtered = prev.filter(a => !(a.event_date === date && a.role === role && a.event_rule_id === ruleId));
             const next = memberId
                 ? [...filtered, {
                     id: tempId,
-                    event_key: ruleId, // Adiciona event_key correto da ocorrência
+                    event_rule_id: ruleId, 
                     event_date: date,
                     role,
                     member_id: memberId,
-                    confirmed: false
+                    confirmed: false,
+                    event_key: ruleId
                 }]
                 : filtered;
-            
-            console.log("ASSIGNMENT STATE AFTER UPDATE", next);
             return next;
         });
 
         try {
             if (memberId) {
-                // FIX: Ordem e payload corretos com ruleId explícito
                 await saveAssignmentV2(ministryId, orgId, {
-                    event_key: ruleId,
+                    event_rule_id: ruleId,
                     event_date: date,
                     role,
                     member_id: memberId
@@ -339,9 +324,8 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
                 
                 addToast('Membro escalado', 'success');
             } else {
-                // FIX: Ordem e payload corretos
                 await removeAssignmentV2(ministryId, orgId, {
-                    event_key: ruleId,
+                    event_rule_id: ruleId,
                     event_date: date,
                     role
                 });
@@ -405,7 +389,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
             </div>
 
             {/* AREA DA TABELA */}
-            <div className="flex-1 overflow-auto custom-scrollbar p-1 pb-40"> {/* pb-40 garante espaço para dropdowns inferiores */}
+            <div className="flex-1 overflow-auto custom-scrollbar p-1 pb-40"> 
                 <table className="w-full text-sm border-separate border-spacing-0">
                     <thead className="bg-zinc-50 dark:bg-zinc-800/50 sticky top-0 z-20 shadow-sm">
                         <tr>
@@ -441,12 +425,10 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
                                 
                                 {/* Células de Escala */}
                                 {roles.map(role => {
-                                    // FIX CRÍTICO: Busca assignment usando event_date + event_key (ruleId)
                                     const assignment = assignments.find(a => {
                                         const aDate = a.event_date?.slice(0, 10);
                                         const oDate = occurrence.date?.slice(0, 10);
-                                        // Match obrigatório: DATA + ROLE + KEY
-                                        return aDate === oDate && a.role === role && a.event_key === occurrence.ruleId;
+                                        return aDate === oDate && a.role === role && a.event_rule_id === occurrence.ruleId;
                                     });
 
                                     return (

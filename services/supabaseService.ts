@@ -15,46 +15,27 @@ import {
 
 // --- INITIALIZATION ---
 
-// Declare globals defined in vite.config.ts
-declare const __SUPABASE_URL__: string;
-declare const __SUPABASE_KEY__: string;
-
 let serviceOrgId: string | null = null;
 
 let envUrl = "";
 let envKey = "";
 
-// 1. Try Vite Global Defines (Most reliable in build)
 try {
-  if (typeof __SUPABASE_URL__ !== 'undefined' && __SUPABASE_URL__) {
-    envUrl = __SUPABASE_URL__;
+  // @ts-ignore
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    envUrl = import.meta.env.VITE_SUPABASE_URL || "";
+    envKey = import.meta.env.VITE_SUPABASE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || "";
   }
-  if (typeof __SUPABASE_KEY__ !== 'undefined' && __SUPABASE_KEY__) {
-    envKey = __SUPABASE_KEY__;
-  }
-} catch (e) {}
-
-// 2. Try import.meta.env (Standard Vite Dev)
-if (!envUrl || !envKey) {
-  try {
-    // @ts-ignore
-    if (typeof import.meta !== 'undefined' && import.meta.env) {
-      envUrl = import.meta.env.VITE_SUPABASE_URL || envUrl;
-      envKey = import.meta.env.VITE_SUPABASE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || envKey;
-    }
-  } catch (e) {
-    console.warn("[SupabaseService] Falha ao ler import.meta.env.");
-  }
+} catch (e) {
+  console.warn("[SupabaseService] Falha ao ler import.meta.env. Usando fallback se disponível.");
 }
 
-// 3. Fallback to process.env (Legacy/Node compat)
-if ((!envUrl || !envKey) && typeof process !== 'undefined' && process.env) {
-    envUrl = process.env.VITE_SUPABASE_URL || envUrl;
-    envKey = process.env.VITE_SUPABASE_KEY || process.env.VITE_SUPABASE_ANON_KEY || envKey;
+if (!envUrl && typeof process !== 'undefined' && process.env) {
+    envUrl = process.env.VITE_SUPABASE_URL || "";
+    envKey = process.env.VITE_SUPABASE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
 }
 
-// Inicializa o cliente APENAS se as chaves existirem
-const supabase = (envUrl && envKey && envUrl !== 'undefined' && envKey !== 'undefined') 
+const supabase = (envUrl && envKey) 
   ? createClient(envUrl, envKey, {
       auth: {
           persistSession: true,
@@ -65,8 +46,7 @@ const supabase = (envUrl && envKey && envUrl !== 'undefined' && envKey !== 'unde
   : null;
 
 if (!supabase) {
-    // Warn instead of Critical Error to allow Setup Screen flow
-    console.warn("[SupabaseService] Client não inicializado. Aguardando configuração manual ou verifique VITE_SUPABASE_URL.");
+    console.error("[SupabaseService] CRITICAL: Client não inicializado. Verifique VITE_SUPABASE_URL e VITE_SUPABASE_KEY.");
 }
 
 export const getSupabase = () => supabase;
@@ -96,25 +76,8 @@ const filterRolesBySettings = async (roles: string[], ministryId: string, orgId:
 
 export const setServiceOrgContext = (id: string) => { serviceOrgId = id; };
 export const clearServiceOrgContext = () => { serviceOrgId = null; };
-export const configureSupabaseManual = (url: string, key: string) => { 
-    // Em uma implementação real com recarregamento a quente, isso re-instanciaria o cliente.
-    // Como usamos o padrão de módulo singleton, a recarga da página (window.location.reload) feita no SetupScreen é o método correto.
-    console.log("Configuração manual recebida. Recarregando...");
-};
-
-export const validateConnection = async (url: string, key: string) => { 
-    try {
-        const tempClient = createClient(url, key);
-        const { error } = await tempClient.from('organizations').select('count', { count: 'exact', head: true });
-        // Se der erro de conexão/auth, retorna false. Se der erro de permissão (403) mas conectou, retorna true.
-        if (error && error.code && (error.code === 'PGRST301' || error.message.includes('fetch'))) {
-            return false;
-        }
-        return true;
-    } catch (e) {
-        return false;
-    }
-};
+export const configureSupabaseManual = (url: string, key: string) => { console.warn("Manual config disabled."); };
+export const validateConnection = async (url: string, key: string) => { return false; };
 
 // --- CORE FUNCTIONS ---
 
@@ -224,13 +187,13 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
     const attendance: any = {};
 
     assignments?.forEach((a: any) => {
-        const ruleId = a.event_key;
+        const ruleId = a.event_rule_id;
         const dateStr = a.event_date;
         
         if (ruleId && dateStr) {
             const key = `${ruleId}_${dateStr}_${a.role}`;
             const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
-            const name = profile?.name || a.member_name;
+            const name = profile?.name;
 
             if (name) schedule[key] = name;
             if (a.confirmed) attendance[key] = true;
@@ -344,16 +307,6 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
     const sb = getSupabase();
     if (!sb) throw new Error("No Supabase client");
 
-    // Fetch context to get ministry_id
-    const { data: announcement, error: annError } = await sb.from('announcements')
-        .select('ministry_id')
-        .eq('id', id)
-        .eq('organization_id', orgId)
-        .single();
-
-    if (annError || !announcement) throw new Error("Announcement not found");
-    const ministryId = announcement.ministry_id;
-
     // Validate Profile
     const { data: profile } = await sb.from('profiles').select('id').eq('id', userId).maybeSingle();
     if (!profile) {
@@ -379,14 +332,13 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
             const { error: delError } = await sb.from('announcement_interactions')
                 .delete()
                 .eq('id', existing.id)
-                .eq('organization_id', orgId); // Enforce tenant isolation
+                .eq('organization_id', orgId); // Hardened multi-tenant isolation
             if (delError) throw delError;
         } else {
             const { error: insertError } = await sb.from('announcement_interactions').insert({
                 announcement_id: id,
                 user_id: userId,
                 organization_id: orgId,
-                ministry_id: ministryId,
                 interaction_type: 'like'
             });
             if (insertError) throw insertError;
@@ -396,7 +348,6 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
             announcement_id: id,
             user_id: userId,
             organization_id: orgId,
-            ministry_id: ministryId,
             interaction_type: 'read'
         }, {
             onConflict: 'announcement_id,user_id,interaction_type'
@@ -548,7 +499,7 @@ export const saveOrganizationMinistry = async (orgId: string, code: string, labe
 export const deleteOrganizationMinistry = async (orgId: string, code: string) => {
     const sb = getSupabase();
     if (!sb) return { success: false, message: "Sem conexão" };
-    const { error } = await sb.from('organization_ministries').delete().eq('organization_id', orgId).eq('code', code);
+    const { error = null } = await sb.from('organization_ministries').delete().eq('organization_id', orgId).eq('code', code);
     return error ? { success: false, message: error.message } : { success: true, message: "Removido" };
 };
 
@@ -670,6 +621,7 @@ export const registerWithInvite = async (token: string, userData: any) => {
 export const createEventRule = async (orgId: string, ruleData: any) => {
     const sb = getSupabase();
     if (!sb) throw new Error("No client");
+    const formattedTime = ruleData.time.length > 5 ? ruleData.time.substring(0, 5) : ruleData.time;
     const { data, error } = await sb.from('event_rules').insert({
         organization_id: orgId,
         ministry_id: ruleData.ministryId,
@@ -677,7 +629,7 @@ export const createEventRule = async (orgId: string, ruleData: any) => {
         type: ruleData.type,
         weekday: ruleData.weekday,
         date: ruleData.date,
-        time: ruleData.time,
+        time: formattedTime,
         active: true
     }).select();
     if (error) throw error;
@@ -691,12 +643,13 @@ export const deleteEventRule = async (orgId: string, ruleId: string) => {
 };
 
 export const createMinistryEvent = async (ministryId: string, orgId: string, event: any) => {
+    const formattedTime = event.time.length > 5 ? event.time.substring(0, 5) : event.time;
     return createEventRule(orgId, {
         ministryId,
         title: event.title,
         type: 'single',
         date: event.date,
-        time: event.time
+        time: formattedTime
     });
 };
 
@@ -722,8 +675,6 @@ export const deleteMinistryEvent = async (ministryId: string, orgId: string, eve
 export const updateMinistryEvent = async (ministryId: string, orgId: string, oldIso: string, newTitle: string, newIso: string, applyToAll: boolean) => {
     const sb = getSupabase();
     if (!sb) return;
-    
-    // Simplification for now, as real implementation needs ruleId passed from UI
 };
 
 export const saveScheduleAssignment = async (ministryId: string, orgId: string, eventKey: string, role: string, memberId: string, memberName: string) => {
@@ -744,13 +695,12 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
     const { error } = await sb.from('schedule_assignments').upsert({
         organization_id: orgId,
         ministry_id: ministryId,
-        event_key: ruleId,
+        event_rule_id: ruleId,
         event_date: dateStr,
         role: role,
         member_id: memberId,
-        member_name: memberName,
         confirmed: false
-    }, { onConflict: 'organization_id,ministry_id,event_key,event_date,role' });
+    }, { onConflict: 'organization_id,ministry_id,event_rule_id,event_date,role' });
     
     if (error) throw error;
 };
@@ -769,7 +719,7 @@ export const removeScheduleAssignment = async (ministryId: string, orgId: string
     await sb.from('schedule_assignments').delete()
         .eq('organization_id', orgId)
         .eq('ministry_id', ministryId)
-        .eq('event_key', ruleId)
+        .eq('event_rule_id', ruleId)
         .eq('event_date', dateStr)
         .eq('role', role);
 };
@@ -787,7 +737,7 @@ export const toggleAssignmentConfirmation = async (ministryId: string, orgId: st
         .select('confirmed')
         .eq('organization_id', orgId)
         .eq('ministry_id', ministryId)
-        .eq('event_key', ruleId)
+        .eq('event_rule_id', ruleId)
         .eq('event_date', dateStr)
         .eq('role', role)
         .single();
@@ -797,7 +747,7 @@ export const toggleAssignmentConfirmation = async (ministryId: string, orgId: st
             .update({ confirmed: !data.confirmed })
             .eq('organization_id', orgId)
             .eq('ministry_id', ministryId)
-            .eq('event_key', ruleId)
+            .eq('event_rule_id', ruleId)
             .eq('event_date', dateStr)
             .eq('role', role);
     }
@@ -814,9 +764,6 @@ export const clearScheduleForMonth = async (ministryId: string, orgId: string, m
 };
 
 // --- AVAILABILITY V2 (NEW MEMBER_AVAILABILITY TABLE) ---
-
-// Deprecated V1 (Keep empty/stub if needed or replace entirely)
-// We are replacing the logic, so we introduce V2 functions
 
 export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: string) => {
     const sb = getSupabase();
@@ -838,9 +785,6 @@ export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: strin
         map[row.user_id].push(row.available_date);
         
         if (row.note) {
-            // Note key format: ID_YYYY-MM-00
-            // Notes are stored per day, but UI displays one per month generally.
-            // We'll key it by month for the UI to consume.
             const monthKey = row.available_date.substring(0, 7) + '-00';
             notes[`${row.user_id}_${monthKey}`] = row.note;
         }
@@ -853,8 +797,6 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
     const sb = getSupabase();
     if (!sb) throw new Error("Supabase client not initialized");
 
-    // 1. Delete existing for month
-    // We filter deletion by the target month to allow full replacement of that month's state
     const { error: delError } = await sb
         .from('member_availability')
         .delete()
@@ -865,8 +807,6 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
 
     if (delError) throw delError;
 
-    // 2. Prepare inserts
-    // Filter dates to ensure they belong to targetMonth (safety check)
     const uniqueDates = [...new Set(dates.filter(d => d.startsWith(targetMonth)))];
 
     if (uniqueDates.length > 0) {
@@ -875,7 +815,6 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
             ministry_id: ministryId,
             user_id: userId,
             available_date: date,
-            // Attach the general month note to each day record for simplicity in this schema
             note: notes[`${userId}_${targetMonth}-00`] || null
         }));
 
@@ -887,11 +826,13 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
     }
 };
 
-// Backwards compatibility alias (if needed by other files not yet updated, though we update App.tsx)
-export const fetchMinistryAvailability = fetchMemberAvailabilityV2;
-export const saveMemberAvailability = saveMemberAvailabilityV2;
+export const fetchMinistryAvailability = async (ministryId: string, orgId: string) => {
+    return fetchMemberAvailabilityV2(ministryId, orgId);
+};
 
-// ----------------------------------------------------
+export const saveMemberAvailability = async (ministryId: string, orgId: string, userId: string, dates: string[], notes: any, monthTarget?: string) => {
+    return saveMemberAvailabilityV2(orgId, ministryId, userId, dates, notes, monthTarget || "");
+};
 
 export const fetchSwapRequests = async (ministryId: string, orgId: string) => {
     const sb = getSupabase();
@@ -913,7 +854,7 @@ export const createSwapRequestSQL = async (ministryId: string, orgId: string, re
         requester_id: request.requesterId,
         requester_name: request.requesterName,
         role: request.role,
-        event_iso: request.eventIso,
+        event_datetime: request.eventIso,
         event_title: request.eventTitle,
         status: 'pending'
     });
@@ -923,13 +864,13 @@ export const performSwapSQL = async (ministryId: string, orgId: string, reqId: s
     const sb = getSupabase();
     if (!sb) return;
     
-    const { data: req } = await sb.from('swap_requests').select('*').eq('id', reqId).single();
+    const { data: req } = await sb.from('swap_requests').select('*').eq('id', reqId).eq('organization_id', orgId).single();
     if (!req) return;
     
-    const datePart = req.event_iso.split('T')[0];
+    const datePart = req.event_datetime.split('T')[0];
     
     const { data: assignment } = await sb.from('schedule_assignments')
-        .select('id, event_key')
+        .select('id, event_rule_id')
         .eq('organization_id', orgId)
         .eq('ministry_id', ministryId)
         .eq('event_date', datePart)
@@ -940,14 +881,13 @@ export const performSwapSQL = async (ministryId: string, orgId: string, reqId: s
     if (assignment) {
         await sb.from('schedule_assignments').update({
             member_id: takenById,
-            member_name: takenByName,
             confirmed: false
         }).eq('id', assignment.id);
         
         await sb.from('swap_requests').update({
             status: 'completed',
-            taken_by_name: takenByName
-        }).eq('id', reqId);
+            taken_by_id: takenById
+        }).eq('id', reqId).eq('organization_id', orgId);
     }
 };
 
@@ -1016,8 +956,10 @@ export const deleteMember = async (ministryId: string, orgId: string, memberId: 
 
 export const updateProfileMinistry = async (userId: string, ministryId: string) => {
     const sb = getSupabase();
-    if (!sb) return;
-    await sb.from('profiles').update({ ministry_id: ministryId }).eq('id', userId);
+    if (!sb || !serviceOrgId) return;
+    await sb.from('profiles').update({ ministry_id: ministryId })
+        .eq('id', userId)
+        .eq('organization_id', serviceOrgId);
 };
 
 export const joinMinistry = async (ministryId: string, orgId: string, roles: string[]) => {
@@ -1034,11 +976,16 @@ export const joinMinistry = async (ministryId: string, orgId: string, roles: str
         functions: roles
     });
     
-    const { data: profile } = await sb.from('profiles').select('allowed_ministries').eq('id', user.id).single();
+    const { data: profile } = await sb.from('profiles').select('allowed_ministries')
+        .eq('id', user.id)
+        .eq('organization_id', orgId)
+        .single();
     if (profile) {
         const allowed = new Set(profile.allowed_ministries || []);
         allowed.add(ministryId);
-        await sb.from('profiles').update({ allowed_ministries: Array.from(allowed) }).eq('id', user.id);
+        await sb.from('profiles').update({ allowed_ministries: Array.from(allowed) })
+            .eq('id', user.id)
+            .eq('organization_id', orgId);
     }
 };
 
@@ -1149,7 +1096,7 @@ export const createAnnouncementSQL = async (ministryId: string, orgId: string, a
 export const fetchRepertoire = async (ministryId: string, orgId: string) => {
     const sb = getSupabase();
     if (!sb) return [];
-    const { data } = await sb.from('repertoire')
+    const { data } = await sb.from('repertoire_items')
         .select('*')
         .eq('organization_id', orgId)
         .eq('ministry_id', ministryId)
@@ -1172,7 +1119,7 @@ export const fetchRepertoire = async (ministryId: string, orgId: string) => {
 export const addToRepertoire = async (ministryId: string, orgId: string, item: any) => {
     const sb = getSupabase();
     if (!sb) return false;
-    const { error } = await sb.from('repertoire').insert({
+    const { error } = await sb.from('repertoire_items').insert({
         organization_id: orgId,
         ministry_id: ministryId,
         title: item.title,
@@ -1187,13 +1134,13 @@ export const addToRepertoire = async (ministryId: string, orgId: string, item: a
 export const deleteFromRepertoire = async (id: string, orgId: string) => {
     const sb = getSupabase();
     if (!sb) return;
-    await sb.from('repertoire').delete().eq('id', id).eq('organization_id', orgId);
+    await sb.from('repertoire_items').delete().eq('id', id).eq('organization_id', orgId);
 };
 
 export const updateRepertoireItem = async (id: string, orgId: string, updates: any) => {
     const sb = getSupabase();
     if (!sb) return;
-    await sb.from('repertoire').update(updates).eq('id', id).eq('organization_id', orgId);
+    await sb.from('repertoire_items').update(updates).eq('id', id).eq('organization_id', orgId);
 };
 
 export const fetchGlobalSchedules = async (month: string, ministryId: string, orgId: string) => {
@@ -1201,14 +1148,15 @@ export const fetchGlobalSchedules = async (month: string, ministryId: string, or
     if (!sb) return {};
     
     const { data } = await sb.from('schedule_assignments')
-        .select('ministry_id, event_date, role, member_name')
+        .select('ministry_id, event_date, role, profiles(name)')
         .eq('organization_id', orgId)
         .neq('ministry_id', ministryId)
         .ilike('event_date', `${month}%`);
         
     const conflicts: any = {};
     data?.forEach((row: any) => {
-        const name = row.member_name?.trim().toLowerCase();
+        const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+        const name = profile?.name?.trim().toLowerCase();
         if (name) {
             if (!conflicts[name]) conflicts[name] = [];
             conflicts[name].push({

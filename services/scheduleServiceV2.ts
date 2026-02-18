@@ -11,12 +11,12 @@ export interface EventRuleV2 {
 
 export interface AssignmentV2 {
   id?: string;
-  event_key: string;
+  event_rule_id: string;
   event_date: string;
   role: string;
   member_id: string;
-  member_name?: string;
   confirmed: boolean;
+  event_key: string; // Legacy compatibility
 }
 
 export interface OccurrenceV2 {
@@ -70,7 +70,7 @@ export const fetchAssignmentsV2 = async (
 
   const { data, error } = await sb
     .from("schedule_assignments")
-    .select('id,event_key,event_date,role,member_id,confirmed,profiles(name)')
+    .select('id,event_rule_id,event_date,role,member_id,confirmed')
     .eq("ministry_id", ministryId)
     .eq("organization_id", orgId)
     .like("event_date", `${monthStr}%`);
@@ -79,12 +79,12 @@ export const fetchAssignmentsV2 = async (
 
   return (data || []).map((a: any) => ({
     id: a.id,
-    event_key: a.event_key,
+    event_rule_id: a.event_rule_id,
     event_date: a.event_date,
     role: a.role,
     member_id: a.member_id,
-    member_name: a.profiles?.name,
-    confirmed: a.confirmed
+    confirmed: a.confirmed,
+    event_key: a.event_rule_id // Corrected mapping
   }));
 };
 
@@ -137,7 +137,7 @@ export const saveAssignmentV2 = async (
   ministryId: string,
   orgId: string,
   payload: {
-    event_key: string;
+    event_rule_id: string;
     event_date: string;
     role: string;
     member_id: string;
@@ -152,14 +152,14 @@ export const saveAssignmentV2 = async (
       {
         organization_id: orgId,
         ministry_id: ministryId,
-        event_key: payload.event_key,
+        event_rule_id: payload.event_rule_id,
         event_date: payload.event_date,
         role: payload.role,
         member_id: payload.member_id,
         confirmed: false
       },
       {
-        onConflict: "event_key,event_date,role"
+        onConflict: "organization_id,ministry_id,event_rule_id,event_date,role"
       }
     )
     .select();
@@ -171,7 +171,7 @@ export const removeAssignmentV2 = async (
   ministryId: string,
   orgId: string,
   key: {
-    event_key: string;
+    event_rule_id: string;
     event_date: string;
     role: string;
   }
@@ -184,7 +184,7 @@ export const removeAssignmentV2 = async (
     .delete()
     .eq("organization_id", orgId)
     .eq("ministry_id", ministryId)
-    .eq("event_key", key.event_key)
+    .eq("event_rule_id", key.event_rule_id)
     .eq("event_date", key.event_date)
     .eq("role", key.role);
 
@@ -257,7 +257,7 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
 
   const { data: assignments, error: assignError } = await sb
       .from('schedule_assignments')
-      .select('event_key, event_date')
+      .select('event_rule_id, event_date')
       .eq('organization_id', orgId)
       .eq('ministry_id', ministryId)
       .gte('event_date', todayStr)
@@ -267,7 +267,7 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
       return null;
   }
 
-  const ruleIds = [...new Set(assignments.map((a: any) => a.event_key))];
+  const ruleIds = [...new Set(assignments.map((a: any) => a.event_rule_id))];
 
   const { data: rules } = await sb
       .from('event_rules')
@@ -277,7 +277,7 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
   const rulesMap = new Map(rules?.map((r: any) => [r.id, r]));
 
   const candidates = assignments.map((a: any) => {
-      const rule = rulesMap.get(a.event_key) as any;
+      const rule = rulesMap.get(a.event_rule_id) as any;
       if (!rule) return null; 
 
       const dateTimeStr = `${a.event_date}T${rule.time}`;
@@ -308,7 +308,7 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
       `)
       .eq('organization_id', orgId)
       .eq('ministry_id', ministryId)
-      .eq('event_key', nextEvent.assignment.event_key)
+      .eq('event_rule_id', nextEvent.assignment.event_rule_id)
       .eq('event_date', nextEvent.assignment.event_date);
 
   const members = (membersData || []).map((m: any) => ({
