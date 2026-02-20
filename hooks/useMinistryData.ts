@@ -224,9 +224,13 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       return finalEvents.sort((a, b) => a.iso.localeCompare(b.iso));
   }, [generatedEvents, assignmentsQuery.data]);
 
+  const availability = availabilityV2.availability;
+
   const eventRules = useMemo(() => {
       return (rulesQuery.data || []).filter(r => r.type === 'weekly');
   }, [rulesQuery.data]);
+
+  console.log("[AVAILABILITY_DEBUG]", availability);
 
   return {
     events,
@@ -234,7 +238,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     attendance: assignmentsQuery.data?.attendance || {}, 
     membersMap: membersQuery.data?.memberMap || {},
     publicMembers: membersQuery.data?.publicList || [],
-    availability: availabilityV2.availability, // ID-Based
+    availability, // ID-Based
     availabilityNotes: availabilityV2.notes, // ID-Based
     notifications: notificationsQuery.data || [],
     announcements: announcementsQuery.data || [],
