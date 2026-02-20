@@ -308,7 +308,7 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
     if (!sb) throw new Error("No Supabase client");
 
     // Validate Profile
-    const { data: profile } = await sb.from('profiles').select('id').eq('id', userId).maybeSingle();
+    const { data: profile } = await sb.from('profiles').select('id').eq('id', userId).eq('organization_id', orgId).maybeSingle();
     if (!profile) {
         await sb.from('profiles').upsert({ 
             id: userId, 
@@ -443,11 +443,11 @@ export const fetchUserFunctions = async (userId: string, ministryId: string, org
 export const fetchOrganizationsWithStats = async () => {
     const sb = getSupabase();
     if (!sb) return [];
-    const { data, error } = await sb.from('organizations').select(`*, organization_ministries (id, code, label), profiles (count)`);
+    const { data, error } = await sb.from('organizations').select('*, organization_ministries(id, code, label), profiles(id)');
     if (error) throw error;
     return (data || []).map((o: any) => ({
         id: o.id, name: o.name, slug: o.slug, active: o.active, createdAt: o.created_at,
-        userCount: o.profiles?.[0]?.count || 0,
+        userCount: o.profiles?.length || 0,
         ministryCount: o.organization_ministries?.length || 0,
         ministries: o.organization_ministries?.map((m:any) => ({ id: m.id, code: m.code, label: m.label })) || [],
         // Billing
@@ -681,6 +681,7 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
     const sb = getSupabase();
     if (!sb) return;
     
+    // TODO: replace composite event key with explicit ruleId/date params
     let ruleId = eventKey;
     let dateStr = "";
     
@@ -882,7 +883,7 @@ export const performSwapSQL = async (ministryId: string, orgId: string, reqId: s
         await sb.from('schedule_assignments').update({
             member_id: takenById,
             confirmed: false
-        }).eq('id', assignment.id);
+        }).eq('id', assignment.id).eq('organization_id', orgId);
         
         await sb.from('swap_requests').update({
             status: 'completed',
@@ -1030,7 +1031,8 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
         
     const { data: reads } = await sb.from('notification_reads')
         .select('notification_id')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .eq('organization_id', orgId);
         
     const readSet = new Set(reads?.map((r: any) => r.notification_id));
     

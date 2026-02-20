@@ -41,6 +41,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   }, [mid, orgId]);
 
   // Transform ID-based availability to Name-based for legacy components
+  // TODO: migrate availability mapping from member name -> member id
   const availabilityByName = useMemo(() => {
       const map: Record<string, string[]> = {};
       const membersList = membersQuery.data?.publicList || [];
