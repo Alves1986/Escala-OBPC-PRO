@@ -231,6 +231,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   }, [rulesQuery.data]);
 
   console.log("[AV_HOOK_FINAL]", availability);
+  console.log("[AV_HOOK_IDS]", Object.keys(availabilityV2.availability));
 
   return {
     events,

@@ -38,7 +38,12 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
   const normalizeString = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
   const reportData = useMemo(() => {
-    const data = registeredMembers.map((profile) => {
+    const profiles = registeredMembers;
+    console.log("[AV_UI_PROFILES]", profiles.map(p => ({
+      id: p.id,
+      name: p.name
+    })));
+    const data = profiles.map((profile) => {
       // FIX CRÍTICO: Usa as funções reais do membro (vindas de organization_memberships.functions).
       // Não filtra mais contra 'availableRoles' para evitar "Sem função" se a config estiver desatualizada.
       let roles: string[] = [];
@@ -55,9 +60,10 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
       }
 
       const dates = availability[profile.id] || [];
-      console.log("[AV_UI_PROFILE]", {
+      console.log("[AV_UI_COMPARE]", {
         profileId: profile.id,
-        availabilityForUser: availability[profile.id]
+        availabilityExists: !!availability[profile.id],
+        dates: availability[profile.id]
       });
       const isBlocked = dates.some(d => d.startsWith(currentMonth) && (d.includes('BLK') || d.includes('BLOCKED')));
 

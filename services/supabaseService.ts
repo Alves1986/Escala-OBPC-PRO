@@ -799,7 +799,10 @@ export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: strin
         }
     });
 
-    console.log("[AV_SERVICE_MAP]", map);
+    console.log("[AV_SERVICE_FINAL_MAP]", {
+      map,
+      keys: Object.keys(map)
+    });
 
     return { availability: map, notes };
 };
