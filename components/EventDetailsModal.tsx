@@ -103,7 +103,11 @@ export const EventDetailsModal: React.FC<Props> = ({
   // Determine if user is scheduled for this event (Legacy check + New DB Check)
   // Fallback to schedule map uses correct canonical key: ruleId_date_role
   // event.id IS ruleId_date
-  const userAssignment = currentUser ? expandedRoles.find(r => schedule[`${event.id}_${r.keySuffix}`] === currentUser.name) : null;
+  const userAssignment = currentUser ? expandedRoles.find(r => {
+      const list = assignmentMap[r.baseRole] || [];
+      const assignment = list[r.index] || (r.baseRole !== 'Vocal' ? list[0] : null);
+      return assignment?.member_id === currentUser.id;
+  }) : null;
 
   const googleCalUrl = generateGoogleCalendarUrl(
       `Escala: ${title}`,
@@ -228,14 +232,9 @@ export const EventDetailsModal: React.FC<Props> = ({
                             const memberName = dbAssignment?.profiles?.name;
                             const memberAvatar = dbAssignment?.profiles?.avatar_url;
                             
-                            // Fallback para Schedule prop se não houver dados no banco (caso de delay ou cache antigo)
-                            // CORREÇÃO CRÍTICA: Fallback usa a chave composta ruleId_date_role
-                            // event.id JÁ É ruleId_date
-                            const legacyName = schedule[`${event.id}_${roleObj.keySuffix}`];
-                            const legacyProfile = allMembers.find(m => m.name === legacyName);
 
-                            const finalName = memberName || legacyName;
-                            const finalAvatar = memberAvatar || legacyProfile?.avatar_url;
+                            const finalName = memberName;
+                            const finalAvatar = memberAvatar;
 
                             return (
                                 <div key={roleObj.keySuffix} className="flex items-center justify-between group p-2 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors border border-transparent hover:border-zinc-100 dark:hover:border-zinc-700/50">

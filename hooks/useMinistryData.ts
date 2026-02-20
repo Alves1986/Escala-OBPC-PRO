@@ -40,41 +40,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       }
   }, [mid, orgId]);
 
-  // Transform ID-based availability to Name-based for legacy components
-  // TODO: migrate availability mapping from member name -> member id
-  const availabilityByName = useMemo(() => {
-      const map: Record<string, string[]> = {};
-      const membersList = membersQuery.data?.publicList || [];
-      
-      Object.entries(availabilityV2.availability).forEach(([userId, dates]) => {
-          const member = membersList.find(m => m.id === userId);
-          if (member) {
-              map[member.name] = dates;
-          }
-      });
-      return map;
-  }, [availabilityV2, membersQuery.data]);
-
-  // Note: availabilityNotes uses "UserID_Month" key. We need to map it to "Name_Month" for legacy if needed, 
-  // but AvailabilityScreen now uses IDs, so legacy mapping might only be needed if ScheduleTable uses notes by name.
-  // ScheduleTable logic currently uses `getMemberNote` via name.
-  const notesByName = useMemo(() => {
-      const map: Record<string, string> = {};
-      const membersList = membersQuery.data?.publicList || [];
-      
-      Object.entries(availabilityV2.notes).forEach(([key, value]) => {
-          // Key format: UserID_YYYY-MM-00
-          const parts = key.split('_');
-          const userId = parts[0];
-          const datePart = parts.slice(1).join('_');
-          
-          const member = membersList.find(m => m.id === userId);
-          if (member) {
-              map[`${member.name}_${datePart}`] = value;
-          }
-      });
-      return map;
-  }, [availabilityV2, membersQuery.data]);
 
 
   // CÁLCULO DE DATAS PARA O USEEVENTS (Regras de projeção)
@@ -271,8 +236,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     publicMembers: membersQuery.data?.publicList || [],
     availability: availabilityV2.availability, // ID-Based
     availabilityNotes: availabilityV2.notes, // ID-Based
-    availabilityByName, // LEGACY Support Name-Based
-    notesByName, // LEGACY Support Name-Based
     notifications: notificationsQuery.data || [],
     announcements: announcementsQuery.data || [],
     repertoire: repertoireQuery.data || [],
