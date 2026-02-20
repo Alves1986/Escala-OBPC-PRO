@@ -778,7 +778,7 @@ export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: strin
 
     const { data, error } = await sb
         .from('member_availability')
-        .select('user_id, available_date, note')
+        .select('user_id, available_date, notes')
         .eq('organization_id', orgId)
         .eq('ministry_id', ministryId);
 
@@ -791,9 +791,9 @@ export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: strin
         if (!map[row.user_id]) map[row.user_id] = [];
         map[row.user_id].push(row.available_date);
         
-        if (row.note) {
+        if (row.notes) {
             const monthKey = row.available_date.substring(0, 7) + '-00';
-            notes[`${row.user_id}_${monthKey}`] = row.note;
+            notes[`${row.user_id}_${monthKey}`] = row.notes;
         }
     });
 
