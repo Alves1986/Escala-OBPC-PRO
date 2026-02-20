@@ -778,7 +778,7 @@ export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: strin
 
     const { data, error } = await sb
         .from('member_availability')
-        .select('user_id, available_date, notes')
+        .select('user_id, available_date, note')
         .eq('organization_id', orgId)
         .eq('ministry_id', ministryId);
 
@@ -787,15 +787,19 @@ export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: strin
     const map: Record<string, string[]> = {};
     const notes: Record<string, string> = {};
 
+    console.log("[AV_SERVICE_RAW]", data);
+
     data?.forEach((row: any) => {
         if (!map[row.user_id]) map[row.user_id] = [];
         map[row.user_id].push(row.available_date);
         
-        if (row.notes) {
+        if (row.note) {
             const monthKey = row.available_date.substring(0, 7) + '-00';
-            notes[`${row.user_id}_${monthKey}`] = row.notes;
+            notes[`${row.user_id}_${monthKey}`] = row.note;
         }
     });
+
+    console.log("[AV_SERVICE_MAP]", map);
 
     return { availability: map, notes };
 };

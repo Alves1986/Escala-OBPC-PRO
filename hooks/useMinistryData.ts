@@ -36,7 +36,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   // Manual fetching/syncing for Availability V2 to integrate it
   useEffect(() => {
       if (mid && orgId) {
-          fetchMemberAvailabilityV2(mid, orgId).then(data => setAvailabilityV2(data)).catch(console.error);
+          fetchMemberAvailabilityV2(mid, orgId).then((availabilityV2) => { console.log("[AV_HOOK_RESPONSE]", availabilityV2); setAvailabilityV2(availabilityV2); }).catch(console.error);
       }
   }, [mid, orgId]);
 
@@ -91,7 +91,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   const refreshData = async () => {
       // Also refresh manual V2 fetch
       if (mid && orgId) {
-          fetchMemberAvailabilityV2(mid, orgId).then(data => setAvailabilityV2(data)).catch(console.error);
+          fetchMemberAvailabilityV2(mid, orgId).then((availabilityV2) => { console.log("[AV_HOOK_RESPONSE]", availabilityV2); setAvailabilityV2(availabilityV2); }).catch(console.error);
       }
 
       await queryClient.invalidateQueries({ predicate: (query) => 
@@ -139,7 +139,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
             () => {
                 // Refresh Availability V2
                 if (mid && orgId) {
-                    fetchMemberAvailabilityV2(mid, orgId).then(data => setAvailabilityV2(data)).catch(console.error);
+                    fetchMemberAvailabilityV2(mid, orgId).then((availabilityV2) => { console.log("[AV_HOOK_RESPONSE]", availabilityV2); setAvailabilityV2(availabilityV2); }).catch(console.error);
                 }
             }
         )
@@ -230,7 +230,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       return (rulesQuery.data || []).filter(r => r.type === 'weekly');
   }, [rulesQuery.data]);
 
-  console.log("[AVAILABILITY_DEBUG]", availability);
+  console.log("[AV_HOOK_FINAL]", availability);
 
   return {
     events,

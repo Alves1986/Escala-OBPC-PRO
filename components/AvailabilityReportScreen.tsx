@@ -55,6 +55,10 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
       }
 
       const dates = availability[profile.id] || [];
+      console.log("[AV_UI_PROFILE]", {
+        profileId: profile.id,
+        availabilityForUser: availability[profile.id]
+      });
       const isBlocked = dates.some(d => d.startsWith(currentMonth) && (d.includes('BLK') || d.includes('BLOCKED')));
 
       const monthDates = dates
