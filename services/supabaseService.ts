@@ -443,19 +443,25 @@ export const fetchUserFunctions = async (userId: string, ministryId: string, org
 export const fetchOrganizationsWithStats = async () => {
     const sb = getSupabase();
     if (!sb) return [];
-    const { data, error } = await sb.from('organizations').select('*, organization_ministries(id, code, label), profiles(id)');
+    const { data, error } = await sb.from('organizations').select(`
+  *,
+  organization_ministries(id, code, label),
+  profiles(id)
+`);
+    console.log("[SUPER_ADMIN_ORGS]", data, error);
     if (error) throw error;
-    return (data || []).map((o: any) => ({
-        id: o.id, name: o.name, slug: o.slug, active: o.active, createdAt: o.created_at,
-        userCount: o.profiles?.length || 0,
-        ministryCount: o.organization_ministries?.length || 0,
-        ministries: o.organization_ministries?.map((m:any) => ({ id: m.id, code: m.code, label: m.label })) || [],
+    return (data || []).map((org: any) => ({
+        id: org.id, name: org.name, slug: org.slug, active: org.active, createdAt: org.created_at,
+        totalUsers: org.profiles?.length || 0,
+        userCount: org.profiles?.length || 0,
+        ministryCount: org.organization_ministries?.length || 0,
+        ministries: org.organization_ministries?.map((m:any) => ({ id: m.id, code: m.code, label: m.label })) || [],
         // Billing
-        plan_type: o.plan_type,
-        billing_status: o.billing_status,
-        trial_ends_at: o.trial_ends_at,
-        access_locked: o.access_locked,
-        checkout_url: o.checkout_url
+        plan_type: org.plan_type,
+        billing_status: org.billing_status,
+        trial_ends_at: org.trial_ends_at,
+        access_locked: org.access_locked,
+        checkout_url: org.checkout_url
     }));
 };
 
