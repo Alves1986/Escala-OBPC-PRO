@@ -811,20 +811,26 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
     const sb = getSupabase();
     if (!sb) throw new Error("Supabase client not initialized");
 
+    const monthStart = `${targetMonth}-01`;
+    const monthEnd = new Date(`${targetMonth}-01T00:00:00`);
+    monthEnd.setMonth(monthEnd.getMonth() + 1);
+    const monthEndStr = monthEnd.toISOString().slice(0, 10);
+
     const { error: delError } = await sb
         .from('member_availability')
         .delete()
         .eq('organization_id', orgId)
         .eq('ministry_id', ministryId)
         .eq('user_id', userId)
-        .ilike('available_date', `${targetMonth}%`);
+        .gte('available_date', monthStart)
+        .lt('available_date', monthEndStr);
 
     if (delError) throw delError;
 
     const uniqueDates = [...new Set(dates.filter(d => d.startsWith(targetMonth)))];
 
     if (uniqueDates.length > 0) {
-        const rows = uniqueDates.map(date => ({
+        const payload = uniqueDates.map(date => ({
             organization_id: orgId,
             ministry_id: ministryId,
             user_id: userId,
@@ -832,9 +838,11 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
             note: notes[`${userId}_${targetMonth}-00`] || null
         }));
 
+        console.log("[AV_SAVE_PAYLOAD]", payload);
+
         const { error: insError } = await sb
             .from('member_availability')
-            .insert(rows);
+            .insert(payload);
 
         if (insError) throw insError;
     }
