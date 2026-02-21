@@ -109,7 +109,9 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
 
                 const orgId = profile.organization_id || '';
                 if (!orgId) {
-                    throw new Error('ORGANIZATION_ID_MISSING');
+                    setUser(null);
+                    setStatus('unauthenticated');
+                    return;
                 }
 
                 setServiceOrgContext(orgId);

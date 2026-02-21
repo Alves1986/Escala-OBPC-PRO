@@ -36,44 +36,10 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   // Manual fetching/syncing for Availability V2 to integrate it
   useEffect(() => {
       if (mid && orgId) {
-          fetchMemberAvailabilityV2(mid, orgId).then(data => setAvailabilityV2(data)).catch(console.error);
+          fetchMemberAvailabilityV2(mid, orgId).then((availabilityV2) => { console.log("[AV_HOOK_RESPONSE]", availabilityV2); setAvailabilityV2(availabilityV2); }).catch(console.error);
       }
   }, [mid, orgId]);
 
-  // Transform ID-based availability to Name-based for legacy components
-  const availabilityByName = useMemo(() => {
-      const map: Record<string, string[]> = {};
-      const membersList = membersQuery.data?.publicList || [];
-      
-      Object.entries(availabilityV2.availability).forEach(([userId, dates]) => {
-          const member = membersList.find(m => m.id === userId);
-          if (member) {
-              map[member.name] = dates;
-          }
-      });
-      return map;
-  }, [availabilityV2, membersQuery.data]);
-
-  // Note: availabilityNotes uses "UserID_Month" key. We need to map it to "Name_Month" for legacy if needed, 
-  // but AvailabilityScreen now uses IDs, so legacy mapping might only be needed if ScheduleTable uses notes by name.
-  // ScheduleTable logic currently uses `getMemberNote` via name.
-  const notesByName = useMemo(() => {
-      const map: Record<string, string> = {};
-      const membersList = membersQuery.data?.publicList || [];
-      
-      Object.entries(availabilityV2.notes).forEach(([key, value]) => {
-          // Key format: UserID_YYYY-MM-00
-          const parts = key.split('_');
-          const userId = parts[0];
-          const datePart = parts.slice(1).join('_');
-          
-          const member = membersList.find(m => m.id === userId);
-          if (member) {
-              map[`${member.name}_${datePart}`] = value;
-          }
-      });
-      return map;
-  }, [availabilityV2, membersQuery.data]);
 
 
   // CÁLCULO DE DATAS PARA O USEEVENTS (Regras de projeção)
@@ -125,7 +91,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   const refreshData = async () => {
       // Also refresh manual V2 fetch
       if (mid && orgId) {
-          fetchMemberAvailabilityV2(mid, orgId).then(data => setAvailabilityV2(data)).catch(console.error);
+          fetchMemberAvailabilityV2(mid, orgId).then((availabilityV2) => { console.log("[AV_HOOK_RESPONSE]", availabilityV2); setAvailabilityV2(availabilityV2); }).catch(console.error);
       }
 
       await queryClient.invalidateQueries({ predicate: (query) => 
@@ -173,7 +139,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
             () => {
                 // Refresh Availability V2
                 if (mid && orgId) {
-                    fetchMemberAvailabilityV2(mid, orgId).then(data => setAvailabilityV2(data)).catch(console.error);
+                    fetchMemberAvailabilityV2(mid, orgId).then((availabilityV2) => { console.log("[AV_HOOK_RESPONSE]", availabilityV2); setAvailabilityV2(availabilityV2); }).catch(console.error);
                 }
             }
         )
@@ -258,9 +224,14 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       return finalEvents.sort((a, b) => a.iso.localeCompare(b.iso));
   }, [generatedEvents, assignmentsQuery.data]);
 
+  const availability = availabilityV2.availability;
+
   const eventRules = useMemo(() => {
       return (rulesQuery.data || []).filter(r => r.type === 'weekly');
   }, [rulesQuery.data]);
+
+  console.log("[AV_HOOK_FINAL]", availability);
+  console.log("[AV_HOOK_IDS]", Object.keys(availabilityV2.availability));
 
   return {
     events,
@@ -268,10 +239,8 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     attendance: assignmentsQuery.data?.attendance || {}, 
     membersMap: membersQuery.data?.memberMap || {},
     publicMembers: membersQuery.data?.publicList || [],
-    availability: availabilityV2.availability, // ID-Based
+    availability, // ID-Based
     availabilityNotes: availabilityV2.notes, // ID-Based
-    availabilityByName, // LEGACY Support Name-Based
-    notesByName, // LEGACY Support Name-Based
     notifications: notificationsQuery.data || [],
     announcements: announcementsQuery.data || [],
     repertoire: repertoireQuery.data || [],

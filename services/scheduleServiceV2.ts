@@ -84,7 +84,7 @@ export const fetchAssignmentsV2 = async (
     role: a.role,
     member_id: a.member_id,
     confirmed: a.confirmed,
-    event_key: a.event_rule_id // Mapeamento para compatibilidade de UI
+    event_key: a.event_rule_id // compatibility layer: event_key maps to event_rule_id
   }));
 };
 

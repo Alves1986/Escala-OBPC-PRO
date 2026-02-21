@@ -178,7 +178,8 @@ export const generateIndividualPDF = (
   monthIso: string,
   memberName: string,
   events: { iso: string; title: string; dateDisplay: string }[],
-  schedule: ScheduleMap
+  schedule: ScheduleMap,
+  memberId?: string
 ) => {
   // Portrait para individual
   const doc = new jsPDF();
@@ -202,8 +203,8 @@ export const generateIndividualPDF = (
   // Filtrar eventos do membro
   const myEvents = [];
   events.forEach(evt => {
-      Object.entries(schedule).forEach(([key, assignedName]) => {
-          if (key.startsWith(evt.iso) && assignedName === memberName) {
+      Object.entries(schedule).forEach(([key, assignment]) => {
+          if (key.startsWith(evt.iso) && (assignment as any)?.member_id === memberId) {
               const role = key.split('_').slice(1).join(' '); 
               myEvents.push({
                   date: evt.dateDisplay,

@@ -38,7 +38,12 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
   const normalizeString = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
   const reportData = useMemo(() => {
-    const data = registeredMembers.map((profile) => {
+    const profiles = registeredMembers;
+    console.log("[AV_UI_PROFILES]", profiles.map(p => ({
+      id: p.id,
+      name: p.name
+    })));
+    const data = profiles.map((profile) => {
       // FIX CRÍTICO: Usa as funções reais do membro (vindas de organization_memberships.functions).
       // Não filtra mais contra 'availableRoles' para evitar "Sem função" se a config estiver desatualizada.
       let roles: string[] = [];
@@ -54,11 +59,23 @@ export const AvailabilityReportScreen: React.FC<Props> = ({
         });
       }
 
-      const dates = availability[profile.name] || [];
+      const dates = availability[profile.id] || [];
+      console.log("[AV_UI_COMPARE]", {
+        profileId: profile.id,
+        availabilityExists: !!availability[profile.id],
+        dates: availability[profile.id]
+      });
       const isBlocked = dates.some(d => d.startsWith(currentMonth) && (d.includes('BLK') || d.includes('BLOCKED')));
 
       const monthDates = dates
-        .filter(d => d.startsWith(currentMonth) && !d.includes('BLK'))
+        .filter(d => {
+            const normalized =
+              typeof d === "string"
+                ? d.slice(0, 10) // garante YYYY-MM-DD mesmo se vier datetime
+                : "";
+
+            return normalized.startsWith(currentMonth) && !normalized.includes("BLK");
+        })
         .map(d => {
             const parts = d.split('_');
             const dayNum = parseInt(d.split('-')[2]);
