@@ -773,13 +773,24 @@ export const clearScheduleForMonth = async (ministryId: string, orgId: string, m
 
 // --- AVAILABILITY V2 (NEW MEMBER_AVAILABILITY TABLE) ---
 
+
+const parseAvailabilityDate = (input: string): { date: string; period: 'FULL' | 'MORNING' | 'NIGHT' } => {
+    if (input.endsWith('_M')) {
+        return { date: input.slice(0, 10), period: 'MORNING' };
+    }
+    if (input.endsWith('_N')) {
+        return { date: input.slice(0, 10), period: 'NIGHT' };
+    }
+    return { date: input.slice(0, 10), period: 'FULL' };
+};
+
 export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: string) => {
     const sb = getSupabase();
     if (!sb) throw new Error("Supabase client not initialized");
 
     const { data, error } = await sb
         .from('member_availability')
-        .select('user_id, available_date, note')
+        .select('user_id, available_date, period, note')
         .eq('organization_id', orgId)
         .eq('ministry_id', ministryId);
 
@@ -792,7 +803,15 @@ export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: strin
 
     data?.forEach((row: any) => {
         if (!map[row.user_id]) map[row.user_id] = [];
-        map[row.user_id].push(row.available_date);
+
+        const normalizedPeriod = row.period || 'FULL';
+        const dateWithPeriod = normalizedPeriod === 'MORNING'
+            ? `${row.available_date}_M`
+            : normalizedPeriod === 'NIGHT'
+            ? `${row.available_date}_N`
+            : row.available_date;
+
+        map[row.user_id].push(dateWithPeriod);
         
         if (row.note) {
             const monthKey = row.available_date.substring(0, 7) + '-00';
@@ -831,13 +850,17 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
     const uniqueDates = [...new Set(dates.filter(d => d.startsWith(targetMonth)))];
 
     if (uniqueDates.length > 0) {
-        const payload = uniqueDates.map(date => ({
-            organization_id: orgId,
-            ministry_id: ministryId,
-            user_id: userId,
-            available_date: date,
-            note: notes[`${userId}_${targetMonth}-00`] || null
-        }));
+        const payload = uniqueDates.map((dateInput) => {
+            const parsed = parseAvailabilityDate(dateInput);
+            return {
+                organization_id: orgId,
+                ministry_id: ministryId,
+                user_id: userId,
+                available_date: parsed.date,
+                period: parsed.period,
+                note: notes[`${userId}_${targetMonth}-00`] || null
+            };
+        });
 
         console.log("[AV_SAVE_PAYLOAD]", payload);
 
