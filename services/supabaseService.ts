@@ -795,7 +795,10 @@ export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: strin
     data?.forEach((row: any) => {
         if (!map[row.user_id]) map[row.user_id] = [];
 
-        map[row.user_id].push(row.available_date);
+        const baseDate = row.available_date;
+        const key = row.note ? `${baseDate}_${row.note}` : baseDate;
+        console.log("[AV_FETCH_PERIOD]", row.available_date, row.note, key);
+        map[row.user_id].push(key);
         
         if (row.note) {
             const monthKey = row.available_date.substring(0, 7) + '-00';
@@ -835,15 +838,17 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
 
     if (uniqueDates.length > 0) {
         const payload = uniqueDates.map((dateString) => {
-            const originalDate = dateString;
-            const normalizedDate = dateString.split('_')[0];
-            console.log("[AV_SAVE_NORMALIZED]", originalDate, normalizedDate);
+            const [dateOnly, period] = dateString.split('_');
+
+            const normalizedDate = dateOnly;
+            const periodMarker = period ?? null;
+            console.log("[AV_SAVE_PERIOD]", dateString, normalizedDate, periodMarker);
             return {
                 organization_id: orgId,
                 ministry_id: ministryId,
                 user_id: userId,
                 available_date: normalizedDate,
-                note: notes[`${userId}_${targetMonth}-00`] || null
+                note: periodMarker
             };
         });
 
