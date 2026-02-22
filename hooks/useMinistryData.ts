@@ -17,6 +17,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
 
   // We explicitly use V2 service here instead of the generic hook to ensure transformation
   const [availabilityV2, setAvailabilityV2] = useState<{ availability: Record<string, string[]>, notes: Record<string, string> }>({ availability: {}, notes: {} });
+  const [editorEvents, setEditorEvents] = useState<any[]>([]);
 
   const {
     settingsQuery,
@@ -173,7 +174,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   }, [mid, currentMonth, queryClient, orgId]);
 
   // ADAPTADOR CORRIGIDO (PARTE 2)
-  const events = useMemo(() => {
+  const builtEditorEvents = useMemo(() => {
       console.log("[EDITOR_CURRENT_MONTH]", currentMonth);
       const assignments = assignmentsQuery.data?.schedule || {};
       console.log("[EDITOR_EVENTS_RAW]", assignments);
@@ -243,6 +244,26 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       return filteredEvents.sort((a, b) => a.iso.localeCompare(b.iso));
   }, [generatedEvents, assignmentsQuery.data, currentMonth]);
 
+  useEffect(() => {
+      console.log("[EDITOR_RESET_MONTH]", currentMonth);
+      setEditorEvents([]);
+  }, [currentMonth]);
+
+  useEffect(() => {
+      const monthEvents = builtEditorEvents.filter((event) => {
+          const eventDate = typeof event?.iso === "string" ? event.iso.split("T")[0] : "";
+          return eventDate.startsWith(currentMonth);
+      });
+
+      setEditorEvents(monthEvents);
+
+      console.log("[EDITOR_EVENTS_AFTER_BUILD]", {
+          month: currentMonth,
+          count: monthEvents.length,
+          dates: monthEvents.map(e => (typeof e?.iso === "string" ? e.iso.split("T")[0] : ""))
+      });
+  }, [builtEditorEvents, currentMonth]);
+
   const availability = availabilityV2.availability;
 
   const eventRules = useMemo(() => {
@@ -253,7 +274,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   console.log("[AV_HOOK_IDS]", Object.keys(availabilityV2.availability));
 
   return {
-    events,
+    events: editorEvents,
     schedule: assignmentsQuery.data?.schedule || {}, 
     attendance: assignmentsQuery.data?.attendance || {}, 
     membersMap: membersQuery.data?.memberMap || {},
