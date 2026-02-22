@@ -703,11 +703,12 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
         organization_id: orgId,
         ministry_id: ministryId,
         event_rule_id: ruleId,
+        event_key: ruleId,
         event_date: dateStr,
         role: role,
         member_id: memberId,
         confirmed: false
-    }, { onConflict: 'organization_id,ministry_id,event_rule_id,event_date,role' });
+    }, { onConflict: 'event_key,event_date,role' });
     
     if (error) throw error;
 };

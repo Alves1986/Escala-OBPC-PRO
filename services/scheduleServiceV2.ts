@@ -153,13 +153,14 @@ export const saveAssignmentV2 = async (
         organization_id: orgId,
         ministry_id: ministryId,
         event_rule_id: payload.event_rule_id,
+        event_key: payload.event_rule_id,
         event_date: payload.event_date,
         role: payload.role,
         member_id: payload.member_id,
         confirmed: false
       },
       {
-        onConflict: "organization_id,ministry_id,event_rule_id,event_date,role"
+        onConflict: "event_key,event_date,role"
       }
     )
     .select();
