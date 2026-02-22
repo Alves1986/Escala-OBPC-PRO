@@ -247,27 +247,65 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [rolesData, membersData, rules] = await Promise.all([
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            const selectedMonth = `${year}-${String(month).padStart(2, '0')}`;
+            console.log("[SCALE_MONTH_FILTER]", selectedMonth);
+
+            const [rolesData, membersData, rules, existingAssignments] = await Promise.all([
                 fetchMinistryRoles(ministryId, orgId),
                 fetchMembersV2(ministryId, orgId),
-                fetchRulesV2(ministryId, orgId)
+                fetchRulesV2(ministryId, orgId),
+                fetchAssignmentsV2(ministryId, orgId, selectedMonth)
             ]);
 
             setRoles(rolesData);
             setMembers(membersData);
 
-            // Gerar ocorrências do mês
-            const year = currentDate.getFullYear();
-            const month = currentDate.getMonth() + 1;
-            
-            const generatedOccurrences = generateOccurrencesV2(rules, year, month);
-            setOccurrences(generatedOccurrences);
+            const monthlyAssignments = existingAssignments.filter((assignment) => {
+                console.log("[SCALE_ASSIGNMENT_DATE]", assignment.event_date);
+                return assignment.event_date?.startsWith(selectedMonth);
+            });
+            setAssignments(monthlyAssignments);
 
-            // Buscar escalas existentes (Passa YYYY-MM como string)
-            const monthStr = `${year}-${String(month).padStart(2, '0')}`;
-            
-            const existingAssignments = await fetchAssignmentsV2(ministryId, orgId, monthStr);
-            setAssignments(existingAssignments);
+            const generatedOccurrences = generateOccurrencesV2(rules, year, month);
+            const rulesMap = new Map(rules.map((rule) => [rule.id, rule]));
+
+            const assignmentOccurrences: OccurrenceV2[] = [];
+            const assignmentOccurrenceKeys = new Set<string>();
+
+            monthlyAssignments.forEach((assignment) => {
+                const eventDate = assignment.event_date?.slice(0, 10);
+                if (!eventDate) return;
+
+                const ruleId = assignment.event_rule_id || assignment.event_key;
+                const rule = rulesMap.get(ruleId);
+                const rawTime = assignment.event_date?.includes('T')
+                    ? assignment.event_date.split('T')[1]?.slice(0, 5)
+                    : undefined;
+                const time = rule?.time || rawTime || '00:00';
+                const occurrenceRuleId = ruleId || `missing-rule-${eventDate}`;
+                const occurrenceKey = `${occurrenceRuleId}_${eventDate}`;
+
+                if (assignmentOccurrenceKeys.has(occurrenceKey)) return;
+                assignmentOccurrenceKeys.add(occurrenceKey);
+
+                assignmentOccurrences.push({
+                    ruleId: occurrenceRuleId,
+                    date: eventDate,
+                    time,
+                    title: rule?.title || 'Evento',
+                    iso: `${eventDate}T${time}`
+                });
+            });
+
+            const generatedKeys = new Set(generatedOccurrences.map((o) => `${o.ruleId}_${o.date}`));
+            const mergedOccurrences = [
+                ...generatedOccurrences,
+                ...assignmentOccurrences.filter((o) => !generatedKeys.has(`${o.ruleId}_${o.date}`))
+            ].sort((a, b) => a.iso.localeCompare(b.iso));
+
+            setOccurrences(mergedOccurrences);
 
         } catch (error) {
             console.error(error);
