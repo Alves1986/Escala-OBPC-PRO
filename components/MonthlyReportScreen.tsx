@@ -25,88 +25,93 @@ export const MonthlyReportScreen: React.FC<Props> = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState<'name' | 'rate' | 'scheduled'>('name');
 
-  // Cálculo das Métricas
-  const reportData = useMemo(() => {
-    // 1. Filtrar eventos do mês
-    const monthEventIsos = events
-      .filter(item => {
-        console.log("[MONTHLY_SAFE_FILTER_INPUT]", item);
-        const safeDate =
-          typeof item?.iso === 'string'
-            ? item.iso
-            : '';
+  type MonthlyAssignment = {
+    event_key?: string;
+    event_rule_id?: string;
+    event_date?: string;
+    member_id?: string;
+    confirmed?: boolean;
+  };
 
-        if (safeDate === '') {
-          return false;
-        }
+  const getRuleId = (a: MonthlyAssignment) =>
+    a.event_key ?? a.event_rule_id ?? null;
 
-        return safeDate.startsWith(currentMonth);
-      })
-      .map(e => e.iso);
+  const isSameMonth = (date: string | undefined, month: string) =>
+    typeof date === 'string' && date.startsWith(month);
 
-    // 2. Processar dados por membro
-    const data = members.map(member => {
-      let scheduledCount = 0;
-      let confirmedCount = 0;
-      
-      // Analisar Escala e Presença
-      Object.entries(schedule).forEach(([key, assignedName]) => {
-        const isThisMonth = monthEventIsos.some(iso => {
-          const safeKey = typeof key === 'string' ? key : '';
-          const safeIso = typeof iso === 'string' ? iso : '';
+  const rawSchedule = schedule as unknown;
+  const assignmentsSource: unknown[] = Array.isArray(rawSchedule)
+    ? rawSchedule
+    : (
+      rawSchedule &&
+      typeof rawSchedule === 'object' &&
+      Array.isArray((rawSchedule as { schedule_assignments?: unknown[] }).schedule_assignments)
+    )
+      ? (rawSchedule as { schedule_assignments: unknown[] }).schedule_assignments
+      : Object.entries(schedule).map(([key, assignedName]) => {
+          const [event_key, event_date] = key.split('_');
+          const mappedMember = members.find(m => m.name === assignedName);
 
-          if (safeKey === '' || safeIso === '') {
-            return false;
-          }
-
-          return safeKey.startsWith(safeIso);
+          return {
+            event_key,
+            event_date,
+            member_id: mappedMember?.id,
+          };
         });
 
-        if (isThisMonth && assignedName === member.name) {
-          scheduledCount++;
-          if (attendance[key]) {
-            confirmedCount++;
-          }
-        }
-      });
+  console.log("[MONTHLY_RAW_ASSIGNMENTS]", assignmentsSource);
+  console.log("[MONTHLY_RAW_EVENTS]", events);
+  console.log("[MONTHLY_RAW_MEMBERS]", members);
 
-      // Analisar Trocas (Engajamento)
-      const swapsRequested = swapRequests.filter(item => {
-        console.log("[MONTHLY_SAFE_FILTER_INPUT]", item);
-        const safeDate =
-          typeof item?.eventIso === 'string'
-            ? item.eventIso
-            : ((item as { event_date?: string; available_date?: string; date?: string })?.event_date ??
-              (item as { event_date?: string; available_date?: string; date?: string })?.available_date ??
-              (item as { event_date?: string; available_date?: string; date?: string })?.date ??
-              '');
+  // Cálculo das Métricas
+  const { reportData, monthlyAssignments } = useMemo(() => {
+    if (!Array.isArray(assignmentsSource)) {
+      return { reportData: [], monthlyAssignments: [] as MonthlyAssignment[] };
+    }
 
-        if (safeDate === '') {
+    const safeAssignments = assignmentsSource.filter((a): a is MonthlyAssignment => {
+      if (!a || typeof a !== 'object') return false;
+
+      const assignment = a as MonthlyAssignment;
+      return Boolean(assignment.member_id && assignment.event_date);
+    });
+
+    const monthlyAssignments = safeAssignments.filter(a =>
+      isSameMonth(a.event_date, currentMonth)
+    );
+
+    const data = members.map(member => {
+      const memberAssignments = monthlyAssignments.filter(
+        a => a.member_id === member.id
+      );
+
+      const scheduledCount = memberAssignments.length;
+
+      const confirmedCount = memberAssignments.filter(a => {
+        const ruleId = getRuleId(a);
+        if (!ruleId || !a.event_date) {
           return false;
         }
 
-        return item.requesterName === member.name && safeDate.startsWith(currentMonth);
+        const attendanceKeyPrefix = `${ruleId}_${a.event_date}`;
+        return Object.entries(attendance).some(([attendanceKey, isConfirmed]) =>
+          typeof attendanceKey === 'string' &&
+          attendanceKey.startsWith(attendanceKeyPrefix) &&
+          Boolean(isConfirmed)
+        );
       }).length;
 
-      const swapsCovered = swapRequests.filter(item => {
-        console.log("[MONTHLY_SAFE_FILTER_INPUT]", item);
-        const safeDate =
-          typeof item?.eventIso === 'string'
-            ? item.eventIso
-            : ((item as { event_date?: string; available_date?: string; date?: string })?.event_date ??
-              (item as { event_date?: string; available_date?: string; date?: string })?.available_date ??
-              (item as { event_date?: string; available_date?: string; date?: string })?.date ??
-              '');
+      const swapsRequested = swapRequests.filter(req =>
+        req.requesterId === member.id && isSameMonth(req.eventIso, currentMonth)
+      ).length;
 
-        if (safeDate === '') {
-          return false;
-        }
-
-        return item.takenByName === member.name && safeDate.startsWith(currentMonth) && item.status === 'completed';
+      const swapsCovered = swapRequests.filter(req => {
+        const takenById = (req as SwapRequest & { takenById?: string }).takenById;
+        return takenById === member.id && isSameMonth(req.eventIso, currentMonth) && req.status === 'completed';
       }).length;
 
-      const attendanceRate = scheduledCount > 0 
-        ? Math.round((confirmedCount / scheduledCount) * 100) 
+      const attendanceRate = scheduledCount > 0
+        ? Math.round((confirmedCount / scheduledCount) * 100)
         : 0;
 
       let engagementScore = attendanceRate;
@@ -128,8 +133,7 @@ export const MonthlyReportScreen: React.FC<Props> = ({
       };
     });
 
-    // 3. Filtragem e Ordenação
-    return data
+    const reportData = data
       .filter(d => (d.name ?? '').toLowerCase().includes(searchTerm.toLowerCase()))
       .sort((a, b) => {
         if (sortBy === 'rate') return b.rate - a.rate;
@@ -137,7 +141,13 @@ export const MonthlyReportScreen: React.FC<Props> = ({
         return (a.name ?? '').localeCompare(b.name ?? '');
       });
 
-  }, [schedule, attendance, swapRequests, members, currentMonth, events, searchTerm, sortBy]);
+    return { reportData, monthlyAssignments };
+  }, [assignmentsSource, attendance, swapRequests, members, currentMonth, searchTerm, sortBy]);
+
+  console.log("[MONTHLY_FINAL_COUNTS]", {
+    totalAssignments: monthlyAssignments.length,
+    sample: monthlyAssignments.slice(0, 5)
+  });
 
   // Totais Gerais
   const totalScales = reportData.reduce((acc, curr) => acc + curr.scheduled, 0);
@@ -147,10 +157,6 @@ export const MonthlyReportScreen: React.FC<Props> = ({
 
   const handlePrevMonth = () => onMonthChange(adjustMonth(currentMonth, -1));
   const handleNextMonth = () => onMonthChange(adjustMonth(currentMonth, 1));
-
-  const assignments = schedule;
-  console.log("[MONTHLY_MEMBERS]", members);
-  console.log("[MONTHLY_ASSIGNMENTS]", assignments);
 
   return (
     <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-28">
@@ -222,22 +228,7 @@ export const MonthlyReportScreen: React.FC<Props> = ({
                   <div className="p-1.5 md:p-2 bg-orange-50 dark:bg-orange-900/20 text-orange-600 rounded-lg"><RefreshCcw size={18}/></div>
               </div>
               <div>
-                  <span className="text-xl md:text-2xl font-bold text-zinc-800 dark:text-white">{swapRequests.filter(item => {
-                    console.log("[MONTHLY_SAFE_FILTER_INPUT]", item);
-                    const safeDate =
-                      typeof item?.eventIso === 'string'
-                        ? item.eventIso
-                        : ((item as { event_date?: string; available_date?: string; date?: string })?.event_date ??
-                          (item as { event_date?: string; available_date?: string; date?: string })?.available_date ??
-                          (item as { event_date?: string; available_date?: string; date?: string })?.date ??
-                          '');
-
-                    if (safeDate === '') {
-                      return false;
-                    }
-
-                    return safeDate.startsWith(currentMonth);
-                  }).length}</span>
+                  <span className="text-xl md:text-2xl font-bold text-zinc-800 dark:text-white">{swapRequests.filter(item => isSameMonth(item.eventIso, currentMonth)).length}</span>
                   <p className="text-[10px] md:text-xs text-zinc-500 font-medium">Trocas Solicitadas</p>
               </div>
           </div>
