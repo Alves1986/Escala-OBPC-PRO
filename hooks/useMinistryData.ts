@@ -109,6 +109,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   };
 
   useEffect(() => {
+    console.log("[EDITOR_MONTH_CHANGED]", currentMonth);
     const sb = getSupabase();
     if (!sb || !mid) return;
     if (mid.length !== 36) return;
@@ -173,7 +174,9 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
 
   // ADAPTADOR CORRIGIDO (PARTE 2)
   const events = useMemo(() => {
+      console.log("[EDITOR_CURRENT_MONTH]", currentMonth);
       const assignments = assignmentsQuery.data?.schedule || {};
+      console.log("[EDITOR_EVENTS_RAW]", assignments);
       
       const assignmentBasedEvents: any[] = [];
       const processedEventKeys = new Set<string>();
@@ -183,10 +186,19 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
           if (parts.length >= 3) {
               const ruleId = parts[0];
               const date = parts[1];
+
+              if (!date?.startsWith(currentMonth)) {
+                  return;
+              }
+
               const uniqueEventKey = `${ruleId}_${date}`; // CORREÇÃO: Chave única utilizando RuleID e Data
 
               if (!processedEventKeys.has(uniqueEventKey)) {
                   const ruleEvent = generatedEvents.find(e => e.id === uniqueEventKey);
+                  console.log("[EDITOR_RULE_LOOKUP]", {
+                      assignmentEventKey: ruleId,
+                      foundRule: Boolean(ruleEvent)
+                  });
                   
                   if (ruleEvent) {
                       assignmentBasedEvents.push({
@@ -211,6 +223,10 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       const finalEvents = [...assignmentBasedEvents];
       
       generatedEvents.forEach(gen => {
+          if (!gen.date?.startsWith(currentMonth)) {
+              return;
+          }
+
           if (!processedEventKeys.has(gen.id)) {
               finalEvents.push({
                   id: gen.id,
@@ -221,8 +237,11 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
           }
       });
 
-      return finalEvents.sort((a, b) => a.iso.localeCompare(b.iso));
-  }, [generatedEvents, assignmentsQuery.data]);
+      const filteredEvents = finalEvents.filter(e => e.iso?.startsWith(currentMonth));
+      console.log("[EDITOR_EVENTS_FILTERED]", filteredEvents);
+
+      return filteredEvents.sort((a, b) => a.iso.localeCompare(b.iso));
+  }, [generatedEvents, assignmentsQuery.data, currentMonth]);
 
   const availability = availabilityV2.availability;
 

@@ -176,10 +176,15 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
     const sb = getSupabase();
     if (!sb || !orgId) throw new Error("Missing dependencies");
 
+    const monthStart = `${month}-01`;
+    const monthEnd = `${month}-31`;
+
     const { data: assignments, error } = await sb.from('schedule_assignments')
         .select('*, profiles(name)')
         .eq('ministry_id', ministryId)
-        .eq('organization_id', orgId);
+        .eq('organization_id', orgId)
+        .gte('event_date', monthStart)
+        .lte('event_date', monthEnd);
 
     if (error) throw error;
 
@@ -187,7 +192,7 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
     const attendance: any = {};
 
     assignments?.forEach((a: any) => {
-        const ruleId = a.event_rule_id;
+        const ruleId = a.event_key ?? a.event_rule_id;
         const dateStr = a.event_date;
         
         if (ruleId && dateStr) {
