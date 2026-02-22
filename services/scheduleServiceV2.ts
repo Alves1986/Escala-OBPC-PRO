@@ -36,17 +36,24 @@ export interface MemberV2 {
 
 export const fetchRulesV2 = async (
   ministryId: string,
-  orgId: string
+  orgId: string,
+  ruleIds?: string[]
 ): Promise<EventRuleV2[]> => {
   const sb = getSupabase();
   if (!sb) throw new Error("NO_SUPABASE");
 
-  const { data, error } = await sb
+  let query = sb
     .from("event_rules")
     .select("*")
     .eq("organization_id", orgId)
     .eq("ministry_id", ministryId)
     .eq("active", true);
+
+  if (Array.isArray(ruleIds) && ruleIds.length > 0) {
+    query = query.in("id", ruleIds);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
 
@@ -68,23 +75,50 @@ export const fetchAssignmentsV2 = async (
   const sb = getSupabase();
   if (!sb) throw new Error("NO_SUPABASE");
 
+  const monthStart = `${monthStr}-01`;
+  const monthEnd = `${monthStr}-31`;
+  console.log("[SCHEDULE_MONTH]", { monthStart, monthEnd });
+
   const { data, error } = await sb
     .from("schedule_assignments")
-    .select('id,event_rule_id,event_date,role,member_id,confirmed,profiles(name)') // CORREÇÃO: Select atualizado
+    .select('id,event_rule_id,event_key,event_date,role,member_id,confirmed,profiles(name)')
     .eq("ministry_id", ministryId)
     .eq("organization_id", orgId)
-    .like("event_date", `${monthStr}%`);
+    .gte("event_date", monthStart)
+    .lte("event_date", monthEnd);
 
   if (error) throw error;
 
-  return (data || []).map((a: any) => ({
+  const assignments = data || [];
+  console.log("[ASSIGNMENTS_FETCHED]", assignments.length);
+
+  const ruleIds = [...new Set(assignments
+    .map((a: any) => a.event_key ?? a.event_rule_id)
+    .filter((id: any): id is string => typeof id === 'string' && id.length > 0))];
+  console.log("[RULE_IDS]", ruleIds);
+
+  let rules: any[] = [];
+  if (ruleIds.length > 0) {
+    const { data: fetchedRules, error: rulesError } = await sb
+      .from("event_rules")
+      .select("id")
+      .eq("organization_id", orgId)
+      .eq("ministry_id", ministryId)
+      .in("id", ruleIds);
+
+    if (rulesError) throw rulesError;
+    rules = fetchedRules || [];
+  }
+  console.log("[EVENT_RULES_FETCHED]", rules.length);
+
+  return assignments.map((a: any) => ({
     id: a.id,
-    event_rule_id: a.event_rule_id,
+    event_rule_id: a.event_rule_id ?? a.event_key,
     event_date: a.event_date,
     role: a.role,
     member_id: a.member_id,
     confirmed: a.confirmed,
-    event_key: a.event_rule_id // compatibility layer: event_key maps to event_rule_id
+    event_key: a.event_key ?? a.event_rule_id
   }));
 };
 
