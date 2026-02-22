@@ -29,7 +29,19 @@ export const MonthlyReportScreen: React.FC<Props> = ({
   const reportData = useMemo(() => {
     // 1. Filtrar eventos do mês
     const monthEventIsos = events
-      .filter(e => e.iso.startsWith(currentMonth))
+      .filter(item => {
+        console.log("[MONTHLY_SAFE_FILTER_INPUT]", item);
+        const safeDate =
+          typeof item?.iso === 'string'
+            ? item.iso
+            : '';
+
+        if (safeDate === '') {
+          return false;
+        }
+
+        return safeDate.startsWith(currentMonth);
+      })
       .map(e => e.iso);
 
     // 2. Processar dados por membro
@@ -39,7 +51,16 @@ export const MonthlyReportScreen: React.FC<Props> = ({
       
       // Analisar Escala e Presença
       Object.entries(schedule).forEach(([key, assignedName]) => {
-        const isThisMonth = monthEventIsos.some(iso => key.startsWith(iso));
+        const isThisMonth = monthEventIsos.some(iso => {
+          const safeKey = typeof key === 'string' ? key : '';
+          const safeIso = typeof iso === 'string' ? iso : '';
+
+          if (safeKey === '' || safeIso === '') {
+            return false;
+          }
+
+          return safeKey.startsWith(safeIso);
+        });
 
         if (isThisMonth && assignedName === member.name) {
           scheduledCount++;
@@ -50,16 +71,39 @@ export const MonthlyReportScreen: React.FC<Props> = ({
       });
 
       // Analisar Trocas (Engajamento)
-      const swapsRequested = swapRequests.filter(req => 
-        req.requesterName === member.name && 
-        req.eventIso.startsWith(currentMonth)
-      ).length;
+      const swapsRequested = swapRequests.filter(item => {
+        console.log("[MONTHLY_SAFE_FILTER_INPUT]", item);
+        const safeDate =
+          typeof item?.eventIso === 'string'
+            ? item.eventIso
+            : ((item as { event_date?: string; available_date?: string; date?: string })?.event_date ??
+              (item as { event_date?: string; available_date?: string; date?: string })?.available_date ??
+              (item as { event_date?: string; available_date?: string; date?: string })?.date ??
+              '');
 
-      const swapsCovered = swapRequests.filter(req => 
-        req.takenByName === member.name && 
-        req.eventIso.startsWith(currentMonth) &&
-        req.status === 'completed'
-      ).length;
+        if (safeDate === '') {
+          return false;
+        }
+
+        return item.requesterName === member.name && safeDate.startsWith(currentMonth);
+      }).length;
+
+      const swapsCovered = swapRequests.filter(item => {
+        console.log("[MONTHLY_SAFE_FILTER_INPUT]", item);
+        const safeDate =
+          typeof item?.eventIso === 'string'
+            ? item.eventIso
+            : ((item as { event_date?: string; available_date?: string; date?: string })?.event_date ??
+              (item as { event_date?: string; available_date?: string; date?: string })?.available_date ??
+              (item as { event_date?: string; available_date?: string; date?: string })?.date ??
+              '');
+
+        if (safeDate === '') {
+          return false;
+        }
+
+        return item.takenByName === member.name && safeDate.startsWith(currentMonth) && item.status === 'completed';
+      }).length;
 
       const attendanceRate = scheduledCount > 0 
         ? Math.round((confirmedCount / scheduledCount) * 100) 
@@ -178,7 +222,22 @@ export const MonthlyReportScreen: React.FC<Props> = ({
                   <div className="p-1.5 md:p-2 bg-orange-50 dark:bg-orange-900/20 text-orange-600 rounded-lg"><RefreshCcw size={18}/></div>
               </div>
               <div>
-                  <span className="text-xl md:text-2xl font-bold text-zinc-800 dark:text-white">{swapRequests.filter(r => r.eventIso.startsWith(currentMonth)).length}</span>
+                  <span className="text-xl md:text-2xl font-bold text-zinc-800 dark:text-white">{swapRequests.filter(item => {
+                    console.log("[MONTHLY_SAFE_FILTER_INPUT]", item);
+                    const safeDate =
+                      typeof item?.eventIso === 'string'
+                        ? item.eventIso
+                        : ((item as { event_date?: string; available_date?: string; date?: string })?.event_date ??
+                          (item as { event_date?: string; available_date?: string; date?: string })?.available_date ??
+                          (item as { event_date?: string; available_date?: string; date?: string })?.date ??
+                          '');
+
+                    if (safeDate === '') {
+                      return false;
+                    }
+
+                    return safeDate.startsWith(currentMonth);
+                  }).length}</span>
                   <p className="text-[10px] md:text-xs text-zinc-500 font-medium">Trocas Solicitadas</p>
               </div>
           </div>
