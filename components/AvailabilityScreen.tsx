@@ -223,10 +223,16 @@ export const AvailabilityScreen: React.FC<Props> = ({
 
   const getDayStatus = (day: number) => {
       if (isBlockedMonth) return 'blocked';
-      const dateBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
-      if (tempDates.includes(dateBase)) return 'full';
-      if (tempDates.includes(`${dateBase}_M`)) return 'morning';
-      if (tempDates.includes(`${dateBase}_N`)) return 'night';
+      const dayKey = `${currentMonth}-${String(day).padStart(2, '0')}`;
+      const fullDay = tempDates.includes(dayKey);
+      const morning = tempDates.includes(`${dayKey}_M`);
+      const night = tempDates.includes(`${dayKey}_N`);
+      console.log("[AV_UI_DAY_STATE]", dayKey, { fullDay, morning, night });
+
+      if (fullDay) return 'full';
+      if (morning && night) return 'full';
+      if (morning) return 'morning';
+      if (night) return 'night';
       return 'none';
   };
 
