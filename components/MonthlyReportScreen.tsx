@@ -104,15 +104,11 @@ export const MonthlyReportScreen: React.FC<Props> = ({
   const handlePrevMonth = () => onMonthChange(adjustMonth(currentMonth, -1));
   const handleNextMonth = () => onMonthChange(adjustMonth(currentMonth, 1));
 
-  try {
-    const assignments = schedule;
-    console.log("[MONTHLY_REPORT_DATA]", {
-      assignments,
-      members,
-      events
-    });
+  const assignments = schedule;
+  console.log("[MONTHLY_MEMBERS]", members);
+  console.log("[MONTHLY_ASSIGNMENTS]", assignments);
 
-    return (
+  return (
     <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-28">
       
       {/* Header e Controles */}
@@ -230,7 +226,10 @@ export const MonthlyReportScreen: React.FC<Props> = ({
                       </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
-                      {reportData.map((row) => (
+                      {reportData.map((row) => {
+                          console.log("[MONTHLY_RENDER_ROW]", row);
+                          try {
+                              return (
                           <tr key={row.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors group">
                               <td className="px-6 py-4">
                                   <div className="flex items-center gap-3">
@@ -296,7 +295,12 @@ export const MonthlyReportScreen: React.FC<Props> = ({
                                   </div>
                               </td>
                           </tr>
-                      ))}
+                              );
+                          } catch (e) {
+                              console.error("[MONTHLY_ROWS_CRASH]", e, row);
+                              throw e;
+                          }
+                      })}
                   </tbody>
               </table>
           </div>
@@ -304,7 +308,10 @@ export const MonthlyReportScreen: React.FC<Props> = ({
 
       {/* --- MOBILE VIEW: Cards --- */}
       <div className="md:hidden space-y-3">
-          {reportData.map((row) => (
+          {reportData.map((row) => {
+              console.log("[MONTHLY_RENDER_ROW]", row);
+              try {
+                  return (
               <div key={row.id} className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex flex-col gap-3">
                   {/* Card Header: Avatar & Main Stat */}
                   <div className="flex items-center justify-between">
@@ -364,7 +371,12 @@ export const MonthlyReportScreen: React.FC<Props> = ({
                       </div>
                   )}
               </div>
-          ))}
+                  );
+              } catch (e) {
+                  console.error("[MONTHLY_ROWS_CRASH]", e, row);
+                  throw e;
+              }
+          })}
       </div>
 
       {reportData.length === 0 && (
@@ -375,8 +387,4 @@ export const MonthlyReportScreen: React.FC<Props> = ({
       )}
     </div>
   );
-  } catch (error) {
-    console.error("[MONTHLY_REPORT_CRASH]", error);
-    throw error;
-  }
 };
