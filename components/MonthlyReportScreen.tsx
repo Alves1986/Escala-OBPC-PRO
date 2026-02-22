@@ -86,11 +86,11 @@ export const MonthlyReportScreen: React.FC<Props> = ({
 
     // 3. Filtragem e Ordenação
     return data
-      .filter(d => d.name.toLowerCase().includes(searchTerm.toLowerCase()))
+      .filter(d => (d.name ?? '').toLowerCase().includes(searchTerm.toLowerCase()))
       .sort((a, b) => {
         if (sortBy === 'rate') return b.rate - a.rate;
         if (sortBy === 'scheduled') return b.scheduled - a.scheduled;
-        return a.name.localeCompare(b.name);
+        return (a.name ?? '').localeCompare(b.name ?? '');
       });
 
   }, [schedule, attendance, swapRequests, members, currentMonth, events, searchTerm, sortBy]);
@@ -104,7 +104,15 @@ export const MonthlyReportScreen: React.FC<Props> = ({
   const handlePrevMonth = () => onMonthChange(adjustMonth(currentMonth, -1));
   const handleNextMonth = () => onMonthChange(adjustMonth(currentMonth, 1));
 
-  return (
+  try {
+    const assignments = schedule;
+    console.log("[MONTHLY_REPORT_DATA]", {
+      assignments,
+      members,
+      events
+    });
+
+    return (
     <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-28">
       
       {/* Header e Controles */}
@@ -230,7 +238,7 @@ export const MonthlyReportScreen: React.FC<Props> = ({
                                           <img src={row.avatar_url} className="w-9 h-9 rounded-full object-cover border border-zinc-200 dark:border-zinc-700" alt="" />
                                       ) : (
                                           <div className="w-9 h-9 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-500">
-                                              {row.name.charAt(0)}
+                                              {row.name?.charAt(0) ?? 'N/A'}
                                           </div>
                                       )}
                                       <div>
@@ -305,7 +313,7 @@ export const MonthlyReportScreen: React.FC<Props> = ({
                               <img src={row.avatar_url} className="w-10 h-10 rounded-full object-cover border border-zinc-200 dark:border-zinc-700" alt="" />
                           ) : (
                               <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-700 flex items-center justify-center text-zinc-500 font-bold">
-                                  {row.name.charAt(0)}
+                                  {row.name?.charAt(0) ?? 'N/A'}
                               </div>
                           )}
                           <div>
@@ -367,4 +375,8 @@ export const MonthlyReportScreen: React.FC<Props> = ({
       )}
     </div>
   );
+  } catch (error) {
+    console.error("[MONTHLY_REPORT_CRASH]", error);
+    throw error;
+  }
 };
