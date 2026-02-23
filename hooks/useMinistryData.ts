@@ -176,58 +176,17 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   // ADAPTADOR CORRIGIDO (PARTE 2)
   const builtEditorEvents = useMemo(() => {
       console.log("[EDITOR_CURRENT_MONTH]", currentMonth);
-      const assignments = assignmentsQuery.data?.schedule || {};
-      console.log("[EDITOR_EVENTS_RAW]", assignments);
-      const raw = assignmentsQuery.data?.rawAssignments || [];
-      console.log("[EDITOR_EVENTS_RAW_ASSIGNMENTS]", raw);
-      
-      const assignmentBasedEvents: any[] = [];
-      const processedEventKeys = new Set<string>();
+      console.log("[EDITOR_EVENTS_SOURCE]", generatedEvents.length);
 
-      raw.forEach((a: any) => {
-          const uniqueEventKey = `${a.ruleId}_${a.date}`;
-
-          if (processedEventKeys.has(uniqueEventKey)) return;
-
-          const ruleEvent = generatedEvents.find(e => e.id === uniqueEventKey);
-
-          if (ruleEvent) {
-              assignmentBasedEvents.push({
-                  id: ruleEvent.id,
-                  iso: ruleEvent.iso,
-                  title: ruleEvent.title,
-                  dateDisplay: ruleEvent.date.split('-').reverse().slice(0, 2).join('/')
-              });
-          } else {
-              assignmentBasedEvents.push({
-                  id: uniqueEventKey,
-                  iso: `${a.date}T00:00`,
-                  title: "Evento (Regra Removida)",
-                  dateDisplay: a.date.split('-').reverse().slice(0, 2).join('/')
-              });
-          }
-
-          processedEventKeys.add(uniqueEventKey);
-      });
-
-      const finalEvents = [...assignmentBasedEvents];
-      
-      generatedEvents.forEach(gen => {
-          if (!processedEventKeys.has(gen.id)) {
-              finalEvents.push({
-                  id: gen.id,
-                  iso: gen.iso,
-                  title: gen.title,
-                  dateDisplay: gen.date.split('-').reverse().slice(0, 2).join('/')
-              });
-          }
-      });
-
-      const filteredEvents = finalEvents.filter(e => e.iso?.startsWith(currentMonth));
-      console.log("[EDITOR_EVENTS_FILTERED]", filteredEvents);
-
-      return filteredEvents.sort((a, b) => a.iso.localeCompare(b.iso));
-  }, [generatedEvents, assignmentsQuery.data, currentMonth]);
+      return generatedEvents
+          .map(gen => ({
+              id: gen.id,
+              iso: gen.iso,
+              title: gen.title,
+              dateDisplay: gen.date.split('-').reverse().slice(0, 2).join('/')
+          }))
+          .sort((a, b) => a.iso.localeCompare(b.iso));
+  }, [generatedEvents, currentMonth]);
 
   useEffect(() => {
       console.log("[EDITOR_RESET_MONTH]", currentMonth);
