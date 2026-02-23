@@ -211,7 +211,7 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
                 name
             });
 
-            schedule[key] = name ?? null;
+            schedule[key] = name || "__MISSING_NAME__";
             if (a.confirmed) attendance[key] = true;
         }
     });

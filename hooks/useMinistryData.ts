@@ -267,12 +267,15 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       return (rulesQuery.data || []).filter(r => r.type === 'weekly');
   }, [rulesQuery.data]);
 
+  const schedule = assignmentsQuery.data?.schedule || {};
+  console.log("[EDITOR_SCHEDULE_KEYS]", Object.keys(schedule));
+
   console.log("[AV_HOOK_FINAL]", availability);
   console.log("[AV_HOOK_IDS]", Object.keys(availabilityV2.availability));
 
   return {
     events: editorEvents,
-    schedule: assignmentsQuery.data?.schedule || {}, 
+    schedule, 
     attendance: assignmentsQuery.data?.attendance || {}, 
     membersMap: membersQuery.data?.memberMap || {},
     publicMembers: membersQuery.data?.publicList || [],
