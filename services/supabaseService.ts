@@ -176,31 +176,57 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
     const sb = getSupabase();
     if (!sb || !orgId) throw new Error("Missing dependencies");
 
+    const monthStart = `${month}-01`;
+    const monthEnd = `${month}-31`;
+    console.log("[EDITOR_FETCH_RANGE]", { monthStart, monthEnd });
+
     const { data: assignments, error } = await sb.from('schedule_assignments')
         .select('*, profiles(name)')
         .eq('ministry_id', ministryId)
-        .eq('organization_id', orgId);
+        .eq('organization_id', orgId)
+        .gte('event_date', monthStart)
+        .lte('event_date', monthEnd);
 
     if (error) throw error;
+
+    console.log("[EDITOR_FETCH_RESULT]", assignments);
 
     const schedule: any = {};
     const attendance: any = {};
 
+    const rawAssignments = (assignments || []).map((a: any) => {
+        const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
+        return {
+            ruleId: a.event_key ?? a.event_rule_id,
+            date: String(a.event_date).split("T")[0],
+            role: a.role,
+            memberName: profile?.name ?? null
+        };
+    });
+
     assignments?.forEach((a: any) => {
-        const ruleId = a.event_rule_id;
-        const dateStr = a.event_date;
+        const ruleId = a.event_key ?? a.event_rule_id;
+        const dateStr = String(a.event_date).split("T")[0];
         
         if (ruleId && dateStr) {
             const key = `${ruleId}_${dateStr}_${a.role}`;
             const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
             const name = profile?.name;
 
-            if (name) schedule[key] = name;
+            console.log("[EDITOR_SERVICE_KEY]", {
+                key,
+                ruleId,
+                dateStr,
+                role: a.role,
+                name
+            });
+
+            schedule[key] = name || "__MISSING_NAME__";
             if (a.confirmed) attendance[key] = true;
         }
     });
 
-    return { schedule, attendance };
+    return { schedule, attendance, rawAssignments };
 };
 
 export const fetchMinistryMembers = async (ministryId: string, orgId?: string) => {
@@ -308,7 +334,7 @@ export const interactAnnouncementSQL = async (id: string, userId: string, userNa
     if (!sb) throw new Error("No Supabase client");
 
     // Validate Profile
-    const { data: profile } = await sb.from('profiles').select('id').eq('id', userId).maybeSingle();
+    const { data: profile } = await sb.from('profiles').select('id').eq('id', userId).eq('organization_id', orgId).maybeSingle();
     if (!profile) {
         await sb.from('profiles').upsert({ 
             id: userId, 
@@ -443,19 +469,25 @@ export const fetchUserFunctions = async (userId: string, ministryId: string, org
 export const fetchOrganizationsWithStats = async () => {
     const sb = getSupabase();
     if (!sb) return [];
-    const { data, error } = await sb.from('organizations').select(`*, organization_ministries (id, code, label), profiles (count)`);
+    const { data, error } = await sb.from('organizations').select(`
+  *,
+  organization_ministries(id, code, label),
+  profiles(id)
+`);
+    console.log("[SUPER_ADMIN_ORGS]", data, error);
     if (error) throw error;
-    return (data || []).map((o: any) => ({
-        id: o.id, name: o.name, slug: o.slug, active: o.active, createdAt: o.created_at,
-        userCount: o.profiles?.[0]?.count || 0,
-        ministryCount: o.organization_ministries?.length || 0,
-        ministries: o.organization_ministries?.map((m:any) => ({ id: m.id, code: m.code, label: m.label })) || [],
+    return (data || []).map((org: any) => ({
+        id: org.id, name: org.name, slug: org.slug, active: org.active, createdAt: org.created_at,
+        totalUsers: org.profiles?.length || 0,
+        userCount: org.profiles?.length || 0,
+        ministryCount: org.organization_ministries?.length || 0,
+        ministries: org.organization_ministries?.map((m:any) => ({ id: m.id, code: m.code, label: m.label })) || [],
         // Billing
-        plan_type: o.plan_type,
-        billing_status: o.billing_status,
-        trial_ends_at: o.trial_ends_at,
-        access_locked: o.access_locked,
-        checkout_url: o.checkout_url
+        plan_type: org.plan_type,
+        billing_status: org.billing_status,
+        trial_ends_at: org.trial_ends_at,
+        access_locked: org.access_locked,
+        checkout_url: org.checkout_url
     }));
 };
 
@@ -681,6 +713,7 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
     const sb = getSupabase();
     if (!sb) return;
     
+    // TODO: replace composite event key with explicit ruleId/date params
     let ruleId = eventKey;
     let dateStr = "";
     
@@ -696,11 +729,12 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
         organization_id: orgId,
         ministry_id: ministryId,
         event_rule_id: ruleId,
+        event_key: ruleId,
         event_date: dateStr,
         role: role,
         member_id: memberId,
         confirmed: false
-    }, { onConflict: 'organization_id,ministry_id,event_rule_id,event_date,role' });
+    }, { onConflict: 'event_key,event_date,role' });
     
     if (error) throw error;
 };
@@ -765,6 +799,8 @@ export const clearScheduleForMonth = async (ministryId: string, orgId: string, m
 
 // --- AVAILABILITY V2 (NEW MEMBER_AVAILABILITY TABLE) ---
 
+
+
 export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: string) => {
     const sb = getSupabase();
     if (!sb) throw new Error("Supabase client not initialized");
@@ -780,14 +816,25 @@ export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: strin
     const map: Record<string, string[]> = {};
     const notes: Record<string, string> = {};
 
+    console.log("[AV_SERVICE_RAW]", data);
+
     data?.forEach((row: any) => {
         if (!map[row.user_id]) map[row.user_id] = [];
-        map[row.user_id].push(row.available_date);
+
+        const baseDate = row.available_date;
+        const key = row.note ? `${baseDate}_${row.note}` : baseDate;
+        console.log("[AV_FETCH_PERIOD]", row.available_date, row.note, key);
+        map[row.user_id].push(key);
         
         if (row.note) {
             const monthKey = row.available_date.substring(0, 7) + '-00';
             notes[`${row.user_id}_${monthKey}`] = row.note;
         }
+    });
+
+    console.log("[AV_SERVICE_FINAL_MAP]", {
+      map,
+      keys: Object.keys(map)
     });
 
     return { availability: map, notes };
@@ -797,30 +844,45 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
     const sb = getSupabase();
     if (!sb) throw new Error("Supabase client not initialized");
 
+    const monthStart = `${targetMonth}-01`;
+    const monthEnd = new Date(`${targetMonth}-01T00:00:00`);
+    monthEnd.setMonth(monthEnd.getMonth() + 1);
+    const monthEndStr = monthEnd.toISOString().slice(0, 10);
+
     const { error: delError } = await sb
         .from('member_availability')
         .delete()
         .eq('organization_id', orgId)
         .eq('ministry_id', ministryId)
         .eq('user_id', userId)
-        .ilike('available_date', `${targetMonth}%`);
+        .gte('available_date', monthStart)
+        .lt('available_date', monthEndStr);
 
     if (delError) throw delError;
 
     const uniqueDates = [...new Set(dates.filter(d => d.startsWith(targetMonth)))];
 
     if (uniqueDates.length > 0) {
-        const rows = uniqueDates.map(date => ({
-            organization_id: orgId,
-            ministry_id: ministryId,
-            user_id: userId,
-            available_date: date,
-            note: notes[`${userId}_${targetMonth}-00`] || null
-        }));
+        const payload = uniqueDates.map((dateString) => {
+            const [dateOnly, period] = dateString.split('_');
+
+            const normalizedDate = dateOnly;
+            const periodMarker = period ?? null;
+            console.log("[AV_SAVE_PERIOD]", dateString, normalizedDate, periodMarker);
+            return {
+                organization_id: orgId,
+                ministry_id: ministryId,
+                user_id: userId,
+                available_date: normalizedDate,
+                note: periodMarker
+            };
+        });
+
+        console.log("[AV_SAVE_PAYLOAD]", payload);
 
         const { error: insError } = await sb
             .from('member_availability')
-            .insert(rows);
+            .insert(payload);
 
         if (insError) throw insError;
     }
@@ -882,7 +944,7 @@ export const performSwapSQL = async (ministryId: string, orgId: string, reqId: s
         await sb.from('schedule_assignments').update({
             member_id: takenById,
             confirmed: false
-        }).eq('id', assignment.id);
+        }).eq('id', assignment.id).eq('organization_id', orgId);
         
         await sb.from('swap_requests').update({
             status: 'completed',
@@ -1030,7 +1092,8 @@ export const fetchNotificationsSQL = async (ministryIds: string[], userId: strin
         
     const { data: reads } = await sb.from('notification_reads')
         .select('notification_id')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .eq('organization_id', orgId);
         
     const readSet = new Set(reads?.map((r: any) => r.notification_id));
     

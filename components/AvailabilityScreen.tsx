@@ -221,12 +221,31 @@ export const AvailabilityScreen: React.FC<Props> = ({
       }
   };
 
+
+  const parseSundayAvailability = (dateString: string) => {
+      console.log("[AV_PARSE_INPUT]", dateString);
+      const result = dateString.endsWith('_M')
+          ? { baseDate: dateString.slice(0, 10), type: 'MORNING' as const }
+          : dateString.endsWith('_N')
+          ? { baseDate: dateString.slice(0, 10), type: 'NIGHT' as const }
+          : { baseDate: dateString, type: 'FULL' as const };
+      console.log("[AV_PARSE_RESULT]", result);
+      return result;
+  };
+
   const getDayStatus = (day: number) => {
       if (isBlockedMonth) return 'blocked';
-      const dateBase = `${currentMonth}-${String(day).padStart(2, '0')}`;
-      if (tempDates.includes(dateBase)) return 'full';
-      if (tempDates.includes(`${dateBase}_M`)) return 'morning';
-      if (tempDates.includes(`${dateBase}_N`)) return 'night';
+      const dayKey = `${currentMonth}-${String(day).padStart(2, '0')}`;
+      const parsedDates = tempDates.map(parseSundayAvailability).filter(d => d.baseDate === dayKey);
+      const fullDay = parsedDates.some(d => d.type === 'FULL');
+      const morning = parsedDates.some(d => d.type === 'MORNING');
+      const night = parsedDates.some(d => d.type === 'NIGHT');
+      console.log("[AV_UI_DAY_STATE]", dayKey, { fullDay, morning, night });
+
+      if (fullDay) return 'full';
+      if (morning && night) return 'full';
+      if (morning) return 'morning';
+      if (night) return 'night';
       return 'none';
   };
 

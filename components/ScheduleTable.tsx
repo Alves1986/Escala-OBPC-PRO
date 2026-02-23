@@ -45,19 +45,27 @@ const SelectorDropdown = ({
     const dropdownRef = useRef<HTMLDivElement>(null);
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
-    // Close on outside click
+    const profileById = useMemo(() => {
+        const map: Record<string, any> = {};
+        (memberProfiles || []).forEach((p: any) => { map[p.id] = p; });
+        return map;
+    }, [memberProfiles]);
+
     useClickOutside(dropdownRef, () => {
         onClose();
     });
 
     useEffect(() => {
-        // Auto-focus search with a slight delay to ensure render
         setTimeout(() => searchInputRef.current?.focus(), 50);
     }, []);
 
     const filteredOptions = useMemo(() => {
         return options
-            .filter((opt: string) => opt.toLowerCase().includes(search.toLowerCase()))
+            .filter((opt: string) => {
+                const profile = profileById[opt];
+                const labelName = (profile?.name || opt).toLowerCase();
+                return labelName.includes(search.toLowerCase());
+            })
             .sort((a: string, b: string) => {
                 const availA = checkIsAvailable(availabilityLookup, a, eventIso);
                 const availB = checkIsAvailable(availabilityLookup, b, eventIso);
@@ -65,27 +73,23 @@ const SelectorDropdown = ({
                 if (!availA && availB) return 1;
                 return 0;
             });
-    }, [options, search, availabilityLookup, eventIso]);
+    }, [options, search, availabilityLookup, eventIso, profileById]);
 
     const getInitials = (name: string) => name ? name.charAt(0).toUpperCase() : '?';
 
-    // Helper to get note
-    const getMemberNote = (name: string) => {
+    const getMemberNote = (memberId: string) => {
         if (!availabilityNotes) return null;
-        // Key format from AvailabilityScreen: Name_YYYY-MM-00
         const monthKey = eventIso.slice(0, 7) + '-00';
-        const key = `${name}_${monthKey}`;
+        const key = `${memberId}_${monthKey}`;
         return availabilityNotes[key];
     };
 
-    const handleSelect = (opt: string) => {
-        if (!opt) {
-            // Remoção explícita
+    const handleSelect = (memberId: string) => {
+        if (!memberId) {
             onChange(null, "");
         } else {
-            const profile = memberProfiles?.find((p: any) => p.name === opt);
-            // IMPORTANTE: Passar ID correto se encontrado, senão null
-            onChange(profile?.id || null, opt);
+            const profile = profileById[memberId];
+            onChange(memberId, profile?.name || "");
         }
         onClose();
     };
@@ -103,7 +107,7 @@ const SelectorDropdown = ({
                     }
                 `}
                 style={isMobile ? {} : { top: position.top, left: position.left, width: position.width }}
-                onMouseDown={(e) => e.stopPropagation()} // Prevent bubble to schedule table handlers
+                onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
             >
                 {isMobile && (
@@ -118,57 +122,55 @@ const SelectorDropdown = ({
                         <input 
                             ref={searchInputRef} 
                             placeholder="Buscar membro..." 
-                            value={search} 
-                            onChange={e => setSearch(e.target.value)} 
-                            className="w-full text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-8 p-2 focus:ring-2 focus:ring-zinc-500 outline-none transition-all text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400" 
+                            className="w-full pl-8 pr-3 py-2 text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Escape') onClose();
+                            }}
                         />
                     </div>
                 </div>
-                <div className="overflow-y-auto custom-scrollbar p-1 flex-1">
-                    <button 
+
+                <div className={`overflow-y-auto ${isMobile ? 'p-4 space-y-2' : 'p-2 space-y-1'} custom-scrollbar`}>
+                    <button
                         type="button"
-                        onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleSelect("");
-                        }}
-                        className="w-full text-left px-3 py-2.5 text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center gap-2 mb-1 border border-transparent transition-colors uppercase tracking-wide"
+                        onClick={() => handleSelect("")}
+                        className={`w-full flex items-center justify-between rounded-lg transition-all p-2 text-left ${!value ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800' : 'hover:bg-zinc-50 dark:hover:bg-zinc-700/50 border border-transparent'}`}
                     >
-                        <Trash2 size={14} /> Remover da Escala
+                        <span className="text-sm italic text-zinc-500">(Vazio)</span>
                     </button>
-                    {filteredOptions.length === 0 && <div className="p-6 text-center text-sm text-zinc-400 flex flex-col items-center gap-2"><User size={24} className="opacity-20"/> Nenhum membro encontrado.</div>}
+
                     {filteredOptions.map((opt: string, idx: number) => {
-                        const profile = memberProfiles?.find((p: any) => p.name === opt);
-                        const count = memberStats[opt] || 0;
+                        const profile = profileById[opt];
+                        const displayName = profile?.name || opt;
+                        const count = memberStats[displayName] || 0;
                         const isAvailable = checkIsAvailable(availabilityLookup, opt, eventIso);
                         const prevIsAvailable = idx > 0 ? checkIsAvailable(availabilityLookup, filteredOptions[idx-1], eventIso) : true;
-                        const showSeparator = !isAvailable && prevIsAvailable;
-                        const isOnline = profile ? onlineUsers.includes(profile.id) : false;
+                        const isOnline = profile?.id ? onlineUsers.includes(profile.id) : false;
                         const note = getMemberNote(opt);
 
                         return (
                             <React.Fragment key={opt}>
-                            {showSeparator && <div className="px-3 py-2 text-[10px] uppercase font-bold text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 mt-1 mb-1 border-t border-b border-zinc-100 dark:border-zinc-800">Indisponíveis</div>}
-                            <button
+                            {idx > 0 && isAvailable !== prevIsAvailable && (
+                                <div className="my-1 border-t border-dashed border-zinc-200 dark:border-zinc-700" />
+                            )}
+                            <button 
                                 type="button"
-                                onMouseDown={(e) => {
-                                    e.preventDefault(); // Prevents input blur
-                                    e.stopPropagation();
-                                    handleSelect(opt);
-                                }}
-                                className={`w-full text-left px-3 py-2 text-sm rounded-lg flex items-center justify-between group transition-colors mb-0.5 ${value === opt ? 'bg-zinc-100 dark:bg-zinc-700' : isAvailable ? 'hover:bg-zinc-50 dark:hover:bg-zinc-800' : 'opacity-80 hover:opacity-100 hover:bg-zinc-50 dark:hover:bg-zinc-800 grayscale hover:grayscale-0'}`}
+                                onClick={() => handleSelect(opt)}
+                                className={`w-full flex items-center justify-between rounded-lg transition-all p-2 text-left ${value === opt ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800' : 'hover:bg-zinc-50 dark:hover:bg-zinc-700/50 border border-transparent'} ${!isAvailable ? 'opacity-80' : ''}`}
                             >
-                                <div className="flex items-center gap-3 overflow-hidden flex-1 min-w-0 pointer-events-none">
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
                                     <div className="relative shrink-0">
                                         {profile?.avatar_url ? (
                                             <img src={profile.avatar_url} alt="" className={`w-8 h-8 rounded-full object-cover border ${isAvailable ? 'border-zinc-200 dark:border-zinc-700' : 'border-zinc-200 dark:border-zinc-600'}`} />
                                         ) : (
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${isAvailable ? 'bg-zinc-200 text-zinc-600' : 'bg-zinc-200 text-zinc-500'}`}>{getInitials(opt)}</div>
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${isAvailable ? 'bg-zinc-200 text-zinc-600' : 'bg-zinc-200 text-zinc-500'}`}>{getInitials(displayName)}</div>
                                         )}
                                         {isOnline && <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-white dark:border-zinc-800 rounded-full" />}
                                     </div>
                                     <div className="flex flex-col truncate text-left flex-1 min-w-0">
-                                        <span className={`font-medium truncate text-sm ${isAvailable ? 'text-zinc-800 dark:text-zinc-100' : 'text-zinc-500 line-through decoration-zinc-400/50'}`}>{opt}</span>
+                                        <span className={`font-medium truncate text-sm ${isAvailable ? 'text-zinc-800 dark:text-zinc-100' : 'text-zinc-500 line-through decoration-zinc-400/50'}`}>{displayName}</span>
                                         {!isAvailable && <span className="text-[10px] text-zinc-400 font-medium">Indisponível</span>}
                                         {note && (
                                             <div className="text-[10px] text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5 font-medium truncate">
@@ -197,17 +199,23 @@ const MemberSelector = ({
     const [isOpen, setIsOpen] = useState(false);
     const triggerRef = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState({ top: 0, left: 0, width: 200 });
-    
-    const selectedProfile = memberProfiles.find(p => p.name === value);
+
+    const profileById = useMemo(() => {
+        const map: Record<string, TeamMemberProfile> = {};
+        memberProfiles.forEach((p) => { map[p.id] = p; });
+        return map;
+    }, [memberProfiles]);
+
+    const selectedProfile = profileById[value];
+    const displayValue = selectedProfile?.name || value;
     const getInitials = (name: string) => name ? name.charAt(0).toUpperCase() : '?';
 
-    // Calculate position when opening
     useEffect(() => {
         if (isOpen && triggerRef.current && window.innerWidth >= 768) {
             const rect = triggerRef.current.getBoundingClientRect();
             const spaceBelow = window.innerHeight - rect.bottom;
             const openUp = spaceBelow < 320; 
-            
+
             let leftPos = rect.left;
             const minWidth = Math.max(rect.width, 240);
             if (leftPos + minWidth > window.innerWidth) {
@@ -244,11 +252,11 @@ const MemberSelector = ({
                             <img src={selectedProfile.avatar_url} alt="" className="w-5 h-5 rounded-full object-cover shrink-0 ring-1 ring-zinc-200 dark:ring-zinc-700" />
                         ) : (
                             <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 shrink-0`}>
-                                {getInitials(value)}
+                                {getInitials(displayValue)}
                             </div>
                         )}
                         <span className={`text-xs font-medium truncate ${hasError ? 'text-red-700 dark:text-red-400' : hasWarning ? 'text-amber-700 dark:text-amber-400' : 'text-zinc-800 dark:text-zinc-200'}`}>
-                            {value}
+                            {displayValue}
                         </span>
                     </div>
                 ) : (
@@ -284,6 +292,11 @@ const MemberSelector = ({
 
 const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup, availabilityNotes, members, memberProfiles, scheduleIssues, globalConflicts, onCellChange, onAttendanceToggle, onDeleteEvent, onEditEvent, memberStats, readOnly, onlineUsers }: any) => {
     const time = event.iso.split('T')[1];
+    const memberNameById = useMemo(() => {
+        const map: Record<string, string> = {};
+        (memberProfiles || []).forEach((p: any) => { map[p.id] = p.name; });
+        return map;
+    }, [memberProfiles]);
 
     return (
         <tr className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors group">
@@ -310,20 +323,75 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                 // event.id JÁ VEM como "ruleId_date" do useEvents/generateEvents
                 // Então uniqueKey = ruleId_date_role
                 const uniqueKey = `${event.id}_${col.keySuffix}`;
+                console.log("[EDITOR_RENDER_KEY]", {
+                    uniqueKey,
+                    value: schedule[uniqueKey]
+                });
+                console.log("[EDITOR_UI_KEY_CHECK]", {
+                    uniqueKey,
+                    exists: schedule[uniqueKey] !== undefined,
+                    value: schedule[uniqueKey]
+                });
                 
                 // NUNCA usar fallbacks soltos como schedule[ruleKey] ou schedule[isoKey]
                 // Isso que causava a mistura de cultos do mesmo dia.
-                const currentValue = schedule[uniqueKey] || "";
+                console.log("[EDITOR_UI_LOOKUP]", {
+                    eventId: event.id,
+                    role: col.keySuffix,
+                    key: `${event.id}_${col.keySuffix}`,
+                    exists: schedule[`${event.id}_${col.keySuffix}`]
+                });
+
+                const rawValue = schedule[uniqueKey];
+                let currentValue = rawValue;
+
+                if (!currentValue) {
+                    const eventDate = event.id.split("_")[1];
+
+                    let fallbackKey = Object.keys(schedule).find(k =>
+                        k.endsWith(`_${eventDate}_${col.keySuffix}`)
+                    );
+
+                    if (!fallbackKey && col.realRole !== col.keySuffix) {
+                        fallbackKey = Object.keys(schedule).find(k =>
+                            k.endsWith(`_${eventDate}_${col.realRole}`)
+                        );
+                    }
+
+                    if (fallbackKey) {
+                        currentValue = schedule[fallbackKey];
+                        console.log("[EDITOR_FALLBACK_MATCH]", {
+                            uniqueKey,
+                            fallbackKey
+                        });
+                    }
+                }
+
+                const renderedValue =
+                  currentValue === "__MISSING_NAME__"
+                    ? "(Membro removido)"
+                    : (currentValue ?? "");
+                console.log("[EDITOR_FINAL_RENDER]", {
+                    uniqueKey,
+                    rawValue,
+                    currentValue: renderedValue
+                });
+                console.log("[EDITOR_RENDER_RESOLVE]", {
+                    uniqueKey,
+                    rawValue,
+                    currentValue: renderedValue
+                });
                 const isConfirmed = attendance[uniqueKey] || false;
                 
                 const roleMembers = members[col.realRole] || [];
                 
-                const hasLocalConflict = currentValue && !checkIsAvailable(availabilityLookup, currentValue, event.iso);
+                const hasLocalConflict = renderedValue && !checkIsAvailable(availabilityLookup, renderedValue, event.iso);
+                const currentName = (memberProfiles || []).find((p: any) => p.id === renderedValue)?.name || renderedValue;
                 
                 let globalConflictMsg = "";
                 let hasGlobalConflict = false;
                 if (currentValue && !readOnly) {
-                    const normalized = currentValue.trim().toLowerCase();
+                    const normalized = currentName.trim().toLowerCase();
                     const conflicts = globalConflicts[normalized];
                     if (conflicts) {
                         const conflict = conflicts.find((c: any) => c.eventIso === event.iso);
@@ -339,12 +407,12 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                         <div className="flex items-center gap-2">
                             {readOnly ? (
                                 <div className="flex-1 flex items-center gap-2">
-                                    <span className={`text-sm font-medium truncate ${currentValue ? 'text-zinc-800 dark:text-zinc-200' : 'text-zinc-300 dark:text-zinc-600'}`}>{currentValue || '-'}</span>
+                                    <span className={`text-sm font-medium truncate ${currentValue ? 'text-zinc-800 dark:text-zinc-200' : 'text-zinc-300 dark:text-zinc-600'}`}>{renderedValue || '-'}</span>
                                 </div>
                             ) : (
                                 <div className="flex-1">
                                     <MemberSelector 
-                                        value={currentValue} 
+                                        value={renderedValue} 
                                         onChange={(memberId, memberName) => {
                                             // event.id = ruleId_date
                                             const safeEventId = event.id;
@@ -521,22 +589,77 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                           {columns.map(col => {
                               // CORREÇÃO CRÍTICA MOBILE: Usar chave composta única (RuleID_Date_Role)
                               const uniqueKey = `${event.id}_${col.keySuffix}`;
+                              console.log("[EDITOR_RENDER_KEY]", {
+                                  uniqueKey,
+                                  value: schedule[uniqueKey]
+                              });
+                              console.log("[EDITOR_UI_KEY_CHECK]", {
+                                  uniqueKey,
+                                  exists: schedule[uniqueKey] !== undefined,
+                                  value: schedule[uniqueKey]
+                              });
                               
-                              const currentValue = schedule[uniqueKey] || "";
+                              console.log("[EDITOR_UI_LOOKUP]", {
+                                  eventId: event.id,
+                                  role: col.keySuffix,
+                                  key: `${event.id}_${col.keySuffix}`,
+                                  exists: schedule[`${event.id}_${col.keySuffix}`]
+                              });
+
+                              const rawValue = schedule[uniqueKey];
+                              let currentValue = rawValue;
+
+                              if (!currentValue) {
+                                  const eventDate = event.id.split("_")[1];
+
+                                  let fallbackKey = Object.keys(schedule).find(k =>
+                                      k.endsWith(`_${eventDate}_${col.keySuffix}`)
+                                  );
+
+                                  if (!fallbackKey && col.realRole !== col.keySuffix) {
+                                      fallbackKey = Object.keys(schedule).find(k =>
+                                          k.endsWith(`_${eventDate}_${col.realRole}`)
+                                      );
+                                  }
+
+                                  if (fallbackKey) {
+                                      currentValue = schedule[fallbackKey];
+                                      console.log("[EDITOR_FALLBACK_MATCH]", {
+                                          uniqueKey,
+                                          fallbackKey
+                                      });
+                                  }
+                              }
+
+                              const renderedValue =
+                                currentValue === "__MISSING_NAME__"
+                                  ? "(Membro removido)"
+                                  : (currentValue ?? "");
+                              console.log("[EDITOR_FINAL_RENDER]", {
+                                  uniqueKey,
+                                  rawValue,
+                                  currentValue: renderedValue
+                              });
+                              console.log("[EDITOR_RENDER_RESOLVE]", {
+                                  uniqueKey,
+                                  rawValue,
+                                  currentValue: renderedValue
+                              });
                               const isConfirmed = attendance[uniqueKey] || false;
                               
                               const roleMembers = members[col.realRole] || [];
                               
-                              const hasLocalConflict = currentValue && !checkIsAvailable(availabilityLookup, currentValue, event.iso);
+                              const hasLocalConflict = renderedValue && !checkIsAvailable(availabilityLookup, renderedValue, event.iso);
+                              const currentName = (memberProfiles || []).find((p: any) => p.id === renderedValue)?.name || renderedValue;
                               
                               let globalConflictMsg = "";
                               let hasGlobalConflict = false;
                               if (currentValue && !readOnly) {
-                                  const normalized = currentValue.trim().toLowerCase();
+                                  const normalized = currentName.trim().toLowerCase();
                                   const conflicts = globalConflicts[normalized];
                                   if (conflicts) {
                                       const conflict = conflicts.find((c: any) => c.eventIso === event.iso);
-                                      if (conflict) { hasGlobalConflict = true; globalConflictMsg = `Conflito: ${currentValue} em ${conflict.ministryId.toUpperCase()}`; }
+                                      if (conflict) { hasGlobalConflict = true; globalConflictMsg = `Conflito: ${currentName} em ${conflict.ministryId.toUpperCase()}`; }
                                   }
                               }
                               return (
@@ -546,7 +669,7 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                                           <div className="flex items-center gap-2">
                                               <div className="flex-1">
                                                   <MemberSelector 
-                                                        value={currentValue} 
+                                                        value={renderedValue} 
                                                         onChange={(memberId, memberName) => {
                                                             const safeEventId = event.id;
                                                             onCellChange(safeEventId, col.keySuffix, memberId, memberName);

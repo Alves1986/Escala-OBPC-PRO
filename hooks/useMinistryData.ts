@@ -17,6 +17,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
 
   // We explicitly use V2 service here instead of the generic hook to ensure transformation
   const [availabilityV2, setAvailabilityV2] = useState<{ availability: Record<string, string[]>, notes: Record<string, string> }>({ availability: {}, notes: {} });
+  const [editorEvents, setEditorEvents] = useState<any[]>([]);
 
   const {
     settingsQuery,
@@ -36,44 +37,10 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   // Manual fetching/syncing for Availability V2 to integrate it
   useEffect(() => {
       if (mid && orgId) {
-          fetchMemberAvailabilityV2(mid, orgId).then(data => setAvailabilityV2(data)).catch(console.error);
+          fetchMemberAvailabilityV2(mid, orgId).then((availabilityV2) => { console.log("[AV_HOOK_RESPONSE]", availabilityV2); setAvailabilityV2(availabilityV2); }).catch(console.error);
       }
   }, [mid, orgId]);
 
-  // Transform ID-based availability to Name-based for legacy components
-  const availabilityByName = useMemo(() => {
-      const map: Record<string, string[]> = {};
-      const membersList = membersQuery.data?.publicList || [];
-      
-      Object.entries(availabilityV2.availability).forEach(([userId, dates]) => {
-          const member = membersList.find(m => m.id === userId);
-          if (member) {
-              map[member.name] = dates;
-          }
-      });
-      return map;
-  }, [availabilityV2, membersQuery.data]);
-
-  // Note: availabilityNotes uses "UserID_Month" key. We need to map it to "Name_Month" for legacy if needed, 
-  // but AvailabilityScreen now uses IDs, so legacy mapping might only be needed if ScheduleTable uses notes by name.
-  // ScheduleTable logic currently uses `getMemberNote` via name.
-  const notesByName = useMemo(() => {
-      const map: Record<string, string> = {};
-      const membersList = membersQuery.data?.publicList || [];
-      
-      Object.entries(availabilityV2.notes).forEach(([key, value]) => {
-          // Key format: UserID_YYYY-MM-00
-          const parts = key.split('_');
-          const userId = parts[0];
-          const datePart = parts.slice(1).join('_');
-          
-          const member = membersList.find(m => m.id === userId);
-          if (member) {
-              map[`${member.name}_${datePart}`] = value;
-          }
-      });
-      return map;
-  }, [availabilityV2, membersQuery.data]);
 
 
   // CÁLCULO DE DATAS PARA O USEEVENTS (Regras de projeção)
@@ -125,7 +92,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   const refreshData = async () => {
       // Also refresh manual V2 fetch
       if (mid && orgId) {
-          fetchMemberAvailabilityV2(mid, orgId).then(data => setAvailabilityV2(data)).catch(console.error);
+          fetchMemberAvailabilityV2(mid, orgId).then((availabilityV2) => { console.log("[AV_HOOK_RESPONSE]", availabilityV2); setAvailabilityV2(availabilityV2); }).catch(console.error);
       }
 
       await queryClient.invalidateQueries({ predicate: (query) => 
@@ -143,6 +110,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   };
 
   useEffect(() => {
+    console.log("[EDITOR_MONTH_CHANGED]", currentMonth);
     const sb = getSupabase();
     if (!sb || !mid) return;
     if (mid.length !== 36) return;
@@ -173,7 +141,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
             () => {
                 // Refresh Availability V2
                 if (mid && orgId) {
-                    fetchMemberAvailabilityV2(mid, orgId).then(data => setAvailabilityV2(data)).catch(console.error);
+                    fetchMemberAvailabilityV2(mid, orgId).then((availabilityV2) => { console.log("[AV_HOOK_RESPONSE]", availabilityV2); setAvailabilityV2(availabilityV2); }).catch(console.error);
                 }
             }
         )
@@ -206,72 +174,55 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   }, [mid, currentMonth, queryClient, orgId]);
 
   // ADAPTADOR CORRIGIDO (PARTE 2)
-  const events = useMemo(() => {
-      const assignments = assignmentsQuery.data?.schedule || {};
-      
-      const assignmentBasedEvents: any[] = [];
-      const processedEventKeys = new Set<string>();
+  const builtEditorEvents = useMemo(() => {
+      console.log("[EDITOR_CURRENT_MONTH]", currentMonth);
+      console.log("[EDITOR_EVENTS_SOURCE]", generatedEvents.length);
 
-      Object.keys(assignments).forEach(key => {
-          const parts = key.split('_');
-          if (parts.length >= 3) {
-              const ruleId = parts[0];
-              const date = parts[1];
-              const uniqueEventKey = `${ruleId}_${date}`; // CORREÇÃO: Chave única utilizando RuleID e Data
+      return generatedEvents
+          .map(gen => ({
+              id: gen.id,
+              iso: gen.iso,
+              title: gen.title,
+              dateDisplay: gen.date.split('-').reverse().slice(0, 2).join('/')
+          }))
+          .sort((a, b) => a.iso.localeCompare(b.iso));
+  }, [generatedEvents, currentMonth]);
 
-              if (!processedEventKeys.has(uniqueEventKey)) {
-                  const ruleEvent = generatedEvents.find(e => e.id === uniqueEventKey);
-                  
-                  if (ruleEvent) {
-                      assignmentBasedEvents.push({
-                          id: ruleEvent.id,
-                          iso: ruleEvent.iso,
-                          title: ruleEvent.title,
-                          dateDisplay: ruleEvent.date.split('-').reverse().slice(0, 2).join('/')
-                      });
-                  } else {
-                      assignmentBasedEvents.push({
-                          id: uniqueEventKey,
-                          iso: `${date}T00:00`, 
-                          title: 'Evento (Regra Removida)',
-                          dateDisplay: date.split('-').reverse().slice(0, 2).join('/')
-                      });
-                  }
-                  processedEventKeys.add(uniqueEventKey);
-              }
-          }
+  useEffect(() => {
+      console.log("[EDITOR_RESET_MONTH]", currentMonth);
+      setEditorEvents([]);
+  }, [currentMonth]);
+
+  useEffect(() => {
+      setEditorEvents(builtEditorEvents);
+
+      console.log("[EDITOR_EVENTS_AFTER_BUILD]", {
+          month: currentMonth,
+          count: builtEditorEvents.length,
+          dates: builtEditorEvents.map(e => (typeof e?.iso === "string" ? e.iso.split("T")[0] : ""))
       });
+  }, [builtEditorEvents, currentMonth]);
 
-      const finalEvents = [...assignmentBasedEvents];
-      
-      generatedEvents.forEach(gen => {
-          if (!processedEventKeys.has(gen.id)) {
-              finalEvents.push({
-                  id: gen.id,
-                  iso: gen.iso,
-                  title: gen.title,
-                  dateDisplay: gen.date.split('-').reverse().slice(0, 2).join('/')
-              });
-          }
-      });
-
-      return finalEvents.sort((a, b) => a.iso.localeCompare(b.iso));
-  }, [generatedEvents, assignmentsQuery.data]);
+  const availability = availabilityV2.availability;
 
   const eventRules = useMemo(() => {
       return (rulesQuery.data || []).filter(r => r.type === 'weekly');
   }, [rulesQuery.data]);
 
+  const schedule = assignmentsQuery.data?.schedule || {};
+  console.log("[EDITOR_SCHEDULE_KEYS]", Object.keys(schedule));
+
+  console.log("[AV_HOOK_FINAL]", availability);
+  console.log("[AV_HOOK_IDS]", Object.keys(availabilityV2.availability));
+
   return {
-    events,
-    schedule: assignmentsQuery.data?.schedule || {}, 
+    events: editorEvents,
+    schedule, 
     attendance: assignmentsQuery.data?.attendance || {}, 
     membersMap: membersQuery.data?.memberMap || {},
     publicMembers: membersQuery.data?.publicList || [],
-    availability: availabilityV2.availability, // ID-Based
+    availability, // ID-Based
     availabilityNotes: availabilityV2.notes, // ID-Based
-    availabilityByName, // LEGACY Support Name-Based
-    notesByName, // LEGACY Support Name-Based
     notifications: notificationsQuery.data || [],
     announcements: announcementsQuery.data || [],
     repertoire: repertoireQuery.data || [],

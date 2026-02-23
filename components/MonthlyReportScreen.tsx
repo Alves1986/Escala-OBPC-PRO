@@ -25,44 +25,93 @@ export const MonthlyReportScreen: React.FC<Props> = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState<'name' | 'rate' | 'scheduled'>('name');
 
+  type MonthlyAssignment = {
+    event_key?: string;
+    event_rule_id?: string;
+    event_date?: string;
+    member_id?: string;
+    confirmed?: boolean;
+  };
+
+  const getRuleId = (a: MonthlyAssignment) =>
+    a.event_key ?? a.event_rule_id ?? null;
+
+  const isSameMonth = (date: string | undefined, month: string) =>
+    typeof date === 'string' && date.startsWith(month);
+
+  const rawSchedule = schedule as unknown;
+  const assignmentsSource: unknown[] = Array.isArray(rawSchedule)
+    ? rawSchedule
+    : (
+      rawSchedule &&
+      typeof rawSchedule === 'object' &&
+      Array.isArray((rawSchedule as { schedule_assignments?: unknown[] }).schedule_assignments)
+    )
+      ? (rawSchedule as { schedule_assignments: unknown[] }).schedule_assignments
+      : Object.entries(schedule).map(([key, assignedName]) => {
+          const [event_key, event_date] = key.split('_');
+          const mappedMember = members.find(m => m.name === assignedName);
+
+          return {
+            event_key,
+            event_date,
+            member_id: mappedMember?.id,
+          };
+        });
+
+  console.log("[MONTHLY_RAW_ASSIGNMENTS]", assignmentsSource);
+  console.log("[MONTHLY_RAW_EVENTS]", events);
+  console.log("[MONTHLY_RAW_MEMBERS]", members);
+
   // Cálculo das Métricas
-  const reportData = useMemo(() => {
-    // 1. Filtrar eventos do mês
-    const monthEventIsos = events
-      .filter(e => e.iso.startsWith(currentMonth))
-      .map(e => e.iso);
+  const { reportData, monthlyAssignments } = useMemo(() => {
+    if (!Array.isArray(assignmentsSource)) {
+      return { reportData: [], monthlyAssignments: [] as MonthlyAssignment[] };
+    }
 
-    // 2. Processar dados por membro
+    const safeAssignments = assignmentsSource.filter((a): a is MonthlyAssignment => {
+      if (!a || typeof a !== 'object') return false;
+
+      const assignment = a as MonthlyAssignment;
+      return Boolean(assignment.member_id && assignment.event_date);
+    });
+
+    const monthlyAssignments = safeAssignments.filter(a =>
+      isSameMonth(a.event_date, currentMonth)
+    );
+
     const data = members.map(member => {
-      let scheduledCount = 0;
-      let confirmedCount = 0;
-      
-      // Analisar Escala e Presença
-      Object.entries(schedule).forEach(([key, assignedName]) => {
-        const isThisMonth = monthEventIsos.some(iso => key.startsWith(iso));
+      const memberAssignments = monthlyAssignments.filter(
+        a => a.member_id === member.id
+      );
 
-        if (isThisMonth && assignedName === member.name) {
-          scheduledCount++;
-          if (attendance[key]) {
-            confirmedCount++;
-          }
+      const scheduledCount = memberAssignments.length;
+
+      const confirmedCount = memberAssignments.filter(a => {
+        const ruleId = getRuleId(a);
+        if (!ruleId || !a.event_date) {
+          return false;
         }
-      });
 
-      // Analisar Trocas (Engajamento)
-      const swapsRequested = swapRequests.filter(req => 
-        req.requesterName === member.name && 
-        req.eventIso.startsWith(currentMonth)
+        const attendanceKeyPrefix = `${ruleId}_${a.event_date}`;
+        return Object.entries(attendance).some(([attendanceKey, isConfirmed]) =>
+          typeof attendanceKey === 'string' &&
+          attendanceKey.startsWith(attendanceKeyPrefix) &&
+          Boolean(isConfirmed)
+        );
+      }).length;
+
+      const swapsRequested = swapRequests.filter(req =>
+        req.requesterId === member.id && isSameMonth(req.eventIso, currentMonth)
       ).length;
 
-      const swapsCovered = swapRequests.filter(req => 
-        req.takenByName === member.name && 
-        req.eventIso.startsWith(currentMonth) &&
-        req.status === 'completed'
-      ).length;
+      const swapsCovered = swapRequests.filter(req => {
+        const takenById = (req as SwapRequest & { takenById?: string }).takenById;
+        return takenById === member.id && isSameMonth(req.eventIso, currentMonth) && req.status === 'completed';
+      }).length;
 
-      const attendanceRate = scheduledCount > 0 
-        ? Math.round((confirmedCount / scheduledCount) * 100) 
+      const attendanceRate = scheduledCount > 0
+        ? Math.round((confirmedCount / scheduledCount) * 100)
         : 0;
 
       let engagementScore = attendanceRate;
@@ -84,16 +133,21 @@ export const MonthlyReportScreen: React.FC<Props> = ({
       };
     });
 
-    // 3. Filtragem e Ordenação
-    return data
-      .filter(d => d.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    const reportData = data
+      .filter(d => (d.name ?? '').toLowerCase().includes(searchTerm.toLowerCase()))
       .sort((a, b) => {
         if (sortBy === 'rate') return b.rate - a.rate;
         if (sortBy === 'scheduled') return b.scheduled - a.scheduled;
-        return a.name.localeCompare(b.name);
+        return (a.name ?? '').localeCompare(b.name ?? '');
       });
 
-  }, [schedule, attendance, swapRequests, members, currentMonth, events, searchTerm, sortBy]);
+    return { reportData, monthlyAssignments };
+  }, [assignmentsSource, attendance, swapRequests, members, currentMonth, searchTerm, sortBy]);
+
+  console.log("[MONTHLY_FINAL_COUNTS]", {
+    totalAssignments: monthlyAssignments.length,
+    sample: monthlyAssignments.slice(0, 5)
+  });
 
   // Totais Gerais
   const totalScales = reportData.reduce((acc, curr) => acc + curr.scheduled, 0);
@@ -174,7 +228,7 @@ export const MonthlyReportScreen: React.FC<Props> = ({
                   <div className="p-1.5 md:p-2 bg-orange-50 dark:bg-orange-900/20 text-orange-600 rounded-lg"><RefreshCcw size={18}/></div>
               </div>
               <div>
-                  <span className="text-xl md:text-2xl font-bold text-zinc-800 dark:text-white">{swapRequests.filter(r => r.eventIso.startsWith(currentMonth)).length}</span>
+                  <span className="text-xl md:text-2xl font-bold text-zinc-800 dark:text-white">{swapRequests.filter(item => isSameMonth(item.eventIso, currentMonth)).length}</span>
                   <p className="text-[10px] md:text-xs text-zinc-500 font-medium">Trocas Solicitadas</p>
               </div>
           </div>
@@ -222,7 +276,10 @@ export const MonthlyReportScreen: React.FC<Props> = ({
                       </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
-                      {reportData.map((row) => (
+                      {reportData.map((row) => {
+                          console.log("[MONTHLY_RENDER_ROW]", row);
+                          try {
+                              return (
                           <tr key={row.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors group">
                               <td className="px-6 py-4">
                                   <div className="flex items-center gap-3">
@@ -230,7 +287,7 @@ export const MonthlyReportScreen: React.FC<Props> = ({
                                           <img src={row.avatar_url} className="w-9 h-9 rounded-full object-cover border border-zinc-200 dark:border-zinc-700" alt="" />
                                       ) : (
                                           <div className="w-9 h-9 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-500">
-                                              {row.name.charAt(0)}
+                                              {row.name?.charAt(0) ?? 'N/A'}
                                           </div>
                                       )}
                                       <div>
@@ -288,7 +345,12 @@ export const MonthlyReportScreen: React.FC<Props> = ({
                                   </div>
                               </td>
                           </tr>
-                      ))}
+                              );
+                          } catch (e) {
+                              console.error("[MONTHLY_ROWS_CRASH]", e, row);
+                              throw e;
+                          }
+                      })}
                   </tbody>
               </table>
           </div>
@@ -296,7 +358,10 @@ export const MonthlyReportScreen: React.FC<Props> = ({
 
       {/* --- MOBILE VIEW: Cards --- */}
       <div className="md:hidden space-y-3">
-          {reportData.map((row) => (
+          {reportData.map((row) => {
+              console.log("[MONTHLY_RENDER_ROW]", row);
+              try {
+                  return (
               <div key={row.id} className="bg-white dark:bg-zinc-800 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm flex flex-col gap-3">
                   {/* Card Header: Avatar & Main Stat */}
                   <div className="flex items-center justify-between">
@@ -305,7 +370,7 @@ export const MonthlyReportScreen: React.FC<Props> = ({
                               <img src={row.avatar_url} className="w-10 h-10 rounded-full object-cover border border-zinc-200 dark:border-zinc-700" alt="" />
                           ) : (
                               <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-700 flex items-center justify-center text-zinc-500 font-bold">
-                                  {row.name.charAt(0)}
+                                  {row.name?.charAt(0) ?? 'N/A'}
                               </div>
                           )}
                           <div>
@@ -356,7 +421,12 @@ export const MonthlyReportScreen: React.FC<Props> = ({
                       </div>
                   )}
               </div>
-          ))}
+                  );
+              } catch (e) {
+                  console.error("[MONTHLY_ROWS_CRASH]", e, row);
+                  throw e;
+              }
+          })}
       </div>
 
       {reportData.length === 0 && (

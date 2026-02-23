@@ -153,7 +153,6 @@ const InnerApp = () => {
   const { 
     events, schedule, attendance,
     membersMap, publicMembers, availability, availabilityNotes, 
-    availabilityByName, notesByName, // NEW Legacy Props
     notifications, announcements, 
     repertoire, swapRequests, globalConflicts, auditLogs, roles, 
     ministryTitle, availabilityWindow, eventRules, nextEvent, 
@@ -162,6 +161,36 @@ const InnerApp = () => {
   } = useMinistryData(ministryId, currentMonth, user);
 
   const onlineUsers = useOnlinePresence(user?.id, user?.name);
+
+
+  const memberNameById = useMemo(() => {
+      const map: Record<string, string> = {};
+      publicMembers.forEach((m) => { map[m.id] = m.name; });
+      return map;
+  }, [publicMembers]);
+
+  const memberIdByName = useMemo(() => {
+      const map: Record<string, string> = {};
+      publicMembers.forEach((m) => { map[m.name] = m.id; });
+      return map;
+  }, [publicMembers]);
+
+  const scheduleById = useMemo(() => {
+      const mapped: Record<string, string> = {};
+      Object.entries(schedule).forEach(([key, value]) => {
+          mapped[key] = memberIdByName[value] || value;
+      });
+      return mapped;
+  }, [schedule, memberIdByName]);
+
+  const membersMapById = useMemo(() => {
+      const mapped: Record<string, string[]> = {};
+      Object.entries(membersMap).forEach(([role, names]) => {
+          mapped[role] = (names || []).map((name) => memberIdByName[name]).filter(Boolean) as string[];
+      });
+      return mapped;
+  }, [membersMap, memberIdByName]);
+
 
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [showInstallModal, setShowInstallModal] = useState(false);
@@ -475,11 +504,11 @@ const InnerApp = () => {
                     <ScheduleTable 
                         events={events} 
                         roles={roles} 
-                        schedule={schedule} 
+                        schedule={scheduleById} 
                         attendance={attendance} 
-                        availability={availabilityByName} // LEGACY PROP
-                        availabilityNotes={notesByName} // LEGACY PROP
-                        members={membersMap} 
+                        availability={availability}
+                        availabilityNotes={availabilityNotes}
+                        members={membersMapById} 
                         allMembers={publicMembers.map(m => m.name)} 
                         memberProfiles={publicMembers} 
                         scheduleIssues={{}} 
@@ -564,7 +593,8 @@ const InnerApp = () => {
             {currentTab === 'settings' && safeEnabledTabs.includes('settings') && <SettingsScreen initialTitle={ministryTitle} ministryId={ministryId} themeMode={themeMode} onSetThemeMode={(m) => useAppStore.getState().setThemeMode(m)} onSaveTitle={async (newTitle) => { await Supabase.saveMinistrySettings(ministryId, orgId!, newTitle); refreshData(); }} onSaveAvailabilityWindow={async (start, end) => { await Supabase.saveMinistrySettings(ministryId, orgId!, undefined, undefined, start, end); refreshData(); }} availabilityWindow={availabilityWindow} isAdmin={isAdmin} orgId={orgId!} onEnableNotifications={handleEnableNotifications} />}
             {currentTab === 'members' && isAdmin && safeEnabledTabs.includes('members') && <MembersScreen members={publicMembers} onlineUsers={onlineUsers} currentUser={user} availableRoles={roles} onToggleAdmin={async (email, currentStatus, name) => { await Supabase.toggleAdminSQL(email, !currentStatus, ministryId, orgId!); refreshData(); }} onRemoveMember={async (id, name) => { await Supabase.deleteMember(ministryId, orgId!, id, name); refreshData(); }} onUpdateMember={async (id, data) => { await Supabase.updateMemberData(id, orgId!, data); refreshData(); }} />}
             {currentTab === 'event-rules' && isAdmin && safeEnabledTabs.includes('event-rules') && <EventsScreen />}
-            {currentTab === 'report' && isAdmin && safeEnabledTabs.includes('report') && <AvailabilityReportScreen availability={availabilityByName} registeredMembers={publicMembers} membersMap={membersMap} currentMonth={currentMonth} onMonthChange={setCurrentMonth} availableRoles={roles} onRefresh={async () => { await refreshData(); }} />}
+            {console.log("[AV_APP_PASS]", availability)}
+            {currentTab === 'report' && isAdmin && safeEnabledTabs.includes('report') && <AvailabilityReportScreen availability={availability} registeredMembers={publicMembers} membersMap={membersMap} currentMonth={currentMonth} onMonthChange={setCurrentMonth} availableRoles={roles} onRefresh={async () => { await refreshData(); }} />}
             {currentTab === 'monthly-report' && isAdmin && safeEnabledTabs.includes('monthly-report') && <MonthlyReportScreen currentMonth={currentMonth} onMonthChange={setCurrentMonth} schedule={schedule} attendance={attendance} swapRequests={swapRequests} members={publicMembers} events={events} />}
             {currentTab === 'social' && safeEnabledTabs.includes('social') && <SocialMediaScreen />}
             {currentTab === 'send-announcements' && isAdmin && safeEnabledTabs.includes('send-announcements') && <AlertsManager onSend={async (t, m, type, exp) => { await Supabase.sendNotificationSQL(ministryId, orgId!, { title: t, message: m, type, actionLink: 'announcements' }); await Supabase.createAnnouncementSQL(ministryId, orgId!, { title: t, message: m, type, expirationDate: exp }, user.name); refreshData(); }} />}
@@ -574,13 +604,9 @@ const InnerApp = () => {
         <InstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />
         <JoinMinistryModal isOpen={showJoinModal} onClose={() => setShowJoinModal(false)} onJoin={async (id, r) => { await Supabase.joinMinistry(id, orgId!, r); window.location.reload(); }} alreadyJoined={user.allowedMinistries || []} />
         <EventsModal isOpen={isEventsModalOpen} onClose={() => setEventsModalOpen(false)} events={events.map(e => ({ id: e.iso, title: e.title, iso: e.iso, date: e.iso.split('T')[0], time: e.iso.split('T')[1] }))} onAdd={async (e) => { await Supabase.createMinistryEvent(ministryId, orgId!, e); refreshData(); }} onRemove={async (id) => { await Supabase.deleteMinistryEvent(ministryId, orgId!, id); refreshData(); }} />
-        <AvailabilityModal isOpen={isAvailModalOpen} onClose={() => setAvailModalOpen(false)} members={publicMembers.map(m => m.name)} availability={availabilityByName} onUpdate={async (m, d) => { 
-            // Fix: AvailabilityModal still uses names internally, map to ID here
-            const memberObj = publicMembers.find(pm => pm.name === m);
-            if (memberObj) {
-                await Supabase.saveMemberAvailabilityV2(orgId!, ministryId, memberObj.id, d, {}, currentMonth); 
-                refreshData(); 
-            }
+        <AvailabilityModal isOpen={isAvailModalOpen} onClose={() => setAvailModalOpen(false)} members={publicMembers.map(m => m.id)} availability={availability} onUpdate={async (memberId, d) => { 
+            await Supabase.saveMemberAvailabilityV2(orgId!, ministryId, memberId, d, {}, currentMonth); 
+            refreshData(); 
         }} currentMonth={currentMonth} />
         <RolesModal isOpen={isRolesModalOpen} onClose={() => setRolesModalOpen(false)} roles={roles} onUpdate={async (r) => { await Supabase.saveMinistrySettings(ministryId, orgId!, undefined, r); refreshData(); }} />
         <AuditModal isOpen={isAuditModalOpen} onClose={() => setAuditModalOpen(false)} logs={auditLogs} />
