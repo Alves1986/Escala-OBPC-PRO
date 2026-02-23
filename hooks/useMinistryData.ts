@@ -211,15 +211,23 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
                       assignmentBasedEvents.push({
                           id: ruleEvent.id,
                           iso: ruleEvent.iso,
+                          date: ruleEvent.date,
                           title: ruleEvent.title,
                           dateDisplay: ruleEvent.date.split('-').reverse().slice(0, 2).join('/')
                       });
                   } else {
+                      console.log("[EDITOR_FALLBACK_EVENT]", {
+                          uniqueEventKey,
+                          normalizedDate
+                      });
+
                       assignmentBasedEvents.push({
                           id: uniqueEventKey,
                           iso: `${normalizedDate}T00:00`, 
-                          title: 'Evento (Regra Removida)',
-                          dateDisplay: date.split('-').reverse().slice(0, 2).join('/')
+                          date: normalizedDate,
+                          title: 'Evento (Escala Existente)',
+                          fallback: true,
+                          dateDisplay: normalizedDate.split('-').reverse().slice(0, 2).join('/')
                       });
                   }
                   processedEventKeys.add(uniqueEventKey);
