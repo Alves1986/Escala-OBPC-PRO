@@ -293,6 +293,18 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
     };
 
     const handleAssignmentChange = async (date: string, role: string, memberId: string | null, ruleId: string) => {
+        console.log("[RULE_ID_TRACE]", {
+            eventId: `${ruleId}_${normalizeDate(date)}`,
+            ruleId,
+            occurrence: { date: normalizeDate(date), ruleId },
+            event: null
+        });
+
+        if (!ruleId) {
+            console.error("[INVALID_RULE_ID]", { date, role, memberId, ruleId });
+            return;
+        }
+
         setProcessing(true);
         
         const tempId = `temp-${Date.now()}`;
@@ -318,12 +330,17 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
 
         try {
             if (memberId) {
-                await saveAssignmentV2(ministryId, orgId, {
+                const payload = {
                     event_rule_id: ruleId,
                     event_date: normalizeDate(date),
                     role,
                     member_id: memberId
+                };
+                console.log("[SAVE_CALLER_TRACE]", {
+                    callerStack: new Error().stack,
+                    payload
                 });
+                await saveAssignmentV2(ministryId, orgId, payload);
                 
                 addToast('Membro escalado', 'success');
             } else {

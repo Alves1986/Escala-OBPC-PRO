@@ -691,7 +691,9 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
         dateStr = parts[1];
     }
 
-    if (!dateStr) return;
+    if (!dateStr) {
+        throw new Error('[BLOCK_SAVE] event_rule_id ou event_key ausente');
+    }
 
     const cleanDate = dateStr.split('T')[0];
     const savePayload = {
@@ -707,9 +709,9 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
 
     console.log('[GLOBAL_SAVE_ASSIGNMENT]', savePayload);
 
-    if (!savePayload.event_key) {
+    if (!savePayload.event_rule_id || !savePayload.event_key) {
         console.error('[BLOCKED_SAVE_NO_EVENT_KEY]', savePayload);
-        return;
+        throw new Error('[BLOCK_SAVE] event_rule_id ou event_key ausente');
     }
 
     const { error } = await sb.from('schedule_assignments').upsert(savePayload, { onConflict: 'organization_id,ministry_id,event_rule_id,event_date,role' });

@@ -160,9 +160,9 @@ export const saveAssignmentV2 = async (
 
   console.log("[GLOBAL_SAVE_ASSIGNMENT]", savePayload);
 
-  if (!savePayload.event_key) {
+  if (!savePayload.event_rule_id || !savePayload.event_key) {
     console.error("[BLOCKED_SAVE_NO_EVENT_KEY]", savePayload);
-    return;
+    throw new Error("[BLOCK_SAVE] event_rule_id ou event_key ausente");
   }
 
   const { data, error } = await sb

@@ -491,8 +491,36 @@ const InnerApp = () => {
                                 return;
                             }
 
+                            const parts = cellKey.split('_');
+                            const ruleId = parts[0];
+                            const eventDate = parts[1];
+                            const isValidEventId = Boolean(ruleId && /^\d{4}-\d{2}-\d{2}$/.test(eventDate || ''));
+
+                            console.log("[RULE_ID_TRACE]", {
+                                eventId: cellKey,
+                                ruleId,
+                                occurrence: null,
+                                event: eventObj
+                            });
+
+                            if (!isValidEventId || eventObj.title === 'Evento (Regra Removida)') {
+                                console.error("[INVALID_RULE_ID]", eventObj);
+                                return;
+                            }
+
                             try {
                                 if (memberId) {
+                                    const payload = {
+                                        event_rule_id: ruleId,
+                                        event_date: eventDate,
+                                        role,
+                                        member_id: memberId,
+                                        event_key: ruleId
+                                    };
+                                    console.log("[SAVE_CALLER_TRACE]", {
+                                        callerStack: new Error().stack,
+                                        payload
+                                    });
                                     await Supabase.saveScheduleAssignment(ministryId, orgId!, cellKey, role, memberId, memberName || "");
                                 } else {
                                     const logicalKey = `${cellKey}_${role}`;
