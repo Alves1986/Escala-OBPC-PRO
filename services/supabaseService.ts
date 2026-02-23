@@ -194,6 +194,16 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
     const schedule: any = {};
     const attendance: any = {};
 
+    const rawAssignments = (assignments || []).map((a: any) => {
+        const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
+        return {
+            ruleId: a.event_key ?? a.event_rule_id,
+            date: String(a.event_date).split("T")[0],
+            role: a.role,
+            memberName: profile?.name ?? null
+        };
+    });
+
     assignments?.forEach((a: any) => {
         const ruleId = a.event_key ?? a.event_rule_id;
         const dateStr = String(a.event_date).split("T")[0];
@@ -216,7 +226,7 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
         }
     });
 
-    return { schedule, attendance };
+    return { schedule, attendance, rawAssignments };
 };
 
 export const fetchMinistryMembers = async (ministryId: string, orgId?: string) => {
