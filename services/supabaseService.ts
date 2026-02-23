@@ -720,15 +720,16 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
         organization_id: orgId,
         ministry_id: ministryId,
         event_rule_id: eventRuleKey,
-        event_date: dateStr,
+        event_date: String(dateStr).split('T')[0],
         role: role,
         member_id: memberId,
-        confirmed: false
+        confirmed: false,
+        updated_at: new Date().toISOString()
     };
 
     console.log("[EDITOR_SAVE_PAYLOAD]", payload);
 
-    const { error } = await sb.from('schedule_assignments').upsert(payload, { onConflict: 'event_rule_id,event_date,role' });
+    const { error } = await sb.from('schedule_assignments').upsert(payload, { onConflict: 'organization_id,ministry_id,event_rule_id,event_date,role' });
     
     if (error) throw error;
 };
