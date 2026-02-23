@@ -33,6 +33,10 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     isLoading: isLoadingQueries
   } = useMinistryQueries(mid, currentMonth, currentUser);
 
+  const assignmentsMonth = assignmentsQuery.data?.month;
+  const schedule = assignmentsQuery.data?.schedule || {};
+  const attendance = assignmentsQuery.data?.attendance || {};
+
   // Manual fetching/syncing for Availability V2 to integrate it
   useEffect(() => {
       if (mid && orgId) {
@@ -205,58 +209,50 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     };
   }, [mid, currentMonth, queryClient, orgId]);
 
-  // ADAPTADOR CORRIGIDO (PARTE 2)
+  // ADAPTADOR DO EDITOR: eventos reconstruídos a partir do schedule (fonte da verdade)
   const events = useMemo(() => {
-      const assignments = assignmentsQuery.data?.schedule || {};
-      
-      const assignmentBasedEvents: any[] = [];
-      const processedEventKeys = new Set<string>();
+      console.log("[ROOT_EVENTS_GENERATED]", {
+          count: generatedEvents.length,
+          sample: generatedEvents[0]
+      });
 
-      Object.keys(assignments).forEach(key => {
+      const eventMap = new Map<string, any>();
+
+      Object.keys(schedule).forEach((key) => {
           const parts = key.split('_');
-          if (parts.length >= 3) {
-              const ruleId = parts[0];
-              const date = parts[1];
-              const uniqueEventKey = `${ruleId}_${date}`; // CORREÇÃO: Chave única utilizando RuleID e Data
+          if (parts.length < 3) return;
 
-              if (!processedEventKeys.has(uniqueEventKey)) {
-                  const ruleEvent = generatedEvents.find(e => e.id === uniqueEventKey);
-                  
-                  if (ruleEvent) {
-                      assignmentBasedEvents.push({
-                          id: ruleEvent.id,
-                          iso: ruleEvent.iso,
-                          title: ruleEvent.title,
-                          dateDisplay: ruleEvent.date.split('-').reverse().slice(0, 2).join('/')
-                      });
-                  } else {
-                      assignmentBasedEvents.push({
-                          id: uniqueEventKey,
-                          iso: `${date}T00:00`, 
-                          title: 'Evento (Regra Removida)',
-                          dateDisplay: date.split('-').reverse().slice(0, 2).join('/')
-                      });
-                  }
-                  processedEventKeys.add(uniqueEventKey);
-              }
-          }
+          const ruleId = parts[0];
+          const date = parts[1];
+          if (!ruleId || !date) return;
+
+          const eventId = `${ruleId}_${date}`;
+          if (eventMap.has(eventId)) return;
+
+          const ruleEvent = generatedEvents.find(e => e.id === eventId);
+
+          eventMap.set(eventId, {
+              id: eventId,
+              iso: `${date}T00:00`,
+              title: ruleEvent?.title || 'Culto',
+              dateDisplay: date.split('-').reverse().slice(0, 2).join('/')
+          });
       });
 
-      const finalEvents = [...assignmentBasedEvents];
-      
-      generatedEvents.forEach(gen => {
-          if (!processedEventKeys.has(gen.id)) {
-              finalEvents.push({
-                  id: gen.id,
-                  iso: gen.iso,
-                  title: gen.title,
-                  dateDisplay: gen.date.split('-').reverse().slice(0, 2).join('/')
-              });
-          }
+      const eventsFromSchedule = Array.from(eventMap.values()).sort((a, b) => a.iso.localeCompare(b.iso));
+
+      console.log("[ROOT_EDITOR_EVENTS]", {
+          events: eventsFromSchedule.length,
+          scheduleKeys: Object.keys(schedule).length,
+          sampleEvent: eventsFromSchedule[0],
+          sampleScheduleKey: Object.keys(schedule)[0]
       });
 
-      return finalEvents.sort((a, b) => a.iso.localeCompare(b.iso));
-  }, [generatedEvents, assignmentsQuery.data]);
+      return eventsFromSchedule;
+  }, [schedule, generatedEvents]);
+
+
+  const isMonthSyncPending = assignmentsQuery.isFetching || assignmentsMonth !== currentMonth;
 
   const eventRules = useMemo(() => {
       return (rulesQuery.data || []).filter(r => r.type === 'weekly');
@@ -264,8 +260,8 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
 
   return {
     events,
-    schedule: assignmentsQuery.data?.schedule || {}, 
-    attendance: assignmentsQuery.data?.attendance || {}, 
+    schedule, 
+    attendance, 
     membersMap: membersQuery.data?.memberMap || {},
     publicMembers: membersQuery.data?.publicList || [],
     availability: availabilityV2.availability, // ID-Based
@@ -283,7 +279,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     roles,
     ministryTitle,
     availabilityWindow,
-    isLoading: isLoadingQueries || isLoadingEvents,
+    isLoading: isLoadingQueries || isLoadingEvents || isMonthSyncPending,
     refreshData,
     setEvents: () => refreshData(), 
     setSchedule: () => refreshData(),

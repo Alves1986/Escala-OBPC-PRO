@@ -34,6 +34,11 @@ export interface MemberV2 {
   roles?: string[];
 }
 
+
+const normalizeDate = (value: string) => {
+  return String(value || '').split('T')[0];
+};
+
 export const fetchRulesV2 = async (
   ministryId: string,
   orgId: string
@@ -80,7 +85,7 @@ export const fetchAssignmentsV2 = async (
   return (data || []).map((a: any) => ({
     id: a.id,
     event_rule_id: a.event_rule_id,
-    event_date: a.event_date,
+    event_date: normalizeDate(a.event_date),
     role: a.role,
     member_id: a.member_id,
     confirmed: a.confirmed,
@@ -146,18 +151,26 @@ export const saveAssignmentV2 = async (
   const sb = getSupabase();
   if (!sb) throw new Error("NO_SUPABASE");
 
+  const normalizedPayload = {
+    organization_id: orgId,
+    ministry_id: ministryId,
+    event_rule_id: payload.event_rule_id,
+    event_date: normalizeDate(payload.event_date),
+    role: payload.role,
+    member_id: payload.member_id,
+    confirmed: false,
+    updated_at: new Date().toISOString()
+  };
+
+  console.log("[UPSERT_CONSTRAINT_CHECK]", {
+    onConflict: "organization_id,ministry_id,event_rule_id,event_date,role",
+    constraintExpected: "schedule_assignments_unique"
+  });
+
   const { data, error } = await sb
     .from("schedule_assignments")
     .upsert(
-      {
-        organization_id: orgId,
-        ministry_id: ministryId,
-        event_rule_id: payload.event_rule_id,
-        event_date: payload.event_date,
-        role: payload.role,
-        member_id: payload.member_id,
-        confirmed: false
-      },
+      normalizedPayload,
       {
         onConflict: "organization_id,ministry_id,event_rule_id,event_date,role"
       }
@@ -185,7 +198,7 @@ export const removeAssignmentV2 = async (
     .eq("organization_id", orgId)
     .eq("ministry_id", ministryId)
     .eq("event_rule_id", key.event_rule_id)
-    .eq("event_date", key.event_date)
+    .eq("event_date", normalizeDate(key.event_date))
     .eq("role", key.role);
 
   if (error) throw error;
@@ -228,8 +241,15 @@ export const generateOccurrencesV2 = (
       const cur = new Date(start);
       // Loop
       while (cur <= end) {
+        const weekdayNumber = Number(rule.weekday);
+        console.log("[WEEKDAY_TYPE_CHECK]", {
+          type: typeof rule.weekday,
+          value: rule.weekday,
+          numericValue: weekdayNumber
+        });
+
         // getDay() is local
-        if (cur.getDay() === rule.weekday) {
+        if (!Number.isNaN(weekdayNumber) && weekdayNumber === cur.getDay()) {
           const dateStr = localDateString(cur);
           
           occurrences.push({
@@ -280,7 +300,8 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
       const rule = rulesMap.get(a.event_rule_id) as any;
       if (!rule) return null; 
 
-      const dateTimeStr = `${a.event_date}T${rule.time}`;
+      const normalizedEventDate = normalizeDate(a.event_date);
+      const dateTimeStr = `${normalizedEventDate}T${rule.time}`;
       const eventDateObj = new Date(dateTimeStr);
 
       return {
@@ -309,7 +330,7 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
       .eq('organization_id', orgId)
       .eq('ministry_id', ministryId)
       .eq('event_rule_id', nextEvent.assignment.event_rule_id)
-      .eq('event_date', nextEvent.assignment.event_date);
+      .eq('event_date', normalizeDate(nextEvent.assignment.event_date));
 
   const members = (membersData || []).map((m: any) => ({
       role: m.role,
@@ -320,10 +341,20 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
       key: `${nextEvent.iso}_${m.role}`
   }));
 
+  const eventId = `${nextEvent.assignment.event_rule_id}_${normalizeDate(nextEvent.assignment.event_date)}`;
+  const sampleRole = members[0]?.role;
+  const expectedKey = sampleRole ? `${eventId}_${sampleRole}` : null;
+
+  console.log("[EDITOR_KEY_CHECK]", {
+      eventId,
+      expectedKey,
+      scheduleHasKey: Boolean(expectedKey)
+  });
+
   return {
       event: {
           id: nextEvent.rule.id,
-          date: nextEvent.assignment.event_date,
+          date: normalizeDate(nextEvent.assignment.event_date),
           time: nextEvent.rule.time,
           title: nextEvent.rule.title,
           iso: nextEvent.iso,

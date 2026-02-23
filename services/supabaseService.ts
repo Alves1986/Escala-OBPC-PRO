@@ -53,6 +53,8 @@ export const getSupabase = () => supabase;
 
 // --- HELPERS ---
 
+const normalizeDate = (value: string) => String(value || '').split('T')[0];
+
 const filterRolesBySettings = async (roles: string[], ministryId: string, orgId: string): Promise<string[]> => {
     const sb = getSupabase();
     if (!sb) return roles;
@@ -179,9 +181,41 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
     const { data: assignments, error } = await sb.from('schedule_assignments')
         .select('*, profiles(name)')
         .eq('ministry_id', ministryId)
-        .eq('organization_id', orgId);
+        .eq('organization_id', orgId)
+        .ilike('event_date', `${month}%`);
 
     if (error) throw error;
+
+    console.log("[ROOT_DB_ASSIGNMENTS]", (assignments || []).map((a: any) => ({
+        event_rule_id: a.event_rule_id,
+        event_date_raw: a.event_date,
+        event_date_normalized: normalizeDate(a.event_date),
+        role: a.role,
+        member_id: a.member_id
+    })));
+
+    const memberIds = Array.from(new Set(
+        (assignments || [])
+            .map((a: any) => a.member_id)
+            .filter((id: any) => !!id)
+    ));
+
+    let profileMap: Record<string, string> = {};
+    if (memberIds.length > 0) {
+        const { data: fallbackProfiles, error: fallbackProfilesError } = await sb
+            .from('profiles')
+            .select('id, name')
+            .in('id', memberIds);
+
+        if (fallbackProfilesError) throw fallbackProfilesError;
+
+        profileMap = (fallbackProfiles || []).reduce((acc: Record<string, string>, p: any) => {
+            if (p?.id && p?.name) {
+                acc[p.id] = p.name;
+            }
+            return acc;
+        }, {});
+    }
 
     const schedule: any = {};
     const attendance: any = {};
@@ -191,11 +225,24 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
         const dateStr = a.event_date;
         
         if (ruleId && dateStr) {
-            const key = `${ruleId}_${dateStr}_${a.role}`;
+            const dateOnly = normalizeDate(dateStr);
+            const key = `${ruleId}_${dateOnly}_${a.role}`;
             const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
-            const name = profile?.name;
+            const name = profile?.name || profileMap[a.member_id] || null;
+            const finalKey = `${ruleId}_${dateOnly}_${a.role}`;
 
-            if (name) schedule[key] = name;
+            console.log("[ROOT_SERVICE_KEYS]", {
+                event_rule_id: ruleId,
+                event_date_raw: dateStr,
+                event_date_normalized: dateOnly,
+                role: a.role,
+                key: finalKey,
+                value: name
+            });
+
+            if (name) {
+                schedule[key] = name;
+            }
             if (a.confirmed) attendance[key] = true;
         }
     });
@@ -681,26 +728,37 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
     const sb = getSupabase();
     if (!sb) return;
     
-    let ruleId = eventKey;
-    let dateStr = "";
-    
-    if (eventKey.includes('_20')) {
-        const parts = eventKey.split('_');
-        ruleId = parts[0];
-        dateStr = parts[1];
-    }
+    const parts = eventKey.split('_');
+    const eventRuleKey = parts[0] || "";
+    const dateStr = normalizeDate(parts[1] || "");
 
-    if (!dateStr) return;
+    if (!eventRuleKey || !dateStr) return;
 
-    const { error } = await sb.from('schedule_assignments').upsert({
+    const payload = {
         organization_id: orgId,
         ministry_id: ministryId,
-        event_rule_id: ruleId,
-        event_date: dateStr,
+        event_rule_id: eventRuleKey,
+        event_date: normalizeDate(dateStr),
         role: role,
         member_id: memberId,
-        confirmed: false
-    }, { onConflict: 'organization_id,ministry_id,event_rule_id,event_date,role' });
+        confirmed: false,
+        updated_at: new Date().toISOString()
+    };
+
+    console.log("[ROOT_SAVE_PAYLOAD]", {
+        event_rule_id: payload.event_rule_id,
+        event_date_raw: parts[1] || "",
+        event_date_normalized: payload.event_date,
+        role: payload.role,
+        key: `${payload.event_rule_id}_${payload.event_date}_${payload.role}`,
+        value: payload.member_id
+    });
+
+    console.log("[ROOT_ON_CONFLICT]", {
+        onConflict: 'organization_id,ministry_id,event_rule_id,event_date,role'
+    });
+
+    const { error } = await sb.from('schedule_assignments').upsert(payload, { onConflict: 'organization_id,ministry_id,event_rule_id,event_date,role' });
     
     if (error) throw error;
 };
