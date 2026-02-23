@@ -158,13 +158,12 @@ export const saveAssignmentV2 = async (
     confirmed: false
   };
 
-  console.log("[SAVE_PAYLOAD]", {
-    event_rule_id: savePayload.event_rule_id,
-    event_date: savePayload.event_date,
-    role: savePayload.role,
-    member_id: savePayload.member_id,
-    event_key: savePayload.event_key
-  });
+  console.log("[GLOBAL_SAVE_ASSIGNMENT]", savePayload);
+
+  if (!savePayload.event_key) {
+    console.error("[BLOCKED_SAVE_NO_EVENT_KEY]", savePayload);
+    return;
+  }
 
   const { data, error } = await sb
     .from("schedule_assignments")
