@@ -209,24 +209,64 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     };
   }, [mid, currentMonth, queryClient, orgId]);
 
-  // ADAPTADOR DO EDITOR: eventos vêm SOMENTE das regras geradas (useEvents)
+  // ADAPTADOR DO EDITOR: usa generatedEvents com fallback de recuperação por assignments
   const events = useMemo(() => {
-      if (assignmentsMonth !== currentMonth) {
-          return [];
-      }
+      const assignments = assignmentsQuery.data?.schedule || {};
+      const assignmentBasedEvents: any[] = [];
+      const processedEventKeys = new Set<string>();
 
-      const normalizedEvents = generatedEvents.map(gen => ({
-          id: gen.id,
-          iso: gen.iso,
-          title: gen.title,
-          dateDisplay: gen.date.split('-').reverse().slice(0, 2).join('/')
-      }));
+      Object.keys(assignments).forEach(key => {
+          const [ruleId, date] = key.split('_');
+          if (!ruleId || !date) return;
 
-      console.log("[EDITOR_EVENT_IDS]", normalizedEvents.map(e => e.id));
-      console.log("[EDITOR_SCHEDULE_KEYS]", Object.keys(schedule));
+          const uniqueEventKey = `${ruleId}_${date}`;
 
-      return normalizedEvents.sort((a, b) => a.iso.localeCompare(b.iso));
-  }, [generatedEvents, assignmentsMonth, currentMonth, schedule]);
+          if (processedEventKeys.has(uniqueEventKey)) return;
+
+          const ruleEvent = generatedEvents.find(e => e.id === uniqueEventKey);
+
+          if (ruleEvent) {
+              assignmentBasedEvents.push({
+                  id: ruleEvent.id,
+                  iso: ruleEvent.iso,
+                  title: ruleEvent.title,
+                  dateDisplay: ruleEvent.date.split('-').reverse().slice(0, 2).join('/')
+              });
+          } else {
+              assignmentBasedEvents.push({
+                  id: uniqueEventKey,
+                  iso: `${date}T00:00`,
+                  title: 'Evento (Recuperado)',
+                  dateDisplay: date.split('-').reverse().slice(0, 2).join('/')
+              });
+          }
+
+          processedEventKeys.add(uniqueEventKey);
+      });
+
+      const finalEvents = [
+          ...assignmentBasedEvents,
+          ...generatedEvents
+              .filter(gen => !processedEventKeys.has(gen.id))
+              .map(gen => ({
+                  id: gen.id,
+                  iso: gen.iso,
+                  title: gen.title,
+                  dateDisplay: gen.date.split('-').reverse().slice(0, 2).join('/')
+              }))
+      ];
+
+      const filteredEvents = finalEvents.filter(e => e.iso.startsWith(currentMonth));
+
+      console.log("[EDITOR_EVENTS_FINAL]", {
+          month: currentMonth,
+          generated: generatedEvents.length,
+          recovered: assignmentBasedEvents.length,
+          final: filteredEvents.length
+      });
+
+      return filteredEvents.sort((a, b) => a.iso.localeCompare(b.iso));
+  }, [assignmentsQuery.data?.schedule, generatedEvents, currentMonth]);
 
 
   const isMonthSyncPending = assignmentsQuery.isFetching || assignmentsMonth !== currentMonth;
