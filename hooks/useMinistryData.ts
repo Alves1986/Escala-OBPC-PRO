@@ -183,29 +183,27 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       const processedEventKeys = new Set<string>();
 
       Object.keys(assignments).forEach(key => {
-          const parts = key.split('_');
-          if (parts.length >= 3) {
-              const assignmentEventKey = parts[0];
-              const assignmentEventRuleId = parts[0];
-              const ruleIdForMatch = assignmentEventKey ?? assignmentEventRuleId;
-              const date = parts[1];
+          const [ruleId, date] = key.split('_');
+          if (ruleId && date) {
+              const normalizedDate = String(date).split("T")[0];
 
               console.log("[EDITOR_ASSIGNMENT_MATCH]", {
-                  assignmentDate: date,
+                  assignmentDate: normalizedDate,
                   currentMonth,
-                  startsWith: date?.startsWith(currentMonth)
+                  startsWith: normalizedDate?.startsWith(currentMonth)
               });
 
-              if (!date?.startsWith(currentMonth)) {
-                  return;
-              }
-
-              const uniqueEventKey = `${ruleIdForMatch}_${date}`; // CORREÇÃO: Chave única utilizando RuleID e Data
+              const uniqueEventKey = `${ruleId}_${normalizedDate}`; // CORREÇÃO: Chave única utilizando RuleID e Data
 
               if (!processedEventKeys.has(uniqueEventKey)) {
                   const ruleEvent = generatedEvents.find(e => e.id === uniqueEventKey);
+                  console.log("[EDITOR_MATCH_CHECK]", {
+                      key,
+                      uniqueEventKey,
+                      found: !!ruleEvent
+                  });
                   console.log("[EDITOR_RULE_LOOKUP]", {
-                      assignmentEventKey: ruleIdForMatch,
+                      assignmentEventKey: ruleId,
                       foundRule: Boolean(ruleEvent)
                   });
                   
@@ -219,7 +217,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
                   } else {
                       assignmentBasedEvents.push({
                           id: uniqueEventKey,
-                          iso: `${date}T00:00`, 
+                          iso: `${normalizedDate}T00:00`, 
                           title: 'Evento (Regra Removida)',
                           dateDisplay: date.split('-').reverse().slice(0, 2).join('/')
                       });
@@ -232,10 +230,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       const finalEvents = [...assignmentBasedEvents];
       
       generatedEvents.forEach(gen => {
-          if (!gen.date?.startsWith(currentMonth)) {
-              return;
-          }
-
           if (!processedEventKeys.has(gen.id)) {
               finalEvents.push({
                   id: gen.id,
@@ -258,17 +252,12 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
   }, [currentMonth]);
 
   useEffect(() => {
-      const monthEvents = builtEditorEvents.filter((event) => {
-          const eventDate = typeof event?.iso === "string" ? event.iso.split("T")[0] : "";
-          return eventDate.startsWith(currentMonth);
-      });
-
-      setEditorEvents(monthEvents);
+      setEditorEvents(builtEditorEvents);
 
       console.log("[EDITOR_EVENTS_AFTER_BUILD]", {
           month: currentMonth,
-          count: monthEvents.length,
-          dates: monthEvents.map(e => (typeof e?.iso === "string" ? e.iso.split("T")[0] : ""))
+          count: builtEditorEvents.length,
+          dates: builtEditorEvents.map(e => (typeof e?.iso === "string" ? e.iso.split("T")[0] : ""))
       });
   }, [builtEditorEvents, currentMonth]);
 

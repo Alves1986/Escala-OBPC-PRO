@@ -323,6 +323,10 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                 // event.id JÁ VEM como "ruleId_date" do useEvents/generateEvents
                 // Então uniqueKey = ruleId_date_role
                 const uniqueKey = `${event.id}_${col.keySuffix}`;
+                console.log("[EDITOR_RENDER_KEY]", {
+                    uniqueKey,
+                    value: schedule[uniqueKey]
+                });
                 
                 // NUNCA usar fallbacks soltos como schedule[ruleKey] ou schedule[isoKey]
                 // Isso que causava a mistura de cultos do mesmo dia.
@@ -535,6 +539,10 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                           {columns.map(col => {
                               // CORREÇÃO CRÍTICA MOBILE: Usar chave composta única (RuleID_Date_Role)
                               const uniqueKey = `${event.id}_${col.keySuffix}`;
+                              console.log("[EDITOR_RENDER_KEY]", {
+                                  uniqueKey,
+                                  value: schedule[uniqueKey]
+                              });
                               
                               const currentValue = schedule[uniqueKey] || "";
                               const isConfirmed = attendance[uniqueKey] || false;

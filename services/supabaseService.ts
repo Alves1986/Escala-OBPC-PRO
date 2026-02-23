@@ -196,14 +196,22 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
 
     assignments?.forEach((a: any) => {
         const ruleId = a.event_key ?? a.event_rule_id;
-        const dateStr = a.event_date;
+        const dateStr = String(a.event_date).split("T")[0];
         
         if (ruleId && dateStr) {
             const key = `${ruleId}_${dateStr}_${a.role}`;
             const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
             const name = profile?.name;
 
-            if (name) schedule[key] = name;
+            console.log("[EDITOR_SERVICE_KEY]", {
+                key,
+                ruleId,
+                dateStr,
+                role: a.role,
+                name
+            });
+
+            schedule[key] = name ?? null;
             if (a.confirmed) attendance[key] = true;
         }
     });
