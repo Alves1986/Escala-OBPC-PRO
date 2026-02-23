@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { User, Role, DEFAULT_ROLES } from '../types';
 import { useMinistryQueries, keys } from './useMinistryQueries';
 import { useQueryClient } from '@tanstack/react-query';
@@ -146,25 +146,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       });
   };
 
-  const previousMonthRef = useRef(currentMonth);
-
-  useEffect(() => {
-      const oldMonth = previousMonthRef.current;
-      if (!mid || !orgId) {
-          previousMonthRef.current = currentMonth;
-          return;
-      }
-
-      if (oldMonth !== currentMonth) {
-          queryClient.removeQueries({
-              queryKey: keys.assignments(mid, oldMonth, orgId)
-          });
-      }
-
-      previousMonthRef.current = currentMonth;
-  }, [mid, currentMonth, orgId, queryClient]);
-
-
   useEffect(() => {
     const sb = getSupabase();
     if (!sb || !mid) return;
@@ -228,81 +209,24 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     };
   }, [mid, currentMonth, queryClient, orgId]);
 
-  // ADAPTADOR CORRIGIDO (PARTE 2)
+  // ADAPTADOR DO EDITOR: eventos vêm SOMENTE das regras geradas (useEvents)
   const events = useMemo(() => {
-      console.log("[EDITOR_MONTH_SYNC]", {
-          currentMonth,
-          assignmentsMonth,
-          eventsCount: generatedEvents.length,
-          scheduleKeys: Object.keys(schedule).length
-      });
-
       if (assignmentsMonth !== currentMonth) {
           return [];
       }
 
-      const assignments = schedule;
-      const assignmentBasedEvents: any[] = [];
-      const processedEventKeys = new Set<string>();
+      const normalizedEvents = generatedEvents.map(gen => ({
+          id: gen.id,
+          iso: gen.iso,
+          title: gen.title,
+          dateDisplay: gen.date.split('-').reverse().slice(0, 2).join('/')
+      }));
 
-      Object.keys(assignments).forEach(key => {
-          const parts = key.split('_');
-          if (parts.length >= 3) {
-              const ruleId = parts[0];
-              const date = parts[1];
-              const uniqueEventKey = `${ruleId}_${date}`; // CORREÇÃO: Chave única utilizando RuleID e Data
+      console.log("[EDITOR_EVENT_IDS]", normalizedEvents.map(e => e.id));
+      console.log("[EDITOR_SCHEDULE_KEYS]", Object.keys(schedule));
 
-              if (!processedEventKeys.has(uniqueEventKey)) {
-                  const ruleEvent = generatedEvents.find(e => e.id === uniqueEventKey);
-                  
-                  if (ruleEvent) {
-                      assignmentBasedEvents.push({
-                          id: ruleEvent.id,
-                          iso: ruleEvent.iso,
-                          title: ruleEvent.title,
-                          dateDisplay: ruleEvent.date.split('-').reverse().slice(0, 2).join('/')
-                      });
-                  } else {
-                      const fallbackIso = `${date}T00:00`;
-                      const fallbackHour = parseInt(fallbackIso.split('T')[1]?.split(':')[0] || '0', 10);
-                      const fallbackTitle = fallbackHour < 12
-                          ? 'Culto Dom. Manhã'
-                          : fallbackHour >= 18
-                              ? 'Culto Dom. Noite'
-                              : 'Culto';
-
-                      console.log("[EDITOR_FALLBACK_EVENT]", {
-                          uniqueEventKey,
-                          date
-                      });
-
-                      assignmentBasedEvents.push({
-                          id: uniqueEventKey,
-                          iso: fallbackIso,
-                          title: fallbackTitle,
-                          dateDisplay: date.split('-').reverse().slice(0, 2).join('/')
-                      });
-                  }
-                  processedEventKeys.add(uniqueEventKey);
-              }
-          }
-      });
-
-      const finalEvents = [...assignmentBasedEvents];
-      
-      generatedEvents.forEach(gen => {
-          if (!processedEventKeys.has(gen.id)) {
-              finalEvents.push({
-                  id: gen.id,
-                  iso: gen.iso,
-                  title: gen.title,
-                  dateDisplay: gen.date.split('-').reverse().slice(0, 2).join('/')
-              });
-          }
-      });
-
-      return finalEvents.sort((a, b) => a.iso.localeCompare(b.iso));
-  }, [generatedEvents, schedule, assignmentsMonth, currentMonth]);
+      return normalizedEvents.sort((a, b) => a.iso.localeCompare(b.iso));
+  }, [generatedEvents, assignmentsMonth, currentMonth, schedule]);
 
 
   const isMonthSyncPending = assignmentsQuery.isFetching || assignmentsMonth !== currentMonth;

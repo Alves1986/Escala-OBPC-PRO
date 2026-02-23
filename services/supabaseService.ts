@@ -179,7 +179,8 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
     const { data: assignments, error } = await sb.from('schedule_assignments')
         .select('*, profiles(name)')
         .eq('ministry_id', ministryId)
-        .eq('organization_id', orgId);
+        .eq('organization_id', orgId)
+        .ilike('event_date', `${month}%`);
 
     if (error) throw error;
 
@@ -214,14 +215,10 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
         const dateStr = a.event_date;
         
         if (ruleId && dateStr) {
-            const key = `${ruleId}_${dateStr}_${a.role}`;
+            const dateOnly = String(dateStr).split('T')[0];
+            const key = `${ruleId}_${dateOnly}_${a.role}`;
             const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
             const name = profile?.name || profileMap[a.member_id] || null;
-
-            console.log("[EDITOR_NAME_RESOLUTION]", {
-                memberId: a.member_id,
-                resolvedName: name
-            });
 
             if (name) {
                 schedule[key] = name;
@@ -229,6 +226,8 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
             if (a.confirmed) attendance[key] = true;
         }
     });
+
+    console.log("[EDITOR_SCHEDULE_KEYS]", Object.keys(schedule));
 
     return { schedule, attendance };
 };
@@ -711,26 +710,25 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
     const sb = getSupabase();
     if (!sb) return;
     
-    let ruleId = eventKey;
-    let dateStr = "";
-    
-    if (eventKey.includes('_20')) {
-        const parts = eventKey.split('_');
-        ruleId = parts[0];
-        dateStr = parts[1];
-    }
+    const parts = eventKey.split('_');
+    const eventRuleKey = parts[0] || "";
+    const dateStr = (parts[1] || "").split('T')[0];
 
-    if (!dateStr) return;
+    if (!eventRuleKey || !dateStr) return;
 
-    const { error } = await sb.from('schedule_assignments').upsert({
+    const payload = {
         organization_id: orgId,
         ministry_id: ministryId,
-        event_rule_id: ruleId,
+        event_rule_id: eventRuleKey,
         event_date: dateStr,
         role: role,
         member_id: memberId,
         confirmed: false
-    }, { onConflict: 'organization_id,ministry_id,event_rule_id,event_date,role' });
+    };
+
+    console.log("[EDITOR_SAVE_PAYLOAD]", payload);
+
+    const { error } = await sb.from('schedule_assignments').upsert(payload, { onConflict: 'event_rule_id,event_date,role' });
     
     if (error) throw error;
 };
