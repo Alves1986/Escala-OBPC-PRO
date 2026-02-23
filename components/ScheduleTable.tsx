@@ -343,9 +343,15 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                 if (!currentValue) {
                     const eventDate = event.id.split("_")[1];
 
-                    const fallbackKey = Object.keys(schedule).find(k =>
+                    let fallbackKey = Object.keys(schedule).find(k =>
                         k.endsWith(`_${eventDate}_${col.keySuffix}`)
                     );
+
+                    if (!fallbackKey && col.realRole !== col.keySuffix) {
+                        fallbackKey = Object.keys(schedule).find(k =>
+                            k.endsWith(`_${eventDate}_${col.realRole}`)
+                        );
+                    }
 
                     if (fallbackKey) {
                         currentValue = schedule[fallbackKey];
@@ -591,9 +597,15 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                               if (!currentValue) {
                                   const eventDate = event.id.split("_")[1];
 
-                                  const fallbackKey = Object.keys(schedule).find(k =>
+                                  let fallbackKey = Object.keys(schedule).find(k =>
                                       k.endsWith(`_${eventDate}_${col.keySuffix}`)
                                   );
+
+                                  if (!fallbackKey && col.realRole !== col.keySuffix) {
+                                      fallbackKey = Object.keys(schedule).find(k =>
+                                          k.endsWith(`_${eventDate}_${col.realRole}`)
+                                      );
+                                  }
 
                                   if (fallbackKey) {
                                       currentValue = schedule[fallbackKey];
