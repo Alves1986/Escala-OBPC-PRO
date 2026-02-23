@@ -178,6 +178,7 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
 
     const monthStart = `${month}-01`;
     const monthEnd = `${month}-31`;
+    console.log("[EDITOR_FETCH_RANGE]", { monthStart, monthEnd });
 
     const { data: assignments, error } = await sb.from('schedule_assignments')
         .select('*, profiles(name)')
@@ -187,6 +188,8 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
         .lte('event_date', monthEnd);
 
     if (error) throw error;
+
+    console.log("[EDITOR_FETCH_RESULT]", assignments);
 
     const schedule: any = {};
     const attendance: any = {};

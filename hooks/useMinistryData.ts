@@ -185,19 +185,27 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       Object.keys(assignments).forEach(key => {
           const parts = key.split('_');
           if (parts.length >= 3) {
-              const ruleId = parts[0];
+              const assignmentEventKey = parts[0];
+              const assignmentEventRuleId = parts[0];
+              const ruleIdForMatch = assignmentEventKey ?? assignmentEventRuleId;
               const date = parts[1];
+
+              console.log("[EDITOR_ASSIGNMENT_MATCH]", {
+                  assignmentDate: date,
+                  currentMonth,
+                  startsWith: date?.startsWith(currentMonth)
+              });
 
               if (!date?.startsWith(currentMonth)) {
                   return;
               }
 
-              const uniqueEventKey = `${ruleId}_${date}`; // CORREÇÃO: Chave única utilizando RuleID e Data
+              const uniqueEventKey = `${ruleIdForMatch}_${date}`; // CORREÇÃO: Chave única utilizando RuleID e Data
 
               if (!processedEventKeys.has(uniqueEventKey)) {
                   const ruleEvent = generatedEvents.find(e => e.id === uniqueEventKey);
                   console.log("[EDITOR_RULE_LOOKUP]", {
-                      assignmentEventKey: ruleId,
+                      assignmentEventKey: ruleIdForMatch,
                       foundRule: Boolean(ruleEvent)
                   });
                   
