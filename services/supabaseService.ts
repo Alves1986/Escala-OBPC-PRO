@@ -179,7 +179,8 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
     const { data: assignments, error } = await sb.from('schedule_assignments')
         .select('*, profiles(name)')
         .eq('ministry_id', ministryId)
-        .eq('organization_id', orgId);
+        .eq('organization_id', orgId)
+        .like('event_date', `${month}%`);
 
     if (error) throw error;
 
@@ -188,7 +189,7 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
 
     assignments?.forEach((a: any) => {
         const ruleId = a.event_rule_id;
-        const dateStr = a.event_date;
+        const dateStr = a.event_date?.split('T')[0] || a.event_date;
         
         if (ruleId && dateStr) {
             const key = `${ruleId}_${dateStr}_${a.role}`;
@@ -692,15 +693,27 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
 
     if (!dateStr) return;
 
-    const { error } = await sb.from('schedule_assignments').upsert({
+    const cleanDate = dateStr.split('T')[0];
+    const savePayload = {
         organization_id: orgId,
         ministry_id: ministryId,
         event_rule_id: ruleId,
-        event_date: dateStr,
+        event_key: ruleId,
+        event_date: cleanDate,
         role: role,
         member_id: memberId,
         confirmed: false
-    }, { onConflict: 'organization_id,ministry_id,event_rule_id,event_date,role' });
+    };
+
+    console.log('[SAVE_PAYLOAD]', {
+        event_rule_id: savePayload.event_rule_id,
+        event_date: savePayload.event_date,
+        role: savePayload.role,
+        member_id: savePayload.member_id,
+        event_key: savePayload.event_key
+    });
+
+    const { error } = await sb.from('schedule_assignments').upsert(savePayload, { onConflict: 'organization_id,ministry_id,event_rule_id,event_date,role' });
     
     if (error) throw error;
 };

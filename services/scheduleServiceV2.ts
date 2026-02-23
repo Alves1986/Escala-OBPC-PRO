@@ -80,7 +80,7 @@ export const fetchAssignmentsV2 = async (
   return (data || []).map((a: any) => ({
     id: a.id,
     event_rule_id: a.event_rule_id,
-    event_date: a.event_date,
+    event_date: a.event_date?.split("T")[0] || a.event_date,
     role: a.role,
     member_id: a.member_id,
     confirmed: a.confirmed,
@@ -146,22 +146,31 @@ export const saveAssignmentV2 = async (
   const sb = getSupabase();
   if (!sb) throw new Error("NO_SUPABASE");
 
+  const cleanDate = payload.event_date.split("T")[0];
+  const savePayload = {
+    organization_id: orgId,
+    ministry_id: ministryId,
+    event_rule_id: payload.event_rule_id,
+    event_key: payload.event_rule_id,
+    event_date: cleanDate,
+    role: payload.role,
+    member_id: payload.member_id,
+    confirmed: false
+  };
+
+  console.log("[SAVE_PAYLOAD]", {
+    event_rule_id: savePayload.event_rule_id,
+    event_date: savePayload.event_date,
+    role: savePayload.role,
+    member_id: savePayload.member_id,
+    event_key: savePayload.event_key
+  });
+
   const { data, error } = await sb
     .from("schedule_assignments")
-    .upsert(
-      {
-        organization_id: orgId,
-        ministry_id: ministryId,
-        event_rule_id: payload.event_rule_id,
-        event_date: payload.event_date,
-        role: payload.role,
-        member_id: payload.member_id,
-        confirmed: false
-      },
-      {
-        onConflict: "organization_id,ministry_id,event_rule_id,event_date,role"
-      }
-    )
+    .upsert(savePayload, {
+      onConflict: "organization_id,ministry_id,event_rule_id,event_date,role"
+    })
     .select();
 
   if (error) throw error;
@@ -185,7 +194,7 @@ export const removeAssignmentV2 = async (
     .eq("organization_id", orgId)
     .eq("ministry_id", ministryId)
     .eq("event_rule_id", key.event_rule_id)
-    .eq("event_date", key.event_date)
+    .eq("event_date", key.event_date.split("T")[0])
     .eq("role", key.role);
 
   if (error) throw error;
@@ -231,11 +240,11 @@ export const generateOccurrencesV2 = (
       while (cur <= end) {
         console.log("[WEEKDAY_CHECK]", {
           raw: rule.weekday,
-          parsed: Number(rule.weekday),
+          parsed: ruleWeekday,
           current: cur.getDay()
         });
         // getDay() is local
-        if (!Number.isNaN(ruleWeekday) && cur.getDay() === ruleWeekday) {
+        if (Number(rule.weekday) === cur.getDay()) {
           const dateStr = localDateString(cur);
           
           occurrences.push({
