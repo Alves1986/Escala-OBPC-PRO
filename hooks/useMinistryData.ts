@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { User, Role, DEFAULT_ROLES } from '../types';
 import { useMinistryQueries, keys } from './useMinistryQueries';
 import { useQueryClient } from '@tanstack/react-query';
@@ -32,6 +32,10 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     nextEventQuery,
     isLoading: isLoadingQueries
   } = useMinistryQueries(mid, currentMonth, currentUser);
+
+  const assignmentsMonth = assignmentsQuery.data?.month;
+  const schedule = assignmentsQuery.data?.schedule || {};
+  const attendance = assignmentsQuery.data?.attendance || {};
 
   // Manual fetching/syncing for Availability V2 to integrate it
   useEffect(() => {
@@ -142,6 +146,25 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       });
   };
 
+  const previousMonthRef = useRef(currentMonth);
+
+  useEffect(() => {
+      const oldMonth = previousMonthRef.current;
+      if (!mid || !orgId) {
+          previousMonthRef.current = currentMonth;
+          return;
+      }
+
+      if (oldMonth !== currentMonth) {
+          queryClient.removeQueries({
+              queryKey: keys.assignments(mid, oldMonth, orgId)
+          });
+      }
+
+      previousMonthRef.current = currentMonth;
+  }, [mid, currentMonth, orgId, queryClient]);
+
+
   useEffect(() => {
     const sb = getSupabase();
     if (!sb || !mid) return;
@@ -207,8 +230,18 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
 
   // ADAPTADOR CORRIGIDO (PARTE 2)
   const events = useMemo(() => {
-      const assignments = assignmentsQuery.data?.schedule || {};
-      
+      console.log("[EDITOR_MONTH_SYNC]", {
+          currentMonth,
+          assignmentsMonth,
+          eventsCount: generatedEvents.length,
+          scheduleKeys: Object.keys(schedule).length
+      });
+
+      if (assignmentsMonth !== currentMonth) {
+          return [];
+      }
+
+      const assignments = schedule;
       const assignmentBasedEvents: any[] = [];
       const processedEventKeys = new Set<string>();
 
@@ -256,7 +289,10 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       });
 
       return finalEvents.sort((a, b) => a.iso.localeCompare(b.iso));
-  }, [generatedEvents, assignmentsQuery.data]);
+  }, [generatedEvents, schedule, assignmentsMonth, currentMonth]);
+
+
+  const isMonthSyncPending = assignmentsQuery.isFetching || assignmentsMonth !== currentMonth;
 
   const eventRules = useMemo(() => {
       return (rulesQuery.data || []).filter(r => r.type === 'weekly');
@@ -264,8 +300,8 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
 
   return {
     events,
-    schedule: assignmentsQuery.data?.schedule || {}, 
-    attendance: assignmentsQuery.data?.attendance || {}, 
+    schedule, 
+    attendance, 
     membersMap: membersQuery.data?.memberMap || {},
     publicMembers: membersQuery.data?.publicList || [],
     availability: availabilityV2.availability, // ID-Based
@@ -283,7 +319,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     roles,
     ministryTitle,
     availabilityWindow,
-    isLoading: isLoadingQueries || isLoadingEvents,
+    isLoading: isLoadingQueries || isLoadingEvents || isMonthSyncPending,
     refreshData,
     setEvents: () => refreshData(), 
     setSchedule: () => refreshData(),

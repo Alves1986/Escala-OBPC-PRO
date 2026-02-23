@@ -38,7 +38,14 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
   // 2. Assignments (Schedule Map)
   const assignmentsQuery = useQuery({
     queryKey: keys.assignments(ministryId, currentMonth, orgId),
-    queryFn: () => Supabase.fetchScheduleAssignments(ministryId, currentMonth, orgId),
+    queryFn: async () => {
+      const { schedule, attendance } = await Supabase.fetchScheduleAssignments(ministryId, currentMonth, orgId);
+      return {
+        month: currentMonth,
+        schedule,
+        attendance
+      };
+    },
     enabled: isScheduleEnabled
   });
 
