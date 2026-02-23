@@ -263,10 +263,23 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
                           dateDisplay: ruleEvent.date.split('-').reverse().slice(0, 2).join('/')
                       });
                   } else {
+                      const fallbackIso = `${date}T00:00`;
+                      const fallbackHour = parseInt(fallbackIso.split('T')[1]?.split(':')[0] || '0', 10);
+                      const fallbackTitle = fallbackHour < 12
+                          ? 'Culto Dom. Manhã'
+                          : fallbackHour >= 18
+                              ? 'Culto Dom. Noite'
+                              : 'Culto';
+
+                      console.log("[EDITOR_FALLBACK_EVENT]", {
+                          uniqueEventKey,
+                          date
+                      });
+
                       assignmentBasedEvents.push({
                           id: uniqueEventKey,
-                          iso: `${date}T00:00`, 
-                          title: 'Evento (Regra Removida)',
+                          iso: fallbackIso,
+                          title: fallbackTitle,
                           dateDisplay: date.split('-').reverse().slice(0, 2).join('/')
                       });
                   }
