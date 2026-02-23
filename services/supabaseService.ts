@@ -183,6 +183,29 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
 
     if (error) throw error;
 
+    const memberIds = Array.from(new Set(
+        (assignments || [])
+            .map((a: any) => a.member_id)
+            .filter((id: any) => !!id)
+    ));
+
+    let profileMap: Record<string, string> = {};
+    if (memberIds.length > 0) {
+        const { data: fallbackProfiles, error: fallbackProfilesError } = await sb
+            .from('profiles')
+            .select('id, name')
+            .in('id', memberIds);
+
+        if (fallbackProfilesError) throw fallbackProfilesError;
+
+        profileMap = (fallbackProfiles || []).reduce((acc: Record<string, string>, p: any) => {
+            if (p?.id && p?.name) {
+                acc[p.id] = p.name;
+            }
+            return acc;
+        }, {});
+    }
+
     const schedule: any = {};
     const attendance: any = {};
 
@@ -193,9 +216,16 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
         if (ruleId && dateStr) {
             const key = `${ruleId}_${dateStr}_${a.role}`;
             const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
-            const name = profile?.name;
+            const name = profile?.name || profileMap[a.member_id] || null;
 
-            if (name) schedule[key] = name;
+            console.log("[EDITOR_NAME_RESOLUTION]", {
+                memberId: a.member_id,
+                resolvedName: name
+            });
+
+            if (name) {
+                schedule[key] = name;
+            }
             if (a.confirmed) attendance[key] = true;
         }
     });
