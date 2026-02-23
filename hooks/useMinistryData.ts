@@ -209,64 +209,42 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     };
   }, [mid, currentMonth, queryClient, orgId]);
 
-  // ADAPTADOR DO EDITOR: usa generatedEvents com fallback de recuperação por assignments
+  // ADAPTADOR DO EDITOR: eventos reconstruídos a partir do schedule (fonte da verdade)
   const events = useMemo(() => {
-      const assignments = assignmentsQuery.data?.schedule || {};
-      const assignmentBasedEvents: any[] = [];
-      const processedEventKeys = new Set<string>();
+      const eventMap = new Map<string, any>();
 
-      Object.keys(assignments).forEach(key => {
-          const [ruleId, date] = key.split('_');
+      Object.keys(schedule).forEach((key) => {
+          const parts = key.split('_');
+          if (parts.length < 3) return;
+
+          const ruleId = parts[0];
+          const date = parts[1];
           if (!ruleId || !date) return;
 
-          const uniqueEventKey = `${ruleId}_${date}`;
+          const eventId = `${ruleId}_${date}`;
+          if (eventMap.has(eventId)) return;
 
-          if (processedEventKeys.has(uniqueEventKey)) return;
+          const ruleEvent = generatedEvents.find(e => e.id === eventId);
 
-          const ruleEvent = generatedEvents.find(e => e.id === uniqueEventKey);
-
-          if (ruleEvent) {
-              assignmentBasedEvents.push({
-                  id: ruleEvent.id,
-                  iso: ruleEvent.iso,
-                  title: ruleEvent.title,
-                  dateDisplay: ruleEvent.date.split('-').reverse().slice(0, 2).join('/')
-              });
-          } else {
-              assignmentBasedEvents.push({
-                  id: uniqueEventKey,
-                  iso: `${date}T00:00`,
-                  title: 'Evento (Recuperado)',
-                  dateDisplay: date.split('-').reverse().slice(0, 2).join('/')
-              });
-          }
-
-          processedEventKeys.add(uniqueEventKey);
+          eventMap.set(eventId, {
+              id: eventId,
+              iso: `${date}T00:00`,
+              title: ruleEvent?.title || 'Culto',
+              dateDisplay: date.split('-').reverse().slice(0, 2).join('/')
+          });
       });
 
-      const finalEvents = [
-          ...assignmentBasedEvents,
-          ...generatedEvents
-              .filter(gen => !processedEventKeys.has(gen.id))
-              .map(gen => ({
-                  id: gen.id,
-                  iso: gen.iso,
-                  title: gen.title,
-                  dateDisplay: gen.date.split('-').reverse().slice(0, 2).join('/')
-              }))
-      ];
+      const eventsFromSchedule = Array.from(eventMap.values()).sort((a, b) => a.iso.localeCompare(b.iso));
 
-      const filteredEvents = finalEvents.filter(e => e.iso.startsWith(currentMonth));
-
-      console.log("[EDITOR_EVENTS_FINAL]", {
-          month: currentMonth,
-          generated: generatedEvents.length,
-          recovered: assignmentBasedEvents.length,
-          final: filteredEvents.length
+      console.log("[EDITOR_FINAL_CHECK]", {
+          events: eventsFromSchedule.length,
+          scheduleKeys: Object.keys(schedule).length,
+          sampleEvent: eventsFromSchedule[0],
+          sampleScheduleKey: Object.keys(schedule)[0]
       });
 
-      return filteredEvents.sort((a, b) => a.iso.localeCompare(b.iso));
-  }, [assignmentsQuery.data?.schedule, generatedEvents, currentMonth]);
+      return eventsFromSchedule;
+  }, [schedule, generatedEvents]);
 
 
   const isMonthSyncPending = assignmentsQuery.isFetching || assignmentsMonth !== currentMonth;
