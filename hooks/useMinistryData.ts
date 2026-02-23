@@ -211,6 +211,11 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
 
   // ADAPTADOR DO EDITOR: eventos reconstruídos a partir do schedule (fonte da verdade)
   const events = useMemo(() => {
+      console.log("[ROOT_EVENTS_GENERATED]", {
+          count: generatedEvents.length,
+          sample: generatedEvents[0]
+      });
+
       const eventMap = new Map<string, any>();
 
       Object.keys(schedule).forEach((key) => {
@@ -236,7 +241,7 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
 
       const eventsFromSchedule = Array.from(eventMap.values()).sort((a, b) => a.iso.localeCompare(b.iso));
 
-      console.log("[EDITOR_FINAL_CHECK]", {
+      console.log("[ROOT_EDITOR_EVENTS]", {
           events: eventsFromSchedule.length,
           scheduleKeys: Object.keys(schedule).length,
           sampleEvent: eventsFromSchedule[0],

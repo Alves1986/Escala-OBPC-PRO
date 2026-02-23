@@ -40,6 +40,13 @@ export function useMinistryQueries(ministryId: string, currentMonth: string, use
     queryKey: keys.assignments(ministryId, currentMonth, orgId),
     queryFn: async () => {
       const { schedule, attendance } = await Supabase.fetchScheduleAssignments(ministryId, currentMonth, orgId);
+
+      console.log("[ROOT_SERVICE_KEYS]", {
+        month: currentMonth,
+        keys: Object.keys(schedule),
+        count: Object.keys(schedule).length
+      });
+
       return {
         month: currentMonth,
         schedule,

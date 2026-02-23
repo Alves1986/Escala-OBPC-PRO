@@ -53,6 +53,8 @@ export const getSupabase = () => supabase;
 
 // --- HELPERS ---
 
+const normalizeDate = (value: string) => String(value || '').split('T')[0];
+
 const filterRolesBySettings = async (roles: string[], ministryId: string, orgId: string): Promise<string[]> => {
     const sb = getSupabase();
     if (!sb) return roles;
@@ -184,6 +186,14 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
 
     if (error) throw error;
 
+    console.log("[ROOT_DB_ASSIGNMENTS]", (assignments || []).map((a: any) => ({
+        event_rule_id: a.event_rule_id,
+        event_date_raw: a.event_date,
+        event_date_normalized: normalizeDate(a.event_date),
+        role: a.role,
+        member_id: a.member_id
+    })));
+
     const memberIds = Array.from(new Set(
         (assignments || [])
             .map((a: any) => a.member_id)
@@ -215,10 +225,20 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
         const dateStr = a.event_date;
         
         if (ruleId && dateStr) {
-            const dateOnly = String(dateStr).split('T')[0];
+            const dateOnly = normalizeDate(dateStr);
             const key = `${ruleId}_${dateOnly}_${a.role}`;
             const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
             const name = profile?.name || profileMap[a.member_id] || null;
+            const finalKey = `${ruleId}_${dateOnly}_${a.role}`;
+
+            console.log("[ROOT_SERVICE_KEYS]", {
+                event_rule_id: ruleId,
+                event_date_raw: dateStr,
+                event_date_normalized: dateOnly,
+                role: a.role,
+                key: finalKey,
+                value: name
+            });
 
             if (name) {
                 schedule[key] = name;
@@ -226,8 +246,6 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
             if (a.confirmed) attendance[key] = true;
         }
     });
-
-    console.log("[EDITOR_SCHEDULE_KEYS]", Object.keys(schedule));
 
     return { schedule, attendance };
 };
@@ -712,7 +730,7 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
     
     const parts = eventKey.split('_');
     const eventRuleKey = parts[0] || "";
-    const dateStr = (parts[1] || "").split('T')[0];
+    const dateStr = normalizeDate(parts[1] || "");
 
     if (!eventRuleKey || !dateStr) return;
 
@@ -720,14 +738,25 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
         organization_id: orgId,
         ministry_id: ministryId,
         event_rule_id: eventRuleKey,
-        event_date: String(dateStr).split('T')[0],
+        event_date: normalizeDate(dateStr),
         role: role,
         member_id: memberId,
         confirmed: false,
         updated_at: new Date().toISOString()
     };
 
-    console.log("[EDITOR_SAVE_PAYLOAD]", payload);
+    console.log("[ROOT_SAVE_PAYLOAD]", {
+        event_rule_id: payload.event_rule_id,
+        event_date_raw: parts[1] || "",
+        event_date_normalized: payload.event_date,
+        role: payload.role,
+        key: `${payload.event_rule_id}_${payload.event_date}_${payload.role}`,
+        value: payload.member_id
+    });
+
+    console.log("[ROOT_ON_CONFLICT]", {
+        onConflict: 'organization_id,ministry_id,event_rule_id,event_date,role'
+    });
 
     const { error } = await sb.from('schedule_assignments').upsert(payload, { onConflict: 'organization_id,ministry_id,event_rule_id,event_date,role' });
     

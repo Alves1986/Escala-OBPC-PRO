@@ -314,6 +314,14 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                 // NUNCA usar fallbacks soltos como schedule[ruleKey] ou schedule[isoKey]
                 // Isso que causava a mistura de cultos do mesmo dia.
                 const currentValue = schedule[uniqueKey] || "";
+                console.log("[ROOT_TABLE_LOOKUP]", {
+                    event_rule_id: event.id.split('_')[0],
+                    event_date_raw: event.id.split('_')[1],
+                    event_date_normalized: event.id.split('_')[1],
+                    role: col.keySuffix,
+                    key: uniqueKey,
+                    value: schedule[uniqueKey]
+                });
                 const isConfirmed = attendance[uniqueKey] || false;
                 
                 const roleMembers = members[col.realRole] || [];
@@ -523,6 +531,14 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                               const uniqueKey = `${event.id}_${col.keySuffix}`;
                               
                               const currentValue = schedule[uniqueKey] || "";
+                              console.log("[ROOT_TABLE_LOOKUP]", {
+                                  event_rule_id: event.id.split('_')[0],
+                                  event_date_raw: event.id.split('_')[1],
+                                  event_date_normalized: event.id.split('_')[1],
+                                  role: col.keySuffix,
+                                  key: uniqueKey,
+                                  value: schedule[uniqueKey]
+                              });
                               const isConfirmed = attendance[uniqueKey] || false;
                               
                               const roleMembers = members[col.realRole] || [];
