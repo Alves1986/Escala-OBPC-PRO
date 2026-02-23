@@ -367,21 +367,26 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                     }
                 }
 
-                currentValue =
-                  currentValue && currentValue !== "__MISSING_NAME__"
-                    ? currentValue
-                    : "";
+                const renderedValue =
+                  currentValue === "__MISSING_NAME__"
+                    ? "(Membro removido)"
+                    : (currentValue ?? "");
+                console.log("[EDITOR_FINAL_RENDER]", {
+                    uniqueKey,
+                    rawValue,
+                    currentValue: renderedValue
+                });
                 console.log("[EDITOR_RENDER_RESOLVE]", {
                     uniqueKey,
                     rawValue,
-                    currentValue
+                    currentValue: renderedValue
                 });
                 const isConfirmed = attendance[uniqueKey] || false;
                 
                 const roleMembers = members[col.realRole] || [];
                 
-                const hasLocalConflict = currentValue && !checkIsAvailable(availabilityLookup, currentValue, event.iso);
-                const currentName = (memberProfiles || []).find((p: any) => p.id === currentValue)?.name || currentValue;
+                const hasLocalConflict = renderedValue && !checkIsAvailable(availabilityLookup, renderedValue, event.iso);
+                const currentName = (memberProfiles || []).find((p: any) => p.id === renderedValue)?.name || renderedValue;
                 
                 let globalConflictMsg = "";
                 let hasGlobalConflict = false;
@@ -402,12 +407,12 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                         <div className="flex items-center gap-2">
                             {readOnly ? (
                                 <div className="flex-1 flex items-center gap-2">
-                                    <span className={`text-sm font-medium truncate ${currentValue ? 'text-zinc-800 dark:text-zinc-200' : 'text-zinc-300 dark:text-zinc-600'}`}>{currentValue || '-'}</span>
+                                    <span className={`text-sm font-medium truncate ${currentValue ? 'text-zinc-800 dark:text-zinc-200' : 'text-zinc-300 dark:text-zinc-600'}`}>{renderedValue || '-'}</span>
                                 </div>
                             ) : (
                                 <div className="flex-1">
                                     <MemberSelector 
-                                        value={currentValue} 
+                                        value={renderedValue} 
                                         onChange={(memberId, memberName) => {
                                             // event.id = ruleId_date
                                             const safeEventId = event.id;
@@ -626,21 +631,26 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                                   }
                               }
 
-                              currentValue =
-                                currentValue && currentValue !== "__MISSING_NAME__"
-                                  ? currentValue
-                                  : "";
+                              const renderedValue =
+                                currentValue === "__MISSING_NAME__"
+                                  ? "(Membro removido)"
+                                  : (currentValue ?? "");
+                              console.log("[EDITOR_FINAL_RENDER]", {
+                                  uniqueKey,
+                                  rawValue,
+                                  currentValue: renderedValue
+                              });
                               console.log("[EDITOR_RENDER_RESOLVE]", {
                                   uniqueKey,
                                   rawValue,
-                                  currentValue
+                                  currentValue: renderedValue
                               });
                               const isConfirmed = attendance[uniqueKey] || false;
                               
                               const roleMembers = members[col.realRole] || [];
                               
-                              const hasLocalConflict = currentValue && !checkIsAvailable(availabilityLookup, currentValue, event.iso);
-                              const currentName = (memberProfiles || []).find((p: any) => p.id === currentValue)?.name || currentValue;
+                              const hasLocalConflict = renderedValue && !checkIsAvailable(availabilityLookup, renderedValue, event.iso);
+                              const currentName = (memberProfiles || []).find((p: any) => p.id === renderedValue)?.name || renderedValue;
                               
                               let globalConflictMsg = "";
                               let hasGlobalConflict = false;
@@ -659,7 +669,7 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                                           <div className="flex items-center gap-2">
                                               <div className="flex-1">
                                                   <MemberSelector 
-                                                        value={currentValue} 
+                                                        value={renderedValue} 
                                                         onChange={(memberId, memberName) => {
                                                             const safeEventId = event.id;
                                                             onCellChange(safeEventId, col.keySuffix, memberId, memberName);
