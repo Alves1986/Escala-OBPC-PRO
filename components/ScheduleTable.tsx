@@ -327,6 +327,11 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                     uniqueKey,
                     value: schedule[uniqueKey]
                 });
+                console.log("[EDITOR_UI_KEY_CHECK]", {
+                    uniqueKey,
+                    exists: schedule[uniqueKey] !== undefined,
+                    value: schedule[uniqueKey]
+                });
                 
                 // NUNCA usar fallbacks soltos como schedule[ruleKey] ou schedule[isoKey]
                 // Isso que causava a mistura de cultos do mesmo dia.
@@ -581,6 +586,11 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                               const uniqueKey = `${event.id}_${col.keySuffix}`;
                               console.log("[EDITOR_RENDER_KEY]", {
                                   uniqueKey,
+                                  value: schedule[uniqueKey]
+                              });
+                              console.log("[EDITOR_UI_KEY_CHECK]", {
+                                  uniqueKey,
+                                  exists: schedule[uniqueKey] !== undefined,
                                   value: schedule[uniqueKey]
                               });
                               

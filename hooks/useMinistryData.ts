@@ -183,7 +183,8 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
       const processedEventKeys = new Set<string>();
 
       Object.keys(assignments).forEach(key => {
-          const [ruleId, date] = key.split('_');
+          const [ruleId, date, ...roleParts] = key.split('_');
+          const role = roleParts.join('_');
           if (ruleId && date) {
               const normalizedDate = String(date).split("T")[0];
 
@@ -200,7 +201,8 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
                   console.log("[EDITOR_MATCH_CHECK]", {
                       key,
                       uniqueEventKey,
-                      found: !!ruleEvent
+                      found: !!ruleEvent,
+                      role
                   });
                   console.log("[EDITOR_RULE_LOOKUP]", {
                       assignmentEventKey: ruleId,
