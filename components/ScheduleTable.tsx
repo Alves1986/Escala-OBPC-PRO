@@ -330,10 +330,35 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                 
                 // NUNCA usar fallbacks soltos como schedule[ruleKey] ou schedule[isoKey]
                 // Isso que causava a mistura de cultos do mesmo dia.
+                console.log("[EDITOR_UI_LOOKUP]", {
+                    eventId: event.id,
+                    role: col.keySuffix,
+                    key: `${event.id}_${col.keySuffix}`,
+                    exists: schedule[`${event.id}_${col.keySuffix}`]
+                });
+
                 const rawValue = schedule[uniqueKey];
-                const currentValue =
-                  rawValue && rawValue !== "__MISSING_NAME__"
-                    ? rawValue
+                let currentValue = rawValue;
+
+                if (!currentValue) {
+                    const eventDate = event.id.split("_")[1];
+
+                    const fallbackKey = Object.keys(schedule).find(k =>
+                        k.endsWith(`_${eventDate}_${col.keySuffix}`)
+                    );
+
+                    if (fallbackKey) {
+                        currentValue = schedule[fallbackKey];
+                        console.log("[EDITOR_FALLBACK_MATCH]", {
+                            uniqueKey,
+                            fallbackKey
+                        });
+                    }
+                }
+
+                currentValue =
+                  currentValue && currentValue !== "__MISSING_NAME__"
+                    ? currentValue
                     : "";
                 console.log("[EDITOR_RENDER_RESOLVE]", {
                     uniqueKey,
@@ -553,10 +578,35 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                                   value: schedule[uniqueKey]
                               });
                               
+                              console.log("[EDITOR_UI_LOOKUP]", {
+                                  eventId: event.id,
+                                  role: col.keySuffix,
+                                  key: `${event.id}_${col.keySuffix}`,
+                                  exists: schedule[`${event.id}_${col.keySuffix}`]
+                              });
+
                               const rawValue = schedule[uniqueKey];
-                              const currentValue =
-                                rawValue && rawValue !== "__MISSING_NAME__"
-                                  ? rawValue
+                              let currentValue = rawValue;
+
+                              if (!currentValue) {
+                                  const eventDate = event.id.split("_")[1];
+
+                                  const fallbackKey = Object.keys(schedule).find(k =>
+                                      k.endsWith(`_${eventDate}_${col.keySuffix}`)
+                                  );
+
+                                  if (fallbackKey) {
+                                      currentValue = schedule[fallbackKey];
+                                      console.log("[EDITOR_FALLBACK_MATCH]", {
+                                          uniqueKey,
+                                          fallbackKey
+                                      });
+                                  }
+                              }
+
+                              currentValue =
+                                currentValue && currentValue !== "__MISSING_NAME__"
+                                  ? currentValue
                                   : "";
                               console.log("[EDITOR_RENDER_RESOLVE]", {
                                   uniqueKey,
