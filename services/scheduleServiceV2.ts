@@ -226,10 +226,16 @@ export const generateOccurrencesV2 = (
 
     if (rule.type === "weekly") {
       const cur = new Date(start);
+      const ruleWeekday = Number(rule.weekday);
       // Loop
       while (cur <= end) {
+        console.log("[WEEKDAY_CHECK]", {
+          raw: rule.weekday,
+          parsed: Number(rule.weekday),
+          current: cur.getDay()
+        });
         // getDay() is local
-        if (cur.getDay() === rule.weekday) {
+        if (!Number.isNaN(ruleWeekday) && cur.getDay() === ruleWeekday) {
           const dateStr = localDateString(cur);
           
           occurrences.push({
