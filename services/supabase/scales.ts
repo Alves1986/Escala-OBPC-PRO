@@ -208,21 +208,28 @@ export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: strin
     const notes: Record<string, string> = {};
 
     data?.forEach((row: any) => {
-        const partialNote = row.note === '_M' || row.note === '_N' ? row.note : null;
-        const finalDate = partialNote ? `${row.available_date}${partialNote}` : row.available_date;
+        const noteText = typeof row.note === 'string' ? row.note : '';
+        const isMorning = noteText === '_M' || noteText.startsWith('_M|');
+        const isNight = noteText === '_N' || noteText.startsWith('_N|');
+        const partialNote = isMorning ? '_M' : isNight ? '_N' : null;
+        const extraNote = partialNote && noteText.includes('|') ? noteText.split('|').slice(1).join('|') : null;
+        const value = partialNote ? `${row.available_date}${partialNote}` : row.available_date;
 
+        console.log("[AV_FETCH_DB_ROW]", row.available_date);
+        console.log("[AV_FETCH_MAP_PUSH]", value);
         console.log("[AV_FETCH_FINAL]", {
             date: row.available_date,
             note: row.note,
-            final: finalDate
+            final: value
         });
 
         if (!map[row.user_id]) map[row.user_id] = [];
-        map[row.user_id].push(finalDate);
+        map[row.user_id].push(value);
         
-        if (row.note && !partialNote) {
+        const noteValue = partialNote ? extraNote : row.note;
+        if (noteValue) {
             const monthKey = row.available_date.substring(0, 7) + '-00';
-            notes[`${row.user_id}_${monthKey}`] = row.note;
+            notes[`${row.user_id}_${monthKey}`] = noteValue;
         }
     });
 
@@ -246,22 +253,28 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
     const uniqueDates = [...new Set(dates.filter(d => d.startsWith(targetMonth)))];
 
     if (uniqueDates.length > 0) {
-        const rows = uniqueDates.map(originalDate => {
-            const savedDate = originalDate.split("_")[0];
-            const note = originalDate.endsWith('_M') ? '_M' : originalDate.endsWith('_N') ? '_N' : null;
+        const monthNote = notes[`${userId}_${targetMonth}-00`] || null;
 
+        const rows = uniqueDates.map(dateString => {
+            console.log("[AV_SAVE_RAW]", dateString);
+
+            const baseDate = dateString.split("_")[0];
+            const partialNote = dateString.endsWith('_M') ? '_M' : dateString.endsWith('_N') ? '_N' : null;
+            const valueSentToDB = partialNote ? (monthNote ? `${partialNote}|${monthNote}` : partialNote) : monthNote;
+
+            console.log("[AV_SAVE_DB]", valueSentToDB);
             console.log("[AV_SAVE_FINAL]", {
-                original: originalDate,
-                date: savedDate,
-                note
+                original: dateString,
+                date: baseDate,
+                note: valueSentToDB
             });
 
             return {
                 organization_id: orgId,
                 ministry_id: ministryId,
                 user_id: userId,
-                available_date: savedDate,
-                note
+                available_date: baseDate,
+                note: valueSentToDB
             };
         });
 
