@@ -208,12 +208,25 @@ export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: strin
     const notes: Record<string, string> = {};
 
     data?.forEach((row: any) => {
+        let preservedKey = row.available_date;
+        let noteValue = row.note;
+
+        if (typeof row.note === 'string' && row.note.startsWith('__AV2__')) {
+            try {
+                const parsed = JSON.parse(row.note.replace('__AV2__', ''));
+                if (parsed?.originalDate) preservedKey = parsed.originalDate;
+                noteValue = parsed?.note || null;
+            } catch {
+                preservedKey = row.available_date;
+            }
+        }
+
         if (!map[row.user_id]) map[row.user_id] = [];
-        map[row.user_id].push(row.available_date);
+        map[row.user_id].push(preservedKey);
         
-        if (row.note) {
-            const monthKey = row.available_date.substring(0, 7) + '-00';
-            notes[`${row.user_id}_${monthKey}`] = row.note;
+        if (noteValue) {
+            const monthKey = preservedKey.substring(0, 7) + '-00';
+            notes[`${row.user_id}_${monthKey}`] = noteValue;
         }
     });
 
@@ -237,13 +250,22 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
     const uniqueDates = [...new Set(dates.filter(d => d.startsWith(targetMonth)))];
 
     if (uniqueDates.length > 0) {
-        const rows = uniqueDates.map(date => ({
-            organization_id: orgId,
-            ministry_id: ministryId,
-            user_id: userId,
-            available_date: date,
-            note: notes[`${userId}_${targetMonth}-00`] || null
-        }));
+        const rows = uniqueDates.map(originalDate => {
+            const dbDate = originalDate.split("_")[0];
+            console.log("[AV_SAVE_DEBUG]", {
+                originalDate,
+                dbDate,
+                preservedKey: originalDate
+            });
+
+            return {
+                organization_id: orgId,
+                ministry_id: ministryId,
+                user_id: userId,
+                available_date: dbDate,
+                note: `__AV2__${JSON.stringify({ originalDate, note: notes[`${userId}_${targetMonth}-00`] || null })}`
+            };
+        });
 
         const { error: insError } = await sb
             .from('member_availability')
@@ -349,4 +371,3 @@ export const fetchGlobalSchedules = async (month: string, ministryId: string, or
     });
     return conflicts;
 };
-
