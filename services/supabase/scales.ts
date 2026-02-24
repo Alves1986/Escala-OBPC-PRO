@@ -208,25 +208,21 @@ export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: strin
     const notes: Record<string, string> = {};
 
     data?.forEach((row: any) => {
-        let preservedKey = row.available_date;
-        let noteValue = row.note;
+        const partialNote = row.note === '_M' || row.note === '_N' ? row.note : null;
+        const finalDate = partialNote ? `${row.available_date}${partialNote}` : row.available_date;
 
-        if (typeof row.note === 'string' && row.note.startsWith('__AV2__')) {
-            try {
-                const parsed = JSON.parse(row.note.replace('__AV2__', ''));
-                if (parsed?.originalDate) preservedKey = parsed.originalDate;
-                noteValue = parsed?.note || null;
-            } catch {
-                preservedKey = row.available_date;
-            }
-        }
+        console.log("[FETCH_AV_PARTIAL]", {
+            savedDate: row.available_date,
+            note: row.note,
+            finalDate
+        });
 
         if (!map[row.user_id]) map[row.user_id] = [];
-        map[row.user_id].push(preservedKey);
+        map[row.user_id].push(finalDate);
         
-        if (noteValue) {
-            const monthKey = preservedKey.substring(0, 7) + '-00';
-            notes[`${row.user_id}_${monthKey}`] = noteValue;
+        if (row.note && !partialNote) {
+            const monthKey = row.available_date.substring(0, 7) + '-00';
+            notes[`${row.user_id}_${monthKey}`] = row.note;
         }
     });
 
@@ -251,19 +247,22 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
 
     if (uniqueDates.length > 0) {
         const rows = uniqueDates.map(originalDate => {
-            const dbDate = originalDate.split("_")[0];
-            console.log("[AV_SAVE_DEBUG]", {
+            const savedDate = originalDate.split("_")[0];
+            const note = originalDate.endsWith('_M') ? '_M' : originalDate.endsWith('_N') ? '_N' : null;
+
+            console.log("[SAVE_AV_PARTIAL]", {
                 originalDate,
-                dbDate,
-                preservedKey: originalDate
+                savedDate,
+                note,
+                finalDate: originalDate
             });
 
             return {
                 organization_id: orgId,
                 ministry_id: ministryId,
                 user_id: userId,
-                available_date: dbDate,
-                note: `__AV2__${JSON.stringify({ originalDate, note: notes[`${userId}_${targetMonth}-00`] || null })}`
+                available_date: savedDate,
+                note
             };
         });
 
