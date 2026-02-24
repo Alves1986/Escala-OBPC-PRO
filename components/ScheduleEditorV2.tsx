@@ -243,6 +243,8 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
     const [assignments, setAssignments] = useState<AssignmentV2[]>([]);
     const [occurrences, setOccurrences] = useState<OccurrenceV2[]>([]);
 
+    const normalizeDate = (value?: string) => (value ? value.split('T')[0] : '');
+
     // -- LOAD DATA --
     const loadData = async () => {
         setLoading(true);
@@ -291,6 +293,18 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
     };
 
     const handleAssignmentChange = async (date: string, role: string, memberId: string | null, ruleId: string) => {
+        console.log("[RULE_ID_TRACE]", {
+            eventId: `${ruleId}_${normalizeDate(date)}`,
+            ruleId,
+            occurrence: { date: normalizeDate(date), ruleId },
+            event: null
+        });
+
+        if (!ruleId) {
+            console.error("[INVALID_RULE_ID]", { date, role, memberId, ruleId });
+            return;
+        }
+
         setProcessing(true);
         
         const tempId = `temp-${Date.now()}`;
@@ -298,12 +312,13 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
         
         // Atualização Otimista
         setAssignments(prev => {
-            const filtered = prev.filter(a => !(a.event_date === date && a.role === role && a.event_rule_id === ruleId));
+            const normalizedDate = normalizeDate(date);
+            const filtered = prev.filter(a => !(normalizeDate(a.event_date) === normalizedDate && a.role === role && a.event_rule_id === ruleId));
             const next = memberId
                 ? [...filtered, {
                     id: tempId,
                     event_rule_id: ruleId, 
-                    event_date: date,
+                    event_date: normalizeDate(date),
                     role,
                     member_id: memberId,
                     confirmed: false,
@@ -315,18 +330,23 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
 
         try {
             if (memberId) {
-                await saveAssignmentV2(ministryId, orgId, {
+                const payload = {
                     event_rule_id: ruleId,
-                    event_date: date,
+                    event_date: normalizeDate(date),
                     role,
                     member_id: memberId
+                };
+                console.log("[SAVE_CALLER_TRACE]", {
+                    callerStack: new Error().stack,
+                    payload
                 });
+                await saveAssignmentV2(ministryId, orgId, payload);
                 
                 addToast('Membro escalado', 'success');
             } else {
                 await removeAssignmentV2(ministryId, orgId, {
                     event_rule_id: ruleId,
-                    event_date: date,
+                    event_date: normalizeDate(date),
                     role
                 });
                 addToast('Removido da escala', 'success');
@@ -426,9 +446,9 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
                                 {/* Células de Escala */}
                                 {roles.map(role => {
                                     const assignment = assignments.find(a => {
-                                        const aDate = a.event_date?.slice(0, 10);
-                                        const oDate = occurrence.date?.slice(0, 10);
-                                        return aDate === oDate && a.role === role && a.event_rule_id === occurrence.ruleId;
+                                        return normalizeDate(a.event_date) === normalizeDate(occurrence.date)
+                                            && a.event_rule_id === occurrence.ruleId
+                                            && a.role === role;
                                     });
 
                                     return (
