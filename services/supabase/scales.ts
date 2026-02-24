@@ -211,10 +211,10 @@ export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: strin
         const partialNote = row.note === '_M' || row.note === '_N' ? row.note : null;
         const finalDate = partialNote ? `${row.available_date}${partialNote}` : row.available_date;
 
-        console.log("[FETCH_AV_PARTIAL]", {
-            savedDate: row.available_date,
+        console.log("[AV_FETCH_FINAL]", {
+            date: row.available_date,
             note: row.note,
-            finalDate
+            final: finalDate
         });
 
         if (!map[row.user_id]) map[row.user_id] = [];
@@ -250,11 +250,10 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
             const savedDate = originalDate.split("_")[0];
             const note = originalDate.endsWith('_M') ? '_M' : originalDate.endsWith('_N') ? '_N' : null;
 
-            console.log("[SAVE_AV_PARTIAL]", {
-                originalDate,
-                savedDate,
-                note,
-                finalDate: originalDate
+            console.log("[AV_SAVE_FINAL]", {
+                original: originalDate,
+                date: savedDate,
+                note
             });
 
             return {
