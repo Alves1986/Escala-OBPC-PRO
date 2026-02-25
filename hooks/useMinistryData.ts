@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { User, Role, DEFAULT_ROLES } from '../types';
 import { useMinistryQueries, keys } from './useMinistryQueries';
 import { useQueryClient } from '@tanstack/react-query';
-import { getSupabase, fetchMemberAvailabilityV2 } from '../services/supabaseService';
+import { fetchMemberAvailabilityV2 } from '../services/supabaseService';
+import { getSupabase } from '../services/supabase/client';
 import { useAppStore } from '../store/appStore';
 import { useEvents } from '../application/useEvents';
 

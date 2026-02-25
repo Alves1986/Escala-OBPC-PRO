@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef } from 'react';
-import { getSupabase } from '../services/supabaseService';
+import { getSupabase } from '../services/supabase/client';
 
 export function useOnlinePresence(userId?: string, userName?: string, onStatusChange?: (name: string, status: 'online' | 'offline') => void) {
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);

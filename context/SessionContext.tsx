@@ -1,12 +1,10 @@
 import React, { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import { 
-    getSupabase, 
-    setServiceOrgContext, 
-    clearServiceOrgContext,
     fetchUserAllowedMinistries, 
     fetchUserFunctions,
     fetchOrganizationDetails
 } from '../services/supabaseService';
+import { getSupabase, setServiceOrgContext, clearServiceOrgContext } from '../services/supabase/client';
 import { User, Organization } from '../types';
 
 type SessionStatus = 

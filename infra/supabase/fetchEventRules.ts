@@ -1,4 +1,4 @@
-import { getSupabase } from '../../services/supabaseService';
+import { getSupabase } from '../../services/supabase/client';
 import { EventRule } from '../../domain/events/types';
 
 export async function fetchEventRules(

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { X, Clock, Calendar, Save, User, RefreshCcw, Lock, CheckSquare, Square, UserPlus, CalendarPlus } from 'lucide-react';
 import { Role, ScheduleMap, User as UserType, TeamMemberProfile } from '../types';
 import { generateGoogleCalendarUrl } from '../utils/dateUtils';
-import { getSupabase } from '../services/supabaseService';
+import { getSupabase } from '../services/supabase/client';
 
 interface Props {
   isOpen: boolean;

@@ -1,4 +1,4 @@
-import { getSupabase } from "./supabaseService";
+import { getSupabase } from "./supabase/client";
 
 export interface EventRuleV2 {
   id: string;

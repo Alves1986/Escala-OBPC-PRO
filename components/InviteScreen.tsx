@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowRight, CheckCircle2, UserPlus, AlertOctagon, Loader2, Mail, Lock, Phone, User, Calendar, Briefcase, Building2, Check } from 'lucide-react';
-import { validateInviteToken, registerWithInvite, getSupabase } from '../services/supabaseService';
+import { validateInviteToken, registerWithInvite } from '../services/supabaseService';
+import { getSupabase } from '../services/supabase/client';
 
 interface Props {
     token: string;

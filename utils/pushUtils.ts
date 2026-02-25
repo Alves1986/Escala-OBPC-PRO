@@ -1,4 +1,4 @@
-import { getSupabase } from '../services/supabaseService';
+import { getSupabase } from '../services/supabase/client';
 
 // Safe Access VAPID Key from Environment Variables
 let vapidKey = "";

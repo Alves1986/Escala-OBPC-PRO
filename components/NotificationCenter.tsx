@@ -2,7 +2,8 @@
 import React, { useState, useRef } from 'react';
 import { Bell, Check, Trash2, Info, AlertTriangle, CheckCircle, AlertOctagon, ExternalLink, ArrowRightLeft } from 'lucide-react';
 import { AppNotification } from '../types';
-import { markNotificationsReadSQL, clearAllNotificationsSQL, getSupabase } from '../services/supabaseService';
+import { markNotificationsReadSQL, clearAllNotificationsSQL } from '../services/supabaseService';
+import { getSupabase } from '../services/supabase/client';
 import { useToast } from './Toast';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useAppStore } from '../store/appStore';
