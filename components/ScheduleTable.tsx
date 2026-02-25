@@ -527,7 +527,7 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                               
                               const roleMembers = members[col.realRole] || [];
                               
-                              const hasLocalConflict = currentValue && !checkIsAvailable(availabilityLookup, currentValue, event.iso);
+                              const hasLocalConflict = !!(currentValue && !checkIsAvailable(availabilityLookup, currentValue, event.iso));
                               
                               let globalConflictMsg = "";
                               let hasGlobalConflict = false;

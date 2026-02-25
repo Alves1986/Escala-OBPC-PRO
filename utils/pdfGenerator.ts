@@ -49,7 +49,7 @@ const drawHeader = (doc: jsPDF, title: string, subtitle: string, orientation: 'p
 
 // Helper para rodapé
 const drawFooter = (doc: jsPDF) => {
-  const pageCount = doc.internal.getNumberOfPages();
+  const pageCount = doc.getNumberOfPages();
   const pageWidth = doc.internal.pageSize.width;
   const pageHeight = doc.internal.pageSize.height;
 
@@ -123,29 +123,29 @@ export const generateFullSchedulePDF = (
     startY: 35,
     theme: 'grid', // Mantemos grid mas customizamos as bordas
     headStyles: {
-      fillColor: COLORS.WHITE,
-      textColor: COLORS.SECONDARY,
+      fillColor: COLORS.WHITE as [number, number, number],
+      textColor: COLORS.SECONDARY as [number, number, number],
       fontStyle: 'bold',
       fontSize: 8,
       lineWidth: 0,
       valign: 'middle',
-      halign: 'left' // Alinhamento à esquerda fica mais limpo
+      halign: 'left'
     },
     bodyStyles: {
-      fillColor: COLORS.WHITE,
-      textColor: COLORS.TEXT_DARK,
+      fillColor: COLORS.WHITE as [number, number, number],
+      textColor: COLORS.TEXT_DARK as [number, number, number],
       fontSize: 9,
       cellPadding: 4,
-      lineColor: COLORS.TABLE_LINE,
-      lineWidth: 0.1, // Linhas muito finas
+      lineColor: COLORS.TABLE_LINE as [number, number, number],
+      lineWidth: 0.1,
     },
     columnStyles: {
-      date: { fontStyle: 'bold', cellWidth: 28, textColor: COLORS.SECONDARY },
-      time: { cellWidth: 20, halign: 'center' }, // Aumentado para 20 e centralizado
-      event: { fontStyle: 'bold', cellWidth: 50 }, // Aumentado para 50
+      date: { fontStyle: 'bold', cellWidth: 28, textColor: COLORS.SECONDARY as [number, number, number] },
+      time: { cellWidth: 20, halign: 'center' },
+      event: { fontStyle: 'bold', cellWidth: 50 },
     },
     alternateRowStyles: {
-      fillColor: [250, 250, 250] // Zebra muito sutil
+      fillColor: [250, 250, 250] as [number, number, number]
     },
     didParseCell: function(data: any) {
        // Remove bordas verticais para um look "SaaS Moderno"
@@ -200,7 +200,7 @@ export const generateIndividualPDF = (
   doc.text(memberName, 20, 50);
 
   // Filtrar eventos do membro
-  const myEvents = [];
+  const myEvents: any[] = [];
   events.forEach(evt => {
       Object.entries(schedule).forEach(([key, assignedName]) => {
           if (key.startsWith(evt.iso) && assignedName === memberName) {
@@ -238,21 +238,20 @@ export const generateIndividualPDF = (
       startY: 70,
       theme: 'plain', // Theme Plain para customizar total
       headStyles: {
-          fillColor: COLORS.WHITE,
-          textColor: COLORS.SECONDARY,
+          fillColor: COLORS.WHITE as [number, number, number],
+          textColor: COLORS.SECONDARY as [number, number, number],
           fontStyle: 'bold',
-          fontSize: 9,
-          uppercase: true
+          fontSize: 9
       },
       styles: {
           cellPadding: 5,
           fontSize: 10,
-          textColor: COLORS.TEXT_DARK,
+          textColor: COLORS.TEXT_DARK as [number, number, number],
           valign: 'middle'
       },
       columnStyles: {
-          date: { fontStyle: 'bold', textColor: COLORS.PRIMARY },
-          role: { fontStyle: 'bold', textColor: [217, 119, 6] } // Amber-600 para destaque
+          date: { fontStyle: 'bold', textColor: COLORS.PRIMARY as [number, number, number] },
+          role: { fontStyle: 'bold', textColor: [217, 119, 6] as [number, number, number] }
       },
       willDrawCell: function(data: any) {
           // Linha divisória fina entre eventos

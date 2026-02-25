@@ -30,6 +30,16 @@ try {
   console.warn("[SupabaseService] Falha ao ler import.meta.env. Usando fallback se disponível.");
 }
 
+// Fallback to global defines from vite.config.ts
+if (!envUrl) {
+    try {
+        // @ts-ignore
+        envUrl = __SUPABASE_URL__ || "";
+        // @ts-ignore
+        envKey = __SUPABASE_KEY__ || "";
+    } catch (e) {}
+}
+
 if (!envUrl && typeof process !== 'undefined' && process.env) {
     envUrl = process.env.VITE_SUPABASE_URL || "";
     envKey = process.env.VITE_SUPABASE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";

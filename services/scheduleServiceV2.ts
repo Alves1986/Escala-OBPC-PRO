@@ -297,6 +297,7 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
   if (candidates.length === 0) return null;
 
   const nextEvent = candidates[0];
+  if (!nextEvent) return null;
 
   const { data: membersData } = await sb
       .from('schedule_assignments')
