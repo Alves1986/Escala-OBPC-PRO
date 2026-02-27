@@ -42,6 +42,10 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                 const rawInviteData: any = res.data || {};
                 console.log("INVITE RAW:", rawInviteData);
 
+                const ministryId =
+                    res.data?.ministryId ||
+                    res.data?.ministry_id;
+
                 try {
                     const cleanUrl = window.location.origin + window.location.pathname;
                     window.history.replaceState({}, document.title, cleanUrl);
@@ -49,8 +53,8 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                     console.warn("Não foi possível limpar a URL", e);
                 }
 
-                const incomingMinistry = rawInviteData.ministryId || rawInviteData.ministry_id || rawInviteData.ministry;
-                const incomingOrgId = rawInviteData.orgId || rawInviteData.org_id || rawInviteData.organization_id;
+                const incomingMinistry = ministryId || rawInviteData.ministry;
+                const incomingOrgId = rawInviteData.orgId || rawInviteData.organization_id || rawInviteData.org_id;
 
                 if (!incomingMinistry || !incomingOrgId) {
                     setErrorMsg("Convite inválido ou ministério não encontrado.");

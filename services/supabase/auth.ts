@@ -80,26 +80,26 @@ export const validateInviteToken = async (token: string) => {
     const decodedData = data;
     console.log("TOKEN DATA", decodedData);
 
-    const inviteData = {
+    const normalizedData = {
+        ...decodedData,
         ministryId:
-            decodedData.ministry_id ||
-            decodedData.ministryId ||
-            decodedData.ministry ||
+            decodedData.ministryId ??
+            decodedData.ministry_id ??
+            decodedData.ministry ??
             null,
         orgId:
-            decodedData.organization_id ||
-            decodedData.org_id ||
-            decodedData.orgId ||
-            decodedData.organization ||
-            null,
-        token: decodedData.token
+            decodedData.orgId ??
+            decodedData.organization_id ??
+            decodedData.org_id ??
+            decodedData.organization ??
+            null
     };
 
-    console.log("INVITE DATA FINAL", inviteData);
+    console.log("INVITE DATA FINAL", normalizedData);
 
-    return { 
-        valid: true, 
-        data: inviteData
+    return {
+        valid: true,
+        data: normalizedData
     };
 };
 
