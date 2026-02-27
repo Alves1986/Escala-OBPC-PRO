@@ -313,7 +313,7 @@ export const fetchNextEventCardData = async (ministryId: string, orgId: string) 
           role,
           member_id,
           confirmed,
-          profiles ( name, avatar_url )
+          profiles ( id, name, avatar_url )
       `)
       .eq('organization_id', orgId)
       .eq('ministry_id', ministryId)

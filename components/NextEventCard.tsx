@@ -29,6 +29,21 @@ export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, att
   const eventData = propEvent?.event ? propEvent.event : propEvent; // Handle structure
   const eventMembers = propEvent?.members || [];
 
+  const memberNameById = React.useMemo(() => {
+    const map = new Map<string, string>();
+    (members || []).forEach((m: any) => {
+      if (m?.id && m?.name) map.set(m.id, m.name);
+    });
+    return map;
+  }, [members]);
+
+  const normalizedEventMembers = React.useMemo(() => {
+    return eventMembers.map((t: any) => ({
+      ...t,
+      name: (t?.name && t.name !== 'Membro') ? t.name : (memberNameById.get(t?.memberId) || t?.name || 'Membro')
+    }));
+  }, [eventMembers, memberNameById]);
+
   const checkTimeWindow = () => {
     if (!eventData) return;
     const now = new Date();
@@ -175,7 +190,7 @@ export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, att
               
               <div className="mt-12 relative z-10">
                   {(() => {
-                      const myRole = eventMembers.find((t: any) => currentUser && t.name === currentUser.name);
+                      const myRole = normalizedEventMembers.find((t: any) => currentUser && t.name === currentUser.name);
                       
                       if (myRole) {
                           // Note: myRole.key is constructed in fetchNextEventCardData as eventIso_role
@@ -195,17 +210,17 @@ export const NextEventCard: React.FC<Props> = ({ event: propEvent, schedule, att
           <div className="lg:col-span-8 p-8 lg:p-12 bg-white dark:bg-slate-900">
               <div className="flex items-center justify-between mb-8">
                   <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.3em]">Equipe Escalada</h3>
-                  <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-full">{eventMembers.length} Integrantes</span>
+                  <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-full">{normalizedEventMembers.length} Integrantes</span>
               </div>
 
-              {eventMembers.length === 0 ? (
+              {normalizedEventMembers.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-[2.5rem]">
                       <CalendarClock size={48} className="text-slate-200 dark:text-slate-800 mb-4" />
                       <p className="text-slate-400 font-bold text-sm">Ninguém escalado ainda.</p>
                   </div>
               ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                      {eventMembers.map((t: any, idx: number) => {
+                      {normalizedEventMembers.map((t: any, idx: number) => {
                           const isMe = currentUser && t.name === currentUser.name;
                           // Use avatarUrl directly from the fetched data if available
                           const avatar = t.avatarUrl; 
