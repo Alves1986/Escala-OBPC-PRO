@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowRight, CheckCircle2, UserPlus, AlertOctagon, Loader2, Mail, Lock, Phone, User, Calendar, Briefcase, Building2, Check } from 'lucide-react';
-import { validateInviteToken, registerWithInvite } from '../services/supabaseService';
-import { getSupabase } from '../services/supabase/client';
+import { validateInviteToken, registerWithInvite, fetchMinistrySettings, fetchOrganizationMinistries } from '../services/supabaseService';
 
 interface Props {
     token: string;
@@ -14,7 +13,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
     const [errorMsg, setErrorMsg] = useState("");
     
     // Ministry Data
-    const [ministryName, setMinistryName] = useState("");
+    const [ministryName, setMinistryName] = useState("Ministério não encontrado");
     
     // Roles Data
     const [availableRoles, setAvailableRoles] = useState<string[]>([]);
@@ -49,40 +48,23 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                 if (res.data?.ministryId) {
                     setLoadingRoles(true);
                     try {
-                        const sb = getSupabase();
-                        if (sb) {
-                            // Get Ministry Details
-                            const { data: ministry } = await sb
-                                .from('organization_ministries')
-                                .select('id, label')
-                                .eq('id', res.data.ministryId)
-                                .maybeSingle();
+                        const [ministries, settings] = await Promise.all([
+                            fetchOrganizationMinistries(res.data.orgId),
+                            fetchMinistrySettings(res.data.ministryId, res.data.orgId)
+                        ]);
 
-                            if (ministry) setMinistryName(ministry.label);
-                            else setMinistryName("Ministério");
+                        const foundMinistry = ministries.find(m => m.id === res.data.ministryId);
+                        const dynamicMinistryName = foundMinistry?.label?.trim() || settings?.displayName?.trim();
+                        setMinistryName(dynamicMinistryName || 'Ministério não encontrado');
 
-                            // Get Roles from Settings
-                            const { data: settings } = await sb
-                                .from('ministry_settings')
-                                .select('roles')
-                                .eq('ministry_id', res.data.ministryId)
-                                .eq('organization_id', res.data.orgId)
-                                .maybeSingle();
-
-                            if (settings?.roles && Array.isArray(settings.roles)) {
-                                setAvailableRoles(settings.roles);
-                            } else {
-                                // Fallback to org definition if settings missing
-                                const { data: minDef } = await sb
-                                    .from('organization_ministries')
-                                    .select('roles') // Assuming roles might be here too in some schemas
-                                    .eq('id', res.data.ministryId)
-                                    .maybeSingle();
-                                if (minDef?.roles) setAvailableRoles(minDef.roles);
-                            }
-                        }
+                        const rolesFromSettings = Array.isArray(settings?.roles)
+                            ? settings.roles.filter((role: string) => role?.trim().length > 0)
+                            : [];
+                        setAvailableRoles(rolesFromSettings);
                     } catch (e) {
                         console.error("Failed to load roles", e);
+                        setMinistryName('Ministério não encontrado');
+                        setAvailableRoles([]);
                     } finally {
                         setLoadingRoles(false);
                     }
@@ -105,13 +87,16 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
         setSelectedRoles(newRoles);
     };
 
+    const isPasswordConfirmationValid = confirmPass.length > 0 && password === confirmPass;
+
     const isFormValid = 
         name.trim().length > 0 &&
         email.trim().length > 0 &&
-        password.length >= 6 &&
-        password === confirmPass &&
         whatsapp.trim().length > 0 &&
-        birthDate.length > 0 &&
+        birthDate.trim().length > 0 &&
+        password.trim().length > 0 &&
+        password.length >= 6 &&
+        isPasswordConfirmationValid &&
         selectedRoles.length > 0;
 
     const handleRegister = async (e: React.FormEvent) => {
@@ -277,7 +262,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                         {/* ROLES SELECTION */}
                         <div className="md:col-span-2 bg-zinc-900/50 p-4 rounded-xl border border-zinc-800">
                             <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1 mb-3 block flex items-center gap-2">
-                                <Briefcase size={12}/> Selecione suas Funções / Cargos *
+                                <Briefcase size={12}/> Selecione suas funções *
                             </label>
                             
                             {loadingRoles ? (
