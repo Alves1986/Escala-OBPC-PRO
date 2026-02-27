@@ -65,9 +65,6 @@ export const AnnouncementCard: React.FC<Props> = ({ announcement, currentUser, o
 
   const theme = getTheme(announcement.type);
 
-  // Se o usuário já leu e não é admin, ocultamos o card para não poluir (opcional, mas solicitado pelo fluxo "marcar como visto")
-  if (hasRead && !isAdmin) return null;
-
   return (
     <div className={`mb-6 rounded-2xl p-5 border shadow-sm animate-slide-up ${theme.bg} ${theme.border}`}>
         <div className="flex gap-4 items-start">
