@@ -77,13 +77,29 @@ export const validateInviteToken = async (token: string) => {
         return { valid: false, message: "Convite inválido, expirado ou já utilizado." };
     }
 
+    const decodedData = data;
+    console.log("TOKEN DATA", decodedData);
+
+    const inviteData = {
+        ministryId:
+            decodedData.ministry_id ||
+            decodedData.ministryId ||
+            decodedData.ministry ||
+            null,
+        orgId:
+            decodedData.organization_id ||
+            decodedData.org_id ||
+            decodedData.orgId ||
+            decodedData.organization ||
+            null,
+        token: decodedData.token
+    };
+
+    console.log("INVITE DATA FINAL", inviteData);
+
     return { 
         valid: true, 
-        data: { 
-            ministryId: data.ministry_id, 
-            orgId: data.organization_id, 
-            token: data.token
-        } 
+        data: inviteData
     };
 };
 
