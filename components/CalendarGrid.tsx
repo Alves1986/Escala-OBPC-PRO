@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ScheduleMap, Role } from '../types';
 import { getLocalDateISOString } from '../utils/dateUtils';
 
@@ -11,16 +11,37 @@ interface Props {
 }
 
 export const CalendarGrid: React.FC<Props> = ({ currentMonth, events, schedule, roles, onEventClick }) => {
-  const [year, month] = currentMonth.split('-').map(Number);
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const firstDayOfWeek = new Date(year, month - 1, 1).getDay(); // 0 = Sun
+  const [currentYear, currentMonthNumber] = currentMonth.split('-').map(Number);
+  const currentMonthIndex = currentMonthNumber - 1;
 
-  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  const blanks = Array.from({ length: firstDayOfWeek }, (_, i) => i);
+  const generateDays = (year: number, monthIndex: number) => {
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+    return Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  };
+
+  const days = useMemo(
+    () => generateDays(currentYear, currentMonthIndex),
+    [currentYear, currentMonthIndex]
+  );
+
+  const blanks = useMemo(() => {
+    const firstDayOfWeek = new Date(currentYear, currentMonthIndex, 1).getDay(); // 0 = Sun
+    return Array.from({ length: firstDayOfWeek }, (_, i) => i);
+  }, [currentYear, currentMonthIndex]);
 
   const getEventsForDay = (day: number) => {
-    const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
-    return events.filter(e => e.iso.startsWith(dateStr)).sort((a, b) => a.iso.localeCompare(b.iso));
+    const dayDate = new Date(currentYear, currentMonthIndex, day, 12, 0, 0);
+
+    return events
+      .filter(e => {
+        const isoDatePart = e.iso.split('T')[0];
+        const eventDate = new Date(`${isoDatePart}T12:00:00`);
+
+        return dayDate.getFullYear() === eventDate.getFullYear()
+          && dayDate.getMonth() === eventDate.getMonth()
+          && dayDate.getDate() === eventDate.getDate();
+      })
+      .sort((a, b) => a.iso.localeCompare(b.iso));
   };
 
   const getAssignedStats = (event: { id: string }) => {

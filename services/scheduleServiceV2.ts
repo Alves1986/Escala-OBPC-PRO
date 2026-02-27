@@ -25,6 +25,7 @@ export interface OccurrenceV2 {
   time: string;
   title: string;
   iso: string;
+  event_key: string;
 }
 
 export interface MemberV2 {
@@ -70,7 +71,7 @@ export const fetchAssignmentsV2 = async (
 
   const { data, error } = await sb
     .from("schedule_assignments")
-    .select('id,event_rule_id,event_date,role,member_id,confirmed,profiles(name)') // CORREÇÃO: Select atualizado
+    .select('id,event_rule_id,event_date,role,member_id,confirmed,event_key,profiles(name)') // CORREÇÃO: Select atualizado
     .eq("ministry_id", ministryId)
     .eq("organization_id", orgId)
     .like("event_date", `${monthStr}%`);
@@ -84,7 +85,7 @@ export const fetchAssignmentsV2 = async (
     role: a.role,
     member_id: a.member_id,
     confirmed: a.confirmed,
-    event_key: a.event_rule_id // Mapeamento para compatibilidade de UI
+    event_key: a.event_key || `${a.event_date}_${a.event_rule_id}` // Compatibilidade
   }));
 };
 
@@ -141,10 +142,14 @@ export const saveAssignmentV2 = async (
     event_date: string;
     role: string;
     member_id: string;
+    event_key: string;
   }
 ) => {
   const sb = getSupabase();
   if (!sb) throw new Error("NO_SUPABASE");
+
+  const eventKey =
+    `${payload.event_rule_id}_${payload.event_date}_${payload.role}`;
 
   const { data, error } = await sb
     .from("schedule_assignments")
@@ -152,6 +157,7 @@ export const saveAssignmentV2 = async (
       {
         organization_id: orgId,
         ministry_id: ministryId,
+        event_key: eventKey,
         event_rule_id: payload.event_rule_id,
         event_date: payload.event_date,
         role: payload.role,
@@ -219,7 +225,8 @@ export const generateOccurrencesV2 = (
           date: rule.date,
           time: rule.time,
           title: rule.title,
-          iso: `${rule.date}T${rule.time}`
+          iso: `${rule.date}T${rule.time}`,
+          event_key: `${rule.date}_${rule.time}_${rule.id}`
         });
       }
     }
@@ -237,7 +244,8 @@ export const generateOccurrencesV2 = (
             date: dateStr,
             time: rule.time,
             title: rule.title,
-            iso: `${dateStr}T${rule.time}`
+            iso: `${dateStr}T${rule.time}`,
+            event_key: `${dateStr}_${rule.time}_${rule.id}`
           });
         }
         cur.setDate(cur.getDate() + 1);

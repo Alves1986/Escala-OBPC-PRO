@@ -58,7 +58,7 @@ interface ScheduleCellProps {
     role: string;
     currentMemberId: string | null;
     members: MemberV2[];
-    onAssign: (date: string, role: string, memberId: string | null, ruleId: string) => void;
+    onAssign: (date: string, role: string, memberId: string | null, ruleId: string, eventKey: string) => void;
     processing: boolean;
 }
 
@@ -110,12 +110,12 @@ const ScheduleCell: React.FC<ScheduleCellProps> = ({
     // CORREÇÃO PRINCIPAL: 
     // Usar a lógica de seleção diretamente sem depender apenas do onClick padrão
     const handleSelect = (memberId: string) => {
-        onAssign(occurrence.date, role, memberId, occurrence.ruleId);
+        onAssign(occurrence.date, role, memberId, occurrence.ruleId, occurrence.event_key);
         setIsOpen(false);
     };
 
     const handleRemove = () => {
-        onAssign(occurrence.date, role, null, occurrence.ruleId);
+        onAssign(occurrence.date, role, null, occurrence.ruleId, occurrence.event_key);
         setIsOpen(false);
     };
 
@@ -242,9 +242,12 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
     const [members, setMembers] = useState<MemberV2[]>([]);
     const [assignments, setAssignments] = useState<AssignmentV2[]>([]);
     const [occurrences, setOccurrences] = useState<OccurrenceV2[]>([]);
+    const requestRef = useRef(0);
 
     // -- LOAD DATA --
     const loadData = async () => {
+        const requestId = ++requestRef.current;
+        if (requestId !== requestRef.current) return;
         setLoading(true);
         try {
             const [rolesData, membersData, rules] = await Promise.all([
@@ -253,7 +256,9 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
                 fetchRulesV2(ministryId, orgId)
             ]);
 
+            if (requestId !== requestRef.current) return;
             setRoles(rolesData);
+            if (requestId !== requestRef.current) return;
             setMembers(membersData);
 
             // Gerar ocorrências do mês
@@ -261,18 +266,22 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
             const month = currentDate.getMonth() + 1;
             
             const generatedOccurrences = generateOccurrencesV2(rules, year, month);
+            if (requestId !== requestRef.current) return;
             setOccurrences(generatedOccurrences);
 
             // Buscar escalas existentes (Passa YYYY-MM como string)
             const monthStr = `${year}-${String(month).padStart(2, '0')}`;
             
             const existingAssignments = await fetchAssignmentsV2(ministryId, orgId, monthStr);
+            if (requestId !== requestRef.current) return;
             setAssignments(existingAssignments);
 
         } catch (error) {
+            if (requestId !== requestRef.current) return;
             console.error(error);
             addToast('Erro ao carregar dados da escala', 'error');
         } finally {
+            if (requestId !== requestRef.current) return;
             setLoading(false);
         }
     };
@@ -290,7 +299,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
         setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
     };
 
-    const handleAssignmentChange = async (date: string, role: string, memberId: string | null, ruleId: string) => {
+    const handleAssignmentChange = async (date: string, role: string, memberId: string | null, ruleId: string, eventKey: string) => {
         setProcessing(true);
         
         const tempId = `temp-${Date.now()}`;
@@ -307,7 +316,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
                     role,
                     member_id: memberId,
                     confirmed: false,
-                    event_key: ruleId
+                    event_key: eventKey
                 }]
                 : filtered;
             return next;
@@ -319,7 +328,8 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
                     event_rule_id: ruleId,
                     event_date: date,
                     role,
-                    member_id: memberId
+                    member_id: memberId,
+                    event_key: eventKey
                 });
                 
                 addToast('Membro escalado', 'success');
