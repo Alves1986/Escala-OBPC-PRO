@@ -20,8 +20,27 @@ export const createEventRule = async (orgId: string, ruleData: any) => {
 
 export const deleteEventRule = async (orgId: string, ruleId: string) => {
     const sb = getSupabase();
-    if (!sb) return;
-    await sb.from('event_rules').update({ active: false }).eq('id', ruleId).eq('organization_id', orgId);
+    if (!sb) throw new Error("No client");
+
+    const { data: updatedRules, error: updateError } = await sb
+        .from('event_rules')
+        .update({ active: false })
+        .eq('id', ruleId)
+        .eq('organization_id', orgId)
+        .select('id')
+        .limit(1);
+
+    if (!updateError && (updatedRules?.length || 0) > 0) return;
+
+    const { error: deleteError } = await sb
+        .from('event_rules')
+        .delete()
+        .eq('id', ruleId)
+        .eq('organization_id', orgId);
+
+    if (deleteError) {
+        throw deleteError;
+    }
 };
 
 export const createMinistryEvent = async (ministryId: string, orgId: string, event: any) => {
