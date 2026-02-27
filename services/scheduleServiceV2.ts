@@ -148,13 +148,16 @@ export const saveAssignmentV2 = async (
   const sb = getSupabase();
   if (!sb) throw new Error("NO_SUPABASE");
 
+  const eventKey =
+    `${payload.event_rule_id}_${payload.event_date}_${payload.role}`;
+
   const { data, error } = await sb
     .from("schedule_assignments")
     .upsert(
       {
         organization_id: orgId,
         ministry_id: ministryId,
-        event_key: payload.event_key,
+        event_key: eventKey,
         event_rule_id: payload.event_rule_id,
         event_date: payload.event_date,
         role: payload.role,
