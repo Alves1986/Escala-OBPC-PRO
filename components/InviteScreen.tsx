@@ -120,16 +120,28 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
 
                     setMinistryName(ministryLabel);
 
-                    if (isUUID(realMinistryId) && incomingOrgId && sb) {
-                        const { data: rolesData } = await sb
-                            .from('organization_ministry_roles')
-                            .select('name')
-                            .eq('ministry_id', realMinistryId)
-                            .eq('organization_id', incomingOrgId)
-                            .eq('active', true);
+                    if (isUUID(realMinistryId) && sb) {
+                        const { data: ministryWithRoles } = await sb
+                            .from('organization_ministries')
+                            .select('*')
+                            .eq('id', realMinistryId)
+                            .maybeSingle();
 
-                        if (rolesData && rolesData.length > 0) {
-                            setAvailableRoles(rolesData.map((r: any) => r.name).filter((name: string) => name?.trim().length > 0));
+                        const roles =
+                            ministryWithRoles?.roles ||
+                            ministryWithRoles?.functions ||
+                            ministryWithRoles?.positions ||
+                            ministryWithRoles?.settings?.roles ||
+                            [];
+
+                        if (Array.isArray(roles)) {
+                            setAvailableRoles(
+                                roles
+                                    .map((r: any) =>
+                                        typeof r === 'string' ? r : r?.name || r?.label
+                                    )
+                                    .filter((roleName: string) => Boolean(roleName))
+                            );
                         } else {
                             setAvailableRoles([]);
                         }
