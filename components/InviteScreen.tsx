@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowRight, CheckCircle2, UserPlus, AlertOctagon, Loader2, Mail, Lock, Phone, User, Calendar, Briefcase, Building2, Check } from 'lucide-react';
-import { validateInviteToken, registerWithInvite, fetchMinistrySettings } from '../services/supabaseService';
+import { validateInviteToken, registerWithInvite } from '../services/supabaseService';
 import { getSupabase } from '../services/supabase/client';
 
 interface Props {
@@ -120,12 +120,19 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
 
                     setMinistryName(ministryLabel);
 
-                    if (isUUID(realMinistryId) && incomingOrgId) {
-                        const settings = await fetchMinistrySettings(realMinistryId, incomingOrgId);
-                        const rolesFromSettings = Array.isArray(settings?.roles)
-                            ? settings.roles.filter((role: string) => role?.trim().length > 0)
-                            : [];
-                        setAvailableRoles(rolesFromSettings);
+                    if (isUUID(realMinistryId) && incomingOrgId && sb) {
+                        const { data: rolesData } = await sb
+                            .from('organization_ministry_roles')
+                            .select('name')
+                            .eq('ministry_id', realMinistryId)
+                            .eq('organization_id', incomingOrgId)
+                            .eq('active', true);
+
+                        if (rolesData && rolesData.length > 0) {
+                            setAvailableRoles(rolesData.map((r: any) => r.name).filter((name: string) => name?.trim().length > 0));
+                        } else {
+                            setAvailableRoles([]);
+                        }
                     }
                 } catch (e) {
                     console.error("Failed to load roles", e);
