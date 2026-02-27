@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowRight, CheckCircle2, UserPlus, AlertOctagon, Loader2, Mail, Lock, Phone, User, Calendar, Briefcase, Building2, Check } from 'lucide-react';
-import { validateInviteToken, registerWithInvite, fetchMinistrySettings, fetchOrganizationMinistries } from '../services/supabaseService';
+import { validateInviteToken, registerWithInvite, fetchMinistrySettings } from '../services/supabaseService';
+import { getSupabase } from '../services/supabase/client';
 
 interface Props {
     token: string;
@@ -35,6 +36,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
             const res = await validateInviteToken(token);
             
             if (res.valid) {
+                console.log("INVITE DATA", res.data);
                 setInviteData(res.data);
                 setStatus('valid');
 
@@ -48,15 +50,26 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                 if (res.data?.ministryId) {
                     setLoadingRoles(true);
                     try {
-                        const [ministries, settings] = await Promise.all([
-                            fetchOrganizationMinistries(res.data.orgId),
-                            fetchMinistrySettings(res.data.ministryId, res.data.orgId)
-                        ]);
+                        const sb = getSupabase();
+                        if (sb) {
+                            const { data: ministry } = await sb
+                                .from('organization_ministries')
+                                .select('*')
+                                .eq('id', res.data.ministryId)
+                                .eq('organization_id', res.data.orgId)
+                                .maybeSingle();
 
-                        const foundMinistry = ministries.find(m => m.id === res.data.ministryId);
-                        const dynamicMinistryName = foundMinistry?.label?.trim() || settings?.displayName?.trim();
-                        setMinistryName(dynamicMinistryName || 'Ministério não encontrado');
+                            const ministryLabel =
+                                ministry?.label ||
+                                ministry?.name ||
+                                ministry?.title ||
+                                ministry?.ministry_name ||
+                                'Ministério não encontrado';
 
+                            setMinistryName(ministryLabel);
+                        }
+
+                        const settings = await fetchMinistrySettings(res.data.ministryId, res.data.orgId);
                         const rolesFromSettings = Array.isArray(settings?.roles)
                             ? settings.roles.filter((role: string) => role?.trim().length > 0)
                             : [];
@@ -262,7 +275,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                         {/* ROLES SELECTION */}
                         <div className="md:col-span-2 bg-zinc-900/50 p-4 rounded-xl border border-zinc-800">
                             <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1 mb-3 block flex items-center gap-2">
-                                <Briefcase size={12}/> Selecione suas funções *
+                                <Briefcase size={12}/> Selecione suas Funções *
                             </label>
                             
                             {loadingRoles ? (
