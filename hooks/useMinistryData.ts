@@ -230,13 +230,6 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
                           title: ruleEvent.title,
                           dateDisplay: ruleEvent.date.split('-').reverse().slice(0, 2).join('/')
                       });
-                  } else {
-                      assignmentBasedEvents.push({
-                          id: uniqueEventKey,
-                          iso: `${date}T00:00`, 
-                          title: 'Evento (Regra Removida)',
-                          dateDisplay: date.split('-').reverse().slice(0, 2).join('/')
-                      });
                   }
                   processedEventKeys.add(uniqueEventKey);
               }
