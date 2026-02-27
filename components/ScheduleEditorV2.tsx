@@ -267,7 +267,17 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
             const monthStr = `${year}-${String(month).padStart(2, '0')}`;
             
             const existingAssignments = await fetchAssignmentsV2(ministryId, orgId, monthStr);
-            setAssignments(existingAssignments);
+
+            // 🔥 FILTRO CIRÚRGICO — elimina fantasmas de meses anteriores
+            const validEventKeys = new Set(
+            generatedOccurrences.map(o => `${o.ruleId}_${o.date}`)
+            );
+
+            const safeAssignments = existingAssignments.filter(a =>
+            validEventKeys.has(`${a.event_rule_id}_${a.event_date?.slice(0,10)}`)
+            );
+
+            setAssignments(safeAssignments);
 
         } catch (error) {
             console.error(error);
