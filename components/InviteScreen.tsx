@@ -32,7 +32,7 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
     const [registering, setRegistering] = useState(false);
 
 
-    const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+    const isUUID = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
     useEffect(() => {
         const check = async () => {
@@ -41,8 +41,6 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
             if (res.valid) {
                 const rawInviteData: any = res.data || {};
                 console.log("INVITE RAW:", rawInviteData);
-
-                setStatus('valid');
 
                 try {
                     const cleanUrl = window.location.origin + window.location.pathname;
@@ -54,75 +52,85 @@ export const InviteScreen: React.FC<Props> = ({ token, onClear }) => {
                 const incomingMinistry = rawInviteData.ministryId || rawInviteData.ministry_id || rawInviteData.ministry;
                 const incomingOrgId = rawInviteData.orgId || rawInviteData.org_id || rawInviteData.organization_id;
 
-                if (incomingMinistry) {
-                    setLoadingRoles(true);
-                    try {
-                        const sb = getSupabase();
-                        let ministry: any = null;
-                        let realMinistryId = incomingMinistry;
+                if (!incomingMinistry || !incomingOrgId) {
+                    setErrorMsg("Convite inválido ou ministério não encontrado.");
+                    setStatus('invalid');
+                    return;
+                }
 
-                        if (sb && incomingOrgId) {
-                            if (isUuid(String(incomingMinistry))) {
-                                const { data } = await sb
-                                    .from('organization_ministries')
-                                    .select('*')
-                                    .eq('id', incomingMinistry)
-                                    .eq('organization_id', incomingOrgId)
-                                    .maybeSingle();
-                                ministry = data;
-                            } else {
-                                for (const field of ['label', 'name', 'title', 'ministry_name']) {
-                                    const { data } = await sb
-                                        .from('organization_ministries')
-                                        .select('*')
-                                        .eq('organization_id', incomingOrgId)
-                                        .eq(field, incomingMinistry)
-                                        .maybeSingle();
-                                    if (data) {
-                                        ministry = data;
-                                        break;
-                                    }
-                                }
-                            }
+                setLoadingRoles(true);
+                try {
+                    const sb = getSupabase();
+                    let ministry: any = null;
+                    let realMinistryId: string | null = null;
 
-                            if (ministry?.id) {
-                                realMinistryId = ministry.id;
-                            }
+                    if (isUUID(String(incomingMinistry))) {
+                        realMinistryId = String(incomingMinistry);
+                        if (sb) {
+                            const { data } = await sb
+                                .from('organization_ministries')
+                                .select('*')
+                                .eq('id', realMinistryId)
+                                .eq('organization_id', incomingOrgId)
+                                .maybeSingle();
+                            ministry = data;
                         }
+                    } else if (sb) {
+                        const { data } = await sb
+                            .from('organization_ministries')
+                            .select('*')
+                            .eq('organization_id', incomingOrgId)
+                            .or(`label.eq.${incomingMinistry},name.eq.${incomingMinistry},title.eq.${incomingMinistry},ministry_name.eq.${incomingMinistry}`)
+                            .maybeSingle();
 
-                        const finalInviteData = {
-                            ...rawInviteData,
-                            ministryId: realMinistryId,
-                            orgId: incomingOrgId
-                        };
+                        ministry = data;
+                        if (isUUID(String(ministry?.id || ''))) {
+                            realMinistryId = String(ministry.id);
+                        }
+                    }
 
-                        console.log("INVITE DATA", finalInviteData);
-                        setInviteData(finalInviteData);
+                    if (!realMinistryId || !isUUID(realMinistryId) || !incomingOrgId) {
+                        setErrorMsg("Convite inválido ou ministério não encontrado.");
+                        setStatus('invalid');
+                        setMinistryName('Ministério não encontrado');
+                        setAvailableRoles([]);
+                        return;
+                    }
 
-                        const ministryLabel =
-                            ministry?.label ||
-                            ministry?.name ||
-                            ministry?.title ||
-                            ministry?.ministry_name ||
-                            'Ministério não encontrado';
+                    const finalInviteData = {
+                        ...rawInviteData,
+                        ministryId: realMinistryId,
+                        orgId: incomingOrgId
+                    };
 
-                        setMinistryName(ministryLabel);
+                    console.log("INVITE DATA", finalInviteData);
+                    setInviteData(finalInviteData);
+                    setStatus('valid');
 
+                    const ministryLabel =
+                        ministry?.label ||
+                        ministry?.name ||
+                        ministry?.title ||
+                        ministry?.ministry_name ||
+                        'Ministério não encontrado';
+
+                    setMinistryName(ministryLabel);
+
+                    if (isUUID(realMinistryId) && incomingOrgId) {
                         const settings = await fetchMinistrySettings(realMinistryId, incomingOrgId);
                         const rolesFromSettings = Array.isArray(settings?.roles)
                             ? settings.roles.filter((role: string) => role?.trim().length > 0)
                             : [];
                         setAvailableRoles(rolesFromSettings);
-                    } catch (e) {
-                        console.error("Failed to load roles", e);
-                        setMinistryName('Ministério não encontrado');
-                        setAvailableRoles([]);
-                        setInviteData(rawInviteData);
-                    } finally {
-                        setLoadingRoles(false);
                     }
-                } else {
-                    setInviteData(rawInviteData);
+                } catch (e) {
+                    console.error("Failed to load roles", e);
+                    setErrorMsg("Convite inválido ou ministério não encontrado.");
+                    setStatus('invalid');
+                    setMinistryName('Ministério não encontrado');
+                    setAvailableRoles([]);
+                } finally {
+                    setLoadingRoles(false);
                 }
             } else {
                 setErrorMsg(res.message || "Convite inválido");
