@@ -98,7 +98,23 @@ export const deleteMember = async (ministryId: string, orgId: string, memberId: 
 export const toggleAdminSQL = async (email: string, isAdmin: boolean, ministryId: string, orgId: string) => {
     const sb = getSupabase();
     if (!sb) return;
-    await sb.from('profiles').update({ is_admin: isAdmin }).eq('email', email).eq('organization_id', orgId);
+
+    const { data: profile } = await sb
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .eq('organization_id', orgId)
+        .maybeSingle();
+
+    if (!profile?.id) return;
+
+    await sb.from('organization_memberships')
+        .update({ role: isAdmin ? 'admin' : 'member' })
+        .eq('organization_id', orgId)
+        .eq('ministry_id', ministryId)
+        .eq('profile_id', profile.id);
+
+    await sb.from('profiles').update({ is_admin: isAdmin }).eq('id', profile.id).eq('organization_id', orgId);
 };
 
 export const fetchAuditLogs = async (ministryId: string, orgId: string) => {

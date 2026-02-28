@@ -19,7 +19,23 @@ USING ranked r
 WHERE om.id = r.id
   AND r.rn > 1;
 
--- Ensure unique tenant+ministry+profile membership
-ALTER TABLE public.organization_memberships
-  ADD CONSTRAINT IF NOT EXISTS organization_memberships_org_ministry_profile_uniq
-  UNIQUE (organization_id, ministry_id, profile_id);
+-- Validate duplicates again after cleanup
+SELECT organization_id, ministry_id, profile_id, COUNT(*) AS total
+FROM public.organization_memberships
+GROUP BY organization_id, ministry_id, profile_id
+HAVING COUNT(*) > 1;
+
+-- Ensure unique tenant+ministry+profile membership (safe check)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'organization_memberships_org_ministry_profile_uniq'
+      AND conrelid = 'public.organization_memberships'::regclass
+  ) THEN
+    ALTER TABLE public.organization_memberships
+      ADD CONSTRAINT organization_memberships_org_ministry_profile_uniq
+      UNIQUE (organization_id, ministry_id, profile_id);
+  END IF;
+END $$;
