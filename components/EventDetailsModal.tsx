@@ -66,12 +66,18 @@ export const EventDetailsModal: React.FC<Props> = ({
                 .eq('event_date', datePart)
                 .eq('event_rule_id', ruleId); // CORREÇÃO: Utilizando event_rule_id
 
-            const { data } = await query;
-            
+            const { data, error } = await query;
+
+            if (error) {
+                console.error("[EventDetailsModal] assignments error:", error);
+            }
+
             const grouped: Record<string, any[]> = {};
             if (data) {
                 data.forEach((item: any) => {
-                    const r = item.role;
+                    if (!item?.member_id) return;
+
+                    const r = item.role || 'Sem função';
                     if (!grouped[r]) grouped[r] = [];
                     grouped[r].push(item);
                 });
@@ -97,6 +103,15 @@ export const EventDetailsModal: React.FC<Props> = ({
           return [{ display: role, keySuffix: role, baseRole: role, index: 0 }];
       });
   }, [roles, ministryId]);
+
+
+  const membersById = useMemo(() => {
+      const map = new Map<string, TeamMemberProfile>();
+      allMembers.forEach(member => {
+          if (member?.id) map.set(member.id, member);
+      });
+      return map;
+  }, [allMembers]);
 
   if (!isOpen || !event) return null;
 
@@ -227,15 +242,17 @@ export const EventDetailsModal: React.FC<Props> = ({
                             // Dados finais
                             const memberName = dbAssignment?.profiles?.name;
                             const memberAvatar = dbAssignment?.profiles?.avatar_url;
+                            const memberId = dbAssignment?.member_id;
                             
                             // Fallback para Schedule prop se não houver dados no banco (caso de delay ou cache antigo)
                             // CORREÇÃO CRÍTICA: Fallback usa a chave composta ruleId_date_role
                             // event.id JÁ É ruleId_date
                             const legacyName = schedule[`${event.id}_${roleObj.keySuffix}`];
                             const legacyProfile = allMembers.find(m => m.name === legacyName);
+                            const memberById = memberId ? membersById.get(memberId) : undefined;
 
-                            const finalName = memberName || legacyName;
-                            const finalAvatar = memberAvatar || legacyProfile?.avatar_url;
+                            const finalName = memberName || memberById?.name || legacyName || (memberId ? 'Membro' : undefined);
+                            const finalAvatar = memberAvatar || memberById?.avatar_url || legacyProfile?.avatar_url;
 
                             return (
                                 <div key={roleObj.keySuffix} className="flex items-center justify-between group p-2 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-700/30 transition-colors border border-transparent hover:border-zinc-100 dark:hover:border-zinc-700/50">
