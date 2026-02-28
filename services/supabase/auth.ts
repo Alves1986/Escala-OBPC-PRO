@@ -136,13 +136,13 @@ export const registerWithInvite = async (token: string, userData: any) => {
         is_super_admin: false
     }).eq('id', userId);
 
-    await sb.from('organization_memberships').insert({
+    await sb.from('organization_memberships').upsert({
         organization_id: invite.organization_id, 
         profile_id: userId, 
         ministry_id: invite.ministry_id, 
         role: 'member', 
         functions: userData.roles || []
-    });
+    }, { onConflict: 'organization_id,ministry_id,profile_id' });
 
     await sb.from('invite_tokens').update({ used: true }).eq('token', token);
 

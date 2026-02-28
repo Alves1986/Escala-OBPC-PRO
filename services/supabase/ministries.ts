@@ -98,13 +98,13 @@ export const joinMinistry = async (ministryId: string, orgId: string, roles: str
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return;
     
-    await sb.from('organization_memberships').insert({
+    await sb.from('organization_memberships').upsert({
         organization_id: orgId,
         ministry_id: ministryId,
         profile_id: user.id,
         role: 'member',
         functions: roles
-    });
+    }, { onConflict: 'organization_id,ministry_id,profile_id' });
     
     const { data: profile } = await sb.from('profiles').select('allowed_ministries')
         .eq('id', user.id)

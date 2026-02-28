@@ -185,7 +185,7 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
       avatar_url: p.avatar_url,
       whatsapp: p.whatsapp,
       birthDate: p.birth_date,
-      isAdmin: p.is_admin || m.role === 'admin',
+      isAdmin: m.role === 'admin',
       roles: rawFunctions, 
       organizationId: orgId
     });
