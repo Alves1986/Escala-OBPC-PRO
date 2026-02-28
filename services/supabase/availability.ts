@@ -6,7 +6,7 @@ export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: strin
 
     const { data, error } = await sb
         .from('member_availability')
-        .select('user_id, available_date, note')
+        .select('user_id, available_date, period, note')
         .eq('organization_id', orgId)
         .eq('ministry_id', ministryId);
 
@@ -17,17 +17,29 @@ export const fetchMemberAvailabilityV2 = async (ministryId: string, orgId: strin
 
     data?.forEach((row: any) => {
         if (!map[row.user_id]) map[row.user_id] = [];
-        
+
+        if (!row.available_date && row.note === 'BLOCKED_MONTH' && row.period) {
+            const monthBlockKey = `${row.period}-BLK`;
+            map[row.user_id].push(monthBlockKey);
+            notes[`${row.user_id}_${row.period}-00`] = row.note;
+            return;
+        }
+
+        if (!row.available_date) return;
+
         const baseDate = row.available_date;
-        const key = row.note ? `${baseDate}_${row.note}` : baseDate;
+        const key = row.note && ['M', 'N', 'T'].includes(row.note)
+            ? `${baseDate}_${row.note}`
+            : baseDate;
         map[row.user_id].push(key);
-        console.log("[AV_FETCH_PERIOD]", row.available_date, row.note, key);
-        
-        if (row.note && !['M', 'N', 'T'].includes(row.note)) {
-            const monthKey = row.available_date.substring(0, 7) + '-00';
+
+        if (row.note && !['M', 'N', 'T', 'BLOCKED_MONTH'].includes(row.note)) {
+            const monthKey = baseDate.substring(0, 7) + '-00';
             notes[`${row.user_id}_${monthKey}`] = row.note;
         }
     });
+
+    console.log("[FETCH_MONTH_BLOCK]", data);
 
     return { availability: map, notes };
 };
@@ -46,7 +58,7 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
         end: `${nextMonth}-01`
     });
 
-    const { error: delError } = await sb
+    const { error: delErrorByDate } = await sb
         .from('member_availability')
         .delete()
         .eq('organization_id', orgId)
@@ -55,21 +67,46 @@ export const saveMemberAvailabilityV2 = async (orgId: string, ministryId: string
         .gte('available_date', `${targetMonth}-01`)
         .lt('available_date', `${nextMonth}-01`);
 
-    if (delError) throw delError;
+    if (delErrorByDate) throw delErrorByDate;
+
+    const { error: delErrorByPeriod } = await sb
+        .from('member_availability')
+        .delete()
+        .eq('organization_id', orgId)
+        .eq('ministry_id', ministryId)
+        .eq('user_id', userId)
+        .eq('period', targetMonth);
+
+    if (delErrorByPeriod) throw delErrorByPeriod;
 
     const uniqueDates = [...new Set(dates.filter(d => d.startsWith(targetMonth)))];
 
     if (uniqueDates.length > 0) {
         const rows = uniqueDates.map(dateString => {
-            const [dateOnly, period] = dateString.split('_');
-            console.log("[AV_SAVE_PERIOD]", dateString, dateOnly, period);
-            
+            if (dateString === `${targetMonth}-BLK`) {
+                const payload = {
+                    organization_id: orgId,
+                    ministry_id: ministryId,
+                    user_id: userId,
+                    available_date: null,
+                    period: targetMonth,
+                    note: 'BLOCKED_MONTH'
+                };
+
+                console.log("[SAVE_MONTH_BLOCK]", payload);
+                return payload;
+            }
+
+            const [dateOnly, periodTag] = dateString.split('_');
+            console.log("[AV_SAVE_PERIOD]", dateString, dateOnly, periodTag);
+
             return {
                 organization_id: orgId,
                 ministry_id: ministryId,
                 user_id: userId,
                 available_date: dateOnly,
-                note: period ?? null
+                period: dateOnly.substring(0, 7),
+                note: periodTag ?? null
             };
         });
 
