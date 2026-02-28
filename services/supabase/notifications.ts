@@ -86,8 +86,7 @@ export const fetchAnnouncementsSQL = async (ministryId: string, orgId?: string) 
         .select('*')
         .eq('ministry_id', ministryId)
         .eq('organization_id', orgId)
-        .eq('active', true)
-        .or(`expiration_date.is.null,expiration_date.gte.${now}`)
+        .gt('expiration_date', now)
         .order('created_at', { ascending: false });
 
     if (error) throw error;
