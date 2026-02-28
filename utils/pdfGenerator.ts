@@ -69,7 +69,7 @@ const drawFooter = (doc: jsPDF) => {
 export const generateFullSchedulePDF = (
   ministryName: string,
   monthIso: string,
-  events: { iso: string; title: string; dateDisplay: string }[],
+  events: { id?: string; iso: string; title: string; dateDisplay: string }[],
   roles: Role[],
   schedule: ScheduleMap
 ) => {
@@ -87,6 +87,8 @@ export const generateFullSchedulePDF = (
     ...roles.map(r => ({ header: r.toUpperCase(), dataKey: r }))
   ];
 
+  console.log("PDF_EXPORT_RAW", { events, roles, schedule });
+
   // Preparar Dados
   const body = events.map(evt => {
     const time = evt.iso.split('T')[1].substring(0, 5); // HH:mm
@@ -101,14 +103,11 @@ export const generateFullSchedulePDF = (
       event: evt.title
     };
 
+    const eventKeyBase = evt.id || evt.iso;
+
     roles.forEach(role => {
-      const key = `${evt.iso}_${role}`;
-      // Lógica para lidar com 'Vocal_1', 'Vocal_2' se necessário, ou correspondência exata
-      // Tenta correspondência exata primeiro
-      let value = schedule[key];
-      
-      // Se não encontrar e o papel for "Vocal", tenta agregar (opcional, mantendo simples por enquanto)
-      
+      const key = `${eventKeyBase}_${role}`;
+      const value = schedule[key];
       row[role] = value || "";
     });
 
@@ -177,7 +176,7 @@ export const generateIndividualPDF = (
   ministryName: string,
   monthIso: string,
   memberName: string,
-  events: { iso: string; title: string; dateDisplay: string }[],
+  events: { id?: string; iso: string; title: string; dateDisplay: string }[],
   schedule: ScheduleMap
 ) => {
   // Portrait para individual
@@ -199,12 +198,17 @@ export const generateIndividualPDF = (
   doc.setTextColor(COLORS.TEXT_DARK[0], COLORS.TEXT_DARK[1], COLORS.TEXT_DARK[2]);
   doc.text(memberName, 20, 50);
 
+  console.log("PDF_EXPORT_RAW", { events, memberName, schedule });
+
   // Filtrar eventos do membro
   const myEvents: any[] = [];
   events.forEach(evt => {
+      const eventKeyBase = evt.id || evt.iso;
+      const keyPrefix = `${eventKeyBase}_`;
+
       Object.entries(schedule).forEach(([key, assignedName]) => {
-          if (key.startsWith(evt.iso) && assignedName === memberName) {
-              const role = key.split('_').slice(1).join(' '); 
+          if (key.startsWith(keyPrefix) && assignedName === memberName) {
+              const role = key.substring(keyPrefix.length).split('_').join(' ');
               myEvents.push({
                   date: evt.dateDisplay,
                   weekday: new Date(evt.iso).toLocaleDateString('pt-BR', { weekday: 'long' }),
