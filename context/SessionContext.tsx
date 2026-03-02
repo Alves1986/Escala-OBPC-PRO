@@ -45,6 +45,8 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
     const [user, setUser] = useState<User | null>(null);
     const [organization, setOrganization] = useState<Organization | null>(null);
     const [error, setError] = useState<Error | null>(null);
+    const [loadingSession, setLoadingSession] = useState(true);
+    const [loadingProfile, setLoadingProfile] = useState(false);
     
     const bootstrappedRef = useRef(false);
     const userRef = useRef<User | null>(null);
@@ -79,6 +81,8 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
             }
 
             try {
+                setLoadingProfile(true);
+
                 const fetchProfile = sb
                     .from('profiles')
                     .select('*')
@@ -89,21 +93,42 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                     setTimeout(() => reject(new Error('TIMEOUT_PROFILE_FETCH')), 7000)
                 );
 
-                const { data: profile, error: profileError } = await Promise.race([
+                const { data: initialProfile, error: profileError } = await Promise.race([
                     fetchProfile, 
                     timeoutPromise
                 ]) as any;
 
                 if (profileError) throw profileError;
 
-                if (!profile) {
-                    console.warn("[SessionProvider] No profile found for user.");
+                let resolvedProfile = initialProfile;
+                if (!resolvedProfile) {
+                    for (let i = 0; i < 4; i++) {
+                        await new Promise(r => setTimeout(r, 500));
+                        const { data: retryProfile, error: retryError } = await sb
+                            .from('profiles')
+                            .select('*')
+                            .eq('id', sessionUser.id)
+                            .maybeSingle();
+
+                        if (retryError) throw retryError;
+                        if (retryProfile) {
+                            resolvedProfile = retryProfile;
+                            break;
+                        }
+                    }
+                }
+
+                console.log("PROFILE", resolvedProfile);
+
+                if (!resolvedProfile) {
+                    console.warn("[SessionProvider] Profile still missing, keeping auth flow contextualizing.");
                     if (mounted) {
-                        setUser(null);
-                        setStatus('unauthenticated');
+                        setStatus('contextualizing');
                     }
                     return;
                 }
+
+                const profile = resolvedProfile;
 
                 const orgId = profile.organization_id || '';
                 if (!orgId) {
@@ -210,6 +235,8 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                         setStatus('error');
                     }
                 }
+            } finally {
+                setLoadingProfile(false);
             }
         };
 
@@ -220,7 +247,10 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
                 setStatus('authenticating');
             }
             
+            setLoadingSession(true);
             const { data: { session }, error: sessionError } = await sb.auth.getSession();
+            console.log("SESSION", session);
+            setLoadingSession(false);
             
             if (sessionError) {
                 if (mounted) {

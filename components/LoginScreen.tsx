@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, Layout } from 'lucide-react';
-import { loginWithEmail } from '../services/supabaseService';
+import { loginWithEmail, loginWithGoogle } from '../services/supabaseService';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 
 export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = false }) => {
@@ -28,6 +28,22 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
     } catch (e: any) {
         setErrorMsg("Erro de conexão. Verifique sua internet.");
         setLoadingAction(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setLoadingAction(true);
+    setErrorMsg("");
+
+    try {
+      const result = await loginWithGoogle();
+      if (!result.success) {
+        setErrorMsg(result.message || "Erro no login Google.");
+        setLoadingAction(false);
+      }
+    } catch (e) {
+      setErrorMsg("Erro no login Google.");
+      setLoadingAction(false);
     }
   };
 
@@ -126,6 +142,15 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
                           {isGlobalLoading ? <Loader2 size={20} className="animate-spin" /> : <>Entrar agora <ArrowRight size={18}/></>}
                       </button>
                   </form>
+
+                  <button
+                      type="button"
+                      onClick={handleGoogleLogin}
+                      disabled={isGlobalLoading}
+                      className="w-full mt-4 bg-white/5 hover:bg-white/10 text-white border border-white/10 font-black py-4 rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-3 uppercase tracking-widest text-xs disabled:opacity-50"
+                  >
+                      {isGlobalLoading ? <Loader2 size={18} className="animate-spin" /> : 'Entrar com Google'}
+                  </button>
               </div>
 
               <div className="mt-8 text-center">

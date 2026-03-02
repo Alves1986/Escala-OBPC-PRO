@@ -8,6 +8,22 @@ export const loginWithEmail = async (email: string, pass: string) => {
     return { success: true, data };
 };
 
+
+export const loginWithGoogle = async () => {
+    const sb = getSupabase();
+    if (!sb) return { success: false, message: "Erro: Supabase não inicializado." };
+
+    const { error } = await (sb.auth as any).signInWithOAuth({
+        provider: 'google',
+        options: {
+            redirectTo: window.location.origin
+        }
+    });
+
+    if (error) return { success: false, message: error.message };
+    return { success: true };
+};
+
 export const logout = async () => {
     const sb = getSupabase();
     if (sb) await (sb.auth as any).signOut();
