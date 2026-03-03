@@ -100,35 +100,25 @@ export const registerWithInvite = async (token: string, userData: any) => {
     if (!invite) return { success: false, message: "Convite inválido ou já usado" };
     
     const { data: authData, error: authError } = await (sb.auth as any).signUp({
-        email: userData.email, password: userData.password,
-        options: { data: { full_name: userData.name, ministry_id: invite.ministry_id, organization_id: invite.organization_id } }
+        email: userData.email,
+        password: userData.password,
+        options: {
+            data: {
+                full_name: userData.name,
+                organization_id: invite.organization_id,
+                ministry_id: invite.ministry_id
+            }
+        }
     });
 
     if (authError) return { success: false, message: authError.message };
     const userId = authData.user?.id;
     if (!userId) return { success: false, message: "Erro ao criar usuário" };
 
-    // FORCE MEMBER & NO ADMIN
-    await sb.from('profiles').update({ 
-        name: userData.name, 
-        whatsapp: userData.whatsapp, 
-        birth_date: userData.birthDate,
-        organization_id: invite.organization_id, 
-        ministry_id: invite.ministry_id, 
-        allowed_ministries: [invite.ministry_id],
-        is_admin: false, 
-        is_super_admin: false
-    }).eq('id', userId);
-
-    await sb.from('organization_memberships').insert({
-        organization_id: invite.organization_id, 
-        profile_id: userId, 
-        ministry_id: invite.ministry_id, 
-        role: 'member', 
-        functions: userData.roles || []
-    });
-
-    await sb.from('invite_tokens').update({ used: true }).eq('token', token);
+    const { error: inviteTokenError } = await sb.from('invite_tokens').update({ used: true }).eq('token', token);
+    if (inviteTokenError) {
+        return { success: false, message: inviteTokenError.message };
+    }
 
     return { success: true };
 };
