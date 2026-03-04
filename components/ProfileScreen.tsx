@@ -93,19 +93,27 @@ export const ProfileScreen: React.FC<Props> = ({ user, onUpdateProfile, availabl
       }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) return addToast("O nome é obrigatório", "error");
-    
+  const handleSaveProfile = async () => {
+    if (!name.trim()) {
+      addToast("O nome é obrigatório", "error");
+      return;
+    }
+
     setLoading(true);
     try {
       const avatarToSend = avatar !== (user.avatar_url || '') ? avatar : undefined;
       await onUpdateProfile(name, whatsapp, avatarToSend, selectedFunctions, birthDate);
-    } catch (e) {
-      addToast("Erro ao atualizar perfil", "error");
+      addToast("Perfil atualizado com sucesso!", "success");
+    } catch (e: any) {
+      addToast(e?.message || "Erro ao atualizar perfil", "error");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await handleSaveProfile();
   };
 
   return (
