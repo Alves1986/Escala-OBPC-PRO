@@ -23,6 +23,7 @@ import {
     Check
 } from 'lucide-react';
 import { useToast } from './Toast';
+import { loadScheduleRules, validateScheduleConflict, ScheduleRoleRule } from '../services/scheduleRules';
 
 // --- COMPONENTES AUXILIARES ---
 
@@ -242,6 +243,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
     const [members, setMembers] = useState<MemberV2[]>([]);
     const [assignments, setAssignments] = useState<AssignmentV2[]>([]);
     const [occurrences, setOccurrences] = useState<OccurrenceV2[]>([]);
+    const [scheduleRules, setScheduleRules] = useState<ScheduleRoleRule[]>([]);
 
     // -- LOAD DATA --
     const loadData = async () => {
@@ -292,6 +294,16 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
     }, [currentDate, ministryId, orgId]);
 
     // -- HANDLERS --
+    useEffect(() => {
+        const loadRules = async () => {
+            const rules = await loadScheduleRules(orgId);
+            setScheduleRules(rules);
+        };
+
+        loadRules();
+    }, [orgId]);
+
+    // -- HANDLERS --
     const handlePrevMonth = () => {
         setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
     };
@@ -305,6 +317,28 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
         
         const tempId = `temp-${Date.now()}`;
         const previousAssignments = [...assignments];
+
+        if (memberId) {
+            const assignmentsWithoutCurrentCell = assignments.filter(a =>
+                !(a.event_date === date && a.role === role && a.event_rule_id === ruleId)
+            );
+
+            const validation = validateScheduleConflict({
+                memberId,
+                role,
+                date,
+                assignments: assignmentsWithoutCurrentCell,
+                rules: scheduleRules
+            });
+
+            if (!validation.valid) {
+                const friendlyMessage = '⚠ Este membro já está escalado em função incompatível neste dia';
+                window.alert(friendlyMessage);
+                addToast(validation.message || friendlyMessage, 'error');
+                setProcessing(false);
+                return;
+            }
+        }
         
         // Atualização Otimista
         setAssignments(prev => {
