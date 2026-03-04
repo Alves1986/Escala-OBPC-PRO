@@ -1,5 +1,5 @@
 
-import React, { ReactNode, useState, useRef } from 'react';
+import React, { ReactNode, useState, useRef, useEffect } from 'react';
 import { Menu, Sun, Moon, LogOut, Layout, Download, RefreshCw, X, ChevronRight, User as UserIcon, ChevronDown, Check, PlusCircle, Settings, ShieldCheck, Sparkles, Building2, Home, Calendar, Megaphone, CalendarCheck, Shield } from 'lucide-react';
 import { User, AppNotification } from '../types'; 
 import { NotificationCenter } from './NotificationCenter';
@@ -41,7 +41,19 @@ export const DashboardLayout: React.FC<Props> = ({
   const [imgError, setImgError] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [ministryMenuOpen, setMinistryMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const ministryMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+      const saved = localStorage.getItem('sidebarCollapsed');
+      if (saved) {
+          setSidebarCollapsed(saved === 'true');
+      }
+  }, []);
+
+  useEffect(() => {
+      localStorage.setItem('sidebarCollapsed', String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
 
   const currentMinistryId = activeMinistryId || storeMinistryId;
 
@@ -75,9 +87,10 @@ export const DashboardLayout: React.FC<Props> = ({
     const isActive = currentTab === item.id;
     return (
       <button
+        title={item.label}
         key={item.id}
         onClick={() => { onTabChange(item.id); setSidebarOpen(false); }}
-        className={`w-full flex items-center gap-3 px-3.5 py-3 text-sm font-semibold rounded-2xl transition-all duration-300 group mb-1 ${
+        className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-3.5 py-3 text-sm font-semibold rounded-2xl transition-all duration-300 group mb-1 ${
           isActive 
             ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/25' 
             : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100'
@@ -86,8 +99,8 @@ export const DashboardLayout: React.FC<Props> = ({
         <span className={`transition-colors duration-300 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'}`}>
           {React.isValidElement(item.icon) ? React.cloneElement(item.icon as React.ReactElement<any>, { size: 18, strokeWidth: isActive ? 2.5 : 2 }) : item.icon}
         </span>
-        <span className="flex-1 text-left tracking-tight">{item.label}</span>
-        {isActive && (
+        {!sidebarCollapsed && <span className="flex-1 text-left tracking-tight">{item.label}</span>}
+        {isActive && !sidebarCollapsed && (
             <ChevronRight size={14} className="opacity-60" />
         )}
       </button>
@@ -174,9 +187,9 @@ export const DashboardLayout: React.FC<Props> = ({
       )}
 
       <aside 
-        className={`fixed inset-y-0 left-0 z-[100] w-72 bg-white/90 dark:bg-slate-900/90 backdrop-blur-3xl border-r border-slate-200/50 dark:border-slate-800/50 transform transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] lg:translate-x-0 lg:static lg:inset-0 flex flex-col shadow-2xl lg:shadow-none ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed inset-y-0 left-0 z-[100] w-72 ${sidebarCollapsed ? 'lg:w-[70px]' : 'lg:w-[240px]'} bg-white/90 dark:bg-slate-900/90 backdrop-blur-3xl border-r border-slate-200/50 dark:border-slate-800/50 transform transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] lg:translate-x-0 lg:static lg:inset-0 flex flex-col shadow-2xl lg:shadow-none ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
-        <div className="px-6 py-8 shrink-0">
+        <div className={`px-6 py-8 shrink-0 ${sidebarCollapsed ? 'lg:px-3' : ''}`}>
            <div className="flex items-center gap-4">
                <div className="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center shadow-xl shadow-emerald-500/20 text-white shrink-0 group relative overflow-hidden">
                   <div className="absolute inset-0 bg-gradient-to-tr from-black/20 to-transparent"></div>
@@ -192,7 +205,7 @@ export const DashboardLayout: React.FC<Props> = ({
                   )}
                </div>
                
-               <div className="flex-1 min-w-0 relative" ref={ministryMenuRef}>
+               <div className={`flex-1 min-w-0 relative ${sidebarCollapsed ? 'lg:hidden' : ''}`} ref={ministryMenuRef}>
                  <button 
                     onClick={() => setMinistryMenuOpen(!ministryMenuOpen)}
                     className="flex flex-col items-start w-full group cursor-pointer transition-all"
@@ -252,12 +265,19 @@ export const DashboardLayout: React.FC<Props> = ({
                </div>
                
                <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"><X size={20}/></button>
+               <button
+                  className="hidden lg:flex p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+                  onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                  title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
+               >
+                  <Menu size={18} />
+               </button>
            </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-2 custom-scrollbar space-y-8">
+        <div className={`flex-1 overflow-y-auto px-4 py-2 custom-scrollbar space-y-8 ${sidebarCollapsed ? 'lg:px-2' : ''}`}>
           <div>
-            <p className="px-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-4">Essenciais</p>
+            {!sidebarCollapsed && <p className="px-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-4">Essenciais</p>}
             <div className="space-y-1">
                 {mainNavItems.map(item => renderNavButton(item))}
             </div>
@@ -265,7 +285,7 @@ export const DashboardLayout: React.FC<Props> = ({
 
           {managementNavItems.length > 0 && (
             <div>
-                <p className="px-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-4">Administração</p>
+                {!sidebarCollapsed && <p className="px-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-4">Administração</p>}
                 <div className="space-y-1">
                     {managementNavItems.map(item => renderNavButton(item))}
                 </div>
@@ -276,47 +296,51 @@ export const DashboardLayout: React.FC<Props> = ({
               <div>
                   <p className="px-3 text-[10px] font-black text-violet-500 uppercase tracking-[0.2em] mb-4">Global</p>
                   <button
+                    title="Super Admin"
                     onClick={() => { onTabChange('super-admin'); setSidebarOpen(false); }}
-                    className={`w-full flex items-center gap-3 px-3.5 py-3 text-sm font-black uppercase tracking-tight rounded-2xl transition-all duration-300 ${
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} px-3.5 py-3 text-sm font-black uppercase tracking-tight rounded-2xl transition-all duration-300 ${
                       currentTab === 'super-admin'
                         ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/25' 
                         : 'text-slate-500 dark:text-slate-400 hover:bg-violet-50 dark:hover:bg-violet-900/10 hover:text-violet-600'
                     }`}
                   >
                     <Shield size={18} />
-                    <span className="flex-1 text-left">Super Admin</span>
+                    {!sidebarCollapsed && <span className="flex-1 text-left">Super Admin</span>}
                   </button>
               </div>
           )}
         </div>
 
-        <div className="p-4 border-t border-slate-200/50 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/30 backdrop-blur-md m-4 rounded-[2rem]">
+        <div className={`p-4 border-t border-slate-200/50 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/30 backdrop-blur-md m-4 rounded-[2rem] ${sidebarCollapsed ? 'lg:p-2 lg:rounded-2xl' : ''}`}>
             <button 
+                title="Meu Perfil"
                 onClick={() => onTabChange('profile')}
-                className="flex items-center gap-3 w-full p-2 rounded-2xl hover:bg-white dark:hover:bg-slate-800 transition-all group"
+                className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} w-full p-2 rounded-2xl hover:bg-white dark:hover:bg-slate-800 transition-all group`}
             >
                 {renderUserAvatar("w-10 h-10")}
-                <div className="flex-1 min-w-0 text-left">
+                {!sidebarCollapsed && <div className="flex-1 min-w-0 text-left">
                     <p className="text-xs font-black text-slate-800 dark:text-white truncate uppercase tracking-tight">{currentUser?.name.split(' ')[0]}</p>
                     <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
                         {currentUser?.role === 'admin' ? 'Administrador' : 'Membro'}
                     </p>
-                </div>
-                <Settings size={16} className="text-slate-400 group-hover:rotate-45 transition-transform" />
+                </div>}
+                {!sidebarCollapsed && <Settings size={16} className="text-slate-400 group-hover:rotate-45 transition-transform" />}
             </button>
             
-            <div className="grid grid-cols-2 gap-2 mt-4">
+            <div className={`grid gap-2 mt-4 ${sidebarCollapsed ? 'grid-cols-1' : 'grid-cols-2'}`}>
                 <button 
+                    title="Sair"
                     onClick={onLogout} 
                     className="flex items-center justify-center gap-2 py-2.5 text-[10px] font-black uppercase tracking-wider text-rose-500 bg-rose-500/10 hover:bg-rose-500/20 rounded-xl transition-colors"
                 >
-                    <LogOut size={12} /> Sair
+                    <LogOut size={12} /> {!sidebarCollapsed && 'Sair'}
                 </button>
                 <button
+                    title="Alternar Tema"
                     onClick={toggleTheme}
                     className="flex items-center justify-center gap-2 py-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500 bg-slate-500/10 hover:bg-slate-500/20 rounded-xl transition-colors"
                 >
-                    {themeMode === 'dark' ? <Sun size={12} /> : <Moon size={12} />} Modo
+                    {themeMode === 'dark' ? <Sun size={12} /> : <Moon size={12} />} {!sidebarCollapsed && 'Modo'}
                 </button>
             </div>
             
