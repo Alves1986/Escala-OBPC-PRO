@@ -5,6 +5,7 @@ import {
     fetchOrganizationDetails
 } from '../services/supabaseService';
 import { getSupabase, setServiceOrgContext, clearServiceOrgContext } from '../services/supabase/client';
+import { ensureGoogleUserProfile } from '../services/supabase/auth';
 import { User, Organization } from '../types';
 
 type SessionStatus = 
@@ -79,6 +80,8 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
             }
 
             try {
+                await ensureGoogleUserProfile(sessionUser);
+
                 const fetchProfileWithRetry = async () => {
                     for (let attempt = 0; attempt < 8; attempt++) {
                         const fetchProfile = sb

@@ -10,6 +10,81 @@ export const loginWithEmail = async (email: string, pass: string) => {
     return { success: true, data };
 };
 
+export const loginWithGoogle = async () => {
+    const sb = getSupabase();
+    if (!sb) return { success: false, message: 'Supabase não inicializado.' };
+
+    const { data, error } = await sb.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+            redirectTo: window.location.origin
+        }
+    });
+
+    if (error) {
+        console.error('Erro login Google:', error);
+        return { success: false, message: error.message };
+    }
+
+    return { success: true, data };
+};
+
+export const ensureGoogleUserProfile = async (sessionUser: any) => {
+    const sb = getSupabase();
+    if (!sb || !sessionUser?.id) return;
+
+    const provider = sessionUser?.app_metadata?.provider;
+    if (provider !== 'google') return;
+
+    const { data: existingProfile, error: profileReadError } = await sb
+        .from('profiles')
+        .select('id')
+        .eq('id', sessionUser.id)
+        .maybeSingle();
+
+    if (profileReadError || existingProfile) return;
+
+    const metadata = sessionUser.user_metadata || sessionUser.raw_user_meta_data || {};
+    const organizationId = metadata.organization_id || null;
+    const ministryId = metadata.ministry_id || null;
+
+    if (!organizationId) {
+        // Sem organization_id não é possível contextualizar o usuário no sistema atual.
+        return;
+    }
+
+    const fullName = metadata.full_name || metadata.name || sessionUser.email?.split('@')[0] || 'Usuário';
+
+    const profilePayload: any = {
+        id: sessionUser.id,
+        email: sessionUser.email,
+        name: fullName,
+        organization_id: organizationId,
+        ministry_id: ministryId,
+        allowed_ministries: ministryId ? [ministryId] : []
+    };
+
+    const { error: profileInsertError } = await sb.from('profiles').insert(profilePayload);
+    if (profileInsertError) {
+        console.error('Erro ao criar profile Google OAuth:', profileInsertError);
+        return;
+    }
+
+    if (ministryId) {
+        const { error: membershipError } = await sb.from('organization_memberships').upsert({
+            organization_id: organizationId,
+            ministry_id: ministryId,
+            profile_id: sessionUser.id,
+            role: 'member',
+            functions: []
+        }, { onConflict: 'organization_id,ministry_id,profile_id' });
+
+        if (membershipError) {
+            console.error('Erro ao criar membership Google OAuth:', membershipError);
+        }
+    }
+};
+
 export const logout = async () => {
     const sb = getSupabase();
     if (sb) await (sb.auth as any).signOut();
