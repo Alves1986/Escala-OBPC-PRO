@@ -11,7 +11,9 @@ import { useOnlinePresence } from './hooks/useOnlinePresence';
 import { getLocalDateISOString, getMonthName, adjustMonth } from './utils/dateUtils';
 import { generateIndividualPDF, generateFullSchedulePDF } from './utils/pdfGenerator';
 import { subscribeUserToPush } from './utils/pushUtils';
+import { validateScheduleRules } from './utils/validateScheduleRules';
 import { buildAutoSchedulerInput, checkExistingSchedule, createScheduleBackup, generateSchedule, isScheduleLocked, saveGeneratedSchedule } from './services/autoScheduler';
+import { getSupabase } from './services/supabase/client';
 
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
@@ -175,12 +177,37 @@ const InnerApp = () => {
   const [isRolesModalOpen, setRolesModalOpen] = useState(false);
   const [isAuditModalOpen, setAuditModalOpen] = useState(false);
   const [isGeneratingSchedule, setIsGeneratingSchedule] = useState(false);
+  const [scheduleRules, setScheduleRules] = useState<any[]>([]);
 
   useEffect(() => {
       const handlePwaReady = () => setShowInstallBanner(true);
       window.addEventListener('pwa-ready', handlePwaReady);
       return () => window.removeEventListener('pwa-ready', handlePwaReady);
   }, []);
+
+  useEffect(() => {
+      const loadScheduleRules = async () => {
+          if (!orgId) {
+              setScheduleRules([]);
+              return;
+          }
+
+          const sb = getSupabase();
+          if (!sb) {
+              setScheduleRules([]);
+              return;
+          }
+
+          const { data: rules } = await sb
+              .from('schedule_role_rules')
+              .select('*')
+              .eq('organization_id', orgId);
+
+          setScheduleRules(rules || []);
+      };
+
+      loadScheduleRules();
+  }, [orgId]);
 
   useEffect(() => {
       const safeEnabledTabs = ministryConfig.enabledTabs || DEFAULT_TABS;
@@ -561,8 +588,50 @@ const InnerApp = () => {
                                 return;
                             }
 
+                            const eventDate = eventObj.iso.slice(0, 10);
+
+                            const nameToId = new Map(publicMembers.map(m => [m.name, m.id]));
+                            const currentAssignments = Object.entries(schedule).map(([key, assignedName]) => {
+                                const parts = key.split('_');
+                                const dateStr = parts[1] || '';
+                                const roleStr = parts.slice(2).join('_');
+                                const mappedId = nameToId.get(String(assignedName)) || '';
+                                return {
+                                    member_id: mappedId,
+                                    event_date: dateStr,
+                                    role: roleStr
+                                };
+                            }).filter(a => !!a.member_id);
+
                             try {
                                 if (memberId) {
+                                    const currentAssignmentsWithoutCell = currentAssignments.filter(a =>
+                                        !(a.event_date === eventDate && a.role === role)
+                                    );
+
+                                    const alreadyAssigned = currentAssignmentsWithoutCell.some(a =>
+                                        a.member_id === memberId &&
+                                        a.event_date === eventDate
+                                    );
+
+                                    if (alreadyAssigned) {
+                                        addToast("Este membro já está escalado neste dia.", "error");
+                                        return;
+                                    }
+
+                                    const valid = validateScheduleRules({
+                                        memberId: memberId,
+                                        role: role,
+                                        eventDate: eventDate,
+                                        assignments: currentAssignmentsWithoutCell,
+                                        rules: scheduleRules
+                                    });
+
+                                    if (!valid) {
+                                        addToast("Este membro já está escalado em função incompatível neste dia.", "error");
+                                        return;
+                                    }
+
                                     await Supabase.saveScheduleAssignment(ministryId, orgId!, cellKey, role, memberId, memberName || "");
                                 } else {
                                     const logicalKey = `${cellKey}_${role}`;
