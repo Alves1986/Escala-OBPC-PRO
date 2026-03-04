@@ -1,86 +1,143 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { 
   FileText, TrendingUp, AlertCircle, CheckCircle2, 
   ArrowUpRight, ArrowDownRight, User, Download, 
   Calendar, RefreshCcw, Filter, Search, Award
 } from 'lucide-react';
-import { ScheduleMap, AttendanceMap, SwapRequest, TeamMemberProfile } from '../types';
+import { SwapRequest, TeamMemberProfile } from '../types';
 import { getMonthName, adjustMonth } from '../utils/dateUtils';
+import { getSupabase } from '../services/supabase/client';
 
 interface Props {
+  organizationId: string;
+  ministryId: string;
   currentMonth: string;
   onMonthChange: (newMonth: string) => void;
-  schedule: ScheduleMap;
-  attendance: AttendanceMap;
   swapRequests: SwapRequest[];
   members: TeamMemberProfile[];
-  events: { iso: string }[];
 }
 
 export const MonthlyReportScreen: React.FC<Props> = ({ 
-  currentMonth, onMonthChange, schedule, attendance, 
-  swapRequests, members, events 
+  organizationId, ministryId,
+  currentMonth, onMonthChange,
+  swapRequests, members
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortBy, setSortBy] = useState<'name' | 'rate' | 'scheduled'>('name');
+  const [sortBy, setSortBy] = useState<'name' | 'rate' | 'scheduled'>('rate');
+  const [monthAssignments, setMonthAssignments] = useState<any[]>([]);
+  const [monthProfiles, setMonthProfiles] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadMonthReportBase = async () => {
+      const sb = getSupabase();
+      if (!sb || !organizationId || !ministryId || !currentMonth) {
+        setMonthAssignments([]);
+        setMonthProfiles([]);
+        return;
+      }
+
+      const [year, month] = currentMonth.split('-');
+      const start = `${year}-${month}-01`;
+      const endDate = new Date(Number(year), Number(month), 0).getDate();
+      const end = `${year}-${month}-${String(endDate).padStart(2, '0')}`;
+
+      const { data: assignments, error: assignmentsError } = await sb
+        .from('schedule_assignments')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .eq('ministry_id', ministryId)
+        .gte('event_date', start)
+        .lte('event_date', end);
+
+      if (assignmentsError) {
+        console.error('[MonthlyReport] erro ao buscar assignments', assignmentsError);
+        setMonthAssignments([]);
+      } else {
+        setMonthAssignments(assignments || []);
+      }
+
+      const { data: profiles, error: profilesError } = await sb
+        .from('profiles')
+        .select('*')
+        .eq('organization_id', organizationId);
+
+      if (profilesError) {
+        console.error('[MonthlyReport] erro ao buscar profiles', profilesError);
+        setMonthProfiles([]);
+      } else {
+        setMonthProfiles(profiles || []);
+      }
+    };
+
+    loadMonthReportBase();
+  }, [organizationId, ministryId, currentMonth]);
 
   // Cálculo das Métricas
   const reportData = useMemo(() => {
-    // 1. Filtrar eventos do mês
-    const monthEventIsos = events
-      .filter(e => e.iso.startsWith(currentMonth))
-      .map(e => e.iso);
+    const memberStats: Record<string, { escalas: number; presenca: number; trocas: number }> = {};
 
-    // 2. Processar dados por membro
-    const data = members.map(member => {
-      let scheduledCount = 0;
-      let confirmedCount = 0;
-      
-      // Analisar Escala e Presença
-      Object.entries(schedule).forEach(([key, assignedName]) => {
-        const isThisMonth = monthEventIsos.some(iso => key.startsWith(iso));
+    monthAssignments.forEach((a: any) => {
+      if (!memberStats[a.member_id]) {
+        memberStats[a.member_id] = { escalas: 0, presenca: 0, trocas: 0 };
+      }
 
-        if (isThisMonth && assignedName === member.name) {
-          scheduledCount++;
-          if (attendance[key]) {
-            confirmedCount++;
-          }
-        }
-      });
+      memberStats[a.member_id].escalas++;
 
-      // Analisar Trocas (Engajamento)
-      const swapsRequested = swapRequests.filter(req => 
-        req.requesterName === member.name && 
+      if (a.confirmed) {
+        memberStats[a.member_id].presenca++;
+      }
+    });
+
+    const profilesById = new Map(monthProfiles.map((p: any) => [p.id, p]));
+    const memberFallbackById = new Map(members.map(m => [m.id, m]));
+    const assignmentIds = Object.keys(memberStats);
+    const sourceIds = new Set<string>([
+      ...members.map(m => m.id),
+      ...assignmentIds
+    ]);
+
+    const sourceMembers = Array.from(sourceIds).map((id) => {
+      const profile = profilesById.get(id);
+      const fallback = memberFallbackById.get(id);
+      return {
+        id,
+        name: profile?.name || fallback?.name || 'Membro',
+        avatar_url: profile?.avatar_url || fallback?.avatar_url
+      };
+    });
+
+    const data = sourceMembers.map((m: any) => {
+      const stats = memberStats[m.id] || { escalas: 0, presenca: 0, trocas: 0 };
+
+      const swapsRequested = swapRequests.filter(req =>
+        (req.requesterId === m.id || req.requesterName === (m.name || '')) &&
         req.eventIso.startsWith(currentMonth)
       ).length;
 
-      const swapsCovered = swapRequests.filter(req => 
-        req.takenByName === member.name && 
+      const swapsCovered = swapRequests.filter(req =>
+        req.takenByName === (m.name || '') &&
         req.eventIso.startsWith(currentMonth) &&
         req.status === 'completed'
       ).length;
 
-      const attendanceRate = scheduledCount > 0 
-        ? Math.round((confirmedCount / scheduledCount) * 100) 
+      const memberName = m.name || 'Membro';
+      const avatarUrl = m.avatar_url;
+      const attendanceRate = stats.escalas > 0
+        ? Math.round((stats.presenca / stats.escalas) * 100)
         : 0;
 
-      let engagementScore = attendanceRate;
-      engagementScore += (swapsCovered * 5);
-      engagementScore -= (swapsRequested * 5);
-      engagementScore = Math.min(Math.max(engagementScore, 0), 100);
-
       return {
-        id: member.id,
-        name: member.name,
-        avatar_url: member.avatar_url,
-        scheduled: scheduledCount,
-        confirmed: confirmedCount,
-        absent: scheduledCount - confirmedCount,
+        id: m.id,
+        name: memberName,
+        avatar_url: avatarUrl,
+        scheduled: stats.escalas,
+        confirmed: stats.presenca,
+        absent: stats.escalas - stats.presenca,
         rate: attendanceRate,
         swapsRequested,
         swapsCovered,
-        score: engagementScore
+        score: attendanceRate
       };
     });
 
@@ -93,13 +150,19 @@ export const MonthlyReportScreen: React.FC<Props> = ({
         return a.name.localeCompare(b.name);
       });
 
-  }, [schedule, attendance, swapRequests, members, currentMonth, events, searchTerm, sortBy]);
+  }, [monthAssignments, monthProfiles, swapRequests, members, currentMonth, searchTerm, sortBy]);
 
   // Totais Gerais
-  const totalScales = reportData.reduce((acc, curr) => acc + curr.scheduled, 0);
-  const totalConfirmed = reportData.reduce((acc, curr) => acc + curr.confirmed, 0);
+  const totalScales = monthAssignments.length;
+  const totalConfirmed = monthAssignments.filter((a: any) => a.confirmed).length;
   const totalRate = totalScales > 0 ? Math.round((totalConfirmed / totalScales) * 100) : 0;
-  const activeMembers = reportData.filter(d => d.scheduled > 0).length;
+  const activeMembers = Object.values(
+    monthAssignments.reduce<Record<string, { escalas: number }>>((acc, a: any) => {
+      if (!acc[a.member_id]) acc[a.member_id] = { escalas: 0 };
+      acc[a.member_id].escalas++;
+      return acc;
+    }, {})
+  ).filter(m => m.escalas > 0).length;
 
   const handlePrevMonth = () => onMonthChange(adjustMonth(currentMonth, -1));
   const handleNextMonth = () => onMonthChange(adjustMonth(currentMonth, 1));
