@@ -179,11 +179,14 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
     
     publicList.push({
       member_id: m.id,
+      profile_id: m.profile_id,
       id: m.profile_id,
       name: p.name,
       email: p.email,
       avatar_url: p.avatar_url,
       whatsapp: p.whatsapp,
+      role: m.role,
+      functions: rawFunctions,
       isAdmin: m.role === 'admin',
       roles: rawFunctions, 
       organizationId: orgId

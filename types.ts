@@ -197,6 +197,9 @@ export interface AuthenticatedUser extends User {
 
 export interface TeamMemberProfile {
     member_id?: string;
+    profile_id?: string;
+    role?: string;
+    functions?: string[];
     id: string;
     name: string;
     email?: string;

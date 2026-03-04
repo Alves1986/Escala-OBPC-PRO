@@ -59,7 +59,7 @@ export const MonthlyReportScreen: React.FC<Props> = ({
 
       const { data: ministryMembers, error: membersError } = await sb
         .from('ministry_members')
-        .select('id, profile_id, profiles(name, avatar_url)')
+        .select('id, profile_id, role, functions, profiles(name, email, avatar_url, whatsapp)')
         .eq('ministry_id', ministryId);
 
       if (membersError) {
