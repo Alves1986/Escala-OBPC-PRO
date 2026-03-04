@@ -95,31 +95,18 @@ export const fetchMembersV2 = async (
   const sb = getSupabase();
   if (!sb) throw new Error("NO_SUPABASE");
 
-  const { data: ministryMembers, error: ministryMembersError } = await sb
-    .from("ministry_members")
-    .select("profile_id, functions, profiles(id, name, avatar_url)")
-    .eq("ministry_id", ministryId)
-    .eq("organization_id", orgId);
+  const { data, error } = await sb
+    .from("ministry_member_profiles")
+    .select("profile_id, ministry_id, functions, name, avatar_url")
+    .eq("ministry_id", ministryId);
 
-  let data = ministryMembers;
-
-  if (ministryMembersError) {
-    const { data: fallbackMembers, error } = await sb
-      .from("organization_memberships")
-      .select("profile_id, functions, profiles(id, name, avatar_url)")
-      .eq("ministry_id", ministryId)
-      .eq("organization_id", orgId);
-
-    if (error) throw error;
-    data = fallbackMembers;
-  }
+  if (error) throw error;
 
   return (data || []).map((m: any) => {
-    const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
     return {
-      id: p?.id || m.profile_id,
-      name: p?.name || "Desconhecido",
-      avatar_url: p?.avatar_url,
+      id: m.profile_id,
+      name: m.name || "Desconhecido",
+      avatar_url: m.avatar_url,
       roles: m.functions || []
     };
   }).filter((m: any) => m.id);

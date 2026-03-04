@@ -121,28 +121,15 @@ export const fetchAuditLogs = async (ministryId: string, orgId: string) => {
     }));
 };
 
-export const fetchUserFunctions = async (userId: string, ministryId: string, orgId?: string): Promise<string[]> => {
+export const fetchUserFunctions = async (userId: string, ministryId: string, _orgId?: string): Promise<string[]> => {
   const sb = getSupabase();
-  if (!sb || !orgId) return [];
-
-  const { data: ministryMember } = await sb
-    .from('ministry_members')
-    .select('functions')
-    .eq('profile_id', userId)
-    .eq('ministry_id', ministryId)
-    .eq('organization_id', orgId)
-    .maybeSingle();
-
-  if (ministryMember && Array.isArray(ministryMember.functions)) {
-    return ministryMember.functions;
-  }
+  if (!sb || !ministryId) return [];
 
   const { data } = await sb
-    .from('organization_memberships')
+    .from('ministry_member_profiles')
     .select('functions')
     .eq('profile_id', userId)
     .eq('ministry_id', ministryId)
-    .eq('organization_id', orgId)
     .maybeSingle();
 
   return (data && Array.isArray(data.functions)) ? data.functions : [];
@@ -173,49 +160,31 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
   const sb = getSupabase();
   if (!sb || !orgId) return { memberMap: {}, publicList: [] };
 
-  const { data: ministryMembers, error: ministryMembersError } = await sb
-    .from('ministry_members')
-    .select(`profile_id, functions, role, profiles (id, name, email, avatar_url, whatsapp, birth_date, is_admin)`)
-    .eq('ministry_id', ministryId)
-    .eq('organization_id', orgId);
+  const { data: memberships, error } = await sb
+    .from('ministry_member_profiles')
+    .select('profile_id, ministry_id, role, functions, name, avatar_url')
+    .eq('ministry_id', ministryId);
 
-  let memberships = ministryMembers;
-
-  if (ministryMembersError) {
-    const { data: fallbackMemberships, error } = await sb
-      .from('organization_memberships')
-      .select(`profile_id, functions, role, profiles (id, name, email, avatar_url, whatsapp, birth_date, is_admin)`)
-      .eq('ministry_id', ministryId)
-      .eq('organization_id', orgId);
-
-    if (error) throw error;
-    memberships = fallbackMemberships;
-  }
+  if (error) throw error;
 
   const memberMap: Record<string, string[]> = {};
   const publicList: TeamMemberProfile[] = [];
 
   memberships?.forEach((m: any) => {
-    const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
-    if (!p) return;
-
     const rawFunctions = Array.isArray(m.functions) ? m.functions : [];
     
     publicList.push({
-      id: p.id,
-      name: p.name,
-      email: p.email,
-      avatar_url: p.avatar_url,
-      whatsapp: p.whatsapp,
-      birthDate: p.birth_date,
-      isAdmin: p.is_admin || m.role === 'admin',
+      id: m.profile_id,
+      name: m.name,
+      avatar_url: m.avatar_url,
+      isAdmin: m.role === 'admin',
       roles: rawFunctions, 
       organizationId: orgId
     });
 
     rawFunctions.forEach((fn: string) => {
       if (!memberMap[fn]) memberMap[fn] = [];
-      memberMap[fn].push(p.name);
+      memberMap[fn].push(m.name);
     });
   });
 
