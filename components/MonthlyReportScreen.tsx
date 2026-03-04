@@ -60,7 +60,8 @@ export const MonthlyReportScreen: React.FC<Props> = ({
       const { data: ministryMembers, error: membersError } = await sb
         .from('ministry_members')
         .select('id, profile_id, role, functions, profiles(name, email, avatar_url, whatsapp)')
-        .eq('ministry_id', ministryId);
+        .eq('ministry_id', ministryId)
+        .order('name', { foreignTable: 'profiles', ascending: true });
 
       if (membersError) {
         console.error('[MonthlyReport] erro ao buscar ministry_members', membersError);

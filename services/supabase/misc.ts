@@ -67,32 +67,38 @@ export const cancelSwapRequestSQL = async (reqId: string, orgId: string) => {
 export const updateMemberData = async (memberId: string, orgId: string, data: any) => {
     const sb = getSupabase();
     if (!sb) return;
-    
+
+    const { data: ministryMember } = await sb
+        .from('ministry_members')
+        .select('id, profile_id')
+        .eq('id', memberId)
+        .maybeSingle();
+
+    const profileId = ministryMember?.profile_id || memberId;
+
     const profileUpdates: any = {};
     if (data.name) profileUpdates.name = data.name;
     if (data.whatsapp) profileUpdates.whatsapp = data.whatsapp;
     
     if (Object.keys(profileUpdates).length > 0) {
-        await sb.from('profiles').update(profileUpdates).eq('id', memberId).eq('organization_id', orgId);
+        await sb.from('profiles').update(profileUpdates).eq('id', profileId).eq('organization_id', orgId);
     }
     
     if (data.roles && data.ministryId) {
-        await sb.from('organization_memberships')
+        await sb.from('ministry_members')
             .update({ functions: data.roles })
-            .eq('profile_id', memberId)
-            .eq('ministry_id', data.ministryId)
-            .eq('organization_id', orgId);
+            .eq('id', memberId)
+            .eq('ministry_id', data.ministryId);
     }
 };
 
 export const deleteMember = async (ministryId: string, orgId: string, memberId: string, memberName: string) => {
     const sb = getSupabase();
     if (!sb) return;
-    await sb.from('organization_memberships')
+    await sb.from('ministry_members')
         .delete()
-        .eq('organization_id', orgId)
         .eq('ministry_id', ministryId)
-        .eq('profile_id', memberId);
+        .eq('id', memberId);
 };
 
 export const toggleAdminSQL = async (email: string, isAdmin: boolean, ministryId: string, orgId: string) => {
@@ -164,7 +170,7 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
     .from('ministry_members')
     .select('id, profile_id, role, functions, profiles(name, email, avatar_url, whatsapp)')
     .eq('ministry_id', ministryId)
-    .order('name', { referencedTable: 'profiles', ascending: true });
+    .order('name', { foreignTable: 'profiles', ascending: true });
 
   if (error) throw error;
 

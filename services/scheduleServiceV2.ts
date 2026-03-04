@@ -29,9 +29,14 @@ export interface OccurrenceV2 {
 
 export interface MemberV2 {
   id: string;
+  member_id?: string;
   profile_id?: string;
   name: string;
+  email?: string;
+  whatsapp?: string;
   avatar_url?: string;
+  role?: string;
+  functions?: string[];
   roles?: string[];
 }
 
@@ -71,7 +76,7 @@ export const fetchAssignmentsV2 = async (
 
   const { data, error } = await sb
     .from("schedule_assignments")
-    .select('id,event_rule_id,event_date,role,member_id,confirmed,profiles(name)') // CORREÇÃO: Select atualizado
+    .select('id,event_rule_id,event_date,role,member_id,confirmed')
     .eq("ministry_id", ministryId)
     .eq("organization_id", orgId)
     .like("event_date", `${monthStr}%`);
@@ -98,8 +103,9 @@ export const fetchMembersV2 = async (
 
   const { data, error } = await sb
     .from("ministry_members")
-    .select("id, profile_id, functions, profiles(id, name, avatar_url)")
-    .eq("ministry_id", ministryId);
+    .select("id, profile_id, role, functions, profiles(name, email, avatar_url, whatsapp)")
+    .eq("ministry_id", ministryId)
+    .order("name", { foreignTable: "profiles", ascending: true });
 
   if (error) throw error;
 
@@ -107,9 +113,14 @@ export const fetchMembersV2 = async (
     const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
     return {
       id: m.id,
-      profile_id: m.profile_id || p?.id,
+      member_id: m.id,
+      profile_id: m.profile_id,
       name: p?.name || "Desconhecido",
+      email: p?.email,
+      whatsapp: p?.whatsapp,
       avatar_url: p?.avatar_url,
+      role: m.role,
+      functions: m.functions || [],
       roles: m.functions || []
     };
   }).filter((m: any) => m.id);
