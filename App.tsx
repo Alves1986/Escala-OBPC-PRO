@@ -11,13 +11,14 @@ import { useOnlinePresence } from './hooks/useOnlinePresence';
 import { getLocalDateISOString, getMonthName, adjustMonth } from './utils/dateUtils';
 import { generateIndividualPDF, generateFullSchedulePDF } from './utils/pdfGenerator';
 import { subscribeUserToPush } from './utils/pushUtils';
+import { buildAutoSchedulerInput, checkExistingSchedule, createScheduleBackup, generateSchedule, isScheduleLocked, saveGeneratedSchedule } from './services/autoScheduler';
 
 import { 
   LayoutDashboard, CalendarCheck, RefreshCcw, Music, 
   Megaphone, Settings, FileBarChart, CalendarDays,
   Users, Edit, Send, ListMusic, ArrowLeft, ArrowRight,
   Calendar as CalendarIcon, Trophy, Loader2, Share2, MousePointerClick, Briefcase, History, FileText, ChevronRight,
-  AlertTriangle, Database, RefreshCw
+  AlertTriangle, Database, RefreshCw, Sparkles
 } from 'lucide-react';
 
 import { LoadingScreen } from './components/LoadingScreen';
@@ -173,6 +174,7 @@ const InnerApp = () => {
   const [isAvailModalOpen, setAvailModalOpen] = useState(false);
   const [isRolesModalOpen, setRolesModalOpen] = useState(false);
   const [isAuditModalOpen, setAuditModalOpen] = useState(false);
+  const [isGeneratingSchedule, setIsGeneratingSchedule] = useState(false);
 
   useEffect(() => {
       const handlePwaReady = () => setShowInstallBanner(true);
@@ -211,6 +213,67 @@ const InnerApp = () => {
           addToast("Notificações ativadas!", "success");
       } else {
           addToast("Não foi possível ativar notificações. Verifique as permissões do navegador.", "error");
+      }
+  };
+
+  const handleAutoGenerateSchedule = async () => {
+      if (!orgId || !ministryId) return;
+
+      try {
+          const locked = await isScheduleLocked(orgId, ministryId, currentMonth);
+          if (locked) {
+              addToast('Esta escala está confirmada. Desbloqueie para refazer.', 'error');
+              return;
+          }
+
+          const executeGeneration = async () => {
+              setIsGeneratingSchedule(true);
+              try {
+                  const { members, rules, availability, existingAssignments, normalizedEvents } = await buildAutoSchedulerInput(
+                      orgId,
+                      ministryId,
+                      currentMonth,
+                      events.map(e => ({ id: e.id, iso: e.iso })),
+                      roles
+                  );
+
+                  await createScheduleBackup(orgId, ministryId, currentMonth);
+
+                  const generated = await generateSchedule({
+                      organizationId: orgId,
+                      ministryId,
+                      events: normalizedEvents,
+                      members,
+                      assignments: existingAssignments,
+                      rules,
+                      availability
+                  });
+
+                  await saveGeneratedSchedule(orgId, ministryId, currentMonth, generated);
+                  await refreshData();
+                  addToast(`Escala automática gerada (${generated.length} atribuições).`, 'success');
+              } catch (error: any) {
+                  console.error(error);
+                  addToast(error?.message || 'Erro ao gerar escala automática.', 'error');
+              } finally {
+                  setIsGeneratingSchedule(false);
+              }
+          };
+
+          const hasExisting = await checkExistingSchedule(orgId, ministryId, currentMonth);
+          if (hasExisting) {
+              confirmAction(
+                  'Já existe escala neste mês',
+                  'Deseja cancelar ou refazer a escala automática para este mês?',
+                  executeGeneration
+              );
+              return;
+          }
+
+          await executeGeneration();
+      } catch (error: any) {
+          console.error(error);
+          addToast(error?.message || 'Erro ao preparar geração automática.', 'error');
       }
   };
 
@@ -462,6 +525,13 @@ const InnerApp = () => {
                                     onResetEvents={() => addToast("Função de restaurar eventos desativada temporariamente", "info")}
                                     allMembers={publicMembers.map(m => m.name)} 
                                 />
+                                <button 
+                                    onClick={handleAutoGenerateSchedule}
+                                    disabled={isGeneratingSchedule}
+                                    className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-xl transition-colors text-sm font-bold whitespace-nowrap border border-blue-500"
+                                >
+                                    {isGeneratingSchedule ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} <span>Gerar Escala Automática</span>
+                                </button>
                             </div>
                             
                             <div className="flex items-center justify-between gap-1 bg-white dark:bg-zinc-800 p-1 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm sm:ml-2">
