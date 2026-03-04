@@ -1,5 +1,6 @@
 import { getSupabase, serviceOrgId } from './client';
 import { TeamMemberProfile } from '../../types';
+import { useAppStore } from '../../store/appStore';
 
 export const fetchSwapRequests = async (ministryId: string, orgId: string) => {
     const sb = getSupabase();
@@ -166,11 +167,19 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
   const sb = getSupabase();
   if (!sb || !orgId) return { memberMap: {}, publicList: [] };
 
+  const appState = useAppStore.getState();
+  const fallbackMinistry = appState.currentUser?.allowedMinistries?.[0] || appState.availableMinistries?.[0]?.id || '';
+  const activeMinistry = ministryId || fallbackMinistry;
+
+  console.log('[fetchMinistryMembers] activeMinistry:', activeMinistry);
+
+  if (!activeMinistry) return { memberMap: {}, publicList: [] };
+
   const { data: memberships, error } = await sb
-    .from('ministry_members')
-    .select('id, profile_id, role, functions, profiles(name, email, avatar_url, whatsapp)')
-    .eq('ministry_id', ministryId)
-    .order('name', { foreignTable: 'profiles', ascending: true });
+    .from("ministry_member_profiles")
+    .select("*")
+    .eq("ministry_id", activeMinistry)
+    .order("name");
 
   if (error) throw error;
 
@@ -178,29 +187,33 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
   const publicList: TeamMemberProfile[] = [];
 
   memberships?.forEach((m: any) => {
-    const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
-    if (!p) return;
+    const rawFunctions = Array.isArray(m.functions)
+      ? m.functions
+      : Array.isArray(m.roles)
+        ? m.roles
+        : [];
 
-    const rawFunctions = Array.isArray(m.functions) ? m.functions : [];
-    
+    const memberId = m.member_id || m.id;
+    const profileId = m.profile_id || m.id;
+
     publicList.push({
-      member_id: m.id,
-      profile_id: m.profile_id,
-      id: m.profile_id,
-      name: p.name,
-      email: p.email,
-      avatar_url: p.avatar_url,
-      whatsapp: p.whatsapp,
+      member_id: memberId,
+      profile_id: profileId,
+      id: profileId,
+      name: m.name,
+      email: m.email,
+      avatar_url: m.avatar_url,
+      whatsapp: m.whatsapp,
       role: m.role,
       functions: rawFunctions,
       isAdmin: m.role === 'admin',
-      roles: rawFunctions, 
+      roles: rawFunctions,
       organizationId: orgId
     });
 
     rawFunctions.forEach((fn: string) => {
       if (!memberMap[fn]) memberMap[fn] = [];
-      memberMap[fn].push(p.name);
+      memberMap[fn].push(m.name);
     });
   });
 

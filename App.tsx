@@ -141,17 +141,28 @@ const InnerApp = () => {
   }, [currentTab]);
 
   const ministryId = storeMinistryId || user?.ministryId || '';
+  const activeMinistry = ministryId || availableMinistries?.[0]?.id || user?.allowedMinistries?.[0] || '';
+
+  useEffect(() => {
+      if (!ministryId && activeMinistry) {
+          setMinistryId(activeMinistry);
+      }
+  }, [ministryId, activeMinistry, setMinistryId]);
+
+  useEffect(() => {
+      console.log('[App] activeMinistry:', activeMinistry);
+  }, [activeMinistry]);
   const isAdmin = user?.role === 'admin';
   const orgId = user?.organizationId; 
 
   const ministryConfig = useMemo(() => {
-      return availableMinistries.find(m => m.id === ministryId) || { 
-          id: ministryId, 
+      return availableMinistries.find(m => m.id === activeMinistry) || { 
+          id: activeMinistry, 
           code: ministryId,
           label: '', 
           enabledTabs: DEFAULT_TABS,
       };
-  }, [availableMinistries, ministryId]);
+  }, [availableMinistries, activeMinistry]);
 
   const { 
     events, schedule, attendance,
@@ -162,7 +173,7 @@ const InnerApp = () => {
     ministryTitle, availabilityWindow, eventRules, nextEvent, 
     refreshData, isLoading: loadingData,
     setAvailability, setNotifications 
-  } = useMinistryData(ministryId, currentMonth, user);
+  } = useMinistryData(activeMinistry, currentMonth, user);
 
   const onlineUsers = useOnlinePresence(user?.id, user?.name);
 
