@@ -91,7 +91,7 @@ export const fetchAssignmentsV2 = async (
 
 export const fetchMembersV2 = async (
   ministryId: string,
-  orgId: string
+  _orgId: string
 ): Promise<MemberV2[]> => {
   const sb = getSupabase();
   if (!sb) throw new Error("NO_SUPABASE");
@@ -99,7 +99,6 @@ export const fetchMembersV2 = async (
   const { data, error } = await sb
     .from("ministry_members")
     .select("id, profile_id, functions, profiles(id, name, avatar_url)")
-    .eq("organization_id", orgId)
     .eq("ministry_id", ministryId);
 
   if (error) throw error;

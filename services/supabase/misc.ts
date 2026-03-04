@@ -162,9 +162,9 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
 
   const { data: memberships, error } = await sb
     .from('ministry_members')
-    .select('id, profile_id, ministry_id, role, functions, profiles(id, name, email, avatar_url, whatsapp, birth_date, is_admin)')
-    .eq('organization_id', orgId)
-    .eq('ministry_id', ministryId);
+    .select('id, profile_id, role, functions, profiles(name, email, avatar_url, whatsapp)')
+    .eq('ministry_id', ministryId)
+    .order('name', { referencedTable: 'profiles', ascending: true });
 
   if (error) throw error;
 
@@ -184,8 +184,7 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
       email: p.email,
       avatar_url: p.avatar_url,
       whatsapp: p.whatsapp,
-      birthDate: p.birth_date,
-      isAdmin: p.is_admin || m.role === 'admin',
+      isAdmin: m.role === 'admin',
       roles: rawFunctions, 
       organizationId: orgId
     });
