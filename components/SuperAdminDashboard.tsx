@@ -254,8 +254,8 @@ export const SuperAdminDashboard: React.FC = () => {
             </div>
 
             {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-2xl w-full max-w-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 dark:bg-black/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="p-6 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 flex justify-between items-center">
                             <h3 className="font-bold text-lg text-zinc-800 dark:text-white">
                                 {editingOrg ? 'Editar Organização' : 'Nova Organização'}
@@ -270,7 +270,7 @@ export const SuperAdminDashboard: React.FC = () => {
                                     <input 
                                         value={formData.name}
                                         onChange={e => setFormData({...formData, name: e.target.value})}
-                                        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 outline-none focus:ring-2 focus:ring-purple-500 text-zinc-800 dark:text-white"
+                                        className="w-full bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-600 rounded-lg p-3 outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 dark:text-zinc-100 placeholder-gray-400 dark:placeholder-zinc-400"
                                         placeholder="Ex: Igreja Central"
                                     />
                                 </div>
@@ -279,7 +279,7 @@ export const SuperAdminDashboard: React.FC = () => {
                                     <input 
                                         value={formData.slug}
                                         onChange={e => setFormData({...formData, slug: e.target.value.toLowerCase().replace(/\s+/g, '-')})}
-                                        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 outline-none focus:ring-2 focus:ring-purple-500 text-zinc-800 dark:text-white"
+                                        className="w-full bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-600 rounded-lg p-3 outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 dark:text-zinc-100 placeholder-gray-400 dark:placeholder-zinc-400"
                                     />
                                 </div>
 
@@ -294,7 +294,7 @@ export const SuperAdminDashboard: React.FC = () => {
                                             <select 
                                                 value={formData.plan_type}
                                                 onChange={e => setFormData({...formData, plan_type: e.target.value})}
-                                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm outline-none"
+                                                className="w-full bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-600 rounded-lg p-2 text-sm outline-none text-gray-900 dark:text-zinc-100"
                                             >
                                                 <option value="trial">Trial</option>
                                                 <option value="pro">Pro</option>
@@ -306,7 +306,7 @@ export const SuperAdminDashboard: React.FC = () => {
                                             <select 
                                                 value={formData.billing_status}
                                                 onChange={e => setFormData({...formData, billing_status: e.target.value})}
-                                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm outline-none"
+                                                className="w-full bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-600 rounded-lg p-2 text-sm outline-none text-gray-900 dark:text-zinc-100"
                                             >
                                                 <option value="active">Ativo</option>
                                                 <option value="trial">Em Teste</option>
@@ -322,7 +322,7 @@ export const SuperAdminDashboard: React.FC = () => {
                                             type="datetime-local"
                                             value={formData.trial_ends_at ? new Date(formData.trial_ends_at).toISOString().slice(0, 16) : ''}
                                             onChange={e => setFormData({...formData, trial_ends_at: new Date(e.target.value).toISOString()})}
-                                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm outline-none"
+                                            className="w-full bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-600 rounded-lg p-2 text-sm outline-none text-gray-900 dark:text-zinc-100"
                                         />
                                     </div>
 
@@ -331,7 +331,7 @@ export const SuperAdminDashboard: React.FC = () => {
                                         <input 
                                             value={formData.checkout_url}
                                             onChange={e => setFormData({...formData, checkout_url: e.target.value})}
-                                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm outline-none"
+                                            className="w-full bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-600 rounded-lg p-2 text-sm outline-none text-gray-900 dark:text-zinc-100 placeholder-gray-400 dark:placeholder-zinc-400"
                                             placeholder="https://stripe..."
                                         />
                                     </div>
@@ -379,7 +379,7 @@ export const SuperAdminDashboard: React.FC = () => {
                                                     value={newMinistryCode}
                                                     onChange={e => setNewMinistryCode(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
                                                     placeholder="ex: jovens"
-                                                    className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm"
+                                                    className="w-full bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-600 rounded-lg p-2 text-sm text-gray-900 dark:text-zinc-100 placeholder-gray-400 dark:placeholder-zinc-400"
                                                 />
                                             </div>
                                             <div className="flex-1 w-full">
@@ -388,7 +388,7 @@ export const SuperAdminDashboard: React.FC = () => {
                                                     value={newMinistryLabel}
                                                     onChange={e => setNewMinistryLabel(e.target.value)}
                                                     placeholder="ex: Ministério de Jovens"
-                                                    className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-2 text-sm"
+                                                    className="w-full bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-600 rounded-lg p-2 text-sm text-gray-900 dark:text-zinc-100 placeholder-gray-400 dark:placeholder-zinc-400"
                                                 />
                                             </div>
                                             <button 
