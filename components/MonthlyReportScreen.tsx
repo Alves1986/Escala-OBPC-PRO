@@ -26,14 +26,14 @@ export const MonthlyReportScreen: React.FC<Props> = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState<'name' | 'rate' | 'scheduled'>('rate');
   const [monthAssignments, setMonthAssignments] = useState<any[]>([]);
-  const [monthProfiles, setMonthProfiles] = useState<any[]>([]);
+  const [monthMembers, setMonthMembers] = useState<any[]>([]);
 
   useEffect(() => {
     const loadMonthReportBase = async () => {
       const sb = getSupabase();
       if (!sb || !organizationId || !ministryId || !currentMonth) {
         setMonthAssignments([]);
-        setMonthProfiles([]);
+        setMonthMembers([]);
         return;
       }
 
@@ -57,16 +57,17 @@ export const MonthlyReportScreen: React.FC<Props> = ({
         setMonthAssignments(assignments || []);
       }
 
-      const { data: profiles, error: profilesError } = await sb
-        .from('profiles')
-        .select('*')
-        .eq('organization_id', organizationId);
+      const { data: ministryMembers, error: membersError } = await sb
+        .from('ministry_members')
+        .select('id, profile_id, profiles(name, avatar_url)')
+        .eq('organization_id', organizationId)
+        .eq('ministry_id', ministryId);
 
-      if (profilesError) {
-        console.error('[MonthlyReport] erro ao buscar profiles', profilesError);
-        setMonthProfiles([]);
+      if (membersError) {
+        console.error('[MonthlyReport] erro ao buscar ministry_members', membersError);
+        setMonthMembers([]);
       } else {
-        setMonthProfiles(profiles || []);
+        setMonthMembers(ministryMembers || []);
       }
     };
 
@@ -89,16 +90,17 @@ export const MonthlyReportScreen: React.FC<Props> = ({
       }
     });
 
-    const profilesById = new Map(monthProfiles.map((p: any) => [p.id, p]));
-    const memberFallbackById = new Map(members.map(m => [m.id, m]));
+    const membersById = new Map(monthMembers.map((m: any) => [m.id, m]));
+    const memberFallbackById = new Map(members.map(m => [m.member_id || m.id, m]));
     const assignmentIds = Object.keys(memberStats);
     const sourceIds = new Set<string>([
-      ...members.map(m => m.id),
+      ...members.map(m => m.member_id || m.id),
       ...assignmentIds
     ]);
 
     const sourceMembers = Array.from(sourceIds).map((id) => {
-      const profile = profilesById.get(id);
+      const mm = membersById.get(id);
+      const profile = Array.isArray(mm?.profiles) ? mm?.profiles[0] : mm?.profiles;
       const fallback = memberFallbackById.get(id);
       return {
         id,
@@ -150,7 +152,7 @@ export const MonthlyReportScreen: React.FC<Props> = ({
         return a.name.localeCompare(b.name);
       });
 
-  }, [monthAssignments, monthProfiles, swapRequests, members, currentMonth, searchTerm, sortBy]);
+  }, [monthAssignments, monthMembers, swapRequests, members, currentMonth, searchTerm, sortBy]);
 
   // Totais Gerais
   const totalScales = monthAssignments.length;

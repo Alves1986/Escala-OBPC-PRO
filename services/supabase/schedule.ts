@@ -5,7 +5,7 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
     if (!sb || !orgId) throw new Error("Missing dependencies");
 
     const { data: assignments, error } = await sb.from('schedule_assignments')
-        .select('*, profiles(name)')
+        .select('*, ministry_members(profile_id, profiles(name))')
         .eq('ministry_id', ministryId)
         .eq('organization_id', orgId);
 
@@ -20,7 +20,8 @@ export const fetchScheduleAssignments = async (ministryId: string, month: string
         
         if (ruleId && dateStr) {
             const key = `${ruleId}_${dateStr}_${a.role}`;
-            const profile = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
+            const mm = Array.isArray(a.ministry_members) ? a.ministry_members[0] : a.ministry_members;
+            const profile = Array.isArray(mm?.profiles) ? mm?.profiles[0] : mm?.profiles;
             const name = profile?.name;
 
             if (name) schedule[key] = name;
@@ -122,14 +123,16 @@ export const fetchGlobalSchedules = async (month: string, ministryId: string, or
     if (!sb) return {};
     
     const { data } = await sb.from('schedule_assignments')
-        .select('ministry_id, event_date, role, profiles(name)')
+        .select('ministry_id, event_date, role, ministry_members(profile_id, profiles(name))')
         .eq('organization_id', orgId)
         .neq('ministry_id', ministryId)
         .ilike('event_date', `${month}%`);
         
     const conflicts: any = {};
     data?.forEach((row: any) => {
-        const name = row.profiles?.name?.trim().toLowerCase();
+        const mm = Array.isArray(row.ministry_members) ? row.ministry_members[0] : row.ministry_members;
+        const profile = Array.isArray(mm?.profiles) ? mm?.profiles[0] : mm?.profiles;
+        const name = profile?.name?.trim().toLowerCase();
         if (name) {
             if (!conflicts[name]) conflicts[name] = [];
             conflicts[name].push({

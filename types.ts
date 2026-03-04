@@ -196,6 +196,7 @@ export interface AuthenticatedUser extends User {
 }
 
 export interface TeamMemberProfile {
+    member_id?: string;
     id: string;
     name: string;
     email?: string;
