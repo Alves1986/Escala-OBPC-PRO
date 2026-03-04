@@ -95,13 +95,24 @@ export const fetchMembersV2 = async (
   const sb = getSupabase();
   if (!sb) throw new Error("NO_SUPABASE");
 
-  const { data, error } = await sb
-    .from("organization_memberships")
+  const { data: ministryMembers, error: ministryMembersError } = await sb
+    .from("ministry_members")
     .select("profile_id, functions, profiles(id, name, avatar_url)")
     .eq("ministry_id", ministryId)
     .eq("organization_id", orgId);
 
-  if (error) throw error;
+  let data = ministryMembers;
+
+  if (ministryMembersError) {
+    const { data: fallbackMembers, error } = await sb
+      .from("organization_memberships")
+      .select("profile_id, functions, profiles(id, name, avatar_url)")
+      .eq("ministry_id", ministryId)
+      .eq("organization_id", orgId);
+
+    if (error) throw error;
+    data = fallbackMembers;
+  }
 
   return (data || []).map((m: any) => {
     const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;

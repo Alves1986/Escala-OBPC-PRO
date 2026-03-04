@@ -125,6 +125,18 @@ export const fetchUserFunctions = async (userId: string, ministryId: string, org
   const sb = getSupabase();
   if (!sb || !orgId) return [];
 
+  const { data: ministryMember } = await sb
+    .from('ministry_members')
+    .select('functions')
+    .eq('profile_id', userId)
+    .eq('ministry_id', ministryId)
+    .eq('organization_id', orgId)
+    .maybeSingle();
+
+  if (ministryMember && Array.isArray(ministryMember.functions)) {
+    return ministryMember.functions;
+  }
+
   const { data } = await sb
     .from('organization_memberships')
     .select('functions')
@@ -161,13 +173,24 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
   const sb = getSupabase();
   if (!sb || !orgId) return { memberMap: {}, publicList: [] };
 
-  const { data: memberships, error } = await sb
-    .from('organization_memberships')
+  const { data: ministryMembers, error: ministryMembersError } = await sb
+    .from('ministry_members')
     .select(`profile_id, functions, role, profiles (id, name, email, avatar_url, whatsapp, birth_date, is_admin)`)
     .eq('ministry_id', ministryId)
     .eq('organization_id', orgId);
 
-  if (error) throw error;
+  let memberships = ministryMembers;
+
+  if (ministryMembersError) {
+    const { data: fallbackMemberships, error } = await sb
+      .from('organization_memberships')
+      .select(`profile_id, functions, role, profiles (id, name, email, avatar_url, whatsapp, birth_date, is_admin)`)
+      .eq('ministry_id', ministryId)
+      .eq('organization_id', orgId);
+
+    if (error) throw error;
+    memberships = fallbackMemberships;
+  }
 
   const memberMap: Record<string, string[]> = {};
   const publicList: TeamMemberProfile[] = [];
