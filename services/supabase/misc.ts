@@ -1,5 +1,6 @@
 import { getSupabase, serviceOrgId } from './client';
 import { TeamMemberProfile } from '../../types';
+import { useAppStore } from '../../store/appStore';
 
 export const fetchSwapRequests = async (ministryId: string, orgId: string) => {
     const sb = getSupabase();
@@ -67,32 +68,38 @@ export const cancelSwapRequestSQL = async (reqId: string, orgId: string) => {
 export const updateMemberData = async (memberId: string, orgId: string, data: any) => {
     const sb = getSupabase();
     if (!sb) return;
-    
+
+    const { data: ministryMember } = await sb
+        .from('ministry_members')
+        .select('id, profile_id')
+        .eq('id', memberId)
+        .maybeSingle();
+
+    const profileId = ministryMember?.profile_id || memberId;
+
     const profileUpdates: any = {};
     if (data.name) profileUpdates.name = data.name;
     if (data.whatsapp) profileUpdates.whatsapp = data.whatsapp;
     
     if (Object.keys(profileUpdates).length > 0) {
-        await sb.from('profiles').update(profileUpdates).eq('id', memberId).eq('organization_id', orgId);
+        await sb.from('profiles').update(profileUpdates).eq('id', profileId).eq('organization_id', orgId);
     }
     
     if (data.roles && data.ministryId) {
-        await sb.from('organization_memberships')
+        await sb.from('ministry_members')
             .update({ functions: data.roles })
-            .eq('profile_id', memberId)
-            .eq('ministry_id', data.ministryId)
-            .eq('organization_id', orgId);
+            .eq('id', memberId)
+            .eq('ministry_id', data.ministryId);
     }
 };
 
 export const deleteMember = async (ministryId: string, orgId: string, memberId: string, memberName: string) => {
     const sb = getSupabase();
     if (!sb) return;
-    await sb.from('organization_memberships')
+    await sb.from('ministry_members')
         .delete()
-        .eq('organization_id', orgId)
         .eq('ministry_id', ministryId)
-        .eq('profile_id', memberId);
+        .eq('id', memberId);
 };
 
 export const toggleAdminSQL = async (email: string, isAdmin: boolean, ministryId: string, orgId: string) => {
@@ -121,16 +128,15 @@ export const fetchAuditLogs = async (ministryId: string, orgId: string) => {
     }));
 };
 
-export const fetchUserFunctions = async (userId: string, ministryId: string, orgId?: string): Promise<string[]> => {
+export const fetchUserFunctions = async (userId: string, ministryId: string, _orgId?: string): Promise<string[]> => {
   const sb = getSupabase();
-  if (!sb || !orgId) return [];
+  if (!sb || !ministryId) return [];
 
   const { data } = await sb
-    .from('organization_memberships')
+    .from('ministry_members')
     .select('functions')
     .eq('profile_id', userId)
     .eq('ministry_id', ministryId)
-    .eq('organization_id', orgId)
     .maybeSingle();
 
   return (data && Array.isArray(data.functions)) ? data.functions : [];
@@ -161,38 +167,65 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
   const sb = getSupabase();
   if (!sb || !orgId) return { memberMap: {}, publicList: [] };
 
+  const appState = useAppStore.getState();
+  const fallbackMinistry = appState.currentUser?.allowedMinistries?.[0] || appState.availableMinistries?.[0]?.id || '';
+  const activeMinistry = ministryId || fallbackMinistry;
+
+  console.log('[fetchMinistryMembers] activeMinistry:', activeMinistry);
+
+  if (!activeMinistry) return { memberMap: {}, publicList: [] };
+
   const { data: memberships, error } = await sb
-    .from('organization_memberships')
-    .select(`profile_id, functions, role, profiles (id, name, email, avatar_url, whatsapp, birth_date, is_admin)`)
-    .eq('ministry_id', ministryId)
-    .eq('organization_id', orgId);
+    .from("ministry_member_profiles")
+    .select("*")
+    .eq("ministry_id", activeMinistry)
+    .order("name");
 
   if (error) throw error;
+
+  const normalized = (memberships || []).map((m: any) => ({
+    id: m.member_id ?? m.id ?? m.profile_id,
+    profile_id: m.profile_id ?? m.id,
+    name: m.name ?? (Array.isArray(m.profiles) ? m.profiles[0]?.name : m.profiles?.name) ?? "",
+    email: m.email ?? (Array.isArray(m.profiles) ? m.profiles[0]?.email : m.profiles?.email),
+    avatar_url: m.avatar_url ?? (Array.isArray(m.profiles) ? m.profiles[0]?.avatar_url : m.profiles?.avatar_url),
+    whatsapp: m.whatsapp ?? (Array.isArray(m.profiles) ? m.profiles[0]?.whatsapp : m.profiles?.whatsapp),
+    functions: Array.isArray(m.functions)
+      ? m.functions
+      : Array.isArray(m.roles)
+        ? m.roles
+        : [],
+    role: m.role ?? "member",
+    ministry_id: m.ministry_id
+  }));
+
+  console.log("members normalized", normalized);
 
   const memberMap: Record<string, string[]> = {};
   const publicList: TeamMemberProfile[] = [];
 
-  memberships?.forEach((m: any) => {
-    const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
-    if (!p) return;
-
+  normalized.forEach((m: any) => {
+    const profileName = m.name || 'Membro';
     const rawFunctions = Array.isArray(m.functions) ? m.functions : [];
-    
+
     publicList.push({
-      id: p.id,
-      name: p.name,
-      email: p.email,
-      avatar_url: p.avatar_url,
-      whatsapp: p.whatsapp,
-      birthDate: p.birth_date,
-      isAdmin: p.is_admin || m.role === 'admin',
-      roles: rawFunctions, 
+      member_id: m.id,
+      profile_id: m.profile_id,
+      id: m.profile_id,
+      name: profileName,
+      email: m.email,
+      avatar_url: m.avatar_url,
+      whatsapp: m.whatsapp,
+      role: m.role,
+      functions: rawFunctions,
+      isAdmin: m.role === 'admin',
+      roles: rawFunctions,
       organizationId: orgId
     });
 
     rawFunctions.forEach((fn: string) => {
       if (!memberMap[fn]) memberMap[fn] = [];
-      memberMap[fn].push(p.name);
+      memberMap[fn].push(profileName);
     });
   });
 

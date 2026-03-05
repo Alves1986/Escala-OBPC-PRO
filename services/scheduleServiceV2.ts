@@ -29,8 +29,14 @@ export interface OccurrenceV2 {
 
 export interface MemberV2 {
   id: string;
+  member_id?: string;
+  profile_id?: string;
   name: string;
+  email?: string;
+  whatsapp?: string;
   avatar_url?: string;
+  role?: string;
+  functions?: string[];
   roles?: string[];
 }
 
@@ -70,10 +76,11 @@ export const fetchAssignmentsV2 = async (
 
   const { data, error } = await sb
     .from("schedule_assignments")
-    .select('id,event_rule_id,event_date,role,member_id,confirmed,profiles(name)') // CORREÇÃO: Select atualizado
+    .select('id,event_rule_id,event_date,role,member_id,confirmed')
     .eq("ministry_id", ministryId)
     .eq("organization_id", orgId)
-    .like("event_date", `${monthStr}%`);
+    .gte("event_date", `${monthStr}-01`)
+    .lte("event_date", `${monthStr}-31`);
 
   if (error) throw error;
 
@@ -90,25 +97,31 @@ export const fetchAssignmentsV2 = async (
 
 export const fetchMembersV2 = async (
   ministryId: string,
-  orgId: string
+  _orgId: string
 ): Promise<MemberV2[]> => {
   const sb = getSupabase();
   if (!sb) throw new Error("NO_SUPABASE");
 
   const { data, error } = await sb
-    .from("organization_memberships")
-    .select("profile_id, functions, profiles(id, name, avatar_url)")
+    .from("ministry_members")
+    .select("id, profile_id, role, functions, profiles(name, email, avatar_url, whatsapp)")
     .eq("ministry_id", ministryId)
-    .eq("organization_id", orgId);
+    .order("name", { foreignTable: "profiles", ascending: true });
 
   if (error) throw error;
 
   return (data || []).map((m: any) => {
     const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
     return {
-      id: p?.id || m.profile_id,
+      id: m.id,
+      member_id: m.id,
+      profile_id: m.profile_id,
       name: p?.name || "Desconhecido",
+      email: p?.email,
+      whatsapp: p?.whatsapp,
       avatar_url: p?.avatar_url,
+      role: m.role,
+      functions: m.functions || [],
       roles: m.functions || []
     };
   }).filter((m: any) => m.id);
@@ -159,7 +172,7 @@ export const saveAssignmentV2 = async (
         confirmed: false
       },
       {
-        onConflict: "organization_id,ministry_id,event_rule_id,event_date,role"
+        onConflict: "ministry_id,event_date,role"
       }
     )
     .select();

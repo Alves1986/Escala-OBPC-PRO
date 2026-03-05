@@ -5,6 +5,7 @@ import {
     fetchOrganizationDetails
 } from '../services/supabaseService';
 import { getSupabase, setServiceOrgContext, clearServiceOrgContext } from '../services/supabase/client';
+import { ensureGoogleUserProfile } from '../services/supabase/auth';
 import { User, Organization } from '../types';
 
 type SessionStatus = 
@@ -79,28 +80,41 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({ children }) =>
             }
 
             try {
-                const fetchProfile = sb
-                    .from('profiles')
-                    .select('*')
-                    .eq('id', sessionUser.id)
-                    .maybeSingle();
-                
-                const timeoutPromise = new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('TIMEOUT_PROFILE_FETCH')), 7000)
-                );
+                await ensureGoogleUserProfile(sessionUser);
 
-                const { data: profile, error: profileError } = await Promise.race([
-                    fetchProfile, 
-                    timeoutPromise
-                ]) as any;
+                const fetchProfileWithRetry = async () => {
+                    for (let attempt = 0; attempt < 8; attempt++) {
+                        const fetchProfile = sb
+                            .from('profiles')
+                            .select('*')
+                            .eq('id', sessionUser.id)
+                            .maybeSingle();
 
-                if (profileError) throw profileError;
+                        const timeoutPromise = new Promise((_, reject) =>
+                            setTimeout(() => reject(new Error('TIMEOUT_PROFILE_FETCH')), 7000)
+                        );
+
+                        const result = await Promise.race([
+                            fetchProfile,
+                            timeoutPromise
+                        ]) as any;
+
+                        if (result?.error) throw result.error;
+                        if (result?.data) return result.data;
+
+                        await new Promise(resolve => setTimeout(resolve, 350));
+                    }
+
+                    return null;
+                };
+
+                const profile = await fetchProfileWithRetry();
 
                 if (!profile) {
                     console.warn("[SessionProvider] No profile found for user.");
                     if (mounted) {
-                        setUser(null);
-                        setStatus('unauthenticated');
+                        setError(new Error('PROFILE_NOT_FOUND'));
+                        setStatus('error');
                     }
                     return;
                 }

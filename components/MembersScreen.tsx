@@ -169,7 +169,7 @@ export const MembersScreen: React.FC<Props> = ({
                                 </button>
                                 
                                 <button 
-                                    onClick={() => onRemoveMember(member.id, member.name)} 
+                                    onClick={() => onRemoveMember(member.member_id || member.id, member.name)} 
                                     className="p-2 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                                     title="Remover da Equipe"
                                 >
@@ -223,7 +223,7 @@ export const MembersScreen: React.FC<Props> = ({
                 member={editingMember}
                 availableRoles={availableRoles}
                 onSave={(id, data) => { 
-                    if(onUpdateMember) onUpdateMember(id, { ...data, ministryId: currentUser.ministryId }); 
+                    if(onUpdateMember) onUpdateMember(editingMember.member_id || id, { ...data, ministryId: currentUser.ministryId }); 
                 }}
             />
         )}

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowRight, Loader2, Mail, Lock, Eye, EyeOff, Layout } from 'lucide-react';
-import { loginWithEmail } from '../services/supabaseService';
+import { loginWithEmail, loginWithGoogle } from '../services/supabaseService';
 import { LegalModal, LegalDocType } from './LegalDocuments';
 
 export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = false }) => {
@@ -28,6 +28,23 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
     } catch (e: any) {
         setErrorMsg("Erro de conexão. Verifique sua internet.");
         setLoadingAction(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setLoadingAction(true);
+    setErrorMsg('');
+
+    try {
+      const result = await loginWithGoogle();
+      if (!result.success) {
+        setErrorMsg(result.message || 'Erro ao autenticar com Google.');
+        setLoadingAction(false);
+      }
+      // Redirecionamento OAuth ocorre no próprio Supabase
+    } catch (e: any) {
+      setErrorMsg('Falha ao iniciar login com Google.');
+      setLoadingAction(false);
     }
   };
 
@@ -124,6 +141,15 @@ export const LoginScreen: React.FC<{ isLoading?: boolean }> = ({ isLoading = fal
                           className="w-full bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black py-4 rounded-2xl shadow-xl shadow-emerald-500/20 transition-all active:scale-95 flex items-center justify-center gap-3 uppercase tracking-widest text-xs disabled:opacity-50"
                       >
                           {isGlobalLoading ? <Loader2 size={20} className="animate-spin" /> : <>Entrar agora <ArrowRight size={18}/></>}
+                      </button>
+
+                      <button
+                          type="button"
+                          onClick={handleGoogleLogin}
+                          disabled={isGlobalLoading}
+                          className="w-full py-3.5 rounded-2xl border border-slate-300 bg-white text-slate-800 font-bold hover:bg-slate-100 transition-colors disabled:opacity-60"
+                      >
+                          Entrar com Google
                       </button>
                   </form>
               </div>

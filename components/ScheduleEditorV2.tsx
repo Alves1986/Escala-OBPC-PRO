@@ -23,6 +23,7 @@ import {
     Check
 } from 'lucide-react';
 import { useToast } from './Toast';
+import { loadScheduleRules, validateScheduleConflict, ScheduleRoleRule } from '../services/scheduleRules';
 
 // --- COMPONENTES AUXILIARES ---
 
@@ -124,7 +125,10 @@ const ScheduleCell: React.FC<ScheduleCellProps> = ({
             {/* Botão Principal (Gatilho) */}
             <button
                 type="button" // Importante: type button para evitar submits acidentais
-                onClick={() => !processing && setIsOpen(!isOpen)}
+                onClick={(e) => {
+                    e.preventDefault();
+                    !processing && setIsOpen(!isOpen);
+                }}
                 disabled={processing}
                 className={`w-full h-full px-2 py-1.5 flex items-center justify-between text-sm transition-all rounded border 
                     ${currentMember 
@@ -172,11 +176,7 @@ const ScheduleCell: React.FC<ScheduleCellProps> = ({
                         <div className="p-1 border-b border-zinc-100 dark:border-zinc-700/50">
                             <button
                                 type="button"
-                                // onMouseDown dispara ANTES do blur do input, garantindo a ação
-                                onMouseDown={(e) => {
-                                    e.preventDefault(); // Impede perda de foco
-                                    handleRemove();
-                                }}
+                                onClick={handleRemove}
                                 className="w-full text-left px-2 py-2 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded flex items-center gap-2 font-medium transition-colors"
                             >
                                 <Trash2 size={12} />
@@ -193,10 +193,7 @@ const ScheduleCell: React.FC<ScheduleCellProps> = ({
                                     key={member.id}
                                     type="button"
                                     // A MÁGICA ACONTECE AQUI: onMouseDown previne que o input perca o foco antes da hora
-                                    onMouseDown={(e) => {
-                                        e.preventDefault(); // Impede o blur
-                                        handleSelect(member.id); // Executa a ação
-                                    }}
+                                    onClick={() => handleSelect(member.id)}
                                     className={`w-full text-left px-2 py-2 flex items-center gap-2 rounded text-xs transition-all border border-transparent
                                         ${currentMemberId === member.id 
                                             ? 'bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border-indigo-100 dark:border-indigo-500/30' 
@@ -242,6 +239,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
     const [members, setMembers] = useState<MemberV2[]>([]);
     const [assignments, setAssignments] = useState<AssignmentV2[]>([]);
     const [occurrences, setOccurrences] = useState<OccurrenceV2[]>([]);
+    const [scheduleRules, setScheduleRules] = useState<ScheduleRoleRule[]>([]);
 
     // -- LOAD DATA --
     const loadData = async () => {
@@ -292,6 +290,16 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
     }, [currentDate, ministryId, orgId]);
 
     // -- HANDLERS --
+    useEffect(() => {
+        const loadRules = async () => {
+            const rules = await loadScheduleRules(orgId);
+            setScheduleRules(rules);
+        };
+
+        loadRules();
+    }, [orgId]);
+
+    // -- HANDLERS --
     const handlePrevMonth = () => {
         setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
     };
@@ -305,10 +313,32 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
         
         const tempId = `temp-${Date.now()}`;
         const previousAssignments = [...assignments];
+
+        if (memberId) {
+            const assignmentsWithoutCurrentCell = assignments.filter(a =>
+                !(a.event_date === date && a.role === role && a.event_rule_id === ruleId)
+            );
+
+            const validation = validateScheduleConflict({
+                memberId,
+                role,
+                date,
+                assignments: assignmentsWithoutCurrentCell,
+                rules: scheduleRules
+            });
+
+            if (!validation.valid) {
+                const friendlyMessage = '⚠ Este membro já está escalado em função incompatível neste dia';
+                window.alert(friendlyMessage);
+                addToast(validation.message || friendlyMessage, 'error');
+                setProcessing(false);
+                return;
+            }
+        }
         
         // Atualização Otimista
         setAssignments(prev => {
-            const filtered = prev.filter(a => !(a.event_date === date && a.role === role && a.event_rule_id === ruleId));
+            const filtered = prev.filter(a => !((a.event_date?.slice(0, 10) === date.slice(0, 10)) && a.role === role && a.event_rule_id === ruleId));
             const next = memberId
                 ? [...filtered, {
                     id: tempId,
@@ -399,7 +429,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
             </div>
 
             {/* AREA DA TABELA */}
-            <div className="flex-1 overflow-auto custom-scrollbar p-1 pb-40"> 
+            <div className="flex-1 overflow-x-auto overflow-y-visible custom-scrollbar p-1 pb-40"> 
                 <table className="w-full text-sm border-separate border-spacing-0">
                     <thead className="bg-zinc-50 dark:bg-zinc-800/50 sticky top-0 z-20 shadow-sm">
                         <tr>
