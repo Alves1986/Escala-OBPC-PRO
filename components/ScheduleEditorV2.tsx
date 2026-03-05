@@ -125,7 +125,10 @@ const ScheduleCell: React.FC<ScheduleCellProps> = ({
             {/* Botão Principal (Gatilho) */}
             <button
                 type="button" // Importante: type button para evitar submits acidentais
-                onClick={() => !processing && setIsOpen(!isOpen)}
+                onClick={(e) => {
+                    e.preventDefault();
+                    !processing && setIsOpen(!isOpen);
+                }}
                 disabled={processing}
                 className={`w-full h-full px-2 py-1.5 flex items-center justify-between text-sm transition-all rounded border 
                     ${currentMember 
@@ -426,7 +429,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
             </div>
 
             {/* AREA DA TABELA */}
-            <div className="flex-1 overflow-auto custom-scrollbar p-1 pb-40"> 
+            <div className="flex-1 overflow-x-auto overflow-y-visible custom-scrollbar p-1 pb-40"> 
                 <table className="w-full text-sm border-separate border-spacing-0">
                     <thead className="bg-zinc-50 dark:bg-zinc-800/50 sticky top-0 z-20 shadow-sm">
                         <tr>
