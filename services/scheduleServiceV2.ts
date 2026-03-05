@@ -79,7 +79,8 @@ export const fetchAssignmentsV2 = async (
     .select('id,event_rule_id,event_date,role,member_id,confirmed')
     .eq("ministry_id", ministryId)
     .eq("organization_id", orgId)
-    .like("event_date", `${monthStr}%`);
+    .gte("event_date", `${monthStr}-01`)
+    .lte("event_date", `${monthStr}-31`);
 
   if (error) throw error;
 
@@ -171,7 +172,7 @@ export const saveAssignmentV2 = async (
         confirmed: false
       },
       {
-        onConflict: "organization_id,ministry_id,event_rule_id,event_date,role"
+        onConflict: "ministry_id,event_date,role"
       }
     )
     .select();

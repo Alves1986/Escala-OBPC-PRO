@@ -34,7 +34,7 @@ import { NextEventCard } from './components/NextEventCard';
 import { BirthdayCard } from './components/BirthdayCard';
 import { CalendarGrid } from './components/CalendarGrid';
 import { ToolsMenu } from './components/ToolsMenu';
-import { ScheduleTable } from './components/ScheduleTable';
+import { ScheduleEditorV2 } from './components/ScheduleEditorV2';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { AvailabilityScreen } from './components/AvailabilityScreen';
 import { SwapRequestsScreen } from './components/SwapRequestsScreen';
@@ -580,89 +580,7 @@ const InnerApp = () => {
                         </div>
                     </div>
                     
-                    <ScheduleTable 
-                        events={events} 
-                        roles={roles} 
-                        schedule={schedule} 
-                        attendance={attendance} 
-                        availability={availabilityByName} // LEGACY PROP
-                        availabilityNotes={notesByName} // LEGACY PROP
-                        members={membersMap} 
-                        allMembers={publicMembers.map(m => m.name)} 
-                        memberProfiles={publicMembers} 
-                        scheduleIssues={{}} 
-                        globalConflicts={globalConflicts} 
-                        onCellChange={async (cellKey, role, memberId, memberName) => { 
-                            const eventObj = events.find(e => e.id === cellKey);
-                            if (!eventObj) {
-                                console.error("[onCellChange] Event not found:", cellKey);
-                                return;
-                            }
-
-                            const eventDate = eventObj.iso.slice(0, 10);
-
-                            const nameToId = new Map(publicMembers.map(m => [m.name, m.member_id || ""]));
-                            const currentAssignments = Object.entries(schedule).map(([key, assignedName]) => {
-                                const parts = key.split('_');
-                                const dateStr = parts[1] || '';
-                                const roleStr = parts.slice(2).join('_');
-                                const mappedId = nameToId.get(String(assignedName)) || '';
-                                return {
-                                    member_id: mappedId,
-                                    event_date: dateStr,
-                                    role: roleStr
-                                };
-                            }).filter(a => !!a.member_id);
-
-                            try {
-                                if (memberId) {
-                                    const currentAssignmentsWithoutCell = currentAssignments.filter(a =>
-                                        !(a.event_date === eventDate && a.role === role)
-                                    );
-
-                                    const alreadyAssigned = currentAssignmentsWithoutCell.some(a =>
-                                        a.member_id === memberId &&
-                                        a.event_date === eventDate
-                                    );
-
-                                    if (alreadyAssigned) {
-                                        addToast("Este membro já está escalado neste dia.", "error");
-                                        return;
-                                    }
-
-                                    const valid = validateScheduleRules({
-                                        memberId: memberId,
-                                        role: role,
-                                        eventDate: eventDate,
-                                        assignments: currentAssignmentsWithoutCell,
-                                        rules: scheduleRules
-                                    });
-
-                                    if (!valid) {
-                                        addToast("Este membro já está escalado em função incompatível neste dia.", "error");
-                                        return;
-                                    }
-
-                                    await Supabase.saveScheduleAssignment(ministryId, orgId!, cellKey, role, memberId, memberName || "");
-                                } else {
-                                    const logicalKey = `${cellKey}_${role}`;
-                                    await Supabase.removeScheduleAssignment(ministryId, orgId!, logicalKey);
-                                }
-                                await refreshData(); 
-                            } catch (error: any) {
-                                const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
-                                console.error("Erro ao salvar escala:", errorMsg);
-                                addToast("Erro ao salvar: " + errorMsg, "error");
-                            }
-                        }} 
-                        onAttendanceToggle={async (key) => { await Supabase.toggleAssignmentConfirmation(ministryId, orgId!, key); refreshData(); }} 
-                        onDeleteEvent={async (iso, title) => confirmAction("Remover?", `Remover "${title}"?`, async () => { await Supabase.deleteMinistryEvent(ministryId, orgId!, iso.split('T')[0] + 'T' + iso.split('T')[1]); refreshData(); })} 
-                        onEditEvent={(event) => setEventDetailsModal({ isOpen: true, event })} 
-                        memberStats={Object.values(schedule).reduce<Record<string, number>>((acc, val) => { const v = val as string; if(v) acc[v] = (acc[v] || 0) + 1; return acc; }, {})} 
-                        ministryId={ministryId} 
-                        readOnly={false} 
-                        onlineUsers={onlineUsers} 
-                    />
+                    <ScheduleEditorV2 ministryId={ministryId} orgId={orgId!} />
                 </div>
             )}
 
