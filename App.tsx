@@ -534,52 +534,6 @@ const InnerApp = () => {
 
             {currentTab === 'schedule-editor' && isAdmin && safeEnabledTabs.includes('schedule-editor') && (
                 <div className="space-y-6 animate-fade-in">
-                    <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-6 border-b border-zinc-200 dark:border-zinc-800 pb-6">
-                        <div className="w-full xl:w-auto">
-                            <h2 className="text-3xl font-bold text-zinc-800 dark:text-white flex items-center gap-3">
-                                <Edit className="text-blue-600 dark:text-blue-500" size={32} /> Editor de Escala
-                            </h2>
-                            <p className="text-zinc-500 dark:text-zinc-400 mt-2">Gerencie a escala oficial de {getMonthName(currentMonth)}.</p>
-                        </div>
-                        
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
-                            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar sm:overflow-visible pb-1 sm:pb-0">
-                                <button 
-                                    onClick={() => setRolesModalOpen(true)}
-                                    className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-sm font-bold whitespace-nowrap border border-zinc-200 dark:border-zinc-700"
-                                >
-                                    <Briefcase size={16}/> <span>Funções</span>
-                                </button>
-                                <button 
-                                    onClick={() => setAuditModalOpen(true)}
-                                    className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-sm font-bold whitespace-nowrap border border-zinc-200 dark:border-zinc-700"
-                                >
-                                    <History size={16}/> <span>Histórico</span>
-                                </button>
-                                <ToolsMenu 
-                                    onExportIndividual={(member) => generateIndividualPDF(ministryTitle, currentMonth, member, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), schedule)} 
-                                    onExportFull={() => generateFullSchedulePDF(ministryTitle, currentMonth, events.map(e => ({...e, dateDisplay: e.iso.split('T')[0].split('-').reverse().slice(0,2).join('/')})), roles, schedule)} 
-                                    onClearMonth={() => confirmAction("Limpar?", "Limpar escala?", () => Supabase.clearScheduleForMonth(ministryId, orgId!, currentMonth).then(refreshData))} 
-                                    onResetEvents={() => addToast("Função de restaurar eventos desativada temporariamente", "info")}
-                                    allMembers={publicMembers.map(m => m.name)} 
-                                />
-                                <button 
-                                    onClick={handleAutoGenerateSchedule}
-                                    disabled={isGeneratingSchedule}
-                                    className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-xl transition-colors text-sm font-bold whitespace-nowrap border border-blue-500"
-                                >
-                                    {isGeneratingSchedule ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} <span>Gerar Escala Automática</span>
-                                </button>
-                            </div>
-                            
-                            <div className="flex items-center justify-between gap-1 bg-white dark:bg-zinc-800 p-1 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm sm:ml-2">
-                                <button onClick={() => setCurrentMonth(adjustMonth(currentMonth, -1))} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg text-zinc-500 dark:text-zinc-400 transition-colors"><ArrowLeft size={18}/></button>
-                                <span className="text-sm font-bold min-w-[90px] text-center text-zinc-800 dark:text-zinc-100 tabular-nums">{currentMonth}</span>
-                                <button onClick={() => setCurrentMonth(adjustMonth(currentMonth, 1))} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg text-zinc-500 dark:text-zinc-400 transition-colors"><ArrowRight size={18}/></button>
-                            </div>
-                        </div>
-                    </div>
-                    
                     <ScheduleEditorV2 ministryId={ministryId} orgId={orgId!} />
                 </div>
             )}

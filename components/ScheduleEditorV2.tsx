@@ -338,7 +338,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
         
         // Atualização Otimista
         setAssignments(prev => {
-            const filtered = prev.filter(a => !(a.event_date === date && a.role === role && a.event_rule_id === ruleId));
+            const filtered = prev.filter(a => !((a.event_date?.slice(0, 10) === date.slice(0, 10)) && a.role === role && a.event_rule_id === ruleId));
             const next = memberId
                 ? [...filtered, {
                     id: tempId,
