@@ -77,20 +77,18 @@ export const updateMemberData = async (memberId: string, orgId: string, data: an
     }
     
     if (data.roles && data.ministryId) {
-        await sb.from('organization_memberships')
+        await sb.from('ministry_members')
             .update({ functions: data.roles })
             .eq('profile_id', memberId)
-            .eq('ministry_id', data.ministryId)
-            .eq('organization_id', orgId);
+            .eq('ministry_id', data.ministryId);
     }
 };
 
 export const deleteMember = async (ministryId: string, orgId: string, memberId: string, memberName: string) => {
     const sb = getSupabase();
     if (!sb) return;
-    await sb.from('organization_memberships')
+    await sb.from('ministry_members')
         .delete()
-        .eq('organization_id', orgId)
         .eq('ministry_id', ministryId)
         .eq('profile_id', memberId);
 };
@@ -126,11 +124,10 @@ export const fetchUserFunctions = async (userId: string, ministryId: string, org
   if (!sb || !orgId) return [];
 
   const { data } = await sb
-    .from('organization_memberships')
+    .from('ministry_members')
     .select('functions')
     .eq('profile_id', userId)
     .eq('ministry_id', ministryId)
-    .eq('organization_id', orgId)
     .maybeSingle();
 
   return (data && Array.isArray(data.functions)) ? data.functions : [];
@@ -162,10 +159,9 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
   if (!sb || !orgId) return { memberMap: {}, publicList: [] };
 
   const { data: memberships, error } = await sb
-    .from('organization_memberships')
-    .select(`profile_id, functions, role, profiles (id, name, email, avatar_url, whatsapp, birth_date, is_admin)`)
-    .eq('ministry_id', ministryId)
-    .eq('organization_id', orgId);
+    .from('ministry_members')
+    .select(`id, profile_id, functions, role, profiles (id, name, email, avatar_url, whatsapp, birth_date, is_admin)`)
+    .eq('ministry_id', ministryId);
 
   if (error) throw error;
 

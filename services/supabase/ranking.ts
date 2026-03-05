@@ -5,10 +5,9 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
     const sb = getSupabase();
     if (!sb || !orgId) throw new Error("Missing dependencies");
     
-    const { data: memberships } = await sb.from('organization_memberships')
+    const { data: memberships } = await sb.from('ministry_members')
         .select('profile_id')
-        .eq('ministry_id', ministryId)
-        .eq('organization_id', orgId);
+        .eq('ministry_id', ministryId);
 
     if (!memberships || memberships.length === 0) return [];
     const userIds = memberships.map((m: any) => m.profile_id);

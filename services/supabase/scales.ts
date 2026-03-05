@@ -54,7 +54,7 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
         role: role,
         member_id: memberId,
         confirmed: false
-    }, { onConflict: 'ministry_id,event_date,role' });
+    }, { onConflict: 'organization_id,ministry_id,event_rule_id,event_date,role' });
     
     if (error) throw error;
 };

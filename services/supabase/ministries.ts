@@ -43,10 +43,9 @@ export const fetchUserAllowedMinistries = async (userId: string, orgId?: string)
     const sb = getSupabase();
     if (!sb || !orgId) return [];
     
-    const { data: members, error } = await sb.from('organization_memberships')
+    const { data: members, error } = await sb.from('ministry_members')
         .select('ministry_id')
-        .eq('profile_id', userId)
-        .eq('organization_id', orgId);
+        .eq('profile_id', userId);
         
     if (error) throw error;
     if (!members || members.length === 0) return [];
@@ -98,8 +97,7 @@ export const joinMinistry = async (ministryId: string, orgId: string, roles: str
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return;
     
-    await sb.from('organization_memberships').insert({
-        organization_id: orgId,
+    await sb.from('ministry_members').insert({
         ministry_id: ministryId,
         profile_id: user.id,
         role: 'member',

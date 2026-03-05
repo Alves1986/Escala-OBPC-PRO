@@ -25,11 +25,10 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
     await sb.from('profiles').update(updates).eq('id', user.id).eq('organization_id', orgId);
     
     if (functions && ministryId) {
-        await sb.from('organization_memberships')
+        await sb.from('ministry_members')
             .update({ functions })
             .eq('profile_id', user.id)
-            .eq('ministry_id', ministryId)
-            .eq('organization_id', orgId);
+            .eq('ministry_id', ministryId);
     }
 };
 
@@ -120,8 +119,7 @@ export const registerWithInvite = async (token: string, userData: any) => {
         is_super_admin: false
     }).eq('id', userId);
 
-    await sb.from('organization_memberships').insert({
-        organization_id: invite.organization_id, 
+    await sb.from('ministry_members').insert({
         profile_id: userId, 
         ministry_id: invite.ministry_id, 
         role: 'member', 

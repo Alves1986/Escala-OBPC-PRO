@@ -31,7 +31,6 @@ import { NextEventCard } from './components/NextEventCard';
 import { BirthdayCard } from './components/BirthdayCard';
 import { CalendarGrid } from './components/CalendarGrid';
 import { ToolsMenu } from './components/ToolsMenu';
-import { ScheduleTable } from './components/ScheduleTable';
 import { ScheduleEditorV2 } from './components/ScheduleEditorV2';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { AvailabilityScreen } from './components/AvailabilityScreen';

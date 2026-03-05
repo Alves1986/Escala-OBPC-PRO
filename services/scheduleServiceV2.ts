@@ -96,17 +96,17 @@ export const fetchMembersV2 = async (
   if (!sb) throw new Error("NO_SUPABASE");
 
   const { data, error } = await sb
-    .from("organization_memberships")
-    .select("profile_id, functions, profiles(id, name, avatar_url)")
-    .eq("ministry_id", ministryId)
-    .eq("organization_id", orgId);
+    .from("ministry_members")
+    .select("id, profile_id, functions, profiles(id, name, avatar_url)")
+    .eq("ministry_id", ministryId);
 
   if (error) throw error;
 
   return (data || []).map((m: any) => {
     const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
     return {
-      id: p?.id || m.profile_id,
+      id: p?.id || m.profile_id, // MUST be profile_id for schedule_assignments
+      profile_id: p?.id || m.profile_id,
       name: p?.name || "Desconhecido",
       avatar_url: p?.avatar_url,
       roles: m.functions || []

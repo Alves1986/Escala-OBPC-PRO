@@ -123,10 +123,9 @@ export const fetchUserAllowedMinistries = async (userId: string, orgId?: string)
     const sb = getSupabase();
     if (!sb || !orgId) return [];
     
-    const { data: members, error } = await sb.from('organization_memberships')
+    const { data: members, error } = await sb.from('ministry_members')
         .select('ministry_id')
-        .eq('profile_id', userId)
-        .eq('organization_id', orgId);
+        .eq('profile_id', userId);
         
     if (error) throw error;
     if (!members || members.length === 0) return [];
@@ -211,10 +210,9 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
   if (!sb || !orgId) return { memberMap: {}, publicList: [] };
 
   const { data: memberships, error } = await sb
-    .from('organization_memberships')
-    .select(`profile_id, functions, role, profiles (id, name, email, avatar_url, whatsapp, birth_date, is_admin)`)
-    .eq('ministry_id', ministryId)
-    .eq('organization_id', orgId);
+    .from('ministry_members')
+    .select(`id, profile_id, functions, role, profiles (id, name, email, avatar_url, whatsapp, birth_date, is_admin)`)
+    .eq('ministry_id', ministryId);
 
   if (error) throw error;
 
@@ -365,10 +363,9 @@ export const fetchRankingData = async (ministryId: string, orgId?: string): Prom
     const sb = getSupabase();
     if (!sb || !orgId) throw new Error("Missing dependencies");
     
-    const { data: memberships } = await sb.from('organization_memberships')
+    const { data: memberships } = await sb.from('ministry_members')
         .select('profile_id')
-        .eq('ministry_id', ministryId)
-        .eq('organization_id', orgId);
+        .eq('ministry_id', ministryId);
 
     if (!memberships || memberships.length === 0) return [];
     const userIds = memberships.map((m: any) => m.profile_id);
@@ -433,11 +430,10 @@ export const fetchUserFunctions = async (userId: string, ministryId: string, org
   if (!sb || !orgId) return [];
 
   const { data } = await sb
-    .from('organization_memberships')
+    .from('ministry_members')
     .select('functions')
     .eq('profile_id', userId)
     .eq('ministry_id', ministryId)
-    .eq('organization_id', orgId)
     .maybeSingle();
 
   return (data && Array.isArray(data.functions)) ? data.functions : [];
@@ -606,8 +602,7 @@ export const registerWithInvite = async (token: string, userData: any) => {
         is_super_admin: false
     }).eq('id', userId);
 
-    await sb.from('organization_memberships').insert({
-        organization_id: invite.organization_id, 
+    await sb.from('ministry_members').insert({
         profile_id: userId, 
         ministry_id: invite.ministry_id, 
         role: 'member', 
@@ -711,7 +706,7 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
 
     console.log("[EDITOR_SAVE]", savePayload);
 
-    const { error } = await sb.from('schedule_assignments').upsert(savePayload, { onConflict: 'ministry_id,event_date,role' });
+    const { error } = await sb.from('schedule_assignments').upsert(savePayload, { onConflict: 'organization_id,ministry_id,event_rule_id,event_date,role' });
     
     if (error) throw error;
 };
@@ -921,11 +916,10 @@ export const updateUserProfile = async (name: string, whatsapp: string, avatar_u
     await sb.from('profiles').update(updates).eq('id', user.id).eq('organization_id', orgId); // CORREÇÃO: Isolamento multi-tenant
     
     if (functions && ministryId) {
-        await sb.from('organization_memberships')
+        await sb.from('ministry_members')
             .update({ functions })
             .eq('profile_id', user.id)
-            .eq('ministry_id', ministryId)
-            .eq('organization_id', orgId);
+            .eq('ministry_id', ministryId);
     }
 };
 
@@ -942,11 +936,10 @@ export const updateMemberData = async (memberId: string, orgId: string, data: an
     }
     
     if (data.roles && data.ministryId) {
-        await sb.from('organization_memberships')
+        await sb.from('ministry_members')
             .update({ functions: data.roles })
             .eq('profile_id', memberId)
-            .eq('ministry_id', data.ministryId)
-            .eq('organization_id', orgId);
+            .eq('ministry_id', data.ministryId);
     }
 };
 
@@ -959,9 +952,8 @@ export const toggleAdminSQL = async (email: string, isAdmin: boolean, ministryId
 export const deleteMember = async (ministryId: string, orgId: string, memberId: string, memberName: string) => {
     const sb = getSupabase();
     if (!sb) return;
-    await sb.from('organization_memberships')
+    await sb.from('ministry_members')
         .delete()
-        .eq('organization_id', orgId)
         .eq('ministry_id', ministryId)
         .eq('profile_id', memberId);
 };
@@ -980,8 +972,7 @@ export const joinMinistry = async (ministryId: string, orgId: string, roles: str
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return;
     
-    await sb.from('organization_memberships').insert({
-        organization_id: orgId,
+    await sb.from('ministry_members').insert({
         ministry_id: ministryId,
         profile_id: user.id,
         role: 'member',
