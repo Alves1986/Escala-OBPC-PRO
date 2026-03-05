@@ -150,6 +150,8 @@ export const saveAssignmentV2 = async (
   const sb = getSupabase();
   if (!sb) throw new Error("NO_SUPABASE");
 
+  console.log("schedule payload", payload);
+
   const { data, error } = await sb
     .from("schedule_assignments")
     .upsert(
