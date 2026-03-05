@@ -46,6 +46,16 @@ export const saveScheduleAssignment = async (ministryId: string, orgId: string, 
 
     if (!dateStr) return;
 
+    console.log('schedule payload', {
+        organization_id: orgId,
+        ministry_id: ministryId,
+        event_rule_id: ruleId,
+        event_date: dateStr,
+        role: role,
+        member_id: memberId,
+        confirmed: false
+    });
+
     const { error } = await sb.from('schedule_assignments').upsert({
         organization_id: orgId,
         ministry_id: ministryId,

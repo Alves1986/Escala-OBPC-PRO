@@ -163,7 +163,7 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
 
   const { data: memberships, error } = await sb
     .from('organization_memberships')
-    .select(`profile_id, functions, role, profiles (id, name, email, avatar_url, whatsapp, birth_date, is_admin)`)
+    .select(`id, profile_id, functions, role, profiles (id, name, email, avatar_url, whatsapp, birth_date, is_admin)`)
     .eq('ministry_id', ministryId)
     .eq('organization_id', orgId);
 
@@ -176,10 +176,16 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
     const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
     if (!p) return;
 
-    const rawFunctions = Array.isArray(m.functions) ? m.functions : [];
+    const rawFunctions = Array.isArray(m.functions)
+      ? m.functions
+      : Array.isArray(m.roles)
+        ? m.roles
+        : [];
     
     publicList.push({
       id: p.id,
+      member_id: m.id,
+      profile_id: p.id,
       name: p.name,
       email: p.email,
       avatar_url: p.avatar_url,
