@@ -29,6 +29,8 @@ export interface OccurrenceV2 {
 
 export interface MemberV2 {
   id: string;
+  member_id?: string;
+  profile_id?: string;
   name: string;
   avatar_url?: string;
   roles?: string[];
@@ -97,7 +99,7 @@ export const fetchMembersV2 = async (
 
   const { data, error } = await sb
     .from("organization_memberships")
-    .select("profile_id, functions, profiles(id, name, avatar_url)")
+    .select("id, profile_id, functions, profiles(id, name, avatar_url)")
     .eq("ministry_id", ministryId)
     .eq("organization_id", orgId);
 
@@ -106,7 +108,9 @@ export const fetchMembersV2 = async (
   return (data || []).map((m: any) => {
     const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
     return {
-      id: p?.id || m.profile_id,
+      id: m.id,
+      member_id: m.id,
+      profile_id: p?.id || m.profile_id,
       name: p?.name || "Desconhecido",
       avatar_url: p?.avatar_url,
       roles: m.functions || []
