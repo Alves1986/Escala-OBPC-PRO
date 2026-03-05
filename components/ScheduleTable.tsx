@@ -85,7 +85,7 @@ const SelectorDropdown = ({
         } else {
             const profile = memberProfiles?.find((p: any) => p.name === opt);
             // IMPORTANTE: salvar sempre ministry member id; profile.id é apenas fallback legado.
-            onChange(profile?.member_id || profile?.id || null, opt);
+            onChange(profile?.member_id || null, opt);
         }
         onClose();
     };

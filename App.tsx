@@ -601,7 +601,7 @@ const InnerApp = () => {
 
                             const eventDate = eventObj.iso.slice(0, 10);
 
-                            const nameToId = new Map(publicMembers.map(m => [m.name, m.member_id || m.id]));
+                            const nameToId = new Map(publicMembers.map(m => [m.name, m.member_id || ""]));
                             const currentAssignments = Object.entries(schedule).map(([key, assignedName]) => {
                                 const parts = key.split('_');
                                 const dateStr = parts[1] || '';
