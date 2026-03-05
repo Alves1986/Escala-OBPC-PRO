@@ -176,7 +176,11 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
     const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
     if (!p) return;
 
-    const rawFunctions = Array.isArray(m.functions) ? m.functions : [];
+    const rawFunctions = Array.isArray(m.functions)
+      ? m.functions
+      : Array.isArray(m.roles)
+        ? m.roles
+        : [];
     
     publicList.push({
       id: p.id,

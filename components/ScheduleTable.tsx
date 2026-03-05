@@ -316,7 +316,7 @@ const ScheduleRow = ({ event, columns, schedule, attendance, availabilityLookup,
                 const currentValue = schedule[uniqueKey] || "";
                 const isConfirmed = attendance[uniqueKey] || false;
                 
-                const roleMembers = members[col.realRole] || [];
+                const roleMembers = members[col.realRole] || members[(col as any).role] || [];
                 
                 const hasLocalConflict = currentValue && !checkIsAvailable(availabilityLookup, currentValue, event.iso);
                 
@@ -525,7 +525,7 @@ export const ScheduleTable: React.FC<Props> = ({ events, roles, schedule, attend
                               const currentValue = schedule[uniqueKey] || "";
                               const isConfirmed = attendance[uniqueKey] || false;
                               
-                              const roleMembers = members[col.realRole] || [];
+                              const roleMembers = members[col.realRole] || members[(col as any).role] || [];
                               
                               const hasLocalConflict = !!(currentValue && !checkIsAvailable(availabilityLookup, currentValue, event.iso));
                               
