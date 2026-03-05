@@ -176,10 +176,22 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
   if (!activeMinistry) return { memberMap: {}, publicList: [] };
 
   const { data: memberships, error } = await sb
-    .from("ministry_member_profiles")
-    .select("*")
+    .from("ministry_members")
+    .select(`
+      id,
+      profile_id,
+      ministry_id,
+      role,
+      functions,
+      profiles (
+        name,
+        email,
+        avatar_url,
+        whatsapp
+      )
+    `)
     .eq("ministry_id", activeMinistry)
-    .order("name");
+    .order("profiles(name)");
 
   if (error) throw error;
 
@@ -187,23 +199,25 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
   const publicList: TeamMemberProfile[] = [];
 
   memberships?.forEach((m: any) => {
+    const profile = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
     const rawFunctions = Array.isArray(m.functions)
       ? m.functions
       : Array.isArray(m.roles)
         ? m.roles
         : [];
 
-    const memberId = m.member_id || m.id;
+    const memberId = m.id;
     const profileId = m.profile_id || m.id;
+    const profileName = profile?.name || 'Membro';
 
     publicList.push({
       member_id: memberId,
       profile_id: profileId,
       id: profileId,
-      name: m.name,
-      email: m.email,
-      avatar_url: m.avatar_url,
-      whatsapp: m.whatsapp,
+      name: profileName,
+      email: profile?.email,
+      avatar_url: profile?.avatar_url,
+      whatsapp: profile?.whatsapp,
       role: m.role,
       functions: rawFunctions,
       isAdmin: m.role === 'admin',
@@ -213,7 +227,7 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
 
     rawFunctions.forEach((fn: string) => {
       if (!memberMap[fn]) memberMap[fn] = [];
-      memberMap[fn].push(m.name);
+      memberMap[fn].push(profileName);
     });
   });
 
