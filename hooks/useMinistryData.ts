@@ -2,8 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { User, Role, DEFAULT_ROLES } from '../types';
 import { useMinistryQueries, keys } from './useMinistryQueries';
 import { useQueryClient } from '@tanstack/react-query';
-import { fetchMemberAvailabilityV2 } from '../services/supabaseService';
-import { getSupabase } from '../services/supabase/client';
+import { getSupabase, fetchMemberAvailabilityV2 } from '../services/supabaseService';
 import { useAppStore } from '../store/appStore';
 import { useEvents } from '../application/useEvents';
 
@@ -206,58 +205,14 @@ export function useMinistryData(ministryId: string | null, currentMonth: string,
     };
   }, [mid, currentMonth, queryClient, orgId]);
 
-  // ADAPTADOR CORRIGIDO (PARTE 2)
   const events = useMemo(() => {
-      const assignments = assignmentsQuery.data?.schedule || {};
-      
-      const assignmentBasedEvents: any[] = [];
-      const processedEventKeys = new Set<string>();
-
-      Object.keys(assignments).forEach(key => {
-          const parts = key.split('_');
-          if (parts.length >= 3) {
-              const ruleId = parts[0];
-              const date = parts[1];
-              const uniqueEventKey = `${ruleId}_${date}`; // CORREÇÃO: Chave única utilizando RuleID e Data
-
-              if (!processedEventKeys.has(uniqueEventKey)) {
-                  const ruleEvent = generatedEvents.find(e => e.id === uniqueEventKey);
-                  
-                  if (ruleEvent) {
-                      assignmentBasedEvents.push({
-                          id: ruleEvent.id,
-                          iso: ruleEvent.iso,
-                          title: ruleEvent.title,
-                          dateDisplay: ruleEvent.date.split('-').reverse().slice(0, 2).join('/')
-                      });
-                  } else {
-                      assignmentBasedEvents.push({
-                          id: uniqueEventKey,
-                          iso: `${date}T00:00`, 
-                          title: 'Evento (Regra Removida)',
-                          dateDisplay: date.split('-').reverse().slice(0, 2).join('/')
-                      });
-                  }
-                  processedEventKeys.add(uniqueEventKey);
-              }
-          }
-      });
-
-      const finalEvents = [...assignmentBasedEvents];
-      
-      generatedEvents.forEach(gen => {
-          if (!processedEventKeys.has(gen.id)) {
-              finalEvents.push({
-                  id: gen.id,
-                  iso: gen.iso,
-                  title: gen.title,
-                  dateDisplay: gen.date.split('-').reverse().slice(0, 2).join('/')
-              });
-          }
-      });
-
-      return finalEvents.sort((a, b) => a.iso.localeCompare(b.iso));
-  }, [generatedEvents, assignmentsQuery.data]);
+      return generatedEvents.map(gen => ({
+          id: gen.id,
+          iso: gen.iso,
+          title: gen.title,
+          dateDisplay: gen.date.split('-').reverse().slice(0, 2).join('/')
+      })).sort((a, b) => a.iso.localeCompare(b.iso));
+  }, [generatedEvents]);
 
   const eventRules = useMemo(() => {
       return (rulesQuery.data || []).filter(r => r.type === 'weekly');

@@ -37,7 +37,7 @@ export function useEvents({ ministryId, organizationId, startDate, endDate }: Us
   return {
     events,
     rules,
-    isLoading,
+    isLoading: (!!ministryId && !!organizationId) ? isLoading : false,
     error
   };
 }

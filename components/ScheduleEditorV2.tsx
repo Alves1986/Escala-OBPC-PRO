@@ -228,13 +228,14 @@ const ScheduleCell: React.FC<ScheduleCellProps> = ({
 interface Props {
     ministryId: string;
     orgId: string;
+    currentMonth: string; // YYYY-MM
+    onMonthChange: (month: string) => void;
 }
 
-export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
+export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId, currentMonth, onMonthChange }) => {
     const { addToast } = useToast();
     
     // -- STATE --
-    const [currentDate, setCurrentDate] = useState(new Date());
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
     
@@ -257,27 +258,22 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
             setMembers(membersData);
 
             // Gerar ocorrências do mês
-            const year = currentDate.getFullYear();
-            const month = currentDate.getMonth() + 1;
+            const [yearStr, monthStrPart] = currentMonth.split('-');
+            const year = parseInt(yearStr, 10);
+            const month = parseInt(monthStrPart, 10);
             
             const generatedOccurrences = generateOccurrencesV2(rules, year, month);
             setOccurrences(generatedOccurrences);
 
             // Buscar escalas existentes (Passa YYYY-MM como string)
-            const monthStr = `${year}-${String(month).padStart(2, '0')}`;
+            const monthStr = currentMonth;
             
             const existingAssignments = await fetchAssignmentsV2(ministryId, orgId, monthStr);
+            setAssignments(existingAssignments);
 
-            // 🔥 FILTRO CIRÚRGICO — elimina fantasmas de meses anteriores
-            const validEventKeys = new Set(
-            generatedOccurrences.map(o => `${o.ruleId}_${o.date}`)
-            );
-
-            const safeAssignments = existingAssignments.filter(a =>
-            validEventKeys.has(`${a.event_rule_id}_${a.event_date?.slice(0,10)}`)
-            );
-
-            setAssignments(safeAssignments);
+            console.log("[EDITOR_MONTH]", monthStr);
+            console.log("[ASSIGNMENTS_COUNT]", existingAssignments.length);
+            console.log("[OCCURRENCES_COUNT]", generatedOccurrences.length);
 
         } catch (error) {
             console.error(error);
@@ -289,15 +285,21 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
 
     useEffect(() => {
         loadData();
-    }, [currentDate, ministryId, orgId]);
+    }, [currentMonth, ministryId, orgId]);
 
     // -- HANDLERS --
     const handlePrevMonth = () => {
-        setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+        const [year, month] = currentMonth.split('-').map(Number);
+        const d = new Date(year, month - 2, 1);
+        const newMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        onMonthChange(newMonth);
     };
 
     const handleNextMonth = () => {
-        setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+        const [year, month] = currentMonth.split('-').map(Number);
+        const d = new Date(year, month, 1);
+        const newMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        onMonthChange(newMonth);
     };
 
     const handleAssignmentChange = async (date: string, role: string, memberId: string | null, ruleId: string) => {
@@ -359,7 +361,10 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
         );
     }
 
-    const monthLabel = currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    const [year, month] = currentMonth.split('-').map(Number);
+    const d = new Date(year, month - 1, 1);
+    const monthLabel = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    const shortMonthLabel = d.toLocaleDateString('pt-BR', { month: 'short' });
 
     return (
         <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-800 flex flex-col h-full">
@@ -387,7 +392,7 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
                         <ChevronLeft size={16} />
                     </button>
                     <span className="w-32 text-center text-sm font-medium text-zinc-700 dark:text-zinc-300 capitalize">
-                        {currentDate.toLocaleDateString('pt-BR', { month: 'short' })}
+                        {shortMonthLabel}
                     </span>
                     <button 
                         onClick={handleNextMonth}
@@ -433,13 +438,14 @@ export const ScheduleEditorV2: React.FC<Props> = ({ ministryId, orgId }) => {
                                     </div>
                                 </td>
                                 
-                                {/* Células de Escala */}
                                 {roles.map(role => {
                                     const assignment = assignments.find(a => {
                                         const aDate = a.event_date?.slice(0, 10);
                                         const oDate = occurrence.date?.slice(0, 10);
                                         return aDate === oDate && a.role === role && a.event_rule_id === occurrence.ruleId;
                                     });
+                                    const key = `${occurrence.ruleId}_${occurrence.date}_${role}`;
+                                    console.log("[CELL_LOOKUP]", key, !!assignment);
 
                                     return (
                                         <td key={`${occurrence.date}-${role}`} className="p-2 border-b border-l border-zinc-100 dark:border-zinc-800/50 relative">

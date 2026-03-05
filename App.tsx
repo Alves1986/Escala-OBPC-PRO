@@ -32,6 +32,7 @@ import { BirthdayCard } from './components/BirthdayCard';
 import { CalendarGrid } from './components/CalendarGrid';
 import { ToolsMenu } from './components/ToolsMenu';
 import { ScheduleTable } from './components/ScheduleTable';
+import { ScheduleEditorV2 } from './components/ScheduleEditorV2';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { AvailabilityScreen } from './components/AvailabilityScreen';
 import { SwapRequestsScreen } from './components/SwapRequestsScreen';
@@ -465,53 +466,16 @@ const InnerApp = () => {
                             </div>
                             
                             <div className="flex items-center justify-between gap-1 bg-white dark:bg-zinc-800 p-1 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm sm:ml-2">
-                                <button onClick={() => setCurrentMonth(adjustMonth(currentMonth, -1))} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg text-zinc-500 dark:text-zinc-400 transition-colors"><ArrowLeft size={18}/></button>
-                                <span className="text-sm font-bold min-w-[90px] text-center text-zinc-800 dark:text-zinc-100 tabular-nums">{currentMonth}</span>
-                                <button onClick={() => setCurrentMonth(adjustMonth(currentMonth, 1))} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg text-zinc-500 dark:text-zinc-400 transition-colors"><ArrowRight size={18}/></button>
+                                {/* Month selector removed as it is now inside ScheduleEditorV2 */}
                             </div>
                         </div>
                     </div>
                     
-                    <ScheduleTable 
-                        events={events} 
-                        roles={roles} 
-                        schedule={schedule} 
-                        attendance={attendance} 
-                        availability={availabilityByName} // LEGACY PROP
-                        availabilityNotes={notesByName} // LEGACY PROP
-                        members={membersMap} 
-                        allMembers={publicMembers.map(m => m.name)} 
-                        memberProfiles={publicMembers} 
-                        scheduleIssues={{}} 
-                        globalConflicts={globalConflicts} 
-                        onCellChange={async (cellKey, role, memberId, memberName) => { 
-                            const eventObj = events.find(e => e.id === cellKey);
-                            if (!eventObj) {
-                                console.error("[onCellChange] Event not found:", cellKey);
-                                return;
-                            }
-
-                            try {
-                                if (memberId) {
-                                    await Supabase.saveScheduleAssignment(ministryId, orgId!, cellKey, role, memberId, memberName || "");
-                                } else {
-                                    const logicalKey = `${cellKey}_${role}`;
-                                    await Supabase.removeScheduleAssignment(ministryId, orgId!, logicalKey);
-                                }
-                                await refreshData(); 
-                            } catch (error: any) {
-                                const errorMsg = error instanceof Error ? error.message : JSON.stringify(error);
-                                console.error("Erro ao salvar escala:", errorMsg);
-                                addToast("Erro ao salvar: " + errorMsg, "error");
-                            }
-                        }} 
-                        onAttendanceToggle={async (key) => { await Supabase.toggleAssignmentConfirmation(ministryId, orgId!, key); refreshData(); }} 
-                        onDeleteEvent={async (iso, title) => confirmAction("Remover?", `Remover "${title}"?`, async () => { await Supabase.deleteMinistryEvent(ministryId, orgId!, iso.split('T')[0] + 'T' + iso.split('T')[1]); refreshData(); })} 
-                        onEditEvent={(event) => setEventDetailsModal({ isOpen: true, event })} 
-                        memberStats={Object.values(schedule).reduce<Record<string, number>>((acc, val) => { const v = val as string; if(v) acc[v] = (acc[v] || 0) + 1; return acc; }, {})} 
+                    <ScheduleEditorV2 
                         ministryId={ministryId} 
-                        readOnly={false} 
-                        onlineUsers={onlineUsers} 
+                        orgId={orgId!} 
+                        currentMonth={currentMonth}
+                        onMonthChange={setCurrentMonth}
                     />
                 </div>
             )}
