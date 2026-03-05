@@ -173,11 +173,7 @@ const ScheduleCell: React.FC<ScheduleCellProps> = ({
                         <div className="p-1 border-b border-zinc-100 dark:border-zinc-700/50">
                             <button
                                 type="button"
-                                // onMouseDown dispara ANTES do blur do input, garantindo a ação
-                                onMouseDown={(e) => {
-                                    e.preventDefault(); // Impede perda de foco
-                                    handleRemove();
-                                }}
+                                onClick={handleRemove}
                                 className="w-full text-left px-2 py-2 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded flex items-center gap-2 font-medium transition-colors"
                             >
                                 <Trash2 size={12} />
@@ -194,10 +190,7 @@ const ScheduleCell: React.FC<ScheduleCellProps> = ({
                                     key={member.id}
                                     type="button"
                                     // A MÁGICA ACONTECE AQUI: onMouseDown previne que o input perca o foco antes da hora
-                                    onMouseDown={(e) => {
-                                        e.preventDefault(); // Impede o blur
-                                        handleSelect(member.id); // Executa a ação
-                                    }}
+                                    onClick={() => handleSelect(member.id)}
                                     className={`w-full text-left px-2 py-2 flex items-center gap-2 rounded text-xs transition-all border border-transparent
                                         ${currentMemberId === member.id 
                                             ? 'bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border-indigo-100 dark:border-indigo-500/30' 
