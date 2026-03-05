@@ -176,48 +176,46 @@ export const fetchMinistryMembers = async (ministryId: string, orgId?: string) =
   if (!activeMinistry) return { memberMap: {}, publicList: [] };
 
   const { data: memberships, error } = await sb
-    .from("ministry_members")
-    .select(`
-      id,
-      profile_id,
-      ministry_id,
-      role,
-      functions,
-      profiles (
-        name,
-        email,
-        avatar_url,
-        whatsapp
-      )
-    `)
+    .from("ministry_member_profiles")
+    .select("*")
     .eq("ministry_id", activeMinistry)
-    .order("profiles(name)");
+    .order("name");
 
   if (error) throw error;
+
+  const normalized = (memberships || []).map((m: any) => ({
+    id: m.member_id ?? m.id ?? m.profile_id,
+    profile_id: m.profile_id ?? m.id,
+    name: m.name ?? (Array.isArray(m.profiles) ? m.profiles[0]?.name : m.profiles?.name) ?? "",
+    email: m.email ?? (Array.isArray(m.profiles) ? m.profiles[0]?.email : m.profiles?.email),
+    avatar_url: m.avatar_url ?? (Array.isArray(m.profiles) ? m.profiles[0]?.avatar_url : m.profiles?.avatar_url),
+    whatsapp: m.whatsapp ?? (Array.isArray(m.profiles) ? m.profiles[0]?.whatsapp : m.profiles?.whatsapp),
+    functions: Array.isArray(m.functions)
+      ? m.functions
+      : Array.isArray(m.roles)
+        ? m.roles
+        : [],
+    role: m.role ?? "member",
+    ministry_id: m.ministry_id
+  }));
+
+  console.log("members normalized", normalized);
 
   const memberMap: Record<string, string[]> = {};
   const publicList: TeamMemberProfile[] = [];
 
-  memberships?.forEach((m: any) => {
-    const profile = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
-    const rawFunctions = Array.isArray(m.functions)
-      ? m.functions
-      : Array.isArray(m.roles)
-        ? m.roles
-        : [];
-
-    const memberId = m.id;
-    const profileId = m.profile_id || m.id;
-    const profileName = profile?.name || 'Membro';
+  normalized.forEach((m: any) => {
+    const profileName = m.name || 'Membro';
+    const rawFunctions = Array.isArray(m.functions) ? m.functions : [];
 
     publicList.push({
-      member_id: memberId,
-      profile_id: profileId,
-      id: profileId,
+      member_id: m.id,
+      profile_id: m.profile_id,
+      id: m.profile_id,
       name: profileName,
-      email: profile?.email,
-      avatar_url: profile?.avatar_url,
-      whatsapp: profile?.whatsapp,
+      email: m.email,
+      avatar_url: m.avatar_url,
+      whatsapp: m.whatsapp,
       role: m.role,
       functions: rawFunctions,
       isAdmin: m.role === 'admin',
